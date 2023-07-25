@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.json
+output/
+ctf_gym.egg-info/
+pyquaticus.egg-info/
+_version.py
+*.mp4
