@@ -1,0 +1,113 @@
+# DISTRIBUTION STATEMENT A. Approved for public release. Distribution is unlimited.
+#
+# This material is based upon work supported by the Under Secretary of Defense for
+# Research and Engineering under Air Force Contract No. FA8702-15-D-0001. Any opinions,
+# findings, conclusions or recommendations expressed in this material are those of the
+# author(s) and do not necessarily reflect the views of the Under Secretary of Defense
+# for Research and Engineering.
+#
+# (C) 2023 Massachusetts Institute of Technology.
+#
+# The software/firmware is provided to you on an As-Is basis
+#
+# Delivered to the U.S. Government with Unlimited Rights, as defined in DFARS
+# Part 252.227-7013 or 7014 (Feb 2014). Notwithstanding any copyright notice, U.S.
+# Government rights in this work are defined by DFARS 252.227-7013 or DFARS
+# 252.227-7014 as detailed above. Use of this work other than as specifically
+# authorized by the U.S. Government may violate any copyrights that exist in this
+# work.
+
+# SPDX-License-Identifier: BSD-3-Clause
+
+[build-system]
+requires = ["setuptools>=46.1.0", "setuptools_scm[toml]>=5"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyquaticus"
+description = "Lightweight USV capture-the-flag environment with MOOS-IVP's uSimMarine dynamics"
+dynamic = ["version"]
+authors = [
+	{ name = "Makai Mann",      email = "makai.mann@ll.mit.edu" },
+	{ name = "Tyler Gonsalves", email = "tyler.gonsalves@ll.mit.edu"},
+	{ name = "Peter Crowley",   email = "petertc@bu.edu"},
+	{ name = "Zachary Serlin",  email = "zachary.serlin@ll.mit.edu"},
+	{ name = "Andrew Schoer",   email = "andrew.schoer@ll.mit.edu"},
+	{ name = "John Kliem",      email = "john.kliem@nrl.navy.mil"}
+]
+readme = "README.md"
+urls = { repository = "https://div3-gitlab.llan.ll.mit.edu/maestro/pyquaticus" } # FIXME when moved to GitHub
+requires-python = ">=3.8,<=3.11"
+classifiers = [
+	"Development Status :: 4 - Beta",
+	"Programming Language :: Python",
+	"Programming Language :: Python :: 3",
+	"Programming Language :: Python :: 3 :: Only",
+]
+license = { file = "LICENSE" }
+# Requirements
+dependencies = ["pettingzoo==1.23.0",
+                "matplotlib==3.7.1",
+                "numpy==1.24.3",
+                "pygame==2.4.0",
+                "sympy==1.12"]
+
+[project.optional-dependencies]
+dev = ["black", "ruff", "mypy >= 1.0.0", "pre-commit", "tox"]
+test = ["pytest", "pytest-cov"]
+torch = ["torch==1.13.1", "tensorflow-probability==0.19.0"]
+# Note: there is an unresolvable dependency conflict between pettingzoo and ray
+# Here is an example error message
+# ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+# pettingzoo 1.23.0 requires gymnasium>=0.28.0, but you have gymnasium 0.26.3 which is incompatible.
+# we ignore that warning and install gymnasium==0.28.1 which works in practice
+# see
+#   https://github.com/ray-project/ray/pull/34696
+#   https://github.com/ray-project/ray/pull/35698
+# instead, we just install ray[rllib]==2.4.0 manually and ignore the error
+
+
+[tool.setuptools.packages.find]
+include = ["pyquaticus"]
+namespaces = false
+
+[tool.setuptools_scm]
+# For smarter version schemes and other configuration options,
+# check out https://github.com/pypa/setuptools_scm
+version_scheme = "no-guess-dev"
+write_to = "pyquaticus/_version.py"
+
+[tool.setuptools]
+zip-safe = false
+
+[tool.black]
+preview = true
+
+[tool.ruff]
+select = [
+	"E",   # Pycodestyle
+	"F",   # PyFlakes
+	"B",   # Flake8-Bugbear
+	"C4",  # Flake8-Comprehensions
+	"SIM", # Flake8-Simplify
+	"A",   # Flake8-Builtins
+	"T10", # Flake8-Debugger
+	"C90", # McCabe complexity
+	"NPY", # NumPy-Specific rules
+	"I",   # ISort
+	"D",   # Pydocstyle
+	"UP",  # Upgrade
+
+]
+
+[tool.ruff.pydocstyle]
+convention = "numpy"
+ignore-decorators = ["typing.overload"]
+
+[tool.ruff.isort]
+known-first-party = ["tooliepy", "tests"]
+
+[tool.pytest.ini_options]
+addopts = ["--cov pyquaticus --cov-report term-missing", "--verbose"]
+nonrecursedirs = ["dist", "build", ".tox"]
+testpaths = "tests"
