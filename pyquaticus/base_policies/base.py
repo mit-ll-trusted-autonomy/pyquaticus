@@ -32,8 +32,8 @@ class BaseAgentPolicy:
     the observation space.
     """
 
-    def __init__(self, id: int, team: Team, suppress_numpy_warnings=True):
-        self.id = id
+    def __init__(self, agent_id: int, team: Team, suppress_numpy_warnings=True):
+        self.id = agent_id
         self.team = team
         self.speed = 0.0
         self.has_flag = False

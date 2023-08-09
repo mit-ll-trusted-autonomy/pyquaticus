@@ -22,7 +22,7 @@
 import numpy as np
 
 from pyquaticus.base_policies.base import BaseAgentPolicy
-from pyquaticus.envs.pyquaticus import Team
+from pyquaticus.envs.pyquaticus import config_dict_std, Team
 
 modes = {"easy", "medium", "hard"}
 
@@ -32,20 +32,18 @@ class BaseDefender(BaseAgentPolicy):
 
     def __init__(
         self,
-        id: int,
+        agent_id: int,
         team: Team,
         mode: str = "easy",
         flag_keepout=10.0,
-        catch_radius=2.0,
+        catch_radius=config_dict_std["catch_radius"],
         using_pyquaticus=True,
     ):
-        super().__init__(id, team)
+        super().__init__(agent_id, team)
 
         if mode not in modes:
             raise ValueError(f"mode {mode} not in set of valid modes {modes}")
         self.mode = mode
-        self.team = team
-        self.my_id = id
         self.flag_keepout = flag_keepout
         self.catch_radius = catch_radius
         self.using_pyquaticus = using_pyquaticus

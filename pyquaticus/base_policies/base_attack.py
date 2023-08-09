@@ -37,9 +37,9 @@ class BaseAttacker(BaseAgentPolicy):
     """This is a Policy class that contains logic for capturing the flag."""
 
     def __init__(
-        self, my_id: int, team=Team.RED_TEAM, mode="easy", using_pyquaticus=True
+        self, agent_id: int, team=Team.RED_TEAM, mode="easy", using_pyquaticus=True
     ):
-        super().__init__(my_id, team)
+        super().__init__(agent_id, team)
 
         if mode not in modes:
             raise AttributeError(f"Invalid mode {mode}")
@@ -48,9 +48,7 @@ class BaseAttacker(BaseAgentPolicy):
         if team not in Team:
             raise AttributeError(f"Invalid team {team}")
 
-        self.team = team
         self.using_pyquaticus = using_pyquaticus
-        self.my_id = my_id
 
     def set_mode(self, mode: str):
         """Sets difficulty mode."""

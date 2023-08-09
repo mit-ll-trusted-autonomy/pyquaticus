@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 *.json
 output/
+env-light/
 ctf_gym.egg-info/
 pyquaticus.egg-info/
 _version.py

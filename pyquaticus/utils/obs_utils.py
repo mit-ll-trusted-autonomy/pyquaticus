@@ -58,7 +58,7 @@ class ObsNormalizer:
 
     @property
     def normalized_space(self):
-        ones = np.ones((1, self.flattened_length), dtype=np.float32)
+        ones = np.ones(self.flattened_length, dtype=np.float32)
         neg_ones = -ones
         return Box(neg_ones, ones)
 
