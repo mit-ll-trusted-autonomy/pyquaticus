@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 *.json
 output/
+rl_test/ray_test/
 env-light/
 env-full/
 ctf_gym.egg-info/

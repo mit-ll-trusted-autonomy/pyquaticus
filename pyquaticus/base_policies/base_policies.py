@@ -116,7 +116,7 @@ def AttackGen(agentid, team, mode, team_size):
                             **kwargs):
             
             # Iterate over all observations in obs_batch
-            for obs in obs_batch[0]:
+            for obs in obs_batch:
 
                 # Unnormalize and unpack numpy arrays to create a new dictionary
                 new_obs_dict = OrderedDict()
@@ -163,7 +163,7 @@ def DefendGen(agentid, team, mode, team_size):
                             episodes=None,
                             **kwargs):
             # Iterate over all observations in obs_batch
-            for obs in obs_batch[0]:
+            for obs in obs_batch:
 
                 # Unnormalize and unpack numpy arrays to create a new dictionary
                 new_obs_dict = OrderedDict()
@@ -208,7 +208,7 @@ def CombinedGen(agentid, team, mode, team_size):
                             info_batch=None,
                             episodes=None,
                             **kwargs): # Iterate over all observations in obs_batch
-            for obs in obs_batch[0]:
+            for obs in obs_batch:
 
                 # Unnormalize and unpack numpy arrays to create a new dictionary
                 new_obs_dict = OrderedDict()
