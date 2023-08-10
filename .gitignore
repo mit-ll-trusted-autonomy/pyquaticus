@@ -3,6 +3,7 @@ __pycache__/
 *.json
 output/
 env-light/
+env-full/
 ctf_gym.egg-info/
 pyquaticus.egg-info/
 _version.py
