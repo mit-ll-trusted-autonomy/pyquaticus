@@ -81,7 +81,6 @@ if __name__ == '__main__':
     
     obs_space = env.observation_space
     act_space = env.action_space
-    policies = {0:PolicySpec(policy_class=None, observation_space=None, action_space=None), 1:PolicySpec(policy_class=None, observation_space=None, action_space=None),}
     def policy_mapping_fn(agent_id, episode, worker, **kwargs):
         if agent_id == 0 or agent_id == 'agent-0':
             return "agent-0-policy"
@@ -91,9 +90,7 @@ if __name__ == '__main__':
     
     env.close()
     policies = {'agent-0-policy':(None, obs_space, act_space, {}), 
-                'agent-1-policy':(None, obs_space, act_space, {}),
-                'easy-defend-policy': (DefendGen(0, 'red', 'easy', 1), obs_space, act_space, {})
-                }
+                'easy-defend-policy': (DefendGen(1, 'red', 'easy', 1), obs_space, act_space, {})}
     ppo_config = PPOConfig().environment(env='pyquaticus').rollouts(num_rollout_workers=5).resources(num_cpus_per_worker=2, num_gpus=int(os.environ.get("RLLIB_NUM_GPUS", "0")))
     ppo_config.multi_agent(policies=policies, policy_mapping_fn=policy_mapping_fn, policies_to_train=["agent-0-policy"],)
     algo = ppo_config.build()
