@@ -606,6 +606,7 @@ class PyQuaticusEnv(ParallelEnv):
             if (
                 ag_dis_2_flag < self.flag_keepout
                 and not self.state["flag_taken"][int(player.team)]
+                and config_dict_std["keepout_bounce"] > 0
             ):
                 self.flag_collision_bool[player.id] = True
 
