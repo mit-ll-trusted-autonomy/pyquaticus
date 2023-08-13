@@ -103,6 +103,7 @@ config_dict_std = {
     "suppress_numpy_warnings": (
         True  # Option to stop numpy from printing warnings to the console
     ),
+    "teleport_on_tag" : False, # Option for the agent when tagged to teleport home or not
 }
 """ Standard configuration setup """
 
@@ -505,7 +506,8 @@ class PyQuaticusEnv(ParallelEnv):
         self._check_pickup_flags()
         self._check_agent_captures()
         self._check_flag_captures()
-
+        if config_dict_std["teleport_on_tag"] == False:
+            self._check_untag()
         self._set_dones()
 
         if self.message and self.render_mode:
@@ -672,11 +674,12 @@ class PyQuaticusEnv(ParallelEnv):
         for player in self.players:
             team = int(player.team)
             other_team = int(not team)
-            if not (player.has_flag or self.state["flag_taken"][other_team]):
+            if not (player.has_flag or self.state["flag_taken"][other_team]) and (not self.state["agent_tagged"][player.id]):
                 flag_pos = self.flags[other_team].pos
                 distance_to_flag = self.get_distance_between_2_points(
                     player.pos, flag_pos
                 )
+
                 if distance_to_flag < self.catch_radius:
                     player.has_flag = True
                     self.state["flag_taken"][other_team] = 1
@@ -685,11 +688,24 @@ class PyQuaticusEnv(ParallelEnv):
                     else:
                         self.red_team_flag_pickup = True
                         break
+    def _check_untag(self):
+        """Untags the player if they return to their own flag."""
+        for player in self.players:
+            team = int(player.team)
+            flag_pos = self.flags[team].pos
+            distance_to_flag = self.get_distance_between_2_points(
+                player.pos, flag_pos
+            )
+            if distance_to_flag < self.catch_radius and self.state["agent_tagged"][player.id]:
+                self.state["agent_tagged"][player.id] = 0
 
     def _check_agent_captures(self):
         """Updates player states if they tagged another player."""
+        # Reset capture state if teleport_on_tag is true
+        if config_dict_std["teleport_on_tag"] == True:
+            self.state["agent_tagged"] = [0] * self.num_agents
+
         self.state["agent_captures"] = [None] * self.num_agents
-        self.state["agent_tagged"] = [0] * self.num_agents
         for player in self.players:
             # Only continue logic check if player tagged someone if it's on its own side.
             if player.on_own_side and (
@@ -709,19 +725,22 @@ class PyQuaticusEnv(ParallelEnv):
                             dist_between_agents > 0.0
                             and dist_between_agents < self.catch_radius
                         ):
-                            # If we get here, thean `player` tagged `other_player` and we need to reset `other_player`
                             self.state["agent_tagged"][other_player.id] = 1
                             self.state["agent_captures"][player.id] = other_player.id
-                            buffer_sign = (
-                                1.0
-                                if self.flags[o_team].home[0] < self.scrimmage
-                                else -1.0
-                            )
-                            other_player.pos[0] = self.flags[o_team].home[
-                                0
-                            ] + buffer_sign * (self.flag_keepout + 0.1)
-                            other_player.pos[1] = self.flags[o_team].home[1]
-                            other_player.speed = 0.0
+                            # If we get here, then `player` tagged `other_player` and we need to reset `other_player`
+                            # Only if config["teleport_on_capture"] == True
+                            if config_dict_std["teleport_on_tag"] == True:
+                                buffer_sign = (
+                                    1.0
+                                    if self.flags[o_team].home[0] < self.scrimmage
+                                    else -1.0
+                                )
+                                other_player.pos[0] = self.flags[o_team].home[
+                                    0
+                                ] + buffer_sign * (self.flag_keepout + 0.1)
+                                other_player.pos[1] = self.flags[o_team].home[1]
+                                other_player.speed = 0.0
+                                other_player.on_own_side = True
 
                             if other_player.has_flag:
                                 # If the player with the flag was tagged, the flag also needs to be reset.
@@ -732,7 +751,6 @@ class PyQuaticusEnv(ParallelEnv):
                                 self.state["flag_taken"][int(player.team)] = 0
                                 self.flags[int(player.team)].reset()
                                 other_player.has_flag = False
-                            other_player.on_own_side = True
 
                             # Set players tagging cooldown
                             player.tagging_cooldown = 0.0
