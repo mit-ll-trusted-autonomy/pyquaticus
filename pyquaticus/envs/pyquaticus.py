@@ -725,9 +725,9 @@ class PyQuaticusEnv(ParallelEnv):
         """Untags the player if they return to their own flag."""
         for player in self.players:
             team = int(player.team)
-            flag_pos = self.flags[team].pos
+            flag_home = self.flags[team].home
             distance_to_flag = self.get_distance_between_2_points(
-                player.pos, flag_pos
+                player.pos, flag_home
             )
             if distance_to_flag < self.catch_radius and self.state["agent_tagged"][player.id]:
                 self.state["agent_tagged"][player.id] = 0
@@ -740,10 +740,10 @@ class PyQuaticusEnv(ParallelEnv):
 
         self.state["agent_captures"] = [None] * self.num_agents
         for player in self.players:
-            # Only continue logic check if player tagged someone if it's on its own side.
+            # Only continue logic check if player tagged someone if it's on its own side and is untagged.
             if player.on_own_side and (
                 player.tagging_cooldown == self.tagging_cooldown
-            ):
+            ) and not self.state["agent_tagged"][player.id]:
                 for other_player in self.players:
                     o_team = int(other_player.team)
                     # Only do the rest if the other player is NOT on sides and they are not on the same team.
