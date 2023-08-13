@@ -245,6 +245,34 @@ class Player:
         self.has_flag = False
         self.on_sides = True
 
+    def rotate(self):
+        """Method to rotate the player 180"""
+        self.prev_pos = self.pos
+        self.speed = 0
+        self.thrust = 0
+        self.has_flag = False
+       
+        # Need to get which wall the agent bumped into
+        x_pos = self.pos[0]
+        y_pos = self.pos[1]
+
+        if (x_pos < self.r):
+            self.pos[0] += 1
+        elif(config_dict_std["world_size"][0] - self.r < x_pos):
+            self.pos[0] -= 1
+        
+        if (y_pos < self.r):
+            self.pos[1] += 1
+        elif(config_dict_std["world_size"][1] - self.r < y_pos):
+            self.pos[1] -= 1
+        
+        # Rotate 180 degrees
+        self.heading = angle180(self.heading + 180)
+
+            
+            
+
+
 
 @dataclass
 class Flag:
@@ -594,7 +622,11 @@ class PyQuaticusEnv(ParallelEnv):
                     self.flags[int(not int(player.team))].reset()
                     self.state["flag_taken"][int(not int(player.team))] = 0
                 self.state["agent_oob"][player.id] = 1
-                player.reset()
+                if (config_dict_std["teleport_on_tag"]):
+                    # print("here")
+                    player.reset()
+                else:
+                    player.rotate()
                 continue
             else:
                 self.state["agent_oob"][player.id] = 0
