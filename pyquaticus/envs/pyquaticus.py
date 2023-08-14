@@ -1001,6 +1001,9 @@ class PyQuaticusEnv(ParallelEnv):
             self.params[agent.id]["opponent_flag_pickup"] = self.blue_team_flag_pickup
             self.params[agent.id]["opponent_flag_capture"] = self.blue_team_flag_capture
             # Elements
+            self.params[agent.id]["team_flag_home"] = self.get_distance_between_2_points(
+                    agent.pos, self.state["flag_home"][1]
+                )
             self.params[agent.id]["team_flag_bearing"] = obs["protect_flag_bearing"]
             self.params[agent.id]["team_flag_distance"] = obs["protect_flag_distance"]
             self.params[agent.id]["opponent_flag_bearing"] = obs[
@@ -1018,6 +1021,9 @@ class PyQuaticusEnv(ParallelEnv):
             self.params[agent.id]["opponent_flag_pickup"] = self.red_team_flag_pickup
             self.params[agent.id]["opponent_flag_capture"] = self.red_team_flag_capture
             # Elements
+            self.params[agent.id]["team_flag_home"] = self.get_distance_between_2_points(
+                    agent.pos, self.state["flag_home"][0]
+                )
             self.params[agent.id]["team_flag_bearing"] = obs["protect_flag_bearing"]
             self.params[agent.id]["team_flag_distance"] = obs["protect_flag_distance"]
             self.params[agent.id]["opponent_flag_bearing"] = obs[
