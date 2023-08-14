@@ -101,8 +101,11 @@ class BaseDefender(BaseAgentPolicy):
 
         elif self.mode == "medium":
             my_flag_vec = self.bearing_to_vec(my_obs["protect_flag_bearing"])
+            #If tagged return to untag
+            if self.is_tagged:
+                ag_vect = self.bearing_to_vec(my_obs["protect_flag_bearing"])
             # If the blue team doesn't have the flag, guard it
-            if self.opp_team_has_flag:
+            elif self.opp_team_has_flag:
                 # If the blue team has the flag, chase them
                 ag_vect = my_flag_vec
 
@@ -216,6 +219,10 @@ class BaseDefender(BaseAgentPolicy):
 
             act_index = 16
 
+            #If tagged return to untag
+            if self.is_tagged:
+                ag_vect = self.bearing_to_vec(my_obs["protect_flag_bearing"])
+                
             # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
             try:
                 act_heading = self.angle180(self.vec_to_heading(ag_vect))

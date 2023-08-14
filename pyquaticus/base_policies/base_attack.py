@@ -74,8 +74,11 @@ class BaseAttacker(BaseAgentPolicy):
         my_obs = self.update_state(obs)
 
         if self.mode == "easy":
+            # If tagged return home to untag
+            if self.is_tagged:
+                goal_vect = self.bearing_to_vec(my_obs["protect_flag_bearing"])
             # If I or someone on my team has the flag, go back home
-            if self.has_flag or self.my_team_has_flag:
+            elif self.has_flag or self.my_team_has_flag:
                 goal_vect = self.bearing_to_vec(my_obs["protect_flag_bearing"])
             # Otherwise go get the opponents flag
             else:
@@ -99,8 +102,11 @@ class BaseAttacker(BaseAgentPolicy):
                 act_index = 12
 
         elif self.mode == "medium":
+            
+            if self.is_tagged:
+                my_action = self.bearing_to_vec(my_obs["protect_flag_bearing"])
             # If I or someone on my team has the flag, return to my side.
-            if self.has_flag or self.my_team_has_flag:
+            elif self.has_flag or self.my_team_has_flag:
                 # Weighted to follow goal more than avoiding others
                 goal_vect = np.multiply(
                     2.00, self.bearing_to_vec(my_obs["protect_flag_bearing"])
@@ -181,9 +187,10 @@ class BaseAttacker(BaseAgentPolicy):
 
             # Increase the avoidance threshold to start avoiding when farther away
             avoid_thresh = 30.0
-
+            if self.is_tagged:
+                my_action = self.bearing_to_vec(my_obs["protect_flag_bearing"])
             # If I or someone on my team has the flag, go back to my side
-            if self.has_flag or self.my_team_has_flag:
+            elif self.has_flag or self.my_team_has_flag:
                 goal_vect = np.multiply(
                     1.25, self.bearing_to_vec(my_obs["protect_flag_bearing"])
                 )

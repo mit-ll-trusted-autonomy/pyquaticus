@@ -1329,6 +1329,7 @@ class PyQuaticusEnv(ParallelEnv):
         agent_obs_normalizer.register(
             "tagging_cooldown", [self.tagging_cooldown], [0.0]
         )
+        agent_obs_normalizer.register("is_tagged", max_bool, min_bool)
         assert len(self.agents_of_team[Team.BLUE_TEAM]) == len(
             self.agents_of_team[Team.RED_TEAM]
         )
@@ -1406,6 +1407,7 @@ class PyQuaticusEnv(ParallelEnv):
             Own speed (meters per second)
             Own flag status (boolean)
             On side (boolean)
+            Is tagged (boolean)
             Tagging cooldown (seconds) time elapsed since last tag (at max when you can tag again)
             For each other agent (teammates first) [Consider sorting teammates and opponents by distance or flag status]
                 Bearing from you (clockwise degrees)
@@ -1419,7 +1421,7 @@ class PyQuaticusEnv(ParallelEnv):
                  and increase in the clockwise direction
         Note 2 : the wall distances can be negative when the agent is out of bounds
         Note 3 : the boolean args Tag/Flag status are -1 false and +1 true
-        Developer Note 1: changes here should be reflected in _register_state_elemnts.
+        Developer Note 1: changes here should be reflected in _register_state_elements.
         """
         agent = self.players[agent_id]
         obs_dict = OrderedDict()
@@ -1490,6 +1492,9 @@ class PyQuaticusEnv(ParallelEnv):
         # On side
         obs["on_side"] = agent.on_own_side
         obs["tagging_cooldown"] = agent.tagging_cooldown
+
+        #Is tagged
+        obs["is_tagged"] = self.state["agent_tagged"][agent.id]
 
         # Relative observations to other agents
         # teammates first

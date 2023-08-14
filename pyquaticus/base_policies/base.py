@@ -82,10 +82,12 @@ class BaseAgentPolicy:
 
         # Copy this agents state from the observation
         my_obs = obs[self.id]
+        print(my_obs)
         self.speed = my_obs["speed"]
         self.on_sides = my_obs["on_side"]
         self.has_flag = my_obs["has_flag"]
         self.tagging_cooldown = my_obs["tagging_cooldown"]
+        self.is_tagged = my_obs["is_tagged"]
 
         # Calculate the rectangular coordinates for the flags location relative to the agent.
         self.my_flag_loc = (
