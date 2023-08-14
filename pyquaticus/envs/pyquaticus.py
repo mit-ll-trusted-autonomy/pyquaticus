@@ -173,6 +173,7 @@ class Player:
     has_flag: bool = field(init=False, default=False)
     on_own_side: bool = field(init=False, default=True)
     tagging_cooldown: float = field(init=False)
+    is_tagged: bool = field(init = False, default=False)
     home: list[float] = field(init=False, default_factory=list)
 
     def __post_init__(self):
@@ -242,6 +243,7 @@ class Player:
         else:
             self.heading = -90
         self.thrust = 0
+        self.is_tagged = False
         self.has_flag = False
         self.on_sides = True
 
@@ -626,6 +628,7 @@ class PyQuaticusEnv(ParallelEnv):
                     player.reset()
                 else:
                     self.state["agent_tagged"][player.id] = 1
+                    player.is_tagged = True
                     player.rotate()
                 continue
             else:
@@ -707,7 +710,7 @@ class PyQuaticusEnv(ParallelEnv):
         for player in self.players:
             team = int(player.team)
             other_team = int(not team)
-            if not (player.has_flag or self.state["flag_taken"][other_team]) and (not self.state["agent_tagged"][player.id]):
+            if not (player.has_flag or self.state["flag_taken"][other_team]) and (not player.is_tagged):
                 flag_pos = self.flags[other_team].pos
                 distance_to_flag = self.get_distance_between_2_points(
                     player.pos, flag_pos
@@ -729,21 +732,24 @@ class PyQuaticusEnv(ParallelEnv):
             distance_to_flag = self.get_distance_between_2_points(
                 player.pos, flag_home
             )
-            if distance_to_flag < self.catch_radius and self.state["agent_tagged"][player.id]:
+            if distance_to_flag < self.catch_radius and player.is_tagged:
                 self.state["agent_tagged"][player.id] = 0
+                player.is_tagged = False
 
     def _check_agent_captures(self):
         """Updates player states if they tagged another player."""
         # Reset capture state if teleport_on_tag is true
         if config_dict_std["teleport_on_tag"] == True:
             self.state["agent_tagged"] = [0] * self.num_agents
+            for player in self.players:
+                player.is_tagged = False
 
         self.state["agent_captures"] = [None] * self.num_agents
         for player in self.players:
             # Only continue logic check if player tagged someone if it's on its own side and is untagged.
             if player.on_own_side and (
                 player.tagging_cooldown == self.tagging_cooldown
-            ) and not self.state["agent_tagged"][player.id]:
+            ) and not player.is_tagged:
                 for other_player in self.players:
                     o_team = int(other_player.team)
                     # Only do the rest if the other player is NOT on sides and they are not on the same team.
@@ -759,6 +765,7 @@ class PyQuaticusEnv(ParallelEnv):
                             and dist_between_agents < self.catch_radius
                         ):
                             self.state["agent_tagged"][other_player.id] = 1
+                            other_player.is_tagged = True
                             self.state["agent_captures"][player.id] = other_player.id
                             # If we get here, then `player` tagged `other_player` and we need to reset `other_player`
                             # Only if config["teleport_on_capture"] == True
@@ -1502,7 +1509,7 @@ class PyQuaticusEnv(ParallelEnv):
         obs["tagging_cooldown"] = agent.tagging_cooldown
 
         #Is tagged
-        obs["is_tagged"] = self.state["agent_tagged"][agent.id]
+        obs["is_tagged"] = agent.is_tagged
 
         # Relative observations to other agents
         # teammates first
@@ -1531,7 +1538,7 @@ class PyQuaticusEnv(ParallelEnv):
                 obs[(entry_name, "has_flag")] = dif_agent.has_flag
                 obs[(entry_name, "on_side")] = dif_agent.on_own_side
                 obs[(entry_name, "tagging_cooldown")] = dif_agent.tagging_cooldown
-                obs[(entry_name, "is_tagged")] = self.state["agent_tagged"][dif_agent.id]
+                obs[(entry_name, "is_tagged")] = dif_agent.is_tagged
 
         obs_dict[agent.id] = obs
         if self.normalize:

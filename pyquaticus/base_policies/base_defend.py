@@ -79,8 +79,12 @@ class BaseDefender(BaseAgentPolicy):
         if self.mode == "easy":
             ag_vect = [0, 0]
             my_flag_vec = self.bearing_to_vec(my_obs["protect_flag_bearing"])
+            
+            #If tagged return to untag
+            if self.is_tagged:
+                ag_vect = self.bearing_to_vec(my_obs["protect_flag_bearing"])
             # If far away from the flag, move towards it
-            if my_obs["protect_flag_distance"] > (
+            elif my_obs["protect_flag_distance"] > (
                 self.flag_keepout + self.catch_radius + 1.0
             ):
                 ag_vect = my_flag_vec
@@ -89,6 +93,7 @@ class BaseDefender(BaseAgentPolicy):
             else:
                 ag_vect = np.multiply(-1.0, my_flag_vec)
 
+            
             act_index = 12
             act_heading = self.angle180(self.vec_to_heading(ag_vect))
 
@@ -222,7 +227,7 @@ class BaseDefender(BaseAgentPolicy):
             #If tagged return to untag
             if self.is_tagged:
                 ag_vect = self.bearing_to_vec(my_obs["protect_flag_bearing"])
-                
+
             # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
             try:
                 act_heading = self.angle180(self.vec_to_heading(ag_vect))
