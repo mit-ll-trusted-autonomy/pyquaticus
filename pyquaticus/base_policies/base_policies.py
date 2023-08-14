@@ -234,14 +234,14 @@ def CombinedGen(agentid, team, mode, team_size):
     return CombinedPolicy
 
 # Function to create the normalizer for observations
-def register_state_elements(self):
+def register_state_elements(team_size):
     """Initializes the normalizer."""
     agent_obs_normalizer = ObsNormalizer(True)
     max_bearing = [180]
-    max_dist = [np.linalg.norm(self.world_size) + 10]  # add a ten meter buffer
+    max_dist = [np.linalg.norm(pyq.config_dict_std["world_size"]) + 10] # add a ten meter buffer
     min_dist = [0.0]
     max_bool, min_bool = [1.0], [0.0]
-    max_speed, min_speed = [self.max_speed], [0.0]
+    max_speed, min_speed = [pyq.config_dict_std["max_speed"]], [0.0]
     agent_obs_normalizer.register("retrieve_flag_bearing", max_bearing)
     agent_obs_normalizer.register("retrieve_flag_distance", max_dist, min_dist)
     agent_obs_normalizer.register("protect_flag_bearing", max_bearing)
@@ -258,13 +258,11 @@ def register_state_elements(self):
     agent_obs_normalizer.register("has_flag", max_bool, min_bool)
     agent_obs_normalizer.register("on_side", max_bool, min_bool)
     agent_obs_normalizer.register(
-        "tagging_cooldown", [self.tagging_cooldown], [0.0]
+        "tagging_cooldown", [pyq.config_dict_std["tagging_cooldown"]], [0.0]
     )
     agent_obs_normalizer.register("is_tagged", max_bool, min_bool)
-    assert len(self.agents_of_team[Team.BLUE_TEAM]) == len(
-        self.agents_of_team[Team.RED_TEAM]
-    )
-    num_on_team = len(self.agents_of_team[Team.BLUE_TEAM])
+
+    num_on_team = team_size
 
     for i in range(num_on_team - 1):
         teammate_name = f"teammate_{i}"
@@ -285,7 +283,7 @@ def register_state_elements(self):
             (teammate_name, "on_side"), max_bool, min_bool
         )
         agent_obs_normalizer.register(
-            (teammate_name, "tagging_cooldown"), [self.tagging_cooldown], [0.0]
+            (teammate_name, "tagging_cooldown"), [pyq.config_dict_std["tagging_cooldown"]], [0.0]
         )
         agent_obs_normalizer.register(
             (teammate_name, "is_tagged"), max_bool, min_bool
@@ -310,7 +308,7 @@ def register_state_elements(self):
             (opponent_name, "on_side"), max_bool, min_bool
         )
         agent_obs_normalizer.register(
-            (opponent_name, "tagging_cooldown"), [self.tagging_cooldown], [0.0]
+            (opponent_name, "tagging_cooldown"), [pyq.config_dict_std["tagging_cooldown"]], [0.0]
         )
         agent_obs_normalizer.register(
             (opponent_name, "is_tagged"), max_bool, min_bool
