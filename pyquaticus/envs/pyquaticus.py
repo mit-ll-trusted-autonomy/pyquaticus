@@ -1357,6 +1357,9 @@ class PyQuaticusEnv(ParallelEnv):
             agent_obs_normalizer.register(
                 (teammate_name, "tagging_cooldown"), [self.tagging_cooldown], [0.0]
             )
+            agent_obs_normalizer.register(
+                (teammate_name, "is_tagged"), max_bool, min_bool
+            )
 
         for i in range(num_on_team):
             opponent_name = f"opponent_{i}"
@@ -1378,6 +1381,9 @@ class PyQuaticusEnv(ParallelEnv):
             )
             agent_obs_normalizer.register(
                 (opponent_name, "tagging_cooldown"), [self.tagging_cooldown], [0.0]
+            )
+            agent_obs_normalizer.register(
+                (opponent_name, "is_tagged"), max_bool, min_bool
             )
 
         return agent_obs_normalizer
@@ -1418,11 +1424,13 @@ class PyQuaticusEnv(ParallelEnv):
                 Has flag status (boolean)
                 On their side status (boolean)
                 Tagging cooldown (seconds)
+                Is tagged (boolean)
         Note 1 : the angles are 0 when the agent is pointed directly at the object
                  and increase in the clockwise direction
         Note 2 : the wall distances can be negative when the agent is out of bounds
         Note 3 : the boolean args Tag/Flag status are -1 false and +1 true
         Developer Note 1: changes here should be reflected in _register_state_elements.
+        Developer Note 2: changes here should be reflected in register_state_elements in base_policies.py
         """
         agent = self.players[agent_id]
         obs_dict = OrderedDict()
@@ -1524,6 +1532,7 @@ class PyQuaticusEnv(ParallelEnv):
                 obs[(entry_name, "has_flag")] = dif_agent.has_flag
                 obs[(entry_name, "on_side")] = dif_agent.on_own_side
                 obs[(entry_name, "tagging_cooldown")] = dif_agent.tagging_cooldown
+                obs[(entry_name, "is_tagged")] = self.state["agent_tagged"][dif_agent.id]
 
         obs_dict[agent.id] = obs
         if self.normalize:
