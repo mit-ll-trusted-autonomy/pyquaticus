@@ -245,7 +245,7 @@ class Player:
         self.has_flag = False
         self.on_sides = True
 
-    def rotate(self):
+    def rotate(self, angle=180):
         """Method to rotate the player 180"""
         self.prev_pos = self.pos
         self.speed = 0
@@ -267,7 +267,7 @@ class Player:
             self.pos[1] -= 1
         
         # Rotate 180 degrees
-        self.heading = angle180(self.heading + 180)
+        self.heading = angle180(self.heading + angle)
 
             
             
@@ -534,7 +534,7 @@ class PyQuaticusEnv(ParallelEnv):
         self._check_pickup_flags()
         self._check_agent_captures()
         self._check_flag_captures()
-        if config_dict_std["teleport_on_tag"] == False:
+        if not config_dict_std["teleport_on_tag"]:
             self._check_untag()
         self._set_dones()
 
@@ -622,8 +622,7 @@ class PyQuaticusEnv(ParallelEnv):
                     self.flags[int(not int(player.team))].reset()
                     self.state["flag_taken"][int(not int(player.team))] = 0
                 self.state["agent_oob"][player.id] = 1
-                if (config_dict_std["teleport_on_tag"]):
-                    # print("here")
+                if config_dict_std["teleport_on_tag"]:
                     player.reset()
                 else:
                     self.state["agent_tagged"][player.id] = 1
@@ -763,7 +762,7 @@ class PyQuaticusEnv(ParallelEnv):
                             self.state["agent_captures"][player.id] = other_player.id
                             # If we get here, then `player` tagged `other_player` and we need to reset `other_player`
                             # Only if config["teleport_on_capture"] == True
-                            if config_dict_std["teleport_on_tag"] == True:
+                            if config_dict_std["teleport_on_tag"]:
                                 buffer_sign = (
                                     1.0
                                     if self.flags[o_team].home[0] < self.scrimmage
