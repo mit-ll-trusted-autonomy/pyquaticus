@@ -626,6 +626,7 @@ class PyQuaticusEnv(ParallelEnv):
                     # print("here")
                     player.reset()
                 else:
+                    self.state["agent_tagged"][player.id] = 1
                     player.rotate()
                 continue
             else:
