@@ -1328,6 +1328,8 @@ class PyQuaticusEnv(ParallelEnv):
         agent_obs_normalizer.register("retrieve_flag_distance", max_dist, min_dist)
         agent_obs_normalizer.register("protect_flag_bearing", max_bearing)
         agent_obs_normalizer.register("protect_flag_distance", max_dist, min_dist)
+        agent_obs_normalizer.register("agent_home_distance", max_dist, min_dist)
+        agent_obs_normalizer.register("agent_home_bearing", max_bearing)
         agent_obs_normalizer.register("wall_0_bearing", max_bearing)
         agent_obs_normalizer.register("wall_0_distance", max_dist, min_dist)
         agent_obs_normalizer.register("wall_1_bearing", max_bearing)
@@ -1461,6 +1463,10 @@ class PyQuaticusEnv(ParallelEnv):
             np_pos, protect_flag_loc, agent.heading
         )
 
+        # Agent home
+        agent_home_dist, agent_home_bearing = mag_bearing_to(
+            np_pos, self.flags[int(own_team)].home, agent.heading
+        )
         # TODO: consider swapping goal location once flag is retrieved
         #       especially if we're bringing the flag all the way back
 
@@ -1468,7 +1474,8 @@ class PyQuaticusEnv(ParallelEnv):
         obs["retrieve_flag_distance"] = retrieve_flag_dist
         obs["protect_flag_bearing"] = protect_flag_bearing
         obs["protect_flag_distance"] = protect_flag_dist
-
+        obs["agent_home_distance"] = agent_home_dist
+        obs["agent_home_bearing"] = agent_home_bearing
         # Walls
         wall_0_closest_point = closest_point_on_line(
             self.boundary_ul, self.boundary_ur, np_pos
