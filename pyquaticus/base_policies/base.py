@@ -38,6 +38,7 @@ class BaseAgentPolicy:
         self.speed = 0.0
         self.has_flag = False
         self.on_sides = False
+        self.is_tagged = False
 
         if suppress_numpy_warnings:
             np.seterr(all="ignore")
@@ -98,8 +99,15 @@ class BaseAgentPolicy:
         self.opp_flag_loc = (
             my_obs["retrieve_flag_distance"]
             * np.cos(np.deg2rad(my_obs["retrieve_flag_bearing"])),
-            my_obs["protect_flag_distance"]
-            * np.sin(np.deg2rad(my_obs["protect_flag_bearing"])),
+            my_obs["retrieve_flag_distance"]
+            * np.sin(np.deg2rad(my_obs["retrieve_flag_bearing"])),
+        )
+
+        self.home = (
+            my_obs["agent_home_distance"]
+            * np.cos(np.deg2rad(my_obs["agent_home_bearing"])),
+            my_obs["agent_home_distance"]
+            * np.sin(np.deg2rad(my_obs["agent_home_bearing"])),
         )
 
         # Copy the polar positions of each agent, separated by team
