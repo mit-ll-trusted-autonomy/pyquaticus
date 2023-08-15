@@ -238,7 +238,7 @@ def register_state_elements(team_size):
     """Initializes the normalizer."""
     agent_obs_normalizer = ObsNormalizer(True)
     max_bearing = [180]
-    max_dist = [np.linalg.norm(pyq.config_dict_std["world_size"]) + 10]  # add a ten meter buffer
+    max_dist = [np.linalg.norm(pyq.config_dict_std["world_size"]) + 10] # add a ten meter buffer
     min_dist = [0.0]
     max_bool, min_bool = [1.0], [0.0]
     max_speed, min_speed = [pyq.config_dict_std["max_speed"]], [0.0]
@@ -260,6 +260,7 @@ def register_state_elements(team_size):
     agent_obs_normalizer.register(
         "tagging_cooldown", [pyq.config_dict_std["tagging_cooldown"]], [0.0]
     )
+    agent_obs_normalizer.register("is_tagged", max_bool, min_bool)
 
     num_on_team = team_size
 
@@ -284,6 +285,9 @@ def register_state_elements(team_size):
         agent_obs_normalizer.register(
             (teammate_name, "tagging_cooldown"), [pyq.config_dict_std["tagging_cooldown"]], [0.0]
         )
+        agent_obs_normalizer.register(
+            (teammate_name, "is_tagged"), max_bool, min_bool
+        )
 
     for i in range(num_on_team):
         opponent_name = f"opponent_{i}"
@@ -305,6 +309,9 @@ def register_state_elements(team_size):
         )
         agent_obs_normalizer.register(
             (opponent_name, "tagging_cooldown"), [pyq.config_dict_std["tagging_cooldown"]], [0.0]
+        )
+        agent_obs_normalizer.register(
+            (opponent_name, "is_tagged"), max_bool, min_bool
         )
 
     return agent_obs_normalizer

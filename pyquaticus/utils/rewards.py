@@ -46,6 +46,7 @@ params{
     "team_flag_capture": bool,   # Indicates if team captures flag
     "opponent_flag_pickup": bool, # Indicates if opponent grabs flag 
     "opponent_flag_capture": bool, #Indicates if opponent grabs flag
+    "team_flag_home": float, #Agents distance to flag home (to untag)
     "team_flag_bearing": float, # Agents bearing to team flag
     "team_flag_distance": float, # Agents distance to team flag
     "opponent_flag_bearing": float, # Agents bearing to opponents flag
@@ -121,6 +122,7 @@ def sparse(self, params, prev_params):
     # Penalize agent if it went out of bounds (Hit border wall)
     if params["agent_oob"][params["agent_id"]] == 1:
         reward -= 100
+
     return reward
 
 
