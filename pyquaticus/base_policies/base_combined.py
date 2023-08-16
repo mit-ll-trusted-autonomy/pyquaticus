@@ -118,7 +118,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
 
         if self.mode == "easy":
             # Opp is close - needs to defend:
-            if self.is_close_to_flag():
+            if self.is_close_to_flag() and False in self.opp_team_tag:
                 action = self.base_defender.compute_action(obs)
 
             # Opp on defensive - needs to attack
@@ -134,7 +134,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
                 action = self.base_defender.compute_action(obs)
 
             # Opp is close - go on defensive
-            elif self.is_close_to_flag():
+            elif self.is_close_to_flag() and (False in self.opp_team_tag):
                 action = self.base_defender.compute_action(obs)
 
             # Opp on defensive - needs to attack
