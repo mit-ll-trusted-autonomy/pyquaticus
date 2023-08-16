@@ -53,11 +53,12 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         self.flag_keepout = flag_keepout
         self.defensiveness = defensiveness
         self.using_pyquaticus = using_pyquaticus
+        self.id = agent_id
         self.base_attacker = attack_policy.BaseAttacker(
-            id, team, mode=mode, using_pyquaticus=using_pyquaticus
+            self.id, team, mode=mode, using_pyquaticus=using_pyquaticus
         )
         self.base_defender = defend_policy.BaseDefender(
-            id,
+            self.id,
             team,
             mode=mode,
             using_pyquaticus=using_pyquaticus,
