@@ -87,6 +87,7 @@ class PyquaticusBridge(AquaticusTeamEnv):
             Own flag status (boolean)
             On side (boolean)
             Tagging cooldown (seconds) time elapsed since last tag (at max when you can tag again)
+            Is tagged (boolean)
             For each other agent (teammates first) [Consider sorting teammates and opponents by distance or flag status]
                 Bearing from you (clockwise degrees)
                 Distance (meters)
@@ -95,6 +96,7 @@ class PyquaticusBridge(AquaticusTeamEnv):
                 Has flag status (boolean)
                 On their side status (boolean)
                 Tagging cooldown (seconds)
+                Is tagged (boolean)
         Note 1 : the angles are 0 when the agent is pointed directly at the object
                  and increase in the clockwise direction
         Note 2 : the wall distances can be negative when the agent is out of bounds
@@ -171,9 +173,12 @@ class PyquaticusBridge(AquaticusTeamEnv):
         obs["speed"] = pnt.speed
         # Own flag status
         obs["has_flag"] = has_flag
-        # On side
+        # True if on your own side
         obs["on_side"] = on_side
+        # Resets to zero after you tag another agent then counts up to max (when you can tag again)
         obs["tagging_cooldown"] = pnt.tagging_cooldown
+        # True if you are currently tagged
+        obs["is_tagged"] = pnt.is_tagged
 
         # Relative observations to other agents
         # teammates first
@@ -206,6 +211,7 @@ class PyquaticusBridge(AquaticusTeamEnv):
                 obs[(entry_name, "has_flag")] = dif_has_flag
                 obs[(entry_name, "on_side")] = dif_on_side
                 obs[(entry_name, "tagging_cooldown")] = dif_pnt.tagging_cooldown
+                obs[(entry_name, "is_tagged")] = dif_pnt.tagged
 
         return self.agent_obs_normalizer.normalized(obs).flatten()
 
