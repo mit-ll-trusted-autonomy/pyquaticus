@@ -38,6 +38,7 @@ class BaseAgentPolicy:
         self.speed = 0.0
         self.has_flag = False
         self.on_sides = False
+        self.is_tagged = False
 
         if suppress_numpy_warnings:
             np.seterr(all="ignore")
@@ -75,6 +76,8 @@ class BaseAgentPolicy:
         """
         self.opp_team_pos = []
         self.my_team_pos = []
+        self.opp_team_tag = []
+        self.my_team_tag = []
         self.opp_team_has_flag = False
         self.my_team_has_flag = False
         opp_team_ids = set()
@@ -98,11 +101,18 @@ class BaseAgentPolicy:
         self.opp_flag_loc = (
             my_obs["retrieve_flag_distance"]
             * np.cos(np.deg2rad(my_obs["retrieve_flag_bearing"])),
-            my_obs["protect_flag_distance"]
-            * np.sin(np.deg2rad(my_obs["protect_flag_bearing"])),
+            my_obs["retrieve_flag_distance"]
+            * np.sin(np.deg2rad(my_obs["retrieve_flag_bearing"])),
         )
 
-        # Copy the polar positions of each agent, separated by team
+        self.home = (
+            my_obs["agent_home_distance"]
+            * np.cos(np.deg2rad(my_obs["agent_home_bearing"])),
+            my_obs["agent_home_distance"]
+            * np.sin(np.deg2rad(my_obs["agent_home_bearing"])),
+        )
+
+        # Copy the polar positions of each agent, separated by team and get their tag status
         for k in my_obs:
             if type(k) is tuple:
                 if k[0].find("opponent_") != -1 and k[0] not in opp_team_ids:
@@ -113,6 +123,9 @@ class BaseAgentPolicy:
                     self.opp_team_has_flag = (
                         self.opp_team_has_flag or my_obs[k[0], "has_flag"]
                     )
+                    self.opp_team_tag.append(
+                        my_obs[(k[0], "is_tagged")]
+                    )
                 elif k[0].find("teammate_") != -1 and k[0] not in my_team_ids:
                     my_team_ids.add(k[0])
                     self.my_team_pos.append(
@@ -121,7 +134,9 @@ class BaseAgentPolicy:
                     self.my_team_has_flag = (
                         self.my_team_has_flag or my_obs[(k[0], "has_flag")]
                     )
-
+                    self.my_team_tag.append(
+                        my_obs[(k[0], "is_tagged")]
+                    )
         return my_obs
 
     def angle180(self, deg):

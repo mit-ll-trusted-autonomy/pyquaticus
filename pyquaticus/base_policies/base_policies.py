@@ -246,6 +246,8 @@ def register_state_elements(team_size):
     agent_obs_normalizer.register("retrieve_flag_distance", max_dist, min_dist)
     agent_obs_normalizer.register("protect_flag_bearing", max_bearing)
     agent_obs_normalizer.register("protect_flag_distance", max_dist, min_dist)
+    agent_obs_normalizer.register("agent_home_distance", max_dist, min_dist)
+    agent_obs_normalizer.register("agent_home_bearing", max_bearing)
     agent_obs_normalizer.register("wall_0_bearing", max_bearing)
     agent_obs_normalizer.register("wall_0_distance", max_dist, min_dist)
     agent_obs_normalizer.register("wall_1_bearing", max_bearing)

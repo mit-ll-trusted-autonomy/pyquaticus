@@ -82,7 +82,7 @@ class BaseDefender(BaseAgentPolicy):
             
             #If tagged return to untag
             if self.is_tagged:
-                ag_vect = self.bearing_to_vec(my_obs["protect_flag_bearing"])
+                ag_vect = self.bearing_to_vec(my_obs["agent_home_bearing"])
             # If far away from the flag, move towards it
             elif my_obs["protect_flag_distance"] > (
                 self.flag_keepout + self.catch_radius + 1.0
@@ -108,7 +108,7 @@ class BaseDefender(BaseAgentPolicy):
             my_flag_vec = self.bearing_to_vec(my_obs["protect_flag_bearing"])
             #If tagged return to untag
             if self.is_tagged:
-                ag_vect = self.bearing_to_vec(my_obs["protect_flag_bearing"])
+                ag_vect = self.bearing_to_vec(my_obs["agent_home_bearing"])
             # If the blue team doesn't have the flag, guard it
             elif self.opp_team_has_flag:
                 # If the blue team has the flag, chase them
@@ -226,7 +226,7 @@ class BaseDefender(BaseAgentPolicy):
 
             #If tagged return to untag
             if self.is_tagged:
-                ag_vect = self.bearing_to_vec(my_obs["protect_flag_bearing"])
+                ag_vect = self.bearing_to_vec(my_obs["agent_home_bearing"])
 
             # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
             try:
