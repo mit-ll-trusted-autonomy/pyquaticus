@@ -1,0 +1,8 @@
+//--------------------------------------------------
+ProcessConfig = uFldMessageHandler
+{
+  AppTick   = 3
+  CommsTick = 3
+
+  STRICT_ADDRESSING = true
+}

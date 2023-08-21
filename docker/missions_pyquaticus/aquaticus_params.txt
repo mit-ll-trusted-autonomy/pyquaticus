@@ -1,0 +1,17 @@
+#This file contains the shared Aquaticus game parameters
+
+#Field boundary
+CORNER_1="194.76,75.68"
+CORNER_2="234.72,178.16"
+CORNER_3="285.96,157.88"
+CORNER_4="246.00,55.70"
+MIDFIELD_1="214.74,126.92"
+MIDFIELD_2="265.98,106.94"
+
+#Flag coordinates
+#orignal BLUE_FLAG="x=225.83,y=79.67"
+BLUE_FLAG_X="225.83"
+BLUE_FLAG_Y="79.67"
+#original RED_FLAG="x=254.89,y=154.21"
+RED_FLAG_X="254.89"
+RED_FLAG_Y="154.21"

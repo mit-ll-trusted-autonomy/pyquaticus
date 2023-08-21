@@ -1,0 +1,20 @@
+//------------------------------------------------
+// uFldZoneEvent config block
+ProcessConfig = UFZEUntag
+{
+  AppTick   = 4
+  CommsTick = 4
+
+  // dynamic values ($[VNAME], $[GROUP], $[TIME], $[VX], $[VY])
+  // zone name should correspond to the vehicle's group name to be active
+  zone_info = name=blue_untag # polygon=format=radial, $(BLUE_FLAG), radius=10, pts=10, snap=1
+  zone_info = name=blue_untag # post_var = UNTAG_REQUEST=vname=$[VNAME]
+  zone_info = name=blue_untag # post_var = FLAG_RESET=vname=$[VNAME]
+  zone_info = name=blue_untag # viewable=true  // default is true
+  zone_info = name=blue_untag # color=blue  // default is orange
+  zone_info = name=blue_untag # group=blue
+  zone_info = name=red_untag  # polygon=format=radial, $(RED_FLAG), radius=10, pts=10, snap=1
+  zone_info = name=red_untag  # post_var = UNTAG_REQUEST=vname=$[VNAME]
+  zone_info = name=red_untag  # post_var = FLAG_RESET=vname=$[VNAME]
+  zone_info = name=red_untag  # viewable=true # color=red # group = red
+}

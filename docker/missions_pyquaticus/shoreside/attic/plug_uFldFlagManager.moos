@@ -1,0 +1,10 @@
+//--------------------------------------------------
+// uFldFlagMgr Configuration Block
+ProcessConfig = uFldFlagManager
+{
+  AppTick       = 2
+  CommsTick     = 2
+
+  flag = $(RED_FLAG),  label=red
+  flag = $(BLUE_FLAG), label=blue
+}

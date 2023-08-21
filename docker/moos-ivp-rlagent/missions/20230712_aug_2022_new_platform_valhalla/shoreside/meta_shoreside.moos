@@ -1,0 +1,374 @@
+//*******************************************************
+// ShoreSide Configuration File
+
+ServerHost = localhost
+ServerPort = $(SPORT)
+Community  = $(SNAME)
+
+#include ../plug_origin_warp.moos
+
+//--------------------------------------------------------
+Processconfig = ANTLER
+{
+  MSBetweenLaunches = 100
+
+  Run = MOOSDB          @ NewConsole = false
+  // Run = pLogger         @ NewConsole = false
+  Run = uProcessWatch   @ NewConsole = false
+
+  Run = pMarineViewer   @ NewConsole = false
+
+  Run = pHostInfo       @ NewConsole = false
+  Run = pShare          @ NewConsole = false
+  Run = uFldShoreBroker @ NewConsole = false
+  Run = uFldNodeComms   @ NewConsole = false
+
+  Run = uFldFlagManager @ NewConsole = false
+  Run = uFldTagManager  @ NewConsole = false
+
+  Run = iSay            @ NewConsole = false
+}
+
+//--------------------------------------------------
+// uFldFlagMgr Configuration Block
+
+ProcessConfig = uFldFlagManager
+{
+  AppTick       = 2
+  CommsTick     = 2
+
+  near_flag_range_buffer = 0
+  flag = x=$(RED_FLAG_X),y=$(RED_FLAG_Y), color=red, label=red
+  flag = x=$(BLUE_FLAG_X), y=$(BLUE_FLAG_Y), color=blue, label=blue
+
+//  grab_post = var=SAY_MOOS, sval={say={$VNAME has the $FLAG flag}}
+//  grab_post = var=SAY_MOOS_ALL, sval={say={$VNAME has the $FLAG flag}}
+
+  grab_post = var=SAY_MOOS, sval={file=sounds/grab_post_$VNAME.wav}
+  grab_post = var=SAY_MOOS_ALL, sval={file=sounds/grab_post_$VNAME.wav}
+
+  grab_post = var=LED_HAVE_FLAG_$UP_VNAME, sval={true}  
+
+//  lose_post = var=SAY_MOOS, sval={say={the $FLAG flag has been returned}}
+//  lose_post = var=SAY_MOOS_ALL, sval={say={the $FLAG flag has been returned}}
+
+  lose_post = var=SAY_MOOS, sval={file=sounds/lose_post_$FLAG.wav}
+  lose_post = var=SAY_MOOS_ALL, sval={file=sounds/lose_post_$FLAG.wav}
+
+  lose_post = var=LED_HAVE_FLAG_$UP_VNAME, sval={false}  
+
+  near_post = var=SAY_MOOS, sval={file=sounds/shipbell.wav}
+  near_post = var=SAY_MOOS_$UP_VNAME, sval={file=sounds/shipbell.wav}
+
+  near_post = var=LED_IN_FLAG_ZONE_$VNAME, sval={true}  
+
+  away_post = var=SAY_MOOS, sval={file=sounds/buzzer.wav}
+  away_post = var=SAY_MOOS_$UP_VNAME, sval={file=sounds/buzzer.wav}
+
+  away_post = var=LED_IN_FLAG_ZONE_$VNAME, sval={false}  
+
+  deny_post = var=SAY_MOOS, sval={file=sounds/deny_post_$REASON.wav}
+  deny_post = var=SAY_MOOS_$UP_VNAME, sval={file=sounds/deny_post_$REASON.wav}
+
+  home_post = var=UNTAG_REQUEST, sval={vname=$VNAME}
+  home_post = var=FLAG_RESET, sval={vname=$VNAME}
+
+  home_post = var=LED_HAVE_FLAG_$UP_VNAME, sval={false} 
+
+//	goal_post = var=SAY_MOOS, sval={say={$VTEAM has scored}}
+//	goal_post = var=SAY_MOOS_ALL, sval={say={$VTEAM has scored}}
+
+	goal_post = var=SAY_MOOS, sval={file=sounds/goal_post_$VTEAM.wav}
+	goal_post = var=SAY_MOOS_ALL, sval={file=sounds/goal_post_$VTEAM.wav}
+
+  goal_post = var=LED_HAVE_FLAG_$UP_VNAME, sval={false} 
+
+}
+
+//--------------------------------------------------
+// uFldTagManager Configuration Block
+
+ProcessConfig = uFldTagManager
+{
+  AppTick   = 4
+  CommsTick = 4
+
+  tag_range = 10     // default (meters)
+
+  post_color = white  // default
+
+  tag_circle = true
+  tag_circle_range = 5
+  tag_circle_color = "green"
+  tag_min_interval = 10
+
+  tag_duration = 10000
+
+  //robot_tag_post   = MOOS_MANUAL_OVERRIDE_$UP_TARGET=true
+//  human_tag_post   = SAY_MOOS_ALL=say={$TARGET_has_been_tagged},rate=200
+//  human_tag_post   = SAY_MOOS=say={$TARGET_has_been_tagged},rate=200
+
+  human_tag_post   = SAY_MOOS_ALL=file=tag_post_$TARGET.wav
+  human_tag_post   = SAY_MOOS=file=tag_post_$TARGET.wav
+
+  // human_tag_post   = SAY_MOOS_$UP_TARGET=say={you_have_been_tagged},rate=200
+//  robot_tag_post   = SAY_MOOS_ALL=say={$TARGET_has_been_tagged},rate=200
+//  robot_tag_post   = SAY_MOOS=say={$TARGET_has_been_tagged},rate=200
+
+  robot_tag_post   = SAY_MOOS_ALL=file=tag_post_$TARGET.wav
+  robot_tag_post   = SAY_MOOS=file=tag_post_$TARGET.wav
+
+  // robot_tag_post   = SAY_MOOS_$UP_TARGET=say={you_have_been_tagged},rate=200
+
+  // Return Flag
+  human_tag_post   = FLAG_RESET=vname=$TARGET
+  robot_tag_post   = FLAG_RESET=vname=$TARGET
+  human_tag_post   = TAGGED_$UP_TARGET=true
+  robot_tag_post   = TAGGED_$UP_TARGET=true
+
+  robot_tag_post   = LED_TAGGED_$UP_TARGET=true
+  human_tag_post   = LED_TAGGED_$UP_TARGET=true
+
+  //robot_untag_post = MOOS_MANUAL_OVERRIDE_$UP_TARGET=false
+  // human_untag_post   = SAY_MOOS=say={$TARGET_has_been_untagged},rate=200
+  // human_untag_post   = SAY_MOOS_$UP_TARGET=say={you_have_been_untagged},rate=200
+  // robot_untag_post   = SAY_MOOS=say={$TARGET_has_been_untagged},rate=200
+  // robot_untag_post   = SAY_MOOS_$UP_TARGET=say={you_have_been_untagged},rate=200
+
+//  human_untag_post = SAY_MOOS_ALL=say={$TARGET_has_been_untagged},rate=200
+//  human_untag_post = SAY_MOOS=say={$TARGET_has_been_untagged},rate=200
+  human_untag_post = SAY_MOOS_ALL=file=sounds/untag_post_$TARGET.wav
+  human_untag_post = SAY_MOOS=file=sounds/untag_post_$TARGET.wav
+  human_untag_post = TAGGED_$UP_TARGET=false
+
+  human_untag_post = LED_TAGGED_$UP_TARGET=false
+  
+//  robot_untag_post = SAY_MOOS_ALL=say={$TARGET_has_been_untagged},rate=200
+//  robot_untag_post = SAY_MOOS=say={$TARGET_has_been_untagged},rate=200
+  robot_untag_post = SAY_MOOS_ALL=file=sounds/untag_post_$TARGET.wav
+  robot_untag_post = SAY_MOOS=file=sounds/untag_post_$TARGET.wav
+  robot_untag_post = TAGGED_$UP_TARGET=false
+
+  robot_untag_post = LED_TAGGED_$UP_TARGET=false
+
+  //notag_post = SAY_MOOS_$UP_SOURCE=say={Tag Denied $REASON},rate=200
+  notag_post = SAY_MOOS_$UP_SOURCE=file=sounds/tag_denied.wav
+  
+  team_one=red
+  team_two=blue
+
+//  zone_one = pts={ 80,0 : 80,80 : 160,80 : 160,0 }
+//  zone_two = pts={ 0,0 : 0,80 : 80,80 : 80,0 }
+
+  zone_one = pts={$(MIDFIELD_1) : $(CORNER_2) : $(CORNER_3): $(MIDFIELD_2) }
+  zone_two = pts={$(CORNER_1) : $(MIDFIELD_1) : $(MIDFIELD_2): $(CORNER_4) }
+
+  zone_one_color = pink
+  zone_two_color = dodger_blue
+}
+
+//---------------------------------------------------------
+// pShare Configuration Block
+
+ProcessConfig = pShare
+{
+  AppTick    = 2
+  CommsTick  = 2
+
+  input = route =  localhost:$(SHARE_LISTEN)
+//  input = route =  multicast_7
+}
+
+//--------------------------------------------------
+// ufldnodecomms Configuration Block
+
+ProcessConfig = uFldNodeComms
+{
+  AppTick       = 2
+  CommsTick     = 2
+
+  comms_range      = 5000
+  critical_range   = 25
+
+  min_msg_interval = 0
+  max_msg_length   = 10000
+  groups           = false
+
+  view_node_rpt_pulses = false
+}
+
+
+//--------------------------------------------------
+// uFldShoreBroker Configuration Block
+ProcessConfig = uFldShoreBroker
+{
+  AppTick       = 1
+  CommsTick     = 1
+
+  // Note: [QBRIDGE = FOO]  is shorthand for
+  //       [BRIDGE = src=FOO_$V,  alias=FOO] and
+  //       [BRIDGE = src=FOO_ALL, alias=FOO]
+
+  qbridge  = DEPLOY, RETURN, STATION, NODE_REPORT, NODE_MESSAGE
+  qbridge  = MOOS_MANUAL_OVERRIDE, APPCAST_REQ, AVOID, CHASE
+  qbridge  = TAGGED
+  qbridge  = HAS_FLAG
+  qbridge  = ACTION, AGGRESSIVE, SHIELD_REQUEST
+  qbridge  = SAY_MOOS
+  qbridge  = ONFIELD, CANTAG
+
+  bridge   = src=IN_OWN_TERRITORY
+  bridge   = src=IN_ENEMY_TERRITORY
+  bridge  = src=TAGGED_VEHICLES
+  bridge   = src=UP_LOITER_$N, alias=UP_LOITER
+  bridge   = src=HELM_MAP_CLEAR, alias=HELM_MAP_CLEAR
+  bridge   = src=FLAG_SUMMARY
+  bridge   = src=MULTI_NOTIFY
+
+  qbridge = LED_TAGGED
+  qbridge = LED_HAVE_FLAG
+  qbridge = LED_IN_FLAG_ZONE
+
+  qbridge = AQUATICUS_GAME
+  qbridge = UFMG_HEARTBEAT
+}
+
+
+//--------------------------------------------------
+ProcessConfig = pHostInfo
+{
+  AppTick     = 2
+  CommsTick   = 2
+
+//  DEFAULT_HOSTIP = localhost
+}
+
+//--------------------------------------------------
+// pLogger Configuration Block
+
+ProcessConfig = pLogger
+{
+  AppTick       = 10
+  CommsTick     = 10
+
+  File          = C%(CID)_LOG_SHORESIDE
+  PATH          = $(LOGPATH)
+  SyncLog       = true @ 0.2
+  AsyncLog      = true
+  FileTimeStamp = true
+
+  LogAuxSrc     = true
+
+  // Log it all!!!!!
+  WildCardLogging = true
+  WildCardOmitPattern = *_STATUS
+  WildCardOmitPattern = DB_VARSUMMARY
+  WildCardOmitPattern = DB_RWSUMMARY
+}
+
+//--------------------------------------------------------
+ProcessConfig = pMarineViewer
+{
+  AppTick    = 4
+  CommsTick  = 4
+
+  //TIFF_FILE            = forrest19.tif
+  TIFF_FILE            = popolopen.tif
+  set_pan_x            = 0
+  set_pan_y            = 0
+  zoom                 = 1
+  vehicles_shape_scale = 1.5
+  vehicles_name_mode   = names
+
+  circle_viewable_all = true
+
+  appcast_viewable = true
+  appcast_color_scheme = indigo
+
+  scope = FLAG_GRAB_REPORT
+  scope = NODE_BROKER_PING
+  scope = DEPLOY_ALL
+
+  action = AQUATICUS_GAME_ALL = play
+  action = AQUATICUS_GAME_ALL = pause
+  action = AQUATICUS_GAME_ALL = stop
+
+  button_one   = DEPLOY  # DEPLOY_ALL=true
+  button_one   = MOOS_MANUAL_OVERRIDE_ALL=false
+  button_one   = RETURN_ALL=false # STATION_KEEP_ALL=false
+
+  button_two   = RETURN  # RETURN_ALL=true
+  button_two   = RETURN  # STATION_KEEP_ALL=false
+
+  button_three = CTF_RESET   # UNTAG_REQUEST=vname=red_one
+  button_three = UNTAG_REQUEST=vname=red_two
+  button_three = UNTAG_REQUEST=vname=blue_one
+  button_three = UNTAG_REQUEST=vname=blue_twotrue
+  button_three = FLAG_RESET=alltrue
+
+  button_four = PAUSE # DEPLOY_ALL=false
+  button_four = MOOS_MANUAL_OVERRIDE_ALL=false
+  button_four = AQUATICUS_GAME_STATE=pause
+
+//op_vertex = x=194.76, y=75.68, lwidth=1,lcolor=yellow,looped=true,group=moa
+//op_vertex = x=234.72, y=178.16, lwidth=1,lcolor=yellow,looped=true,group=moa
+//op_vertex = x=285.96, y=157.88, lwidth=1,lcolor=yellow,looped=true,group=moa
+//op_vertex = x=246.00, y=55.70, lwidth=1,lcolor=yellow,looped=true,group=moa
+
+  cmd = label=DEPLOY, var=DEPLOY,  sval=true,  receivers=all:red_one:red_two:blue_one:blue_two
+  cmd = label=DEPLOY, var=MOOS_MANUAL_OVERRIDE, sval=false, receivers=all:red_one:red_two:blue_one:blue_two
+  cmd = label=DEPLOY, var=RETURN,  sval=false,  receivers=all:red_one:red_two:blue_one:blue_two
+
+  cmd = label=ATTACK_EASY, var=ACTION, sval=ATTACK_E, receivers=red_one:red_two:blue_one:blue_two
+
+  cmd = label=ATTACK_MEDIUM, var=ACTION, sval=ATTACK_MED, receivers=red_one:red_two:blue_one:blue_two
+
+  cmd = label=DEFEND_EASY, var=ACTION, sval=DEFEND_E, receivers=red_one:red_two:blue_one:blue_two
+
+  cmd = label=DEFEND_MEDIUM, var=ACTION, sval=DEFEND_MED, receivers=red_one:red_two:blue_one:blue_two
+
+}
+
+//--------------------------------------------------------
+// uProcessWatch Configuration Block
+
+ProcessConfig = uProcessWatch
+{
+  AppTick   = 1
+  CommsTick = 1
+
+  allow_retractions = true
+
+  watch_all = true      // default is true
+
+  nowatch = uXMS*
+  // nowatch = uPokeDB*
+
+  summary_wait = 10
+}
+
+//------------------------------------------
+ProcessConfig = iSay
+{
+  AppTick   = 5
+  CommsTick = 5
+
+  min_utter_interval = 1.5
+  interval_policy    = from_start
+
+  os_mode=both
+  audio_dir=sounds
+}
+
+//----------------------------------------
+ProcessConfig = pTimeWatch
+{
+  AppTick   = 4
+  CommsTick = 4
+  
+  watch_var = NODE_REPORT
+
+  threshhold = 30
+  //local_offset = 30
+}
+

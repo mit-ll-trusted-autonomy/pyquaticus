@@ -1,0 +1,7 @@
+//------------------------------------------------
+ProcessConfig = pBotDialog
+{
+  AppTick   = 4
+  CommsTick = 4
+
+}

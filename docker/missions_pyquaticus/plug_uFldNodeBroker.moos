@@ -1,0 +1,24 @@
+//--------------------------------------------------
+ProcessConfig = uFldNodeBroker
+{
+  AppTick   = 1
+  CommsTick = 1
+
+#ifdef SIM
+  TRY_SHORE_HOST = pshare_route=$(SHORE_IP):$(SHORE_LISTEN)
+#else
+  TRY_SHORE_HOST = pshare_route=$(SHORE_IP):$(SHORE_LISTEN)
+#endif
+
+
+  BRIDGE = src=VIEW_POLYGON
+  BRIDGE = src=VIEW_POINT
+  BRIDGE = src=VIEW_SEGLIST
+  BRIDGE = src=VIEW_CIRCLE
+  BRIDGE = src=AVDCOL_MODE
+  BRIDGE = src=FLAG_GRAB_REQUEST
+  BRIDGE = src=TAG_REQUEST
+  BRIDGE = src=APPCAST
+  BRIDGE = src=NODE_REPORT_LOCAL,  alias=NODE_REPORT
+  BRIDGE = src=NODE_MESSAGE_LOCAL, alias=NODE_MESSAGE
+}

@@ -1,0 +1,16 @@
+//------------------------------------------------
+// pRangeEvent config block
+
+ProcessConfig = pRangeEvent
+{
+  AppTick   = 4
+  CommsTick = 4
+
+  // Range within which the event is triggered
+  min_range = 0 // default
+  max_range = 10 // default
+
+  ignore_group = $(VTEAM)
+
+  event_var = TAG_REQUEST=vname=$[SELFVNAME]
+}
