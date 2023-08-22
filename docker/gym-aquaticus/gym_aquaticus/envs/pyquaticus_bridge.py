@@ -257,6 +257,7 @@ class PyquaticusBridge(AquaticusTeamEnv):
         agent_obs_normalizer.register(
             "tagging_cooldown", [self._moos_config.tagging_cooldown], [0.0]
         )
+        agent_obs_normalizer.register("is_tagged", max_bool, min_bool)
 
         assert len(self._red_team) == len(self._blue_team), "Expecting symmetric team sizes so that policies are interchangeable"
         num_on_team = len(self._blue_team)
@@ -282,6 +283,9 @@ class PyquaticusBridge(AquaticusTeamEnv):
             agent_obs_normalizer.register(
                 (teammate_name, "tagging_cooldown"), [self.tagging_cooldown], [0.0]
             )
+            agent_obs_normalizer.register(
+                (teammate_name, "is_tagged"), max_bool, min_bool
+            )
 
         for i in range(num_on_team):
             opponent_name = f"opponent_{i}"
@@ -303,6 +307,9 @@ class PyquaticusBridge(AquaticusTeamEnv):
             )
             agent_obs_normalizer.register(
                 (opponent_name, "tagging_cooldown"), [self._moos_config.tagging_cooldown], [0.0]
+            )
+            agent_obs_normalizer.register(
+                (opponent_name, "is_tagged"), max_bool, min_bool
             )
 
         return agent_obs_normalizer
