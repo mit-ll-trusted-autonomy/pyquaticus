@@ -178,7 +178,7 @@ class PyquaticusBridge(AquaticusTeamEnv):
         # Resets to zero after you tag another agent then counts up to max (when you can tag again)
         obs["tagging_cooldown"] = pnt.tagging_cooldown
         # True if you are currently tagged
-        obs["is_tagged"] = pnt.is_tagged
+        obs["is_tagged"] = pnt.tagged
 
         # Relative observations to other agents
         # teammates first
