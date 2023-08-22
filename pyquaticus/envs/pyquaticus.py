@@ -103,7 +103,8 @@ config_dict_std = {
     "suppress_numpy_warnings": (
         True  # Option to stop numpy from printing warnings to the console
     ),
-    "teleport_on_tag" : False, # Option for the agent when tagged to teleport home or not
+    "teleport_on_tag" : False, 
+    # Option for the agent when tagged, either out of bounds or by opponent, to teleport home or not
 }
 """ Standard configuration setup """
 
