@@ -34,6 +34,21 @@ You can then activate the environment with: `conda activate pyquaticus-lightenv`
 * Control with arrow keys: `python ./test/arrowkeys_test.py`
   * control agents with WASD and the arrow keys
 
+## Docker 
+
+The docker is necessary for running the trained agents on the robots. It has files for both running the simulations in MOOS and on the water.
+
+```
+# build the docker
+cd docker
+sudo docker build -t pyquaticus:test .
+```
+
+```
+# run the docker
+sudo docker run -it -v ~/pyquaticus/docker/logs:/home/moos/logs --net host --entrypoint /bin/bash pyquaticus:test
+```
+
 ## Distribution and Disclaimer Statements
 
 DISTRIBUTION STATEMENT A. Approved for public release. Distribution is unlimited.
