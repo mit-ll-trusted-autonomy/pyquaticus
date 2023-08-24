@@ -15,7 +15,7 @@ import argparse
 #This file launchs a single trained agent in simulation
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the simulation with trained agents.")
-    parser.add_argument('--trained', required=True, choices=['red', 'blue'], help="Specify if red or blue team is the trained agent.")
+    parser.add_argument('--color', required=True, choices=['red', 'blue'], help="Specify if red or blue team is the trained agent.")
     parser.add_argument('--policy-dir', required=True, help="Directory containing policy file.")
     args = parser.parse_args()
 
@@ -24,16 +24,15 @@ if __name__ == "__main__":
         'shoreside_params': ('localhost', 9000, 'shoreside'),
         'red_team_params': [('localhost', 9011, 'red_one')], # ('localhost', 9012, 'red_two')
         'blue_team_params': [('localhost', 9015, 'blue_one')], # ('localhost', 9016, 'blue_two')
-        'sim_script': './demo1v1.sh',
         'return_raw_state': False,
         'max_steps': 1000000
     }
 
     
     # Set the right script to use
-    if args.trained == 'red':
+    if args.color == 'red':
         config_dict['sim_script'] = './red.sh'
-    elif args.trained == 'blue':
+    elif args.color == 'blue':
         config_dict['sim_script'] = './blue.sh'
 
     env = PyquaticusBridge(config_dict)
@@ -41,7 +40,6 @@ if __name__ == "__main__":
 
     # Use the `from_checkpoint` utility of the Policy class:
     policy = Policy.from_checkpoint(args.policy_dir)
-    print(args.policy_dir)
 
 
     obs = env.reset()
@@ -51,7 +49,7 @@ if __name__ == "__main__":
     while not done:
         unnormalized_obs = {name: obs_normalizer.unnormalized(obs[name]) for name in env._agents}
 
-        if args.trained == "blue":
+        if args.color == "blue":
             blue_action = defend_policy.compute_single_action(obs['blue_one'])[0]
             obs, reward, done, info = env.step({'blue_one': blue_action})
 
