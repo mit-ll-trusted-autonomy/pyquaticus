@@ -78,7 +78,7 @@ config_dict_std = {
     "tau": (
         1 / 10
     ),  # length of timestep (seconds) between state updates and for updating action input from demonstrator or rl
-    "max_time": 120.0,  # maximum time (seconds) per episode
+    "max_time": 240.0,  # maximum time (seconds) per episode
     "max_screen_size": get_screen_res(),
     "random_init": (
         False
@@ -213,6 +213,14 @@ class Player:
                     right_vertex,
                 ),
             )
+            # draw.arc(self.pygame_agent, (0, 0, 0), pygame.Rect((0, 0), (2*self.r, 2*self.r)), np.pi/2, 5*np.pi/2, 5)
+            # draw.circle(
+            #     self.pygame_agent,
+            #     (0, 255, 0),
+            #     (self.r, self.r),
+            #     self.r,
+            #     width=5,
+            # )
         else:
             draw.circle(self.pygame_agent, (255, 0, 0, 50), (self.r, self.r), self.r)
             draw.circle(
@@ -232,6 +240,12 @@ class Player:
                     right_vertex,
                 ),
             )
+
+        # make a copy of pygame agent with nothing extra drawn on it
+        self.pygame_agent_base = self.pygame_agent.copy()
+
+        # pygame Rect object the same size as pygame_agent Surface
+        self.pygame_agent_rect = pygame.Rect((0, 0), (2*self.r, 2*self.r))
 
     def reset(self):
         """Method to return a player to their original starting position."""
@@ -271,9 +285,27 @@ class Player:
         # Rotate 180 degrees
         self.heading = angle180(self.heading + angle)
 
-            
-            
+    def render_tagging(self, cooldown_time):
+        self.pygame_agent = self.pygame_agent_base.copy()
 
+        # render_is_tagged
+        if self.is_tagged :
+            draw.circle(
+                self.pygame_agent,
+                (0, 255, 0),
+                (self.r, self.r),
+                self.r,
+                width=5,
+            )
+
+        # render_tagging_cooldown
+        if self.tagging_cooldown != cooldown_time:
+            percent_cooldown = self.tagging_cooldown/cooldown_time
+
+            start_angle = np.pi/2 + percent_cooldown * 2*np.pi
+            end_angle = 5*np.pi/2
+
+            draw.arc(self.pygame_agent, (0, 0, 0), self.pygame_agent_rect, start_angle, end_angle, 5)
 
 
 @dataclass
@@ -1734,6 +1766,10 @@ class PyQuaticusEnv(ParallelEnv):
                 )
 
             for player in teams_players:
+                # render tagging
+                player.render_tagging(self.tagging_cooldown)
+
+                # heading
                 orientation = Vector2(list(mag_heading_to_vec(1.0, player.heading)))
                 ref_angle = -orientation.angle_to(self.UP)
 
