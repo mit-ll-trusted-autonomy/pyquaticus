@@ -1,0 +1,57 @@
+README-MISSION-AUTONOMY
+DATE: June 12th 2022
+AUTHOR: Michael "Misha" Novitzky
+
+#Launching the example mission -- from within directory moos-ivp-aquaticus/missions/competition-2022/
+
+$launch_demo.sh 4
+
+To bring up the command window:  press the 'spacebar' when the GUI is highlighted.
+
+#Launching the mission piece meal
+#Launching the shoreside
+$./launch_shoreside.sh 4
+
+#Launching individual robot agents
+
+$./launch_heron.sh <physical-vehicle-name> <vehicle_role> <teammate_vehicle_role> [SWITCHES]
+
+example
+$./launch_heron.sh j b1 b2 4 -s --role=ATTACK_E
+
+**MAKE SURE TO KEEP THE VEHICLE NAMES DIFFERENT TO AVOID NETOWORK COLLISIONS/ERRORS***
+
+POSSIBLE VEHICLE NAMES:
+  evan,         e   : Evan heron.
+  felix,        f   : Felix heron.
+  gus,          g   : Gus heron.
+  hal,          h   : Hal heron.
+  ida,          i   : Ida heron.
+  jing,         j   : Jing heron.
+  kirk,         k   : Kirk heron.
+  luke,         l   : Luke heron.
+
+POSSIBLE ROLES (and teammate_roles):
+  blue_one,     b1  : Vehicle one on blue team.
+  blue_two,     b2  : Vehicle two on blue team.
+  red_one,      r1  : Vehicle one on red team.
+  red_two,      r2  : Vehicle two on red team.
+
+POSSIBLE SWITCHES:
+  --role,           : Autonomy startup role.
+  --sim,        -s  : Simulation mode.
+  --start-x=        : Start from x position (requires x y a).
+  --start-y=        : Start from y position (requires x y a).
+  --start-a=        : Start from angle (requires x y a).
+  --cid=            : Competition ID (for log file)
+  --logpath=        : Log path
+  --just_build, -J  : Just build targ files.
+  --help,       -H  : Display this message.
+  #                 : MOOS Time Warp.
+
+
+Possible Autonomy Roles:
+ATTACK_E
+ATTACK_MED
+DEFEND_E
+DEFEND_MED

@@ -1,0 +1,18 @@
+// Generated with Anaxi Tile Downloader
+lat_north= 41.35310301646902
+lat_south= 41.347948493443546
+
+lon_east= -74.05746459960938
+lon_west= -74.06295776367188
+
+datum_lat  = 41.35124
+datum_lon = -74.06087
+
+//tileStartX= 77141
+//tileStartY= 97943
+//tileEndX= 77144
+//tileEndY= 97947
+//om= 18
+//mTiles= 20
+//pFile= Map_18_77141-77144_97943-97947.png
+//d= tsdl.py

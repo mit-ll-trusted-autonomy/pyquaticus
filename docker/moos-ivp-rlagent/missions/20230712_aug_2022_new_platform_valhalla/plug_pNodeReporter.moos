@@ -1,0 +1,10 @@
+//---------------------------------------
+ProcessConfig = pNodeReporter
+{
+  AppTick     = 2
+  CommsTick   = 2
+
+  vessel_type = $(VTYPE)
+  group       = $(VTEAM)
+  platform_color = $(VTEAM)
+}

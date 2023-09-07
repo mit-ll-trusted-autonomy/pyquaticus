@@ -103,7 +103,8 @@ config_dict_std = {
     "suppress_numpy_warnings": (
         True  # Option to stop numpy from printing warnings to the console
     ),
-    "teleport_on_tag" : False, # Option for the agent when tagged to teleport home or not
+    "teleport_on_tag" : False, 
+    # Option for the agent when tagged, either out of bounds or by opponent, to teleport home or not
 }
 """ Standard configuration setup """
 
@@ -328,6 +329,7 @@ class PyQuaticusEnv(ParallelEnv):
             Own flag status (boolean)
             On side (boolean)
             Tagging cooldown (seconds) time elapsed since last tag (at max when you can tag again)
+            Is tagged (boolean)
             For each other agent (teammates first) [Consider sorting teammates and opponents by distance or flag status]
                 Bearing from you (clockwise degrees)
                 Distance (meters)
@@ -336,6 +338,7 @@ class PyQuaticusEnv(ParallelEnv):
                 Has flag status (boolean)
                 On their side status (boolean)
                 Tagging cooldown (seconds)
+                Is tagged (boolean)
         Note 1 : the angles are 0 when the agent is pointed directly at the object
                  and increase in the clockwise direction
         Note 2 : the wall distances can be negative when the agent is out of bounds
@@ -1428,8 +1431,8 @@ class PyQuaticusEnv(ParallelEnv):
             Own speed (meters per second)
             Own flag status (boolean)
             On side (boolean)
-            Is tagged (boolean)
             Tagging cooldown (seconds) time elapsed since last tag (at max when you can tag again)
+            Is tagged (boolean)
             For each other agent (teammates first) [Consider sorting teammates and opponents by distance or flag status]
                 Bearing from you (clockwise degrees)
                 Distance (meters)
