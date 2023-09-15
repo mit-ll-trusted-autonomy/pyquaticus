@@ -577,7 +577,7 @@ class PyQuaticusEnv(ParallelEnv):
             # convert desired_speed   and  desired_heading to
             #         desired_thrust  and  desired_rudder
             # requested heading is relative so it directly maps to the heading error
-            # print(obs["protect_flag_bearing"])
+            
             if player.is_tagged and not config_dict_std["teleport_on_tag"]:
                 team = int(player.team)
                 flag_home = self.flags[team].home
@@ -585,14 +585,8 @@ class PyQuaticusEnv(ParallelEnv):
                     np.array(player.pos, dtype=np.float32), flag_home, player.heading
                 )
                 ag_vect = self._bearing_to_vec(home_flag_bearing)
-                act_heading = self._vec_to_heading(ag_vect)
-                if 1 >= act_heading >= -1:
-                    act_index = 4
-                elif act_heading < -1:
-                    act_index = 6
-                elif act_heading > 1:
-                    act_index = 2
-                desired_speed, heading_error = ACTION_MAP[act_index]
+                heading_error = self._vec_to_heading(ag_vect)
+                desired_speed = MAX_SPEED
             else:
                 desired_speed, heading_error = action_dict[player.id]
 
