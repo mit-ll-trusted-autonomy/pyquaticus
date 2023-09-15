@@ -4,7 +4,7 @@ from pyquaticus.base_policies.base_defend import BaseDefender
 from pyquaticus.envs.pyquaticus import Team
 
 # internal imports
-from gym_aquaticus.envs.pyquaticus_bridge import PyquaticusBridge
+from gym_aquaticus.envs.pyquaticus_team_env_bridge import PyquaticusBridge
 from gym_aquaticus.envs.config import WestPointConfig
 from ray.rllib.algorithms.ppo import PPOConfig as ppo
 from ray import air

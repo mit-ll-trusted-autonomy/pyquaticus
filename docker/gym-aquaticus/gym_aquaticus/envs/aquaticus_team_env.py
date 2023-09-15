@@ -33,8 +33,8 @@ class AquaticusTeamEnv(gym.Env):
         Args:
             env_config:            a dictionary containing the following
                 moos_config:       a gym_aquaticus.config object
-                red_team_params:   list of tuples (name, port) for own team agents
-                blue_team_params:  list of tuples (name, port) for enemy team agents
+                red_team_params:   list of tuples (name, port) for red team agents
+                blue_team_params:  list of tuples (name, port) for blue team agents
                 sim_script:        bash script to launch MOOS
                 max_score:         maximum score before game ends
                 frame:             whether observations and actions are in the world or local frame
