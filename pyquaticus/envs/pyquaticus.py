@@ -1239,6 +1239,7 @@ class PyQuaticusEnv(ParallelEnv):
             )
 
         for player in self.players:
+            player.is_tagged = False
             player.thrust = 0.0
             player.speed = 0.0
             player.has_flag = False
