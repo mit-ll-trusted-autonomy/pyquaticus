@@ -126,7 +126,6 @@ class Watcher:
 
         self._opponent_team = Team.BLUE_TEAM if self._team == Team.RED_TEAM else Team.RED_TEAM
 
-        # TODO: consider refactoring so base player class doesn't have rendering info
         player_id = 0
         self.players = {agent_name: Player(player_id)}
         player_id += 1
