@@ -224,7 +224,7 @@ class Watcher:
                 field, val = col.split("=")
                 if field.lower() == "owner":
                     # the value for owner is the agent name
-                    flag_holders.append(val)
+                    flag_holders.add(val)
             # update all player objects
             for name, agent in self.players.items():
                 agent.has_flag = name in flag_holders
