@@ -91,7 +91,8 @@ import itertools
 import pymoos
 import time
 
-from pyquaticus.envs.pyquaticus import Player, Team
+from pyquaticus.config import get_std_config
+from pyquaticus.structs import Player, Team
 
 
 class Watcher:
@@ -128,13 +129,14 @@ class Watcher:
         # TODO: consider refactoring so base player class doesn't have rendering info
         radius = 10.
         player_id = 0
-        self.players = {agent_name: Player(player_id, self._team, radius)}
+        config_dict = get_std_config()
+        self.players = {agent_name: Player(player_id, self._team, radius, config_dict)}
         player_id += 1
         for name in self._team_names:
-            self.players[name] = (Player(player_id, self._team, radius))
+            self.players[name] = (Player(player_id, self._team, radius, config_dict))
             player_id += 1
         for name in self._opponent_names:
-            self.players[name] = (Player(player_id, self._opponent_team, radius))
+            self.players[name] = (Player(player_id, self._opponent_team, radius, config_dict))
             player_id += 1
 
         for player in self.players.values():
@@ -245,15 +247,3 @@ class Watcher:
         agent.pos = [float(data["X"]), float(data["Y"])]
         agent.speed = float(data["SPD"])
         agent.heading = float(data["HDG"])
- 
-
-if __name__ == "__main__":
-    watcher = Watcher("localhost", "red_one", 9011, 
-                      [], ["blue_one"], quiet=False)
-
-    for i in range(60):
-        print(f"{'#'*10} REPORT {'#'*10}")
-        for name, agent in watcher.players.items():
-            print(f"{name}: {agent.pos}, {agent.speed} m/s, {agent.heading} deg")
-        print('#'*28)
-        time.sleep(1)

@@ -24,8 +24,6 @@ import functools
 import math
 import random
 from collections import OrderedDict, defaultdict
-from dataclasses import dataclass, field
-from enum import Enum
 from typing import Optional
 
 import numpy as np
@@ -33,10 +31,12 @@ import pygame
 from gymnasium.spaces import Discrete
 from gymnasium.utils import seeding
 from pettingzoo import ParallelEnv
-from pygame import SRCALPHA, Surface, draw
+from pygame import SRCALPHA, draw
 from pygame.math import Vector2
 from pygame.transform import rotozoom
 
+from pyquaticus.config import config_dict_std, ACTION_MAP
+from pyquaticus.structs import Team, Player, Flag
 from pyquaticus.utils.obs_utils import ObsNormalizer
 from pyquaticus.utils.pid import PID
 from pyquaticus.utils.utils import (
@@ -44,7 +44,6 @@ from pyquaticus.utils.utils import (
     clip,
     closest_point_on_line,
     get_rot_angle,
-    get_screen_res,
     mag_bearing_to,
     mag_heading_to_vec,
     rc_intersection,
@@ -52,251 +51,6 @@ from pyquaticus.utils.utils import (
     rot2d,
     vec_to_mag_heading,
 )
-
-MAX_SPEED = 5.0
-
-config_dict_std = {
-    "world_size": [110.0, 55.0],  # meters
-    "pixel_size": 10,  # pixels/meter
-    "scrimmage_line": 55.0,  # horizontal location (meters)
-    "agent_radius": 2.0,  # meters
-    "catch_radius": 10.0,  # meters
-    "flag_keepout": 5.0,  # minimum distance (meters) between agent and flag centers
-    "keepout_bounce": (
-        0.0 # In the WP competition there is no penalty for going withing the ctach radius of the flag
-    ),  # [0, 1] percentage of velocity in direction of collision at which an agent is repelled from its keepout zone
-    "max_speed": MAX_SPEED,  # meters / s
-    "own_side_accel": (
-        1.0
-    ),  # [0, 1] percentage of max acceleration that can be used on your side of scrimmage
-    "opp_side_accel": (
-        1.0
-    ),  # [0, 1] percentage of max acceleration that can be used on opponent's side of scrimmage
-    "wall_bounce": (
-        0.5
-    ),  # [0, 1] percentage of current speed (x or y) at which an agent is repelled from a wall (vertical or horizontal)
-    "tau": (
-        1 / 10
-    ),  # length of timestep (seconds) between state updates and for updating action input from demonstrator or rl
-    "max_time": 120.0,  # maximum time (seconds) per episode
-    "max_screen_size": get_screen_res(),
-    "random_init": (
-        False
-    ),  # randomly initialize agents' positions for ctf mode (within fairness constraints)
-    "save_traj": False,  # save traj as pickle
-    "render_fps": 30,
-    "normalize": True,  # Flag for normalizing the observation space.
-    "tagging_cooldown": (
-        10.0
-    ),  # Cooldown on an agent after they tag another agent, to prevent consecutive tags
-    # MOOS dynamics parameters
-    "speed_factor": 20.0,  # Multiplicative factor for desired_speed -> desired_thrust
-    "thrust_map": np.array(  # Piecewise linear mapping from desired_thrust to speed
-        [[-100, 0, 20, 40, 60, 80, 100], [-2, 0, 1, 2, 3, 5, 5]]
-    ),
-    "max_thrust": 70,  # Limit on vehicle thrust
-    "max_rudder": 100,  # Limit on vehicle rudder actuation
-    "turn_loss": 0.85,
-    "turn_rate": 70,
-    "max_acc": 1,  # m / s**2
-    "max_dec": 1,  # m / s**2
-    "suppress_numpy_warnings": (
-        True  # Option to stop numpy from printing warnings to the console
-    ),
-    "teleport_on_tag" : False, 
-    # Option for the agent when tagged, either out of bounds or by opponent, to teleport home or not
-}
-""" Standard configuration setup """
-
-
-def get_std_config() -> dict:
-    """Gets a copy of the standard configuration, ideal for minor modifications to the standard configuration."""
-    return copy.deepcopy(config_dict_std)
-
-
-# action space key combos
-# maps discrete action id to (speed, heading)
-ACTION_MAP = []
-for spd in [MAX_SPEED, MAX_SPEED / 2.0]:
-    for hdg in range(180, -180, -45):
-        ACTION_MAP.append([spd, hdg])
-# add a none action
-ACTION_MAP.append([0.0, 0.0])
-
-
-class Team(Enum):
-    """Enum for teams."""
-
-    BLUE_TEAM = 0
-    RED_TEAM = 1
-
-    def __int__(self):
-        """Returns integer equivalent of enum for indexing."""
-        return self.value
-
-    def __str__(self):
-        """Returns string equivalent for enum."""
-        return self.name
-
-    def __repr__(self):
-        return f"{self.name}({self.value})"
-
-
-@dataclass
-class Player:
-    """
-    Class to hold data on each player/agent in the game.
-
-    Attributes
-    ----------
-        id: The ID of the agent (also used as an index)
-        team: The team of the agent (red or blue)
-        r: Agent radius
-        thrust: The engine thrust
-        pos: The position of the agent [x, y]
-        speed: The speed of the agent (m / s)
-        heading: The heading of the agent (deg), maritime convention: north is 0, east is 90
-        pygame_agent: The pygame object that is drawn on screen.
-        prev_pos: The previous position of the agent
-        has_flag: Indicator for whether or not the agent has the flag
-        on_own_side: Indicator for whether or not the agent is on its own side of the field.
-    """
-
-    id: int
-    team: Team
-    r: float
-    thrust: float = field(init=False, default_factory=float)
-    pos: list[float] = field(init=False, default_factory=list)
-    speed: float = field(init=False, default_factory=float)
-    heading: float = field(init=False, default_factory=float)
-    pygame_agent: Surface = field(init=False, default=None)
-    prev_pos: list[float] = field(init=False, default_factory=list)
-    has_flag: bool = field(init=False, default=False)
-    on_own_side: bool = field(init=False, default=True)
-    tagging_cooldown: float = field(init=False)
-    is_tagged: bool = field(init = False, default=False)
-    home: list[float] = field(init=False, default_factory=list)
-
-    def __post_init__(self):
-        """Called automatically after __init__ to set up pygame object interface."""
-        # Create the shape of the arrow indicating agent orientation
-        top_vertex = (self.r, 0)
-        left_vertex = (
-            self.r - self.r * np.sqrt(2) / 2 + 1,
-            self.r + self.r * np.sqrt(2) / 2 - 1,
-        )
-        right_vertex = (
-            self.r + self.r * np.sqrt(2) / 2 - 1,
-            self.r + self.r * np.sqrt(2) / 2 - 1,
-        )
-        center_vertex = (self.r, 1.25 * self.r)
-
-        # Create the actual object
-        self.pygame_agent = Surface((2 * self.r, 2 * self.r), SRCALPHA)
-
-        # Adjust color based on which team
-        if self.team == Team.BLUE_TEAM:
-            draw.circle(self.pygame_agent, (0, 0, 255, 50), (self.r, self.r), self.r)
-            draw.circle(
-                self.pygame_agent,
-                (0, 0, 255),
-                (self.r, self.r),
-                self.r,
-                width=round(self.r / 20),
-            )
-            draw.polygon(
-                self.pygame_agent,
-                (0, 0, 255),
-                (
-                    top_vertex,
-                    left_vertex,
-                    center_vertex,
-                    right_vertex,
-                ),
-            )
-        else:
-            draw.circle(self.pygame_agent, (255, 0, 0, 50), (self.r, self.r), self.r)
-            draw.circle(
-                self.pygame_agent,
-                (255, 0, 0),
-                (self.r, self.r),
-                self.r,
-                width=round(self.r / 20),
-            )
-            draw.polygon(
-                self.pygame_agent,
-                (255, 0, 0),
-                (
-                    top_vertex,
-                    left_vertex,
-                    center_vertex,
-                    right_vertex,
-                ),
-            )
-
-    def reset(self):
-        """Method to return a player to their original starting position."""
-        self.prev_pos = self.pos
-        self.pos = self.home
-        self.speed = 0
-        if self.team == Team.RED_TEAM:
-            self.heading = 90
-        else:
-            self.heading = -90
-        self.thrust = 0
-        self.is_tagged = False
-        self.has_flag = False
-        self.on_sides = True
-
-    def rotate(self, angle=180):
-        """Method to rotate the player 180"""
-        self.prev_pos = self.pos
-        self.speed = 0
-        self.thrust = 0
-        self.has_flag = False
-       
-        # Need to get which wall the agent bumped into
-        x_pos = self.pos[0]
-        y_pos = self.pos[1]
-
-        if (x_pos < self.r):
-            self.pos[0] += 1
-        elif(config_dict_std["world_size"][0] - self.r < x_pos):
-            self.pos[0] -= 1
-        
-        if (y_pos < self.r):
-            self.pos[1] += 1
-        elif(config_dict_std["world_size"][1] - self.r < y_pos):
-            self.pos[1] -= 1
-        
-        # Rotate 180 degrees
-        self.heading = angle180(self.heading + angle)
-
-            
-            
-
-
-
-@dataclass
-class Flag:
-    """
-    Class for data on the flag.
-
-    Attributes
-    ----------
-        team: The team the flag belongs to
-        home: The flags original position at the start of the round/game
-        pos: The flags current position
-    """
-
-    team: Team
-    home: list[float] = field(default_factory=list, init=False)
-    pos: list[float] = field(default_factory=list, init=False)
-
-    def reset(self):
-        """Resets the flags `pos` to be `home`."""
-        self.pos = copy.deepcopy(self.home)
-
 
 class PyQuaticusEnv(ParallelEnv):
     """
@@ -409,11 +163,11 @@ class PyQuaticusEnv(ParallelEnv):
         # Create players, use IDs from [0, (2 * team size) - 1] so their IDs can also be used as indices.
         for i in range(0, self.team_size):
             b_players.append(
-                Player(i, Team.BLUE_TEAM, (self.agent_radius * self.pixel_size))
+                Player(i, Team.BLUE_TEAM, (self.agent_radius * self.pixel_size), self.config_dict)
             )
         for i in range(self.team_size, 2 * self.team_size):
             r_players.append(
-                Player(i, Team.RED_TEAM, (self.agent_radius * self.pixel_size))
+                Player(i, Team.RED_TEAM, (self.agent_radius * self.pixel_size), self.config_dict)
             )
         self.players = b_players + r_players
         self.player_ids = {p.id for p in self.players}
