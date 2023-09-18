@@ -226,6 +226,15 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             str(self._agent_name))
         self._moos_comm.set_quiet(self._quiet)
 
+        start_time = time.time()
+        wait_time = 1.
+        while not self._moos_comm.is_connected():
+            print(f"Waiting for agent to connect...")
+            time.sleep(wait_time)
+            wait_time = wait_time + 1 if wait_time < 10 else wait_time
+            if time.time() - start_time > 300:
+                print(f"Timed out!")
+
     def _on_mail(self):
         try:
             for msg in self._moos_comm.fetch():
