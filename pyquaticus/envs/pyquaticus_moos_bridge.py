@@ -127,16 +127,14 @@ class Watcher:
         self._opponent_team = Team.BLUE_TEAM if self._team == Team.RED_TEAM else Team.RED_TEAM
 
         # TODO: consider refactoring so base player class doesn't have rendering info
-        radius = 10.
         player_id = 0
-        config_dict = get_std_config()
-        self.players = {agent_name: Player(player_id, self._team, radius, config_dict)}
+        self.players = {agent_name: Player(player_id)}
         player_id += 1
         for name in self._team_names:
-            self.players[name] = (Player(player_id, self._team, radius, config_dict))
+            self.players[name] = (Player(player_id))
             player_id += 1
         for name in self._opponent_names:
-            self.players[name] = (Player(player_id, self._opponent_team, radius, config_dict))
+            self.players[name] = (Player(player_id))
             player_id += 1
 
         for player in self.players.values():
@@ -236,9 +234,9 @@ class Watcher:
         # update all player objects
         for name, agent in self.players.items():
             tag_status = name in tagged_agents
-            if tag_status != agent.tagged:
+            if tag_status != agent.is_tagged:
                 print(f"Warning: getting no tag cooldown information!")
-            agent.tagged = tag_status
+            agent.is_tagged = tag_status
     def _node_report_handler(self, msg):
         agent_name = msg.key().removeprefix("NODE_REPORT_").lower()
         data = {field: val 
