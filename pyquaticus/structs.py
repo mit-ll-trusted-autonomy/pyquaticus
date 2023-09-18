@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 import numpy as np
 from pygame import SRCALPHA, Surface, draw
+from typing import Hashable
 
 from pyquaticus.utils.utils import angle180
 
@@ -45,7 +46,7 @@ class Player:
         on_own_side: Indicator for whether or not the agent is on its own side of the field.
     """
 
-    id: int
+    id: Hashable
     team: Team
     r: float
     config_dict: dict
