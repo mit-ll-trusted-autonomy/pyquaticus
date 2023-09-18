@@ -36,7 +36,7 @@ runtime = 120 # seconds
 
 def run_one_episode(env, quittable=True, render=RENDER_MODE):
     env.reset()
-    full_action = {agent.id:env.action_space(agent.id).sample() for agent in  env.players}
+    full_action = {agent_id:env.action_space(agent_id).sample() for agent_id in  env.players}
     for i in range(int(runtime/env.tau)):
         if quittable and render:
             for event in pygame.event.get():
@@ -46,7 +46,7 @@ def run_one_episode(env, quittable=True, render=RENDER_MODE):
                     env.close()
                     sys.exit()
 
-        full_action = {agent.id:env.action_space(agent.id).sample() for agent in env.players}
+        full_action = {agent_id:env.action_space(agent_id).sample() for agent_id in env.players}
         new_obs, reward, terminated, truncated, info = env.step(full_action)
         for k in terminated:
             if terminated[k] == True or truncated[k] == True:

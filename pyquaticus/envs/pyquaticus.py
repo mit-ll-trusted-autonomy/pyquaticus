@@ -20,6 +20,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import copy
+import itertools
 import functools
 import math
 import random
@@ -155,7 +156,7 @@ class PyQuaticusEnv(ParallelEnv):
         self.num_blue = team_size
         self.num_red = team_size
 
-        self.players = []
+        self.players = {} # a dictionary mapping player ids (or names) to player objects
         b_players = []
         r_players = []
         self.team_size = team_size
@@ -169,29 +170,28 @@ class PyQuaticusEnv(ParallelEnv):
             r_players.append(
                 Player(i, Team.RED_TEAM, (self.agent_radius * self.pixel_size), self.config_dict)
             )
-        self.players = b_players + r_players
-        self.player_ids = {p.id for p in self.players}
+        self.players = {player.id:player for player in itertools.chain(b_players, r_players)}
 
-        self.agents = [p.id for p in self.players]
+        self.agents = [agent_id for agent_id in self.players]
         self.possible_agents = self.agents[:]
 
         self.agents_of_team = {Team.BLUE_TEAM: b_players, Team.RED_TEAM: r_players}
 
         # Setup Rewards
         self.reward_config = {} if reward_config is None else reward_config
-        for a in self.player_ids:
+        for a in self.players:
             if a not in self.reward_config:
                 self.reward_config[a] = None
         # Create a PID controller for each agent
         self._pid_controllers = {}
-        for player in self.players:
+        for player in self.players.values():
             self._pid_controllers[player.id] = {
                 "speed": PID(self.tau, kp=1.0, ki=0.0, kd=0.0, integral_max=0.07),
                 "heading": PID(self.tau, kp=0.35, ki=0.0, kd=0.07, integral_max=0.07),
             }
 
-        self.params = {agent.id: {} for agent in self.players}
-        self.prev_params = {agent.id: {} for agent in self.players}
+        self.params = {agent_id: {} for agent_id in self.players}
+        self.prev_params = {agent_id: {} for agent_id in self.players}
         # Create the list of flags that are indexed by self.flags[int(player.team)]
 
         self.flags = []
@@ -199,16 +199,16 @@ class PyQuaticusEnv(ParallelEnv):
             self.flags.append(Flag(team))
 
         # Set tagging cooldown
-        for player in self.players:
+        for player in self.players.values():
             player.tagging_cooldown = self.tagging_cooldown
 
         self.agent_obs_normalizer = self._register_state_elements()
 
         self.action_spaces = {
-            agent: self.action_space(agent) for agent in self.player_ids
+            agent_id: self.action_space(agent_id) for agent_id in self.players
         }
         self.observation_spaces = {
-            agent: self.observation_space(agent) for agent in self.player_ids
+            agent_id: self.observation_space(agent_id) for agent_id in self.players
         }
 
         self.render_mode = render_mode
@@ -266,13 +266,13 @@ class PyQuaticusEnv(ParallelEnv):
         # set the time
         self.current_time += self.tau
         self.state["current_time"] = self.current_time
-        if not set(raw_action_dict.keys()) <= self.player_ids:
+        if not set(raw_action_dict.keys()) <= set(self.players):
             raise ValueError(
                 "Keys of action dict should be player ids but got"
                 f" {raw_action_dict.keys()}"
             )
 
-        for player in self.players:
+        for player in self.players.values():
             if player.tagging_cooldown != self.tagging_cooldown:
                 # player is still under a cooldown from tagging, advance their cooldown timer, clip at the configured tagging cooldown
                 player.tagging_cooldown = self._min(
@@ -300,9 +300,9 @@ class PyQuaticusEnv(ParallelEnv):
         if self.message and self.render_mode:
             print(self.message)
 
-        rewards = {agent.id: self.compute_rewards(agent.id) for agent in self.players}
-        obs = {agent: self.state_to_obs(agent) for agent in raw_action_dict}
-        info = {agent: {"blue": {}, "red": {}} for agent in range(self.num_agents)}
+        rewards = {agent_id: self.compute_rewards(agent_id) for agent_id in self.players}
+        obs = {agent_id: self.state_to_obs(agent_id) for agent_id in raw_action_dict}
+        info = {}
 
         terminated = False
         truncated = False
@@ -318,7 +318,7 @@ class PyQuaticusEnv(ParallelEnv):
 
     def _move_agents(self, action_dict, dt):
         """Moves agents in the space according to the specified speed/heading in `action_dict`."""
-        for player in self.players:
+        for player in self.players.values():
             pos_x = player.pos[0]
             pos_y = player.pos[1]
             flag_loc = self.flags[int(player.team)].home
@@ -451,7 +451,7 @@ class PyQuaticusEnv(ParallelEnv):
     def _to_speed_heading(self, action_dict):
         """Returns an array of velocities for each agent."""
         processed_action_dict = OrderedDict()
-        for player in self.players:
+        for player in self.players.values():
             if player.id in action_dict:
                 speed, heading = ACTION_MAP[action_dict[player.id]]
             else:
@@ -464,7 +464,7 @@ class PyQuaticusEnv(ParallelEnv):
 
     def _check_pickup_flags(self):
         """Updates player states if they picked up the flag."""
-        for player in self.players:
+        for player in self.players.values():
             team = int(player.team)
             other_team = int(not team)
             if not (player.has_flag or self.state["flag_taken"][other_team]) and (not player.is_tagged):
@@ -483,7 +483,7 @@ class PyQuaticusEnv(ParallelEnv):
                         break
     def _check_untag(self):
         """Untags the player if they return to their own flag."""
-        for player in self.players:
+        for player in self.players.values():
             team = int(player.team)
             flag_home = self.flags[team].home
             distance_to_flag = self.get_distance_between_2_points(
@@ -498,16 +498,16 @@ class PyQuaticusEnv(ParallelEnv):
         # Reset capture state if teleport_on_tag is true
         if config_dict_std["teleport_on_tag"] == True:
             self.state["agent_tagged"] = [0] * self.num_agents
-            for player in self.players:
+            for player in self.players.values():
                 player.is_tagged = False
 
         self.state["agent_captures"] = [None] * self.num_agents
-        for player in self.players:
+        for player in self.players.values():
             # Only continue logic check if player tagged someone if it's on its own side and is untagged.
             if player.on_own_side and (
                 player.tagging_cooldown == self.tagging_cooldown
             ) and not player.is_tagged:
-                for other_player in self.players:
+                for other_player in self.players.values():
                     o_team = int(other_player.team)
                     # Only do the rest if the other player is NOT on sides and they are not on the same team.
                     if (
@@ -554,7 +554,7 @@ class PyQuaticusEnv(ParallelEnv):
 
     def _check_flag_captures(self):
         """Updates states if a player captured a flag."""
-        for player in self.players:
+        for player in self.players.values():
             if player.on_own_side and player.has_flag:
                 if player.team == Team.BLUE_TEAM:
                     self.blue_team_flag_capture = True
@@ -922,7 +922,7 @@ class PyQuaticusEnv(ParallelEnv):
         self.message = ""
         self.current_time = 0
         self.reset_count += 1
-        reset_obs = {agent.id: self.state_to_obs(agent.id) for agent in self.players}
+        reset_obs = {agent_id: self.state_to_obs(agent_id) for agent_id in self.players}
 
         if self.render_mode:
             self._render()
@@ -964,7 +964,7 @@ class PyQuaticusEnv(ParallelEnv):
                 flag_locations[0], flag_locations[1]
             )
 
-        for player in self.players:
+        for player in self.players.values():
             player.thrust = 0.0
             player.speed = 0.0
             player.has_flag = False
@@ -1025,7 +1025,7 @@ class PyQuaticusEnv(ParallelEnv):
         where each number is the corresponding agents min distance to a boundary wall.
         """
         distances_to_walls = defaultdict(dict)
-        for player in self.players:
+        for player in self.players.values():
             i = player.id
             x_pos = player.pos[0]
             y_pos = player.pos[1]
@@ -1041,11 +1041,11 @@ class PyQuaticusEnv(ParallelEnv):
         """Returns dictionary of distances between agents indexed by agent numbers."""
         agt_to_agt_vecs = {}
 
-        for player in self.players:
+        for player in self.players.values():
             i = player.id
             agt_to_agt_vecs[i] = {}
             i_pos = player.pos
-            for other_player in self.players:
+            for other_player in self.players.values():
                 j = other_player.id
                 j_pos = other_player.pos
                 agt_to_agt_vecs[i][j] = [j_pos[0] - i_pos[0], j_pos[1] - i_pos[1]]
@@ -1056,7 +1056,7 @@ class PyQuaticusEnv(ParallelEnv):
         """Returns a dictionary mapping observation keys to 2d arrays."""
         flag_vecs = {}
 
-        for player in self.players:
+        for player in self.players.values():
             flag_vecs[player.id] = {}
             team_idx = int(player.team)
             i_pos = player.pos
