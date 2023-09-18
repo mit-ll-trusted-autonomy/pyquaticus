@@ -88,14 +88,19 @@ self.state = {
 """
 
 import itertools
+import numpy as np
 import pymoos
 import time
 
-from pyquaticus.structs import Player, Team
+from pyquaticus.envs.pyquaticus import PyQuaticusEnvBase
+from pyquaticus.structs import Player, Team, Flag
+from pyquaticus.config import config_dict_std
 
 
-class PyquaticusMoosBridge:
-    def __init__(self, server, agent_name, agent_port, team_names, opponent_names, quiet=True, team=None):
+class PyQuaticusMoosBridge(PyQuaticusEnvBase):
+    def __init__(self, server, agent_name, agent_port, team_names, opponent_names, moos_config, \
+                 quiet=True, team=None, timewarp=None, tagging_cooldown=config_dict_std["tagging_cooldown"],
+                 normalize=True):
         """
         Subscribe to the relevant MOOSDB variables to form a Pyquaticus state.
 
@@ -105,7 +110,10 @@ class PyquaticusMoosBridge:
             port: the MOOS port for this agent
             team_names: list of names of team members
             opponent_names: list of names of opponents
+            moos_config: one of the objects from pyquaticus.moos.config
             quiet: tell the pymoos comms object to be quiet
+            team: which team this agent is (will infer based on name if not passed)
+            timewarp: uses moos_config default if not passed
         """
         self._server = server
         self._agent_name = agent_name
@@ -113,34 +121,65 @@ class PyquaticusMoosBridge:
         self._team_names = team_names
         self._opponent_names = opponent_names
         self._quiet = quiet
+        self._timewarp = timewarp
+        # Note: not using _ convention to match pyquaticus
+        self.tagging_cooldown = tagging_cooldown
+        self.normalize = normalize
+
+        self.set_config(moos_config)
 
         if isinstance(team, str) and team.lower() in {"red", "blue"}:
-            self._team = Team.RED_TEAM if team == "red" else Team.BLUE_TEAM
+            self.team = Team.RED_TEAM if team == "red" else Team.BLUE_TEAM
         elif "red" in agent_name and "blue" not in agent_name:
-            self._team = Team.RED_TEAM
+            self.team = Team.RED_TEAM
         elif "blue" in agent_name and "red" not in agent_name:
-            self._team = Team.BLUE_TEAM
+            self.team = Team.BLUE_TEAM
         else:
             raise ValueError(f"Unknown team: please pass team=[red|blue]")
 
-        self._opponent_team = Team.BLUE_TEAM if self._team == Team.RED_TEAM else Team.RED_TEAM
+        self._opponent_team = Team.BLUE_TEAM if self.team == Team.RED_TEAM else Team.RED_TEAM
+        self._moos_comm = None
 
-        player_id = 0
-        self.players = {agent_name: Player(player_id)}
-        player_id += 1
+    def reset(self):
+        self.agents_of_team = {t: [] for t in Team}
+
+        self.agents_of_team[self.team].append(Player(self._agent_name, self.team))
         for name in self._team_names:
-            self.players[name] = (Player(player_id))
-            player_id += 1
+            self.agents_of_team[self.team].append(Player(name, self.team))
         for name in self._opponent_names:
-            self.players[name] = (Player(player_id))
-            player_id += 1
+            self.agents_of_team[self._opponent_team].append(Player(name, self._opponent_team))
+
+        self.players = {}
+        for agent_list in self.agents_of_team.values():
+            for agent in agent_list:
+                self.players[agent.id] = agent
+
+        # Set tagging cooldown
+        for player in self.players.values():
+            player.tagging_cooldown = self.tagging_cooldown
+
+        own_team_len = len(self._team_names) + 1
+        opp_team_len = len(self._opponent_names)
+        if own_team_len != opp_team_len:
+            raise ValueError(f"Expecting equal team sizes but got: {own_team_len} vs {opp_team_len}")
+
+
+        self.agent_obs_normalizer = self._register_state_elements(own_team_len)
 
         for player in self.players.values():
             player.pos = [None, None]
 
+        if self._moos_comm is not None:
+            self._moos_comm.close()
+
         self._init_moos_comm()
 
-    def __del__(self):
+        return self.state_to_obs(self._agent_name)
+
+    def render(self, mode="human"):
+        pass
+
+    def close(self):
         if self._moos_comm.close(nice=True):
             return
         else:
@@ -151,6 +190,14 @@ class PyquaticusMoosBridge:
         else:
             self._moos_comm.close(nice=False)
 
+    def step(self, action):
+        # TODOS
+        # set on_own_side for each agent using _check_side(player, team)
+        # translate actions and publish them
+        # get observation and return it
+        # use empty info
+        # just return reward 0 for now -- maybe consider implementing a sparse reward
+        raise NotImplementedError("NYI")
 
     def _init_moos_comm(self):
         self._moos_comm = pymoos.comms()
@@ -235,6 +282,7 @@ class PyquaticusMoosBridge:
             if tag_status != agent.is_tagged:
                 print(f"Warning: getting no tag cooldown information!")
             agent.is_tagged = tag_status
+
     def _node_report_handler(self, msg):
         agent_name = msg.key().removeprefix("NODE_REPORT_").lower()
         data = {field: val 
@@ -245,3 +293,81 @@ class PyquaticusMoosBridge:
         agent.pos = [float(data["X"]), float(data["Y"])]
         agent.speed = float(data["SPD"])
         agent.heading = float(data["HDG"])
+
+    def set_config(self, moos_config):
+        self._moos_config = moos_config
+        self._blue_flag = np.asarray(self._moos_config.blue_flag, dtype=np.float32)
+        self._red_flag = np.asarray(self._moos_config.red_flag, dtype=np.float32)
+
+        self.flags = []
+        for team in Team:
+            flag = Flag(team)
+            if team == Team.BLUE_TEAM:
+                flag.home = self._blue_flag
+                flag.pos = self._blue_flag
+            else:
+                assert team == Team.RED_TEAM
+                flag.home = self._red_flag
+                flag.pos = self._red_flag
+            self.flags.append(flag)
+
+        self.scrimmage_pnts = np.asarray(self._moos_config.scrimmage_pnts, dtype=np.float32)
+        # define function for checking which side an agent is on
+        if abs(self.scrimmage_pnts[0][0] - self.scrimmage_pnts[1][0]) < 1e-2:
+            if self._red_flag[0] > self.scrimmage_pnts[0][0]:
+                def check_side(pnt, team):
+                    x, y = pnt.pos
+                    if team == 'red':
+                        return x > self.scrimmage_pnts[0][0]
+                    else:
+                        return x < self.scrimmage_pnts[0][0]
+            else:
+                def check_side(pnt, team):
+                    x, y = pnt.pos
+                    if team == 'red':
+                        return x < self.scrimmage_pnts[0][0]
+                    else:
+                        return x > self.scrimmage_pnts[0][0]
+
+        elif abs(self.scrimmage_pnts[0][1] - self.scrimmage_pnts[1][1]) < 1e-2:
+            raise RuntimeError('Horizontal scrimmage lines not yet supported')
+        else:
+            m = (self.scrimmage_pnts[1][1] - self.scrimmage_pnts[0][1]) / (self.scrimmage_pnts[1][0] - self.scrimmage_pnts[0][1])
+            b = self.scrimmage_pnts[0][1] - m*self.scrimmage_pnts[0][0]
+
+            if self._red_flag[1] > m*self._red_flag[0] + b:
+                def check_side(pnt, team):
+                    x, y = pnt.pos
+                    if team == 'red':
+                        return y > m*x + b
+                    else:
+                        return y < m*x + b
+            else:
+                def check_side(pnt, team):
+                    x, y = pnt.pos
+                    if team == 'red':
+                        return y < m*x + b
+                    else:
+                        return y > m*x + b
+
+        self._check_on_side = check_side
+
+        # The operating boundary is defined in shoreside/meta_shoreside.moos
+        self.boundary_ul = np.asarray(self._moos_config.boundary_ul, dtype=np.float32)
+        self.boundary_ur = np.asarray(self._moos_config.boundary_ur, dtype=np.float32)
+        self.boundary_ll = np.asarray(self._moos_config.boundary_ll, dtype=np.float32)
+        self.boundary_lr = np.asarray(self._moos_config.boundary_lr, dtype=np.float32)
+        self.world_size  = np.array([np.linalg.norm(self.boundary_lr - self.boundary_ll),
+                                     np.linalg.norm(self.boundary_ul - self.boundary_ll)])
+        if self._timewarp is not None:
+            self._moos_config.moos_timewarp = self._timewarp
+            self._moos_config.sim_timestep = self._moos_config.moos_timewarp / 10.0
+        self.steptime = self._moos_config.sim_timestep
+        self.time_limit = self._moos_config.sim_time_limit
+        self.timewarp = self._moos_config.moos_timewarp
+
+        self.max_speed = self._moos_config.speed_bounds[1]
+
+        # mark this function called already
+        # if called again, nothing will happen
+        self._config_set = True

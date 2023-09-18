@@ -33,6 +33,7 @@ class Player:
     Attributes
     ----------
         id: The ID of the agent (also used as an index)
+        team: The team of the agent (red or blue)
         thrust: The engine thrust
         pos: The position of the agent [x, y]
         speed: The speed of the agent (m / s)
@@ -45,6 +46,7 @@ class Player:
     """
 
     id: Hashable
+    team: Team
     thrust: float = field(init=False, default_factory=float)
     pos: list[float] = field(init=False, default_factory=list)
     speed: float = field(init=False, default_factory=float)
@@ -65,6 +67,7 @@ class RenderingPlayer(Player):
     ----------
         #### inherited from Player
         id: The ID of the agent (also used as an index)
+        team: The team of the agent (red or blue)
         thrust: The engine thrust
         pos: The position of the agent [x, y]
         speed: The speed of the agent (m / s)
@@ -75,14 +78,12 @@ class RenderingPlayer(Player):
         tagging_cooldown: reset to 0 after this player tags another agent then counts up to the configured cooldown
         is_tagged: True iff this player is currently tagged
         #### new fields
-        team: The team of the agent (red or blue)
         r: Agent radius
         config_dict: the configuration dictionary
         home: This agent's home location upon a reset
         pygame_agent: The pygame object that is drawn on screen.
     """
 
-    team: Team
     r: float
     config_dict: dict
     home: list[float] = field(init=False, default_factory=list)

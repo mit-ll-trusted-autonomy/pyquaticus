@@ -1,5 +1,5 @@
 #----------------------------------------------------------------------
-# config.py -- configuration parameters for AquaticusTeamEnv
+# config.py -- configuration parameters for Python wrappers of MOOS-IvP
 #
 # originally developed at NRL and modified at MIT LL
 
