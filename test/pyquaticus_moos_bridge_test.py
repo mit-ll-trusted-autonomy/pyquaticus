@@ -1,9 +1,9 @@
 import time
 
-from pyquaticus.envs.pyquaticus_moos_bridge import Watcher
+from pyquaticus.envs.pyquaticus_moos_bridge import PyquaticusMoosBridge
 
 if __name__ == "__main__":
-    watcher = Watcher("localhost", "red_one", 9011, 
+    watcher = PyquaticusMoosBridge("localhost", "red_one", 9011,
                       [], ["blue_one"], quiet=False)
 
     for i in range(60):

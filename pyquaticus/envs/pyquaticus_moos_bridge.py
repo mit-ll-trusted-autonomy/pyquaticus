@@ -91,11 +91,10 @@ import itertools
 import pymoos
 import time
 
-from pyquaticus.config import get_std_config
 from pyquaticus.structs import Player, Team
 
 
-class Watcher:
+class PyquaticusMoosBridge:
     def __init__(self, server, agent_name, agent_port, team_names, opponent_names, quiet=True, team=None):
         """
         Subscribe to the relevant MOOSDB variables to form a Pyquaticus state.
