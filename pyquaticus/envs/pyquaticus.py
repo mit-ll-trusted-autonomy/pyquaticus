@@ -37,7 +37,7 @@ from pygame.math import Vector2
 from pygame.transform import rotozoom
 
 from pyquaticus.config import config_dict_std, ACTION_MAP
-from pyquaticus.structs import Team, Player, Flag
+from pyquaticus.structs import Team, RenderingPlayer, Flag
 from pyquaticus.utils.obs_utils import ObsNormalizer
 from pyquaticus.utils.pid import PID
 from pyquaticus.utils.utils import (
@@ -164,11 +164,11 @@ class PyQuaticusEnv(ParallelEnv):
         # Create players, use IDs from [0, (2 * team size) - 1] so their IDs can also be used as indices.
         for i in range(0, self.team_size):
             b_players.append(
-                Player(i, Team.BLUE_TEAM, (self.agent_radius * self.pixel_size), self.config_dict)
+                RenderingPlayer(i, Team.BLUE_TEAM, (self.agent_radius * self.pixel_size), self.config_dict)
             )
         for i in range(self.team_size, 2 * self.team_size):
             r_players.append(
-                Player(i, Team.RED_TEAM, (self.agent_radius * self.pixel_size), self.config_dict)
+                RenderingPlayer(i, Team.RED_TEAM, (self.agent_radius * self.pixel_size), self.config_dict)
             )
         self.players = {player.id:player for player in itertools.chain(b_players, r_players)}
 

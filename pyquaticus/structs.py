@@ -33,34 +33,60 @@ class Player:
     Attributes
     ----------
         id: The ID of the agent (also used as an index)
-        team: The team of the agent (red or blue)
-        r: Agent radius
-        config_dict: the configuration dictionary
         thrust: The engine thrust
         pos: The position of the agent [x, y]
         speed: The speed of the agent (m / s)
         heading: The heading of the agent (deg), maritime convention: north is 0, east is 90
-        pygame_agent: The pygame object that is drawn on screen.
         prev_pos: The previous position of the agent
         has_flag: Indicator for whether or not the agent has the flag
         on_own_side: Indicator for whether or not the agent is on its own side of the field.
+        tagging_cooldown: reset to 0 after this player tags another agent then counts up to the configured cooldown
+        is_tagged: True iff this player is currently tagged
     """
 
     id: Hashable
-    team: Team
-    r: float
-    config_dict: dict
     thrust: float = field(init=False, default_factory=float)
     pos: list[float] = field(init=False, default_factory=list)
     speed: float = field(init=False, default_factory=float)
     heading: float = field(init=False, default_factory=float)
-    pygame_agent: Surface = field(init=False, default=None)
     prev_pos: list[float] = field(init=False, default_factory=list)
     has_flag: bool = field(init=False, default=False)
     on_own_side: bool = field(init=False, default=True)
     tagging_cooldown: float = field(init=False)
     is_tagged: bool = field(init = False, default=False)
+
+
+@dataclass
+class RenderingPlayer(Player):
+    """
+    Class to hold data on each player/agent in the game.
+
+    Attributes
+    ----------
+        #### inherited from Player
+        id: The ID of the agent (also used as an index)
+        thrust: The engine thrust
+        pos: The position of the agent [x, y]
+        speed: The speed of the agent (m / s)
+        heading: The heading of the agent (deg), maritime convention: north is 0, east is 90
+        prev_pos: The previous position of the agent
+        has_flag: Indicator for whether or not the agent has the flag
+        on_own_side: Indicator for whether or not the agent is on its own side of the field.
+        tagging_cooldown: reset to 0 after this player tags another agent then counts up to the configured cooldown
+        is_tagged: True iff this player is currently tagged
+        #### new fields
+        team: The team of the agent (red or blue)
+        r: Agent radius
+        config_dict: the configuration dictionary
+        home: This agent's home location upon a reset
+        pygame_agent: The pygame object that is drawn on screen.
+    """
+
+    team: Team
+    r: float
+    config_dict: dict
     home: list[float] = field(init=False, default_factory=list)
+    pygame_agent: Surface = field(init=False, default=None)
 
     def __post_init__(self):
         """Called automatically after __init__ to set up pygame object interface."""
