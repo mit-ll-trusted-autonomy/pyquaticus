@@ -235,8 +235,10 @@ class Watcher:
         tagged_agents = set(msg.string().split(","))
         # update all player objects
         for name, agent in self.players.items():
-            agent.tagged = name in tagged_agents
-
+            tag_status = name in tagged_agents
+            if tag_status != agent.tagged:
+                print(f"Warning: getting no tag cooldown information!")
+            agent.tagged = tag_status
     def _node_report_handler(self, msg):
         agent_name = msg.key().removeprefix("NODE_REPORT_").lower()
         data = {field: val 
