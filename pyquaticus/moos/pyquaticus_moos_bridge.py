@@ -242,7 +242,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
                 return True
         except Exception as e:
             print(f"Got exception: {e}")
-            raise e
+            return False
 
     def _dispatch_message(self, msg):
         if "NAV_" in msg.key():
@@ -375,7 +375,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.time_limit = self._moos_config.sim_time_limit
         self.timewarp = self._moos_config.moos_timewarp
 
-        self.max_speed = self._moos_config.speed_bounds[1]
+        # add some padding becaus it can end up going faster than requested speed
+        self.max_speed = self._moos_config.speed_bounds[1] + 0.5
 
         # mark this function called already
         # if called again, nothing will happen
