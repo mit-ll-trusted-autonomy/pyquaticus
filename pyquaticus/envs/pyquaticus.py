@@ -19,6 +19,7 @@
 
 # SPDX-License-Identifier: BSD-3-Clause
 
+import colorsys
 import copy
 import functools
 import math
@@ -61,10 +62,7 @@ config_dict_std = {
     "scrimmage_line": 55.0,  # horizontal location (meters)
     "agent_radius": 2.0,  # meters
     "catch_radius": 10.0,  # meters
-    "flag_keepout": 5.0,  # minimum distance (meters) between agent and flag centers
-    "keepout_bounce": (
-        0.0 # In the WP competition there is no penalty for going withing the ctach radius of the flag
-    ),  # [0, 1] percentage of velocity in direction of collision at which an agent is repelled from its keepout zone
+    "flag_keepout": 0.0,  # minimum distance (meters) between agent and flag centers
     "max_speed": MAX_SPEED,  # meters / s
     "own_side_accel": (
         1.0
@@ -213,14 +211,6 @@ class Player:
                     right_vertex,
                 ),
             )
-            # draw.arc(self.pygame_agent, (0, 0, 0), pygame.Rect((0, 0), (2*self.r, 2*self.r)), np.pi/2, 5*np.pi/2, 5)
-            # draw.circle(
-            #     self.pygame_agent,
-            #     (0, 255, 0),
-            #     (self.r, self.r),
-            #     self.r,
-            #     width=5,
-            # )
         else:
             draw.circle(self.pygame_agent, (255, 0, 0, 50), (self.r, self.r), self.r)
             draw.circle(
@@ -499,6 +489,7 @@ class PyQuaticusEnv(ParallelEnv):
             # arena
             self.arena_offset = 20  # pixels
             self.border_width = 4  # pixels
+            self.a2a_line_width = 3 #pixels
 
             self.arena_width = self.world_size[0] * self.pixel_size
             self.arena_height = self.world_size[1] * self.pixel_size
@@ -673,7 +664,7 @@ class PyQuaticusEnv(ParallelEnv):
             if (
                 ag_dis_2_flag < self.flag_keepout
                 and not self.state["flag_taken"][int(player.team)]
-                and config_dict_std["keepout_bounce"] > 0
+                and self.flag_keepout > 0.
             ):
                 self.flag_collision_bool[player.id] = True
 
@@ -687,11 +678,7 @@ class PyQuaticusEnv(ParallelEnv):
 
                 crd_ref_angle = get_rot_angle(np.asarray(flag_loc), ag_pos)
                 vel_ref = rot2d(ag_vel, -crd_ref_angle)
-                vel_ref[
-                    1
-                ] *= (
-                    self.keepout_bounce
-                )  # convention is that vector pointing from keepout intersection to flag center is y' axis in new reference frame
+                vel_ref[1] = 0. # convention is that vector pointing from keepout intersection to flag center is y' axis in new reference frame
 
                 vel = rot2d(vel_ref, crd_ref_angle)
                 pos_x = ag_pos[0]
@@ -786,7 +773,8 @@ class PyQuaticusEnv(ParallelEnv):
                     o_team = int(other_player.team)
                     # Only do the rest if the other player is NOT on sides and they are not on the same team.
                     if (
-                        not other_player.on_own_side
+                        not other_player.is_tagged
+                        and not other_player.on_own_side
                         and other_player.team != player.team
                     ):
                         dist_between_agents = self.get_distance_between_2_points(
@@ -873,9 +861,6 @@ class PyQuaticusEnv(ParallelEnv):
         self.flag_keepout = config_dict.get(
             "flag_keepout", config_dict_std["flag_keepout"]
         )
-        self.keepout_bounce = config_dict.get(
-            "keepout_bounce", config_dict_std["keepout_bounce"]
-        )
         self.max_speed = config_dict.get("max_speed", config_dict_std["max_speed"])
         self.own_side_accel = config_dict.get(
             "own_side_accel", config_dict_std["own_side_accel"]
@@ -948,15 +933,6 @@ class PyQuaticusEnv(ParallelEnv):
 
         self.num_renders_per_step = int(self.render_fps * self.tau)
 
-        # check that flag_keepout is >= flag_radius
-        flag_keepout_err_msg = (
-            "Specified flag_keepout ({}) is too small, allows for overlap between agent"
-            " and flag".format(self.flag_keepout)
-        )
-        assert (
-            self.flag_keepout >= self.flag_radius + self.agent_radius
-        ), flag_keepout_err_msg
-
         # check that agents and flags properly fit within world
         agent_flag_err_msg = (
             "Specified agent_radius ({}), flag_radius ({}), and flag_keepout ({})"
@@ -969,14 +945,6 @@ class PyQuaticusEnv(ParallelEnv):
         )
         vertical_fit = self.flag_keepout + self.agent_radius < self.world_size[1] / 2
         assert horizontal_fit and vertical_fit, agent_flag_err_msg
-
-        # check that keepout_bounce and wall_bounce are between 0 and 1
-        bounce_err_msg = (
-            "Either keepout_bounce or wall_bounce falls outside of allowed range [0, 1]"
-        )
-        assert (0 <= self.keepout_bounce <= 1) and (
-            0 <= self.wall_bounce <= 1
-        ), bounce_err_msg
 
         # set reference variables for world boundaries
         # ll = lower left, lr = lower right
@@ -1713,24 +1681,15 @@ class PyQuaticusEnv(ParallelEnv):
             self.screen, (0, 0, 0), top_middle, bottom_middle, width=self.border_width
         )
 
+        player_poses = {}
         for team in Team:
             flag = self.flags[int(team)]
             teams_players = self.agents_of_team[team]
             color = "blue" if team == Team.BLUE_TEAM else "red"
+            player_poses[color] = []
             if not self.state["flag_taken"][int(team)]:
                 # Flag is not captured, draw normally.
-                flag_pos_x_m, flag_pos_y_m = flag.pos
-                flag_pos_x, flag_pos_y = (
-                    self.pixel_size * flag_pos_x_m,
-                    self.pixel_size * flag_pos_y_m,
-                )
-                flag_pos_x += self.arena_offset
-                flag_pos_y = (
-                    0.5 * self.arena_height
-                    - (flag_pos_y - 0.5 * self.arena_height)
-                    + self.arena_offset
-                )
-                flag_pos_screen = (flag_pos_x, flag_pos_y)
+                flag_pos_screen = self.world_to_screen(flag.pos)
                 draw.circle(
                     self.screen,
                     color,
@@ -1744,20 +1703,16 @@ class PyQuaticusEnv(ParallelEnv):
                     (self.flag_keepout - self.agent_radius) * self.pixel_size,
                     width=round(self.agent_radius * self.pixel_size / 20),
                 )
+                draw.circle(
+                    self.screen,
+                    (0, 0, 0),
+                    flag_pos_screen,
+                    self.catch_radius * self.pixel_size,
+                    width=round(self.agent_radius * self.pixel_size / 20),
+                )
             else:
-                # Flag is captured so draw a different shape.
-                flag_pos_x_m, flag_pos_y_m = flag.pos
-                flag_pos_x, flag_pos_y = (
-                    self.pixel_size * flag_pos_x_m,
-                    self.pixel_size * flag_pos_y_m,
-                )
-                flag_pos_x += self.arena_offset
-                flag_pos_y = (
-                    0.5 * self.arena_height
-                    - (flag_pos_y - 0.5 * self.arena_height)
-                    + self.arena_offset
-                )
-                flag_pos_screen = (flag_pos_x, flag_pos_y)
+                # Flag is captured so draw a different shape
+                flag_pos_screen = self.world_to_screen(flag.pos)
                 draw.circle(
                     self.screen,
                     color,
@@ -1766,6 +1721,9 @@ class PyQuaticusEnv(ParallelEnv):
                 )
 
             for player in teams_players:
+                # add pos to player_poses
+                player_poses[color].append(player.pos)
+
                 # render tagging
                 player.render_tagging(self.tagging_cooldown)
 
@@ -1774,24 +1732,48 @@ class PyQuaticusEnv(ParallelEnv):
                 ref_angle = -orientation.angle_to(self.UP)
 
                 # transform position to pygame coordinates
-                pos_x_m, pos_y_m = player.pos
-                pos_x, pos_y = pos_x_m * self.pixel_size, pos_y_m * self.pixel_size
-                pos_x += self.arena_offset
-                pos_y = (
-                    0.5 * self.arena_height
-                    - (pos_y - 0.5 * self.arena_height)
-                    + self.arena_offset
-                )
-                blit_position = np.array([pos_x, pos_y])
+                blit_position = self.world_to_screen(player.pos)
                 rotated_surface = rotozoom(player.pygame_agent, ref_angle, 1.0)
                 rotated_surface_size = np.array(rotated_surface.get_size())
                 blit_position -= 0.5 * rotated_surface_size
                 self.screen.blit(rotated_surface, blit_position)
 
+        # visually indicate distances between players of both teams 
+        assert len(player_poses) == 2, "If number of teams > 2, update code that draws distance indicator lines"
+        blue_poses = np.asarray(player_poses["blue"])
+        red_poses = np.asarray(player_poses["red"])
+
+        for blue_pos in player_poses["blue"]:
+            a2a_distances = np.linalg.norm(blue_pos - red_poses, axis=1)
+            for r, dis in enumerate(a2a_distances):
+                if dis <= 2*self.catch_radius:
+                    hsv_hue = (dis - self.catch_radius) / (2*self.catch_radius - self.catch_radius)
+                    hsv_hue = 0.33 * np.clip(hsv_hue, 0, 1)
+                    line_color = tuple(255 * np.asarray(colorsys.hsv_to_rgb(hsv_hue, 0.9, 0.9)))
+
+                    draw.line(
+                        self.screen, 
+                        line_color,
+                        self.world_to_screen(blue_pos),
+                        self.world_to_screen(red_poses[r]),
+                        width=self.a2a_line_width
+                    )
+
         if self.render_mode:
             pygame.event.pump()
             self.clock.tick(self.render_fps)
             pygame.display.flip()
+
+    def world_to_screen(self, pos):
+        screen_pos = self.pixel_size * np.asarray(pos)
+        screen_pos[0] += self.arena_offset
+        screen_pos[1] = (
+            0.5 * self.arena_height
+            - (screen_pos[1] - 0.5 * self.arena_height)
+            + self.arena_offset
+        )
+
+        return screen_pos
 
     def close(self):
         """Overridden method inherited from `Gym`."""
