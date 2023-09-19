@@ -1,92 +1,3 @@
-"""
-Observation Space (per agent):
-    Retrieve flag relative bearing (clockwise degrees)
-    Retrieve flag distance (meters)
-    Home flag relative bearing (clockwise degrees)
-    Home flag distance (meters)
-    Wall 1 relative bearing (clockwise degrees)
-    Wall 1 distance (meters)
-    Wall 2 relative bearing (clockwise degrees)
-    Wall 2 distance (meters)
-    Wall 3 relative bearing (clockwise degrees)
-    Wall 3 distance (meters)
-    Wall 4 relative bearing (clockwise degrees)
-    Wall 4 distance (meters)
-    Own speed (meters per second)
-    Own flag status (boolean)
-    On side (boolean)
-    Tagging cooldown (seconds) time elapsed since last tag (at max when you can tag again)
-    Is tagged (boolean)
-    For each other agent (teammates first) [Consider sorting teammates and opponents by distance or flag status]
-        Bearing from you (clockwise degrees)
-        Distance (meters)
-        Heading of other agent relative to the vector to you (clockwise degrees)
-        Speed (meters per second)
-        Has flag status (boolean)
-        On their side status (boolean)
-        Tagging cooldown (seconds)
-        Is tagged (boolean)
-"""
-
-"""
-MOOS Variables of Interest -- based on red_one
-Own State and Control:
-    position: NAV_X, NAV_Y
-    speed and heading: NAV_SPEED, NAV_HEADING
-Own Flag Status:
-    HAS_FLAG
-Own Tag Status and cooldown:
-    TAGGED
-    TAGGED_VEHICLES (Mike adding)
-
-Other:
-    position and control: NODE_REPORT_{NAME}
-        includes: X, Y, SPD, HDG -- needs parsing
-        it's a csv with name=value pairs
-    flag status:
-        FLAG_SUMMARY -- see if your flag (identified with
-                        label or color) has an owner
-                        that's not you (not sure if it can
-                        be you anyway -- can't pick up your
-                        own flag)
-    tag status and cooldown:
-        TAGGED_VEHICLES (Mike adding)
-        
-                     
-
-
-To Publish:
-FLAG_GRAB_REQUEST -- won't pick up otherwise?
-TAG_REQUEST? -- doesn't seem like we're using it currently and it still works -- can't find with ag
-DEPLOY_ALL
-
-To Update in State:
-    position, control actions, flag status, tag status
-    update flag status on successful grab or when tagged
-
-Notes:
-flag homes and boundaries are configuration variables
-
-
-Create a Pyquaticus State
-self.state = {
-    "agent_position": agent_positions,
-    "prev_agent_position": copy.deepcopy(agent_positions),
-    "agent_spd_hdg": agent_spd_hdg,
-    "agent_has_flag": np.zeros(self.num_agents),
-    "agent_on_sides": agent_on_sides,
-    "flag_home": copy.deepcopy(flag_locations),
-    "flag_locations": flag_locations,
-    "flag_taken": np.zeros(2),
-    "current_time": 0.0,
-    "agent_captures": [
-        None
-    ] * self.num_agents,  # whether this agent tagged something
-    "agent_tagged": [0] * self.num_agents,  # if this agent was tagged
-    "agent_oob": [0] * self.num_agents,  # if this agent went out of bounds
-}
-"""
-
 import itertools
 import numpy as np
 import pymoos
@@ -195,9 +106,6 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self._moos_comm.close(nice=False)
 
     def step(self, action):
-        # set on_own_side for each agent using _check_side(player)
-        for agent in self.players.values():
-            agent.on_own_side = self._check_on_side(agent)
         # translate actions and publish them
         desired_spd, delta_hdg = self._discrete_action_to_speed_relheading(action)
         desired_hdg = self._relheading_to_global_heading(
@@ -223,6 +131,15 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
         obs = self.state_to_obs(self._agent_name)
         return obs, reward, terminated, truncated, {}
+
+    def state_to_obs(self, agent_id):
+        """
+        Light wrapper around parent class state_to_obs function
+        """
+        # set on_own_side for each agent using _check_side(player)
+        for agent in self.players.values():
+            agent.on_own_side = self._check_on_side(agent)
+        return super().state_to_obs(agent_id)
 
     def _init_moos_comm(self):
         self._moos_comm = pymoos.comms()
