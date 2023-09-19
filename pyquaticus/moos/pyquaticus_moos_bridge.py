@@ -180,15 +180,13 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         pass
 
     def close(self):
-        if self._moos_comm.close(nice=True):
-            return
-        else:
-            time.sleep(2)
-
-        if self._moos_comm.close(nice=True):
-            return
-        else:
-            self._moos_comm.close(nice=False)
+        max_nice_attempts = 2
+        for i in range(max_nice_attempts):
+            if self._moos_comm.close(nice=True):
+                time.sleep(0.1)
+                return
+            time.sleep(0.2)
+        self._moos_comm.close(nice=False)
 
     def step(self, action):
         # TODOS
