@@ -34,6 +34,19 @@ You can then activate the environment with: `conda activate pyquaticus-lightenv`
 * Control with arrow keys: `python ./test/arrowkeys_test.py`
   * control agents with WASD and the arrow keys
 
+## Pygame Environment Visuals
+
+* Blue vs Red 1v1 or multiagent teams
+* **Flag keepout zone:** circle (team's color) drawn around flag
+* **Flag pickup zone:** black circle drawn around flag
+* **Tagging cooldown**: receding black circle around agent
+* **Drive-to-home**: green halo around agent (occurs if tagged or boundary collision)
+* **Lines between agents:**
+  * Drawn between agents of opposite teams
+  * **Green**: within `2*catch_radius`
+  * **Orange/Yellow**: within `1.5*catch_radius`
+  * **Red**: within `catch_radius`
+
 ## Distribution and Disclaimer Statements
 
 DISTRIBUTION STATEMENT A. Approved for public release. Distribution is unlimited.
