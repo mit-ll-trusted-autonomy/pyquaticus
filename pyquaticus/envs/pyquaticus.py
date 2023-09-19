@@ -638,7 +638,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             # convert desired_speed   and  desired_heading to
             #         desired_thrust  and  desired_rudder
             # requested heading is relative so it directly maps to the heading error
-            desired_speed, heading_error = action_dict[player.id]
+            
+            if player.is_tagged and not self.config_dict["teleport_on_tag"]:
+                flag_home = self.flags[int(player.team)].home
+                _, heading_error = mag_bearing_to(player.pos, flag_home, player.heading)
+                desired_speed = self.config_dict["max_speed"]
+            else:
+                desired_speed, heading_error = action_dict[player.id]
+
             # desired heading is relative to current heading
             speed_error = desired_speed - player.speed
             desired_speed = self._pid_controllers[player.id]["speed"](speed_error)
@@ -1258,6 +1265,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             )
 
         for player in self.players.values():
+            player.is_tagged = False
             player.thrust = 0.0
             player.speed = 0.0
             player.has_flag = False
