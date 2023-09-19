@@ -9,12 +9,22 @@ from pyquaticus.config import config_dict_std
 
 
 class PyQuaticusMoosBridge(PyQuaticusEnvBase):
+    """
+    This class is used to control an agent in MOOS Aquaticus.
+    It does *not* start anything on the MOOS side. Instead, you start everything you want
+    and then run this and pass actions (for example from a policy learned in Pyquaticus)
+    once you're ready to run the agent.
+
+    Important differences from pyquaticus_team_env_bridge:
+    * This class only connects to a single MOOS node, not all of them
+        -- this choice makes it much more efficient
+    * This class only controls a single agent
+        -- run multiple instances (e.g., one per docker) to run multiple agents
+    """
     def __init__(self, server, agent_name, agent_port, team_names, opponent_names, moos_config, \
                  quiet=True, team=None, timewarp=None, tagging_cooldown=config_dict_std["tagging_cooldown"],
                  normalize=True):
         """
-        Subscribe to the relevant MOOSDB variables to form a Pyquaticus state.
-
         Args:
             server: server for the MOOS process
             name: the name of the agent
@@ -63,6 +73,10 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.action_space = self.get_agent_action_space()
 
     def reset(self):
+        """
+        Sets up the players and resets variables.
+        (Re)connects to MOOS node for the provided agent name.
+        """
         self._action_count = 0
         assert isinstance(self.timewarp, int)
         pymoos.set_moos_timewarp(self.timewarp)
@@ -94,9 +108,15 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         return self.state_to_obs(self._agent_name)
 
     def render(self, mode="human"):
+        """
+        This is a pass through, all rendering is handled by pMarineViewer on the MOOS side.
+        """
         pass
 
     def close(self):
+        """
+        Close the connection to MOOS
+        """
         max_nice_attempts = 2
         for i in range(max_nice_attempts):
             if self._moos_comm.close(nice=True):
@@ -106,6 +126,20 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self._moos_comm.close(nice=False)
 
     def step(self, action):
+        """
+        Take a single action and sleep until it has taken effect.
+
+        Args:
+            action: a discrete action that aligns with Pyquaticus
+                    see pyquaticus.config.ACTION_MAP for the specific mapping
+
+        Returns (aligns with Gymnasium interface):
+            obs: a normalized observation space (this can be "unnormalized" via self.agent_obs_normalizer.unnormalized(obs))
+            reward: this always returns -1 for now -- only using this env for deploying, not training
+            terminated: always False (runs until you stop)
+            truncated: always False (runs until you stop)
+            info: additional information
+        """
         # translate actions and publish them
         desired_spd, delta_hdg = self._discrete_action_to_speed_relheading(action)
         desired_hdg = self._relheading_to_global_heading(
@@ -122,7 +156,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         # always returning zero reward for now
         # this is only for running policy, not traning
         # TODO: implement a sparse reward for evaluation
-        reward = 0.
+        reward = -1.
         # just for evaluation, never need to reset (might be running real robots)
         terminated, truncated = False, False
 
@@ -142,6 +176,9 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         return super().state_to_obs(agent_id)
 
     def _init_moos_comm(self):
+        """
+        Create a connection to the MOOS node for self._agent_name
+        """
         self._moos_comm = pymoos.comms()
         self._moos_vars = [
             "NAV_X", "NAV_Y",
@@ -178,6 +215,10 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
                 print(f"Timed out!")
 
     def _on_mail(self):
+        """
+        Performed everytime there are updates to the MOOSDB
+        for variables that we registered for in _init_moos_comm
+        """
         try:
             for msg in self._moos_comm.fetch():
                 self._dispatch_message(msg)
@@ -187,6 +228,9 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             return False
 
     def _dispatch_message(self, msg):
+        """
+        Dispatch MOOSDB messages to appropriate handlers
+        """
         if "NAV_" in msg.key():
             self._nav_handler(msg)
         elif "FLAG_SUMMARY" == msg.key():
@@ -199,6 +243,10 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             raise ValueError(f"Unexpected message: {msg.key()}")
 
     def _nav_handler(self, msg):
+        """
+        Handles navigation messages that provide information
+        about this agent's nodes
+        """
         if msg.key() == "NAV_X":
             self.players[self._agent_name].pos[0] = msg.double()
         elif msg.key() == "NAV_Y":
@@ -211,6 +259,9 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             raise ValueError(f"Unexpected message: {msg.key()}")
 
     def _flag_handler(self, msg):
+        """
+        Handles messages about the flags.
+        """
         # Note: assuming the underlying MOOS logic only allows
         #       agents to grab the opponent's flag, so not even
         #       checking for that
@@ -226,6 +277,9 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
                 agent.has_flag = name in flag_holders
 
     def _tag_handler(self, msg):
+        """
+        Handles messages about tags.
+        """
         tagged_agents = set(msg.string().split(","))
         # update all player objects
         for name, agent in self.players.items():
@@ -235,8 +289,11 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             agent.is_tagged = tag_status
 
     def _node_report_handler(self, msg):
+        """
+        Handles node reports about the state of other agents.
+        """
         agent_name = msg.key().removeprefix("NODE_REPORT_").lower()
-        data = {field: val 
+        data = {field: val
                 for field, val in (entry.split("=") for entry in msg.string().split(","))}
         assert agent_name == data["NAME"]
 
@@ -246,6 +303,10 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         agent.heading = float(data["HDG"])
 
     def set_config(self, moos_config):
+        """
+        Reads a configuration object to set the field and other configuration variables
+        See the default moos_config value in the constructor (__init__)
+        """
         self._moos_config = moos_config
         self._blue_flag = np.asarray(self._moos_config.blue_flag, dtype=np.float32)
         self._red_flag = np.asarray(self._moos_config.red_flag, dtype=np.float32)
