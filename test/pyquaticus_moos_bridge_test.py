@@ -10,12 +10,13 @@ if __name__ == "__main__":
 
     try:
         watcher.reset()
-        for i in range(20):
+        action_space = watcher.action_space
+        for i in range(800):
+            watcher.step(action_space.sample())
             print(f"{'#'*10} REPORT {'#'*10}")
             for name, agent in watcher.players.items():
                 print(f"{name}: {agent.pos}, {agent.speed} m/s, {agent.heading} deg")
             print('#'*28)
-            time.sleep(1)
         print("Finished reporting loop")
     finally:
         watcher.close()

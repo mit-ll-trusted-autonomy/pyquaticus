@@ -113,7 +113,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             moos_config: one of the objects from pyquaticus.moos.config
             quiet: tell the pymoos comms object to be quiet
             team: which team this agent is (will infer based on name if not passed)
-            timewarp: uses moos_config default if not passed
+            timewarp: specify the moos timewarp (IMPORTANT for messages to send correctly)
+                      uses moos_config default if not passed
         """
         self._server = server
         self._agent_name = agent_name
@@ -121,8 +122,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self._team_names = team_names
         self._opponent_names = opponent_names
         self._quiet = quiet
-        self._timewarp = timewarp
         # Note: not using _ convention to match pyquaticus
+        self.timewarp = timewarp
         self.tagging_cooldown = tagging_cooldown
         self.normalize = normalize
 
@@ -140,7 +141,20 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self._opponent_team = Team.BLUE_TEAM if self.team == Team.RED_TEAM else Team.RED_TEAM
         self._moos_comm = None
 
+        own_team_len = len(self._team_names) + 1
+        opp_team_len = len(self._opponent_names)
+        if own_team_len != opp_team_len:
+            raise ValueError(f"Expecting equal team sizes but got: {own_team_len} vs {opp_team_len}")
+
+        self.agent_obs_normalizer = self._register_state_elements(own_team_len)
+
+        self.observation_space = self.get_agent_observation_space()
+        self.action_space = self.get_agent_action_space()
+
     def reset(self):
+        self._action_count = 0
+        assert isinstance(self.timewarp, int)
+        pymoos.set_moos_timewarp(self.timewarp)
         self.agents_of_team = {t: [] for t in Team}
 
         self.agents_of_team[self.team].append(Player(self._agent_name, self.team))
@@ -157,14 +171,6 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         # Set tagging cooldown
         for player in self.players.values():
             player.tagging_cooldown = self.tagging_cooldown
-
-        own_team_len = len(self._team_names) + 1
-        opp_team_len = len(self._opponent_names)
-        if own_team_len != opp_team_len:
-            raise ValueError(f"Expecting equal team sizes but got: {own_team_len} vs {opp_team_len}")
-
-
-        self.agent_obs_normalizer = self._register_state_elements(own_team_len)
 
         for player in self.players.values():
             player.pos = [None, None]
@@ -189,13 +195,34 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self._moos_comm.close(nice=False)
 
     def step(self, action):
-        # TODOS
-        # set on_own_side for each agent using _check_side(player, team)
+        # set on_own_side for each agent using _check_side(player)
+        for agent in self.players.values():
+            agent.on_own_side = self._check_on_side(agent)
         # translate actions and publish them
-        # get observation and return it
-        # use empty info
-        # just return reward 0 for now -- maybe consider implementing a sparse reward
-        raise NotImplementedError("NYI")
+        desired_spd, delta_hdg = self._discrete_action_to_speed_relheading(action)
+        desired_hdg = self._relheading_to_global_heading(
+            self.players[self._agent_name].heading,
+            delta_hdg)
+        # notify the moos agent that we're controlling it directly
+        # NOTE: the name of this variable depends on the mission files
+        moostime = pymoos.time()
+        self._moos_comm.notify("ACTION", "CONTROL", moostime)
+        self._moos_comm.notify("RLA_SPEED", desired_spd, moostime)
+        self._moos_comm.notify("RLA_HEADING", desired_hdg, moostime)
+        self._action_count += 1
+        self._moos_comm.notify("RLA_ACTION_COUNT", self._action_count, moostime)
+        # always returning zero reward for now
+        # this is only for running policy, not traning
+        # TODO: implement a sparse reward for evaluation
+        reward = 0.
+        # just for evaluation, never need to reset (might be running real robots)
+        terminated, truncated = False, False
+
+        # let the action occur
+        time.sleep(self.steptime / self.timewarp)
+
+        obs = self.state_to_obs(self._agent_name)
+        return obs, reward, terminated, truncated, {}
 
     def _init_moos_comm(self):
         self._moos_comm = pymoos.comms()
@@ -322,16 +349,16 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         # define function for checking which side an agent is on
         if abs(self.scrimmage_pnts[0][0] - self.scrimmage_pnts[1][0]) < 1e-2:
             if self._red_flag[0] > self.scrimmage_pnts[0][0]:
-                def check_side(pnt, team):
-                    x, y = pnt.pos
-                    if team == 'red':
+                def check_side(agent):
+                    x, y = agent.pos
+                    if agent.team == Team.RED_TEAM:
                         return x > self.scrimmage_pnts[0][0]
                     else:
                         return x < self.scrimmage_pnts[0][0]
             else:
-                def check_side(pnt, team):
-                    x, y = pnt.pos
-                    if team == 'red':
+                def check_side(agent):
+                    x, y = agent.pos
+                    if agent.team == Team.RED_TEAM:
                         return x < self.scrimmage_pnts[0][0]
                     else:
                         return x > self.scrimmage_pnts[0][0]
@@ -343,16 +370,16 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             b = self.scrimmage_pnts[0][1] - m*self.scrimmage_pnts[0][0]
 
             if self._red_flag[1] > m*self._red_flag[0] + b:
-                def check_side(pnt, team):
-                    x, y = pnt.pos
-                    if team == 'red':
+                def check_side(agent):
+                    x, y = agent.pos
+                    if agent.team == Team.RED_TEAM:
                         return y > m*x + b
                     else:
                         return y < m*x + b
             else:
-                def check_side(pnt, team):
-                    x, y = pnt.pos
-                    if team == 'red':
+                def check_side(agent):
+                    x, y = agent.pos
+                    if agent.team == Team.RED_TEAM:
                         return y < m*x + b
                     else:
                         return y > m*x + b
@@ -366,8 +393,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.boundary_lr = np.asarray(self._moos_config.boundary_lr, dtype=np.float32)
         self.world_size  = np.array([np.linalg.norm(self.boundary_lr - self.boundary_ll),
                                      np.linalg.norm(self.boundary_ul - self.boundary_ll)])
-        if self._timewarp is not None:
-            self._moos_config.moos_timewarp = self._timewarp
+        if self.timewarp is not None:
+            self._moos_config.moos_timewarp = self.timewarp
             self._moos_config.sim_timestep = self._moos_config.moos_timewarp / 10.0
         self.steptime = self._moos_config.sim_timestep
         self.time_limit = self._moos_config.sim_time_limit

@@ -109,11 +109,18 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
     """
 
     def _to_speed_heading(self, action_dict):
-        """Returns an array of velocities for each agent."""
+        """
+        Processes the raw discrete actions.
+
+        Returns:
+            dict from agent id -> (speed, relative heading)
+            Note: we use relative heading here so that it can be used directly
+                  to the heading error in the PID controller
+        """
         processed_action_dict = OrderedDict()
         for player in self.players.values():
             if player.id in action_dict:
-                speed, heading = ACTION_MAP[action_dict[player.id]]
+                speed, heading = self._discrete_action_to_speed_relheading(action_dict[player.id])
             else:
                 # if no action provided, stop moving
                 speed, heading = 0.0, player.heading
@@ -121,6 +128,12 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                 [speed, heading], dtype=np.float32
             )
         return processed_action_dict
+
+    def _discrete_action_to_speed_relheading(self, action):
+        return ACTION_MAP[action]
+
+    def _relheading_to_global_heading(self, player_heading, relheading):
+        return angle180((player_heading + relheading) % 360)
 
     def _register_state_elements(self, num_on_team):
         """Initializes the normalizer."""
@@ -366,8 +379,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             )
         return obs_dict[agent.id]
 
-    @functools.lru_cache(maxsize=None)
-    def observation_space(self, agent_id):
+    def get_agent_observation_space(self):
         """Overridden method inherited from `Gym`."""
         if self.normalize:
             agent_obs_space = self.agent_obs_normalizer.normalized_space
@@ -378,8 +390,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             )
         return agent_obs_space
 
-    @functools.lru_cache(maxsize=None)
-    def action_space(self, agent_id):
+    def get_agent_action_space(self):
         """Overridden method inherited from `Gym`."""
         return Discrete(len(ACTION_MAP))
 
@@ -501,10 +512,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.agent_obs_normalizer = self._register_state_elements(num_on_team)
 
         self.action_spaces = {
-            agent_id: self.action_space(agent_id) for agent_id in self.players
+            agent_id: self.get_agent_action_space() for agent_id in self.players
         }
         self.observation_spaces = {
-            agent_id: self.observation_space(agent_id) for agent_id in self.players
+            agent_id: self.get_agent_observation_space() for agent_id in self.players
         }
 
         self.render_mode = render_mode
