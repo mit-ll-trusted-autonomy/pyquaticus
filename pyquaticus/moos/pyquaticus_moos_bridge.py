@@ -239,7 +239,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         try:
             for msg in self._moos_comm.fetch():
                 self._dispatch_message(msg)
-                return True
+            return True
         except Exception as e:
             print(f"Got exception: {e}")
             return False
