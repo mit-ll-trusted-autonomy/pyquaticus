@@ -47,6 +47,23 @@ You can then activate the environment with: `conda activate pyquaticus-lightenv`
   * **Orange/Yellow**: within `1.5*catch_radius`
   * **Red**: within `catch_radius`
 
+## Docker 
+
+The docker directory contains the files for the bridge over to the MOOS environment. If you just want to run your agents in MOOS, you do not need to build the docker. Install gym-aquaticus with `pip install -e /gym-aquaticus ` and then run the pyquaticus_bridge_test.py or pyquaticus_bridge_single_sim.py. 
+
+The docker is necessary for running the agents on the boats, however. Here are the commands
+
+```
+# build the docker
+cd docker
+sudo docker build -t pyquaticus:test .
+```
+
+```
+# runs the docker and mounts a volume to the logs directory on the host computer
+sudo docker run -it -v ~/pyquaticus/docker/logs:/home/moos/logs --net host --entrypoint /bin/bash pyquaticus:test
+```
+
 ## Distribution and Disclaimer Statements
 
 DISTRIBUTION STATEMENT A. Approved for public release. Distribution is unlimited.

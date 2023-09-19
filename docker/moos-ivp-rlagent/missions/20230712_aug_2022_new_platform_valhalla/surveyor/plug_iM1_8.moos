@@ -1,0 +1,27 @@
+//------------------------------------------------
+// iM300 config block
+
+ProcessConfig = iM1_8
+{
+  //AppTick   = 10
+  //CommsTick = 10
+
+  ip_addr=$(SURVEYOR_IP)  // frontseat IP address
+  port=8003      // default port number for Clearpath Heron
+  comms_type=client
+
+  //MAX_RUDDER     = 30.0       // Maximum Rudder Angle  [+/- deg]
+  //MAX_THRUST     = 100.0      // Maximum Thrust        [+/- %]
+  //DRIVE_MODE     = "normal"   // Drive Mode ["normal" or "aggro"]
+
+  //max_appcast_events = 8          //default=8
+  //max_appcast_run_warnings = 10   //default=10
+
+  ignore_msg = $DEBUG, $OIVCQ                                   
+  ignore_msg = $PSEAD, $PSEAE
+  ignore_msg = $PSEAG, $PSEAJ
+  ignore_msg = $PSEAF, $VCGLL
+  ignore_msg = $PTQM0, $PTQM1
+  ignore_msg = $PSEAX, $PSEAY
+}
+

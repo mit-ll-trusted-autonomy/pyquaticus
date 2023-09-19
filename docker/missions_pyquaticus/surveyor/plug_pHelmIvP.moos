@@ -1,0 +1,16 @@
+//---------------------------------------
+ProcessConfig = pHelmIvP
+{
+  AppTick    = 4
+  CommsTick  = 4
+  
+//  ivp_behavior_dirs = /home/mikey/moos-ivp-aquaticus/lib
+  Behaviors    = targ_$(RNAME).bhv
+  Verbose      = false
+  Domain       = course:0:359:360
+#ifdef VTYPE uuv
+  Domain       = speed:0:4.5:26
+#elseifdef VTYPE kayak
+  Domain       = speed:0:1.5:26
+#endif
+}

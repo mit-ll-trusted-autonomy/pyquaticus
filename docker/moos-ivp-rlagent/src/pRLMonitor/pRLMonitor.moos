@@ -1,0 +1,9 @@
+//------------------------------------------------
+// pRLMonitor config block
+
+ProcessConfig = pRLMonitor
+{
+   AppTick   = 4
+   CommsTick = 4
+}
+

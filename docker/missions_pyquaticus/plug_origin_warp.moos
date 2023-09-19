@@ -1,0 +1,7 @@
+MOOSTimeWarp = $(WARP)
+
+//Lake Popolopen
+LatOrigin  = 41.34928
+LongOrigin = -74.063645
+
+ 

@@ -1,0 +1,68 @@
+//--------------------------------------------------------
+ProcessConfig = pMarineViewer
+{
+  AppTick    = 4
+  CommsTick  = 4
+
+  //TIFF_FILE            = forrest19.tif
+  TIFF_FILE            = MIT_SP.tif
+  set_pan_x            = 129
+  set_pan_y            = -364
+  zoom                 = 2.5
+  vehicles_shape_scale = 1.5
+  vehicles_name_mode   = names
+
+  circle_viewable_all = true
+
+  appcast_viewable = true
+  appcast_color_scheme = indigo
+
+  scope = FLAG_GRAB_REPORT
+  scope = NODE_BROKER_PING
+  scope = DEPLOY_ALL
+
+  action = STATION_KEEP_ALL = false
+  action = STATION_KEEP_ALL = true
+  action = CHASE_ALL = false
+
+  button_one   = DEPLOY  # DEPLOY_ALL=true
+  button_one   = MOOS_MANUAL_OVERRIDE_ALL=false
+  button_one   = RETURN_ALL=false # STATION_KEEP_ALL=false
+
+  button_two   = RETURN  # RETURN_ALL=true
+  button_two   = RETURN  # STATION_KEEP_ALL=false
+
+  button_three = CTF_RESET   # UNTAG_REQUEST=vname=mokai_red
+  button_three = UNTAG_REQUEST=vname=mokai_blue
+  button_three = UNTAG_REQUEST=vname=evan
+  button_three = UNTAG_REQUEST=vname=felix
+  button_three = UNTAG_REQUEST=vname=gus
+  button_three = FLAG_RESET=all
+  button_three = RETURN_ALL=true
+
+  op_vertex = x=56,   y=16,  lwidth=1,lcolor=yellow,looped=true,group=moa
+  op_vertex = x=-83, y=-49,  lwidth=1,lcolor=yellow,looped=true,group=moa
+  op_vertex = x=-53, y=-114, lwidth=1,lcolor=yellow,looped=true,group=moa
+  op_vertex = x=82,   y=-56, lwidth=1,lcolor=yellow,looped=true,group=moa
+
+
+  cmd = label=DEPLOY, var=DEPLOY,  sval=true,  receivers=all:evan:felix:gus:mokai_red:mokai_blue
+  cmd = label=DEPLOY, var=MOOS_MANUAL_OVERRIDE, sval=false, receivers=all:evan:felix:gus:mokai_red:mokai_blue
+  cmd = label=DEPLOY, var=RETURN,  sval=false,  receivers=all:evan:felix:gus:mokai_red:mokai_blue
+
+  cmd = label=RETURN, var=RETURN, sval=true, receivers=all:evan:felix:gus:mokai_red:mokai_blue
+
+  cmd = label=ATTACK, var=ACTION, sval=ATTACK, receivers=evan:felix:gus
+  cmd = label=ATTACK, var=AGGRESSIVE, sval=true, receivers=evan:felix:gus
+
+  cmd = label=ATTACK_NICELY, var=ACTION, sval=ATTACK, receivers=evan:felix:gus
+  cmd = label=ATTACK_NICELY, var=AGGRESSIVE, sval=false, receivers=evan:felix:gus
+
+  cmd = label=DEFEND, var=ACTION, sval=DEFEND, receivers=evan:felix:gus
+
+  cmd = label=COVER, var=ACTION, sval=COVER, receivers=evan:felix:gus
+
+  cmd = label=TRAIL, var=ACTION, sval=TRAIL, receivers=evan:felix:gus
+
+  cmd = label=STATION, var=ACTION,  sval=STATION,  receivers=all:evan:felix:gus
+}

@@ -1,0 +1,292 @@
+initialize DEPLOY     = false
+initialize RETURN     = false
+initialize ACTION     = $(START_ACTION)
+initialize TAGGED     = false
+initialize AGGRESSIVE = false
+initialize RECOVER    = false
+
+set MODE     = ACTIVE {
+  DEPLOY     = true
+} INACTIVE
+
+set MODE     = ATTACKING_EASY {
+  MODE       = ACTIVE
+  ACTION     = ATTACK_E
+}
+
+set MODE     = ATTACKING_MEDIUM {
+  MODE       = ACTIVE
+  ACTION     = ATTACK_MED
+}
+
+set MODE     = DEFENDING_EASY {
+  MODE       = ACTIVE
+  ACTION     = DEFEND_E
+}
+
+set MODE     = DEFENDING_MEDIUM {
+  MODE       = ACTIVE
+  ACTION     = DEFEND_MED
+}
+
+set MODE     = AGENT_BEHAVIOUR {
+  MODE       = ACTIVE
+  ACTION     = AGENT_BEH
+}
+
+set MODE     = TAGGED {
+  MODE       = ACTIVE:ATTACKING_EASY
+  TAGGED     = true
+} UNTAGGED
+
+set MODE     = TAGGED {
+  MODE       = ACTIVE:ATTACKING_MEDIUM
+  TAGGED     = true
+} UNTAGGED
+
+set MODE     = TAGGED {
+  MODE       = ACTIVE:DEFENDING_EASY
+  TAGGED     = true
+} UNTAGGED
+
+set MODE     = TAGGED {
+  MODE       = ACTIVE:DEFENDING_MEDIUM
+  TAGGED     = true
+} UNTAGGED
+
+set MODE     = TAGGED {
+  MODE       = ACTIVE:AGENT_BEHAVIOUR
+  TAGGED     = true
+} UNTAGGED
+
+
+//----------------------------------------------
+Behavior = BHV_OpRegionRecover
+{
+  name         = recover
+  pwt          = 300
+  updates      = RECOVER_UPDATES
+  activeflag   = RECOVER = true
+  inactiveflag = RECOVER = false
+
+             polygon = pts={$(CORNER_1):$(CORNER_2) :$(CORNER_3) :$(CORNER_4)}
+        trigger_entry_time = 1
+        trigger_exit_time  = 1
+}
+
+
+Behavior = BHV_AvoidCollision
+{
+   // General Behavior Parameters
+   // ---------------------------
+   name         = avdcollision_
+   pwt          = 300
+   condition = ((MODE == UNTAGGED) or (MODE == TAGGED)) and (MODE == ATTACKING_MEDIUM)
+   updates      = CONTACT_INFO
+   endflag = CONTACT_RESOLVED = $[CONTACT]
+   templating   = spawn
+
+
+   // General Contact Behavior Parameters
+   // -----------------------------------
+       bearing_lines = white:0, green:0.65, yellow:0.8, red:1.0   // example
+
+             contact = optional_vehicle_name
+               decay = 15,30
+         extrapolate = true
+    on_no_contact_ok = true
+
+
+   // Parameters specific to this behavior
+   // ------------------------------------
+      completed_dist = 25
+   max_util_cpa_dist = 20
+   min_util_cpa_dist = 10
+           pwt_grade = linear
+      pwt_inner_dist = 10
+      pwt_outer_dist = 20
+ }
+
+//#############################################################################
+
+Behavior = BHV_RLAgent
+//Behavior = BHV_Waypoint
+{
+  name                    = rlagent
+  pwt                     = 50
+  perpetual               = true
+
+  condition               = (MODE == UNTAGGED) and (MODE == AGENT_BEHAVIOUR)
+  runflag                 = BOT_DIALOG_STATUS=Attacking
+  endflag                 = FLAG_GRAB_REQUEST=vname=$(RNAME)
+  endflag                 = TAGGED=false
+
+}
+
+// Behavior = BHV_RLAgent
+// Behavior = BHV_Waypoint
+//{
+//  name                    = rlagent
+//  pwt                     = 50
+//  perpetual               = true
+//
+//  condition               = (MODE == UNTAGGED) and (MODE == AGENT_BEHAVIOUR)
+//  runflag                 = BOT_DIALOG_STATUS=Attacking
+//  endflag                 = FLAG_GRAB_REQUEST=vname=$(RNAME)
+//  endflag                 = TAGGED=false
+
+  // capture_radius = 8.0
+  // flag_x = 20
+  // flag_y = 40
+
+
+//}
+
+//#############################################################################
+Behavior = BHV_Waypoint
+{
+  name                    = waypt_grab_easy
+  pwt                     = 50
+  perpetual               = true
+
+  condition               = (MODE == UNTAGGED) and (MODE == ATTACKING_EASY)
+  runflag                 = BOT_DIALOG_STATUS=Attacking
+  endflag                 = FLAG_GRAB_REQUEST=vname=$(RNAME)
+  endflag                 = TAGGED=true
+
+  speed                   = 5 // meters per second
+  capture_line            = false
+  capture_radius          = 7.0
+  slip_radius             = 5.0
+
+  points                  = $(GRAB_POS)
+}
+
+//#############################################################################
+Behavior = BHV_Waypoint
+{
+  name                    = waypt_grab_medium
+  pwt                     = 50
+  perpetual               = true
+
+  condition               = (MODE == UNTAGGED) and (MODE == ATTACKING_MEDIUM)
+  runflag                 = BOT_DIALOG_STATUS=Attacking
+  endflag                 = FLAG_GRAB_REQUEST=vname=$(RNAME)
+  endflag                 = TAGGED=true
+
+  speed                   = 5 // meters per second
+  capture_line            = false
+  capture_radius          = 7.0
+  slip_radius             = 5.0
+
+  points                  = $(GRAB_POS)
+}
+
+
+//#############################################################################
+Behavior = BHV_Waypoint
+{
+  name                    = waypt_untag
+  pwt                     = 50
+  perpetual               = true
+
+  condition               = MODE == TAGGED
+  runflag                 = BOT_DIALOG_STATUS=Returning to home flag
+  endflag                 = TAGGED=false
+  endflag		  = UPDATE_WPT=currix=100
+  endflag		  = UPDATE_WPT=currix=0
+
+  speed                   = 5 // meters per second
+  capture_line            = false
+  capture_radius          = 10.0
+  slip_radius             = 10.0
+
+  points                  = $(UNTAG_POS)
+}
+
+//#############################################################################
+Behavior = BHV_Loiter
+{
+  name                    = loiter_passive
+  pwt                     = 100
+  condition               = MODE==DEFENDING_EASY
+  runflag                 = BOT_DIALOG_STATUS=Defending
+  updates                 = LOITER_UPDATES
+
+  speed                   = 5
+
+  polygon                 = radial:: x=0,y=0,radius=10,pts=8 // example
+  center_assign           = $(UNTAG_POS)
+}
+
+//#############################################################################
+//Behavior = BHV_Defense_Multi
+{
+  name                    = protect
+  pwt                     = 100
+  condition               = MODE==DEFENDING_MEDIUM
+  runflag                 = BOT_DIALOG_STATUS=Protecting
+
+  flag                    = $(UNTAG_POS)
+  enemy_flag       	  = $(GRAB_POS)
+  team	 		  = $(VTEAM)
+  self	 		  = $(RNAME)
+  teammate		  = $(HERON_TEAMMATE)
+
+  speed                   = 2  //default
+  distance_from_flag      = 20 //default
+
+}
+
+//#############################################################################
+Behavior = BHV_CutRange
+{
+  name                    = cutrange_aggressive_
+  pwt                     = 100
+  activeflag                 = BOT_DIALOG_STATUS=Intercepting
+//  activeflag                = AGGRESSIVE=true
+
+  condition               = MODE == DEFENDING_MEDIUM
+  condition               = AGGRESSIVE==TRUE
+  updates                 = CR_INTERCEPT_UPDATES
+//  templating              = spawn
+//  inactiveflag                  = AGGRESSIVE=false
+//  endflag                   = STATION=true
+//  endflag                   = AGGRESSIVE=false
+  contact                 = blue_one
+  decay                   = 15,30
+  extrapolate             = false
+  on_no_contact_ok        = true
+  time_on_leg             = 60
+
+  giveup_dist             = 50 //30
+  patience                = 50
+  pwt_inner_dist          = 0
+  pwt_outer_dist          = 50 //20
+}
+
+
+//#############################################################################
+Behavior = BHV_StationKeep
+{
+  name                    = aggressive_station_keep
+  pwt                     = 100
+  condition               = MODE==DEFENDING_MEDIUM
+  condition               = AGGRESSIVE==FALSE
+  runflag                 = BOT_DIALOG_STATUS=protect
+
+//  center_activate         = true
+  station_pt              = $(STATION_KEEP_AGGRESSIVE) //example points
+  hibernation_radius      = 5
+  inner_radius            = 4
+  outer_radius            = 15
+  outer_speed             = 5
+  transit_speed           = 5
+  swing_time              = 3
+
+  visual_hints            = vertex_size = 1 // default
+  visual_hints            = edge_color = light_blue // default
+  visual_hints            = edge_size = 1 // default
+  visual_hints            = label_color = white // default
+  visual_hints            = vertex_color = red // default
+}

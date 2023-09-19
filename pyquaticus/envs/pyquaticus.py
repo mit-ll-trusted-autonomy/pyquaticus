@@ -101,7 +101,8 @@ config_dict_std = {
     "suppress_numpy_warnings": (
         True  # Option to stop numpy from printing warnings to the console
     ),
-    "teleport_on_tag" : False, # Option for the agent when tagged to teleport home or not
+    "teleport_on_tag" : False, 
+    # Option for the agent when tagged, either out of bounds or by opponent, to teleport home or not
 }
 """ Standard configuration setup """
 
@@ -350,6 +351,7 @@ class PyQuaticusEnv(ParallelEnv):
             Own flag status (boolean)
             On side (boolean)
             Tagging cooldown (seconds) time elapsed since last tag (at max when you can tag again)
+            Is tagged (boolean)
             For each other agent (teammates first) [Consider sorting teammates and opponents by distance or flag status]
                 Bearing from you (clockwise degrees)
                 Distance (meters)
@@ -358,6 +360,7 @@ class PyQuaticusEnv(ParallelEnv):
                 Has flag status (boolean)
                 On their side status (boolean)
                 Tagging cooldown (seconds)
+                Is tagged (boolean)
         Note 1 : the angles are 0 when the agent is pointed directly at the object
                  and increase in the clockwise direction
         Note 2 : the wall distances can be negative when the agent is out of bounds
@@ -597,7 +600,19 @@ class PyQuaticusEnv(ParallelEnv):
             # convert desired_speed   and  desired_heading to
             #         desired_thrust  and  desired_rudder
             # requested heading is relative so it directly maps to the heading error
-            desired_speed, heading_error = action_dict[player.id]
+            
+            if player.is_tagged and not config_dict_std["teleport_on_tag"]:
+                team = int(player.team)
+                flag_home = self.flags[team].home
+                home_flag_dist, home_flag_bearing = mag_bearing_to(
+                    np.array(player.pos, dtype=np.float32), flag_home, player.heading
+                )
+                ag_vect = self._bearing_to_vec(home_flag_bearing)
+                heading_error = self._vec_to_heading(ag_vect)
+                desired_speed = MAX_SPEED
+            else:
+                desired_speed, heading_error = action_dict[player.id]
+
             # desired heading is relative to current heading
             speed_error = desired_speed - player.speed
             desired_speed = self._pid_controllers[player.id]["speed"](speed_error)
@@ -723,7 +738,23 @@ class PyQuaticusEnv(ParallelEnv):
                 [speed, heading], dtype=np.float32
             )
         return processed_action_dict
-
+    
+    def _bearing_to_vec(self, heading):
+        return [np.cos(np.deg2rad(heading)), np.sin(np.deg2rad(heading))]
+    
+    def _vec_to_heading(self, vec):
+        """Converts a vector to a magnitude and heading (deg)."""
+        angle = math.degrees(math.atan2(vec[1], vec[0]))
+        return self.angle180(angle)
+    
+    def angle180(self, deg):
+        """Rotates an angle to be between -180 and +180 degrees."""
+        while deg > 180:
+            deg -= 360
+        while deg < -180:
+            deg += 360
+        return deg
+    
     def _check_pickup_flags(self):
         """Updates player states if they picked up the flag."""
         for player in self.players:
@@ -1208,6 +1239,7 @@ class PyQuaticusEnv(ParallelEnv):
             )
 
         for player in self.players:
+            player.is_tagged = False
             player.thrust = 0.0
             player.speed = 0.0
             player.has_flag = False
@@ -1428,8 +1460,8 @@ class PyQuaticusEnv(ParallelEnv):
             Own speed (meters per second)
             Own flag status (boolean)
             On side (boolean)
-            Is tagged (boolean)
             Tagging cooldown (seconds) time elapsed since last tag (at max when you can tag again)
+            Is tagged (boolean)
             For each other agent (teammates first) [Consider sorting teammates and opponents by distance or flag status]
                 Bearing from you (clockwise degrees)
                 Distance (meters)

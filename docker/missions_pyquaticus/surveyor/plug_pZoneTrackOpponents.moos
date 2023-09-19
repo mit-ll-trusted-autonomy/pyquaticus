@@ -1,0 +1,17 @@
+//------------------------------------------------
+// pZoneTrackOpponents config block
+//zone is min_x, min_y, max_x, max_y
+ProcessConfig = pZoneTrackOpponents
+{
+   AppTick   = 4
+   CommsTick = 4
+
+//   opfor=blue
+   opfor=$(OPFOR)
+//   zone=80,0,160,80
+//   zone=$(OPFOR_ZONE)
+   pts=$(OPFOR_ZONE)
+   point=$(UNTAG_POS)
+
+}
+

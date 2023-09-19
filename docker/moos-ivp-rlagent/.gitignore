@@ -1,0 +1,35 @@
+# ignore object files and output libs
+*.o
+*.dylib
+*.dll
+__pycache__
+
+# ignore saved models
+*.zip
+*.csv
+
+# ignore emacs version files
+*~
+
+# Ignore build/install directories
+build/
+bin/
+lib/
+
+# Ignore docs subdirectories and tex temp files
+docs/figures/
+docs/log/
+docs/tex/common
+docs/tex/*.log
+docs/tex/*.aux
+docs/tex/*.out
+docs/tex/*.toc
+
+# Ignore missions Log directory and other generated files
+missions/*/Logs
+targ_*
+.LastOpened*
+
+# macOS
+.DS_Store
+

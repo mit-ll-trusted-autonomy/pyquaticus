@@ -1,0 +1,53 @@
+//--------------------------------------------------
+// uFldTagManager Configuration Block
+ProcessConfig = uFldTagManager
+{
+  AppTick   = 4
+  CommsTick = 4
+
+  tag_range = 10     // default (meters)
+
+  post_color = white  // default
+
+  tag_circle = true
+  tag_circle_range = 5
+  tag_circle_color = "green"
+  tag_min_interval = 10
+
+  tag_duration = 10000
+
+  //robot_tag_post   = MOOS_MANUAL_OVERRIDE_$UP_TARGET=true
+  human_tag_post   = SAY_MOOS_ALL=say={$TARGET_has_been_tagged},rate=200
+  human_tag_post   = SAY_MOOS=say={$TARGET_has_been_tagged},rate=200
+  // human_tag_post   = SAY_MOOS_$UP_TARGET=say={you_have_been_tagged},rate=200
+  robot_tag_post   = SAY_MOOS_ALL=say={$TARGET_has_been_tagged},rate=200
+  robot_tag_post   = SAY_MOOS=say={$TARGET_has_been_tagged},rate=200
+  // robot_tag_post   = SAY_MOOS_$UP_TARGET=say={you_have_been_tagged},rate=200
+
+  // Return Flag
+  human_tag_post   = FLAG_RESET=vname=$TARGET
+  robot_tag_post   = FLAG_RESET=vname=$TARGET
+  human_tag_post   = TAGGED_$UP_TARGET=true
+  robot_tag_post   = TAGGED_$UP_TARGET=true
+
+  //robot_untag_post = MOOS_MANUAL_OVERRIDE_$UP_TARGET=false
+  // human_untag_post   = SAY_MOOS=say={$TARGET_has_been_untagged},rate=200
+  // human_untag_post   = SAY_MOOS_$UP_TARGET=say={you_have_been_untagged},rate=200
+  // robot_untag_post   = SAY_MOOS=say={$TARGET_has_been_untagged},rate=200
+  // robot_untag_post   = SAY_MOOS_$UP_TARGET=say={you_have_been_untagged},rate=200
+  human_untag_post = SAY_MOOS_ALL=say={$TARGET_has_been_untagged},rate=200
+  human_untag_post = SAY_MOOS=say={$TARGET_has_been_untagged},rate=200
+  human_untag_post = TAGGED_$UP_TARGET=false
+  robot_untag_post = SAY_MOOS_ALL=say={$TARGET_has_been_untagged},rate=200
+  robot_untag_post = SAY_MOOS=say={$TARGET_has_been_untagged},rate=200
+  robot_untag_post = TAGGED_$UP_TARGET=false
+
+  team_one=red
+  team_two=blue
+
+  zone_one = pts={ 56,16 : -15,-17 : 17,-83 : 82,-56 }
+  zone_two = pts={ -15,-17 : -83,-49 : -53,-114 : 17,-83 }
+
+  zone_one_color = pink
+  zone_two_color = dodger_blue
+}
