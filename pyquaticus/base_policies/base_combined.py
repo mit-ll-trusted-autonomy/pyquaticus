@@ -188,9 +188,9 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             if np.random.random() < 0.5:
                 goal_vec = self.bearing_to_vec(nearest_enemy[1])
             else:
-                own_flag_dist = my_obs["protect_flag_distance"]
+                own_flag_dist = my_obs["own_home_distance"]
                 if own_flag_dist > self.flag_keepout + 2.0:
-                    goal_vec = self.bearing_to_vec(my_obs["protect_flag_bearing"])
+                    goal_vec = self.bearing_to_vec(my_obs["own_home_bearing"])
                 else:
                     span_len = self.scrimmage - self.defensiveness
                     goal_vec = [np.random.random() * span_len, 0]

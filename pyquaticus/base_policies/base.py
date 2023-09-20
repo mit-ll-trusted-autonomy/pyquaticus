@@ -93,16 +93,16 @@ class BaseAgentPolicy:
 
         # Calculate the rectangular coordinates for the flags location relative to the agent.
         self.my_flag_loc = (
-            my_obs["protect_flag_distance"]
-            * np.cos(np.deg2rad(my_obs["protect_flag_bearing"])),
-            my_obs["protect_flag_distance"]
-            * np.sin(np.deg2rad(my_obs["protect_flag_bearing"])),
+            my_obs["own_home_distance"]
+            * np.cos(np.deg2rad(my_obs["own_home_bearing"])),
+            my_obs["own_home_distance"]
+            * np.sin(np.deg2rad(my_obs["own_home_bearing"])),
         )
         self.opp_flag_loc = (
-            my_obs["retrieve_flag_distance"]
-            * np.cos(np.deg2rad(my_obs["retrieve_flag_bearing"])),
-            my_obs["retrieve_flag_distance"]
-            * np.sin(np.deg2rad(my_obs["retrieve_flag_bearing"])),
+            my_obs["opponent_home_distance"]
+            * np.cos(np.deg2rad(my_obs["opponent_home_bearing"])),
+            my_obs["opponent_home_distance"]
+            * np.sin(np.deg2rad(my_obs["opponent_home_bearing"])),
         )
 
         self.home = (

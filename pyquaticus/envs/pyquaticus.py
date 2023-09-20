@@ -75,10 +75,10 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
     ### Observation Space
 
         Per Agent (supplied in a dictionary from agent-id to a Box):
-            Retrieve flag relative bearing (clockwise degrees)
-            Retrieve flag distance (meters)
-            Home flag relative bearing (clockwise degrees)
-            Home flag distance (meters)
+            Opponent home flag relative bearing (clockwise degrees)
+            Opponent home flag distance (meters)
+            Own home flag relative bearing (clockwise degrees)
+            Own home flag distance (meters)
             Wall 1 relative bearing (clockwise degrees)
             Wall 1 distance (meters)
             Wall 2 relative bearing (clockwise degrees)
@@ -143,10 +143,10 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         min_dist = [0.0]
         max_bool, min_bool = [1.0], [0.0]
         max_speed, min_speed = [self.max_speed], [0.0]
-        agent_obs_normalizer.register("retrieve_flag_bearing", max_bearing)
-        agent_obs_normalizer.register("retrieve_flag_distance", max_dist, min_dist)
-        agent_obs_normalizer.register("protect_flag_bearing", max_bearing)
-        agent_obs_normalizer.register("protect_flag_distance", max_dist, min_dist)
+        agent_obs_normalizer.register("opponent_home_bearing", max_bearing)
+        agent_obs_normalizer.register("opponent_home_distance", max_dist, min_dist)
+        agent_obs_normalizer.register("own_home_bearing", max_bearing)
+        agent_obs_normalizer.register("own_home_distance", max_dist, min_dist)
         agent_obs_normalizer.register("agent_home_distance", max_dist, min_dist)
         agent_obs_normalizer.register("agent_home_bearing", max_bearing)
         agent_obs_normalizer.register("wall_0_bearing", max_bearing)
@@ -229,10 +229,10 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         red teams are flipped (e.g., the goal is in the opposite
         direction)
         Observation Space (per agent):
-            Retrieve flag relative bearing (clockwise degrees)
-            Retrieve flag distance (meters)
-            Home flag relative bearing (clockwise degrees)
-            Home flag distance (meters)
+            Opponent home relative bearing (clockwise degrees)
+            Opponent home distance (meters)
+            Home relative bearing (clockwise degrees)
+            Home distance (meters)
             Wall 1 relative bearing (clockwise degrees)
             Wall 1 distance (meters)
             Wall 2 relative bearing (clockwise degrees)
@@ -268,18 +268,18 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         agent = self.players[agent_id]
         obs_dict = OrderedDict()
         own_team = agent.team
-        protect_flag_loc = self.flags[int(own_team)].pos
-        retrieve_flag_loc = self.flags[not int(own_team)].pos
+        own_home_loc = self.flags[int(own_team)].home
+        opponent_home_loc = self.flags[not int(own_team)].home
         other_team = Team.BLUE_TEAM if own_team == Team.RED_TEAM else Team.RED_TEAM
         obs = OrderedDict()
         np_pos = np.array(agent.pos, dtype=np.float32)
         # Goal flag
-        retrieve_flag_dist, retrieve_flag_bearing = mag_bearing_to(
-            np_pos, retrieve_flag_loc, agent.heading
+        opponent_home_dist, opponent_home_bearing = mag_bearing_to(
+            np_pos, opponent_home_loc, agent.heading
         )
         # Defend flag
-        protect_flag_dist, protect_flag_bearing = mag_bearing_to(
-            np_pos, protect_flag_loc, agent.heading
+        own_home_dist, own_home_bearing = mag_bearing_to(
+            np_pos, own_home_loc, agent.heading
         )
 
         # Agent home
@@ -289,10 +289,10 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         # TODO: consider swapping goal location once flag is retrieved
         #       especially if we're bringing the flag all the way back
 
-        obs["retrieve_flag_bearing"] = retrieve_flag_bearing
-        obs["retrieve_flag_distance"] = retrieve_flag_dist
-        obs["protect_flag_bearing"] = protect_flag_bearing
-        obs["protect_flag_distance"] = protect_flag_dist
+        obs["opponent_home_bearing"] = opponent_home_bearing
+        obs["opponent_home_distance"] = opponent_home_dist
+        obs["own_home_bearing"] = own_home_bearing
+        obs["own_home_distance"] = own_home_dist
         obs["agent_home_distance"] = agent_home_dist
         obs["agent_home_bearing"] = agent_home_bearing
         # Walls
@@ -1039,13 +1039,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.params[agent.id]["team_flag_home"] = self.get_distance_between_2_points(
                     agent.pos, self.state["flag_home"][1]
                 )
-            self.params[agent.id]["team_flag_bearing"] = obs["protect_flag_bearing"]
-            self.params[agent.id]["team_flag_distance"] = obs["protect_flag_distance"]
+            self.params[agent.id]["team_flag_bearing"] = obs["own_home_bearing"]
+            self.params[agent.id]["team_flag_distance"] = obs["own_home_distance"]
             self.params[agent.id]["opponent_flag_bearing"] = obs[
-                "retrieve_flag_bearing"
+                "opponent_home_bearing"
             ]
             self.params[agent.id]["opponent_flag_distance"] = obs[
-                "retrieve_flag_distance"
+                "opponent_home_distance"
             ]
         else:
             # Game Events
@@ -1059,13 +1059,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.params[agent.id]["team_flag_home"] = self.get_distance_between_2_points(
                     agent.pos, self.state["flag_home"][0]
                 )
-            self.params[agent.id]["team_flag_bearing"] = obs["protect_flag_bearing"]
-            self.params[agent.id]["team_flag_distance"] = obs["protect_flag_distance"]
+            self.params[agent.id]["team_flag_bearing"] = obs["own_home_bearing"]
+            self.params[agent.id]["team_flag_distance"] = obs["own_home_distance"]
             self.params[agent.id]["opponent_flag_bearing"] = obs[
-                "retrieve_flag_bearing"
+                "opponent_home_bearing"
             ]
             self.params[agent.id]["opponent_flag_distance"] = obs[
-                "retrieve_flag_distance"
+                "opponent_home_distance"
             ]
         self.params[agent.id]["num_players"] = len(self.players)
         self.params[agent.id]["speed"] = agent.speed
@@ -1341,11 +1341,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             i_pos = player.pos
             proFlag_pos = self.flags[team_idx].pos
             retFlag_pos = self.flags[int(not team_idx)].pos
-            flag_vecs[player.id]["protect_flag_dist"] = [
+            flag_vecs[player.id]["own_home_dist"] = [
                 proFlag_pos[0] - i_pos[0],
                 proFlag_pos[1] - i_pos[1],
             ]
-            flag_vecs[player.id]["retrieve_flag_dist"] = [
+            flag_vecs[player.id]["opponent_home_dist"] = [
                 retFlag_pos[0] - i_pos[0],
                 retFlag_pos[1] - i_pos[1],
             ]

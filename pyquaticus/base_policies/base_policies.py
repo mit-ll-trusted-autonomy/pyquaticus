@@ -242,10 +242,10 @@ def register_state_elements(team_size):
     min_dist = [0.0]
     max_bool, min_bool = [1.0], [0.0]
     max_speed, min_speed = [pyq.config_dict_std["max_speed"]], [0.0]
-    agent_obs_normalizer.register("retrieve_flag_bearing", max_bearing)
-    agent_obs_normalizer.register("retrieve_flag_distance", max_dist, min_dist)
-    agent_obs_normalizer.register("protect_flag_bearing", max_bearing)
-    agent_obs_normalizer.register("protect_flag_distance", max_dist, min_dist)
+    agent_obs_normalizer.register("opponent_home_bearing", max_bearing)
+    agent_obs_normalizer.register("opponent_home_distance", max_dist, min_dist)
+    agent_obs_normalizer.register("own_home_bearing", max_bearing)
+    agent_obs_normalizer.register("own_home_distance", max_dist, min_dist)
     agent_obs_normalizer.register("agent_home_distance", max_dist, min_dist)
     agent_obs_normalizer.register("agent_home_bearing", max_bearing)
     agent_obs_normalizer.register("wall_0_bearing", max_bearing)

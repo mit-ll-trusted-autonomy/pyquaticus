@@ -76,10 +76,10 @@ class BaseAttacker(BaseAgentPolicy):
         if self.mode == "easy":
             # If I or someone on my team has the flag, go back home
             if self.has_flag or self.my_team_has_flag:
-                goal_vect = self.bearing_to_vec(my_obs["protect_flag_bearing"])
+                goal_vect = self.bearing_to_vec(my_obs["own_home_bearing"])
             # Otherwise go get the opponents flag
             else:
-                goal_vect = self.bearing_to_vec(my_obs["retrieve_flag_bearing"])
+                goal_vect = self.bearing_to_vec(my_obs["opponent_home_bearing"])
 
             # Convert the vector to a heading, and then pick the best discrete action to perform
             try:
@@ -105,7 +105,7 @@ class BaseAttacker(BaseAgentPolicy):
             if self.has_flag or self.my_team_has_flag:
                 # Weighted to follow goal more than avoiding others
                 goal_vect = np.multiply(
-                    2.00, self.bearing_to_vec(my_obs["protect_flag_bearing"])
+                    2.00, self.bearing_to_vec(my_obs["own_home_bearing"])
                 )
                 avoid_vect = self.get_avoid_vect(self.opp_team_pos)
                 my_action = goal_vect + avoid_vect
@@ -113,7 +113,7 @@ class BaseAttacker(BaseAgentPolicy):
             # Otherwise, go get the other teams flag
             else:
                 goal_vect = np.multiply(
-                    2.00, self.bearing_to_vec(my_obs["retrieve_flag_bearing"])
+                    2.00, self.bearing_to_vec(my_obs["opponent_home_bearing"])
                 )
                 avoid_vect = self.get_avoid_vect(self.opp_team_pos)
                 my_action = goal_vect + avoid_vect
@@ -186,7 +186,7 @@ class BaseAttacker(BaseAgentPolicy):
             # If I or someone on my team has the flag, go back to my side
             if self.has_flag or self.my_team_has_flag:
                 goal_vect = np.multiply(
-                    1.25, self.bearing_to_vec(my_obs["protect_flag_bearing"])
+                    1.25, self.bearing_to_vec(my_obs["own_home_bearing"])
                 )
                 avoid_vect = self.get_avoid_vect(
                     self.opp_team_pos, avoid_threshold=avoid_thresh
@@ -195,7 +195,7 @@ class BaseAttacker(BaseAgentPolicy):
 
             # Otherwise go get the flag
             else:
-                goal_vect = self.bearing_to_vec(my_obs["retrieve_flag_bearing"])
+                goal_vect = self.bearing_to_vec(my_obs["opponent_home_bearing"])
                 avoid_vect = self.get_avoid_vect(
                     self.opp_team_pos, avoid_threshold=avoid_thresh
                 )
