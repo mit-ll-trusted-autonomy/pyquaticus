@@ -11,10 +11,7 @@ config_dict_std = {
     "scrimmage_line": 55.0,  # horizontal location (meters)
     "agent_radius": 2.0,  # meters
     "catch_radius": 10.0,  # meters
-    "flag_keepout": 5.0,  # minimum distance (meters) between agent and flag centers
-    "keepout_bounce": (
-        0.0 # In the WP competition there is no penalty for going withing the ctach radius of the flag
-    ),  # [0, 1] percentage of velocity in direction of collision at which an agent is repelled from its keepout zone
+    "flag_keepout": 0.0,  # minimum distance (meters) between agent and flag centers
     "max_speed": MAX_SPEED,  # meters / s
     "own_side_accel": (
         1.0
@@ -28,7 +25,7 @@ config_dict_std = {
     "tau": (
         1 / 10
     ),  # length of timestep (seconds) between state updates and for updating action input from demonstrator or rl
-    "max_time": 120.0,  # maximum time (seconds) per episode
+    "max_time": 240.0,  # maximum time (seconds) per episode
     "max_screen_size": get_screen_res(),
     "random_init": (
         False
@@ -64,7 +61,6 @@ def get_std_config() -> dict:
     return copy.deepcopy(config_dict_std)
 
 
-#### How discrete actions map to speed and heading
 # action space key combos
 # maps discrete action id to (speed, heading)
 ACTION_MAP = []

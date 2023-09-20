@@ -2,6 +2,7 @@ import copy
 from dataclasses import dataclass, field
 from enum import Enum
 import numpy as np
+import pygame
 from pygame import SRCALPHA, Surface, draw
 from typing import Hashable
 
@@ -146,6 +147,12 @@ class RenderingPlayer(Player):
                 ),
             )
 
+        # make a copy of pygame agent with nothing extra drawn on it
+        self.pygame_agent_base = self.pygame_agent.copy()
+
+        # pygame Rect object the same size as pygame_agent Surface
+        self.pygame_agent_rect = pygame.Rect((0, 0), (2*self.r, 2*self.r))
+
     def reset(self):
         """Method to return a player to their original starting position."""
         self.prev_pos = self.pos
@@ -158,7 +165,7 @@ class RenderingPlayer(Player):
         self.thrust = 0
         self.is_tagged = False
         self.has_flag = False
-        self.on_sides = True
+        self.on_own_side = True
 
     def rotate(self, angle=180):
         """Method to rotate the player 180"""
@@ -183,6 +190,28 @@ class RenderingPlayer(Player):
         
         # Rotate 180 degrees
         self.heading = angle180(self.heading + angle)
+
+    def render_tagging(self, cooldown_time):
+        self.pygame_agent = self.pygame_agent_base.copy()
+
+        # render_is_tagged
+        if self.is_tagged :
+            draw.circle(
+                self.pygame_agent,
+                (0, 255, 0),
+                (self.r, self.r),
+                self.r,
+                width=5,
+            )
+
+        # render_tagging_cooldown
+        if self.tagging_cooldown != cooldown_time:
+            percent_cooldown = self.tagging_cooldown/cooldown_time
+
+            start_angle = np.pi/2 + percent_cooldown * 2*np.pi
+            end_angle = 5*np.pi/2
+
+            draw.arc(self.pygame_agent, (0, 0, 0), self.pygame_agent_rect, start_angle, end_angle, 5)
 
 
 @dataclass

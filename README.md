@@ -34,6 +34,20 @@ You can then activate the environment with: `conda activate pyquaticus-lightenv`
 * Control with arrow keys: `python ./test/arrowkeys_test.py`
   * control agents with WASD and the arrow keys
 
+## Environment Visuals
+
+* Rendered with `pygame`
+* Blue vs Red 1v1 or multiagent teams
+* **Flag keepout zone:** circle (team's color) drawn around flag
+* **Flag pickup zone:** black circle drawn around flag
+* **Tagging cooldown**: receding black circle around agent
+* **Drive-to-home**: green halo around agent (occurs if tagged or boundary collision)
+* **Lines between agents:**
+  * Drawn between agents of opposite teams
+  * **Green**: within `2*catch_radius`
+  * **Orange/Yellow**: within `1.5*catch_radius`
+  * **Red**: within `catch_radius`
+
 ## Docker 
 
 The docker directory contains the files for the bridge over to the MOOS environment. If you just want to run your agents in MOOS, you do not need to build the docker. Install gym-aquaticus with `pip install -e /gym-aquaticus ` and then run the pyquaticus_bridge_test.py or pyquaticus_bridge_single_sim.py. 
