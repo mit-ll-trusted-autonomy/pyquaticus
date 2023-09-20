@@ -24,8 +24,8 @@ import gymnasium as gym
 import pygame
 from pygame import KEYDOWN, QUIT, K_ESCAPE
 import sys
-import time
-from pyquaticus.envs.pyquaticus import Team, get_std_config, ACTION_MAP
+from pyquaticus.config import get_std_config, ACTION_MAP
+from pyquaticus.envs.pyquaticus import Team
 from pyquaticus.base_policies.base_combined import Heuristic_CTF_Agent
 from pyquaticus import pyquaticus_v0
 from pygame import QUIT, KEYDOWN, K_ESCAPE, K_LEFT, K_UP, K_RIGHT
@@ -90,7 +90,7 @@ class KeyTest:
                     self.env.close()
                     sys.exit()
 
-        action_dict = OrderedDict([(p.id, self.no_op_action) for p in self.env.players])
+        action_dict = OrderedDict([(player_id, self.no_op_action) for player_id in self.env.players])
         is_key_pressed = pygame.key.get_pressed()
 
         # blue policy

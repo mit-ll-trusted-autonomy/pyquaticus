@@ -107,7 +107,7 @@ class KeyTest:
                     self.env.close()
                     sys.exit()
 
-        action_dict = OrderedDict([(p.id, self.no_op_action) for p in self.env.players])
+        action_dict = OrderedDict([(player_id, self.no_op_action) for player_id in self.env.players])
         is_key_pressed = pygame.key.get_pressed()
 
         # blue keys

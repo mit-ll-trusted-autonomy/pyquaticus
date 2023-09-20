@@ -6,5 +6,5 @@ except ImportError:
     PYQUATICUS_AVAILABLE=False
 
 if PYQUATICUS_AVAILABLE:
-    from gym_aquaticus.envs.pyquaticus_bridge import PyquaticusBridge
+    from gym_aquaticus.envs.pyquaticus_team_env_bridge import PyquaticusBridge
 

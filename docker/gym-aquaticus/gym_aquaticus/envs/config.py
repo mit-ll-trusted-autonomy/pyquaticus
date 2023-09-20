@@ -1,5 +1,5 @@
 #----------------------------------------------------------------------
-# config.py -- configuration parameters for AquaticusTeamEnv
+# config.py -- configuration parameters for Python wrappers of MOOS-IvP
 #
 # originally developed at NRL and modified at MIT LL
 
@@ -134,8 +134,9 @@ class WestPointConfig(MITConfig):
         self.sim_timestep = 0.4      # moostime (sec) between steps
         self.moos_timewarp = 4
 
-        # Surveyors seem to be slower than herons, setting max speed lower
-        self.speed_bounds = (0.0, 1.5)
+        # will sometimes exceed this boundary so it's a good idea to pad a bit
+        # when setting the observation limits for normalizing
+        self.speed_bounds = (0.0, 5.)
 
         # THIS
         # defined in meta_shoreside.moos and must match

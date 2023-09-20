@@ -19,14 +19,13 @@
 
 # SPDX-License-Identifier: BSD-3-Clause
 
+from abc import ABC
 import colorsys
 import copy
-import functools
+import itertools
 import math
 import random
 from collections import OrderedDict, defaultdict
-from dataclasses import dataclass, field
-from enum import Enum
 from typing import Optional
 
 import numpy as np
@@ -34,10 +33,12 @@ import pygame
 from gymnasium.spaces import Discrete
 from gymnasium.utils import seeding
 from pettingzoo import ParallelEnv
-from pygame import SRCALPHA, Surface, draw
+from pygame import SRCALPHA, draw
 from pygame.math import Vector2
 from pygame.transform import rotozoom
 
+from pyquaticus.config import config_dict_std, ACTION_MAP
+from pyquaticus.structs import Team, RenderingPlayer, Flag
 from pyquaticus.utils.obs_utils import ObsNormalizer
 from pyquaticus.utils.pid import PID
 from pyquaticus.utils.utils import (
@@ -45,7 +46,6 @@ from pyquaticus.utils.utils import (
     clip,
     closest_point_on_line,
     get_rot_angle,
-    get_screen_res,
     mag_bearing_to,
     mag_heading_to_vec,
     rc_intersection,
@@ -54,278 +54,18 @@ from pyquaticus.utils.utils import (
     vec_to_mag_heading,
 )
 
-MAX_SPEED = 5.0
-
-config_dict_std = {
-    "world_size": [110.0, 55.0],  # meters
-    "pixel_size": 10,  # pixels/meter
-    "scrimmage_line": 55.0,  # horizontal location (meters)
-    "agent_radius": 2.0,  # meters
-    "catch_radius": 10.0,  # meters
-    "flag_keepout": 0.0,  # minimum distance (meters) between agent and flag centers
-    "max_speed": MAX_SPEED,  # meters / s
-    "own_side_accel": (
-        1.0
-    ),  # [0, 1] percentage of max acceleration that can be used on your side of scrimmage
-    "opp_side_accel": (
-        1.0
-    ),  # [0, 1] percentage of max acceleration that can be used on opponent's side of scrimmage
-    "wall_bounce": (
-        0.5
-    ),  # [0, 1] percentage of current speed (x or y) at which an agent is repelled from a wall (vertical or horizontal)
-    "tau": (
-        1 / 10
-    ),  # length of timestep (seconds) between state updates and for updating action input from demonstrator or rl
-    "max_time": 240.0,  # maximum time (seconds) per episode
-    "max_screen_size": get_screen_res(),
-    "random_init": (
-        False
-    ),  # randomly initialize agents' positions for ctf mode (within fairness constraints)
-    "save_traj": False,  # save traj as pickle
-    "render_fps": 30,
-    "normalize": True,  # Flag for normalizing the observation space.
-    "tagging_cooldown": (
-        10.0
-    ),  # Cooldown on an agent after they tag another agent, to prevent consecutive tags
-    # MOOS dynamics parameters
-    "speed_factor": 20.0,  # Multiplicative factor for desired_speed -> desired_thrust
-    "thrust_map": np.array(  # Piecewise linear mapping from desired_thrust to speed
-        [[-100, 0, 20, 40, 60, 80, 100], [-2, 0, 1, 2, 3, 5, 5]]
-    ),
-    "max_thrust": 70,  # Limit on vehicle thrust
-    "max_rudder": 100,  # Limit on vehicle rudder actuation
-    "turn_loss": 0.85,
-    "turn_rate": 70,
-    "max_acc": 1,  # m / s**2
-    "max_dec": 1,  # m / s**2
-    "suppress_numpy_warnings": (
-        True  # Option to stop numpy from printing warnings to the console
-    ),
-    "teleport_on_tag" : False, 
-    # Option for the agent when tagged, either out of bounds or by opponent, to teleport home or not
-}
-""" Standard configuration setup """
-
-
-def get_std_config() -> dict:
-    """Gets a copy of the standard configuration, ideal for minor modifications to the standard configuration."""
-    return copy.deepcopy(config_dict_std)
-
-
-# action space key combos
-# maps discrete action id to (speed, heading)
-ACTION_MAP = []
-for spd in [MAX_SPEED, MAX_SPEED / 2.0]:
-    for hdg in range(180, -180, -45):
-        ACTION_MAP.append([spd, hdg])
-# add a none action
-ACTION_MAP.append([0.0, 0.0])
-
-
-class Team(Enum):
-    """Enum for teams."""
-
-    BLUE_TEAM = 0
-    RED_TEAM = 1
-
-    def __int__(self):
-        """Returns integer equivalent of enum for indexing."""
-        return self.value
-
-    def __str__(self):
-        """Returns string equivalent for enum."""
-        return self.name
-
-    def __repr__(self):
-        return f"{self.name}({self.value})"
-
-
-@dataclass
-class Player:
-    """
-    Class to hold data on each player/agent in the game.
-
-    Attributes
-    ----------
-        id: The ID of the agent (also used as an index)
-        team: The team of the agent (red or blue)
-        r: Agent radius
-        thrust: The engine thrust
-        pos: The position of the agent [x, y]
-        speed: The speed of the agent (m / s)
-        heading: The heading of the agent (deg), maritime convention: north is 0, east is 90
-        pygame_agent: The pygame object that is drawn on screen.
-        prev_pos: The previous position of the agent
-        has_flag: Indicator for whether or not the agent has the flag
-        on_own_side: Indicator for whether or not the agent is on its own side of the field.
-    """
-
-    id: int
-    team: Team
-    r: float
-    thrust: float = field(init=False, default_factory=float)
-    pos: list[float] = field(init=False, default_factory=list)
-    speed: float = field(init=False, default_factory=float)
-    heading: float = field(init=False, default_factory=float)
-    pygame_agent: Surface = field(init=False, default=None)
-    prev_pos: list[float] = field(init=False, default_factory=list)
-    has_flag: bool = field(init=False, default=False)
-    on_own_side: bool = field(init=False, default=True)
-    tagging_cooldown: float = field(init=False)
-    is_tagged: bool = field(init = False, default=False)
-    home: list[float] = field(init=False, default_factory=list)
-
-    def __post_init__(self):
-        """Called automatically after __init__ to set up pygame object interface."""
-        # Create the shape of the arrow indicating agent orientation
-        top_vertex = (self.r, 0)
-        left_vertex = (
-            self.r - self.r * np.sqrt(2) / 2 + 1,
-            self.r + self.r * np.sqrt(2) / 2 - 1,
-        )
-        right_vertex = (
-            self.r + self.r * np.sqrt(2) / 2 - 1,
-            self.r + self.r * np.sqrt(2) / 2 - 1,
-        )
-        center_vertex = (self.r, 1.25 * self.r)
-
-        # Create the actual object
-        self.pygame_agent = Surface((2 * self.r, 2 * self.r), SRCALPHA)
-
-        # Adjust color based on which team
-        if self.team == Team.BLUE_TEAM:
-            draw.circle(self.pygame_agent, (0, 0, 255, 50), (self.r, self.r), self.r)
-            draw.circle(
-                self.pygame_agent,
-                (0, 0, 255),
-                (self.r, self.r),
-                self.r,
-                width=round(self.r / 20),
-            )
-            draw.polygon(
-                self.pygame_agent,
-                (0, 0, 255),
-                (
-                    top_vertex,
-                    left_vertex,
-                    center_vertex,
-                    right_vertex,
-                ),
-            )
-        else:
-            draw.circle(self.pygame_agent, (255, 0, 0, 50), (self.r, self.r), self.r)
-            draw.circle(
-                self.pygame_agent,
-                (255, 0, 0),
-                (self.r, self.r),
-                self.r,
-                width=round(self.r / 20),
-            )
-            draw.polygon(
-                self.pygame_agent,
-                (255, 0, 0),
-                (
-                    top_vertex,
-                    left_vertex,
-                    center_vertex,
-                    right_vertex,
-                ),
-            )
-
-        # make a copy of pygame agent with nothing extra drawn on it
-        self.pygame_agent_base = self.pygame_agent.copy()
-
-        # pygame Rect object the same size as pygame_agent Surface
-        self.pygame_agent_rect = pygame.Rect((0, 0), (2*self.r, 2*self.r))
-
-    def reset(self):
-        """Method to return a player to their original starting position."""
-        self.prev_pos = self.pos
-        self.pos = self.home
-        self.speed = 0
-        if self.team == Team.RED_TEAM:
-            self.heading = 90
-        else:
-            self.heading = -90
-        self.thrust = 0
-        self.is_tagged = False
-        self.has_flag = False
-        self.on_own_side = True
-
-    def rotate(self, angle=180):
-        """Method to rotate the player 180"""
-        self.prev_pos = self.pos
-        self.speed = 0
-        self.thrust = 0
-        self.has_flag = False
-       
-        # Need to get which wall the agent bumped into
-        x_pos = self.pos[0]
-        y_pos = self.pos[1]
-
-        if (x_pos < self.r):
-            self.pos[0] += 1
-        elif(config_dict_std["world_size"][0] - self.r < x_pos):
-            self.pos[0] -= 1
-        
-        if (y_pos < self.r):
-            self.pos[1] += 1
-        elif(config_dict_std["world_size"][1] - self.r < y_pos):
-            self.pos[1] -= 1
-        
-        # Rotate 180 degrees
-        self.heading = angle180(self.heading + angle)
-
-    def render_tagging(self, cooldown_time):
-        self.pygame_agent = self.pygame_agent_base.copy()
-
-        # render_is_tagged
-        if self.is_tagged :
-            draw.circle(
-                self.pygame_agent,
-                (0, 255, 0),
-                (self.r, self.r),
-                self.r,
-                width=5,
-            )
-
-        # render_tagging_cooldown
-        if self.tagging_cooldown != cooldown_time:
-            percent_cooldown = self.tagging_cooldown/cooldown_time
-
-            start_angle = np.pi/2 + percent_cooldown * 2*np.pi
-            end_angle = 5*np.pi/2
-
-            draw.arc(self.pygame_agent, (0, 0, 0), self.pygame_agent_rect, start_angle, end_angle, 5)
-
-
-@dataclass
-class Flag:
-    """
-    Class for data on the flag.
-
-    Attributes
-    ----------
-        team: The team the flag belongs to
-        home: The flags original position at the start of the round/game
-        pos: The flags current position
-    """
-
-    team: Team
-    home: list[float] = field(default_factory=list, init=False)
-    pos: list[float] = field(default_factory=list, init=False)
-
-    def reset(self):
-        """Resets the flags `pos` to be `home`."""
-        self.pos = copy.deepcopy(self.home)
-
-
-class PyQuaticusEnv(ParallelEnv):
+class PyQuaticusEnvBase(ParallelEnv, ABC):
     """
     ### Description.
 
-    This environment simulates a game of capture the flag with agent dynamics based on MOOS-IvP
-    (https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarine#section5).
+    This class contains the base behavior for the main class PyQuaticusEnv below.
+    The functionality of this class is shared between both the main Pyquaticus
+    entry point (PyQuaticusEnv) and the PyQuaticusMoosBridge class that allows
+    deploying policies on a MOOS-IvP backend.
+
+    The exposed functionality includes the following:
+    1. converting from discrete actions to a desired speed/heading command
+    2. converting from raw states in Player objects to a normalized observation space
 
     ### Action Space
     A discrete action space with all combinations of
@@ -366,6 +106,301 @@ class PyQuaticusEnv(ParallelEnv):
         Note 2 : the wall distances can be negative when the agent is out of bounds
         Note 3 : the boolean args Tag/Flag status are -1 false and +1 true
         Note 4: the values are normalized by default
+    """
+
+    def _to_speed_heading(self, action_dict):
+        """
+        Processes the raw discrete actions.
+
+        Returns:
+            dict from agent id -> (speed, relative heading)
+            Note: we use relative heading here so that it can be used directly
+                  to the heading error in the PID controller
+        """
+        processed_action_dict = OrderedDict()
+        for player in self.players.values():
+            if player.id in action_dict:
+                speed, heading = self._discrete_action_to_speed_relheading(action_dict[player.id])
+            else:
+                # if no action provided, stop moving
+                speed, heading = 0.0, player.heading
+            processed_action_dict[player.id] = np.array(
+                [speed, heading], dtype=np.float32
+            )
+        return processed_action_dict
+
+    def _discrete_action_to_speed_relheading(self, action):
+        return ACTION_MAP[action]
+
+    def _relheading_to_global_heading(self, player_heading, relheading):
+        return angle180((player_heading + relheading) % 360)
+
+    def _register_state_elements(self, num_on_team):
+        """Initializes the normalizer."""
+        agent_obs_normalizer = ObsNormalizer(True)
+        max_bearing = [180]
+        max_dist = [np.linalg.norm(self.world_size) + 10]  # add a ten meter buffer
+        min_dist = [0.0]
+        max_bool, min_bool = [1.0], [0.0]
+        max_speed, min_speed = [self.max_speed], [0.0]
+        agent_obs_normalizer.register("retrieve_flag_bearing", max_bearing)
+        agent_obs_normalizer.register("retrieve_flag_distance", max_dist, min_dist)
+        agent_obs_normalizer.register("protect_flag_bearing", max_bearing)
+        agent_obs_normalizer.register("protect_flag_distance", max_dist, min_dist)
+        agent_obs_normalizer.register("agent_home_distance", max_dist, min_dist)
+        agent_obs_normalizer.register("agent_home_bearing", max_bearing)
+        agent_obs_normalizer.register("wall_0_bearing", max_bearing)
+        agent_obs_normalizer.register("wall_0_distance", max_dist, min_dist)
+        agent_obs_normalizer.register("wall_1_bearing", max_bearing)
+        agent_obs_normalizer.register("wall_1_distance", max_dist, min_dist)
+        agent_obs_normalizer.register("wall_2_bearing", max_bearing)
+        agent_obs_normalizer.register("wall_2_distance", max_dist, min_dist)
+        agent_obs_normalizer.register("wall_3_bearing", max_bearing)
+        agent_obs_normalizer.register("wall_3_distance", max_dist, min_dist)
+        agent_obs_normalizer.register("speed", max_speed, min_speed)
+        agent_obs_normalizer.register("has_flag", max_bool, min_bool)
+        agent_obs_normalizer.register("on_side", max_bool, min_bool)
+        agent_obs_normalizer.register(
+            "tagging_cooldown", [self.tagging_cooldown], [0.0]
+        )
+        agent_obs_normalizer.register("is_tagged", max_bool, min_bool)
+
+        for i in range(num_on_team - 1):
+            teammate_name = f"teammate_{i}"
+            agent_obs_normalizer.register((teammate_name, "bearing"), max_bearing)
+            agent_obs_normalizer.register(
+                (teammate_name, "distance"), max_dist, min_dist
+            )
+            agent_obs_normalizer.register(
+                (teammate_name, "relative_heading"), max_bearing
+            )
+            agent_obs_normalizer.register(
+                (teammate_name, "speed"), max_speed, min_speed
+            )
+            agent_obs_normalizer.register(
+                (teammate_name, "has_flag"), max_bool, min_bool
+            )
+            agent_obs_normalizer.register(
+                (teammate_name, "on_side"), max_bool, min_bool
+            )
+            agent_obs_normalizer.register(
+                (teammate_name, "tagging_cooldown"), [self.tagging_cooldown], [0.0]
+            )
+            agent_obs_normalizer.register(
+                (teammate_name, "is_tagged"), max_bool, min_bool
+            )
+
+        for i in range(num_on_team):
+            opponent_name = f"opponent_{i}"
+            agent_obs_normalizer.register((opponent_name, "bearing"), max_bearing)
+            agent_obs_normalizer.register(
+                (opponent_name, "distance"), max_dist, min_dist
+            )
+            agent_obs_normalizer.register(
+                (opponent_name, "relative_heading"), max_bearing
+            )
+            agent_obs_normalizer.register(
+                (opponent_name, "speed"), max_speed, min_speed
+            )
+            agent_obs_normalizer.register(
+                (opponent_name, "has_flag"), max_bool, min_bool
+            )
+            agent_obs_normalizer.register(
+                (opponent_name, "on_side"), max_bool, min_bool
+            )
+            agent_obs_normalizer.register(
+                (opponent_name, "tagging_cooldown"), [self.tagging_cooldown], [0.0]
+            )
+            agent_obs_normalizer.register(
+                (opponent_name, "is_tagged"), max_bool, min_bool
+            )
+
+        self._state_elements_initialized = True
+        return agent_obs_normalizer
+
+    def state_to_obs(self, agent_id):
+        """
+        Returns a local observation space. These observations are
+        based entirely on the agent local coordinate frame rather
+        than the world frame.
+        This was originally designed so that observations can be
+        easily shared between different teams and agents.
+        Without this the world frame observations from the blue and
+        red teams are flipped (e.g., the goal is in the opposite
+        direction)
+        Observation Space (per agent):
+            Retrieve flag relative bearing (clockwise degrees)
+            Retrieve flag distance (meters)
+            Home flag relative bearing (clockwise degrees)
+            Home flag distance (meters)
+            Wall 1 relative bearing (clockwise degrees)
+            Wall 1 distance (meters)
+            Wall 2 relative bearing (clockwise degrees)
+            Wall 2 distance (meters)
+            Wall 3 relative bearing (clockwise degrees)
+            Wall 3 distance (meters)
+            Wall 4 relative bearing (clockwise degrees)
+            Wall 4 distance (meters)
+            Own speed (meters per second)
+            Own flag status (boolean)
+            On side (boolean)
+            Tagging cooldown (seconds) time elapsed since last tag (at max when you can tag again)
+            Is tagged (boolean)
+            For each other agent (teammates first) [Consider sorting teammates and opponents by distance or flag status]
+                Bearing from you (clockwise degrees)
+                Distance (meters)
+                Heading of other agent relative to the vector to you (clockwise degrees)
+                Speed (meters per second)
+                Has flag status (boolean)
+                On their side status (boolean)
+                Tagging cooldown (seconds)
+                Is tagged (boolean)
+        Note 1 : the angles are 0 when the agent is pointed directly at the object
+                 and increase in the clockwise direction
+        Note 2 : the wall distances can be negative when the agent is out of bounds
+        Note 3 : the boolean args Tag/Flag status are -1 false and +1 true
+        Developer Note 1: changes here should be reflected in _register_state_elements.
+        Developer Note 2: changes here should be reflected in register_state_elements in base_policies.py
+        """
+        if not hasattr(self, '_state_elements_initialized') or not self._state_elements_initialized:
+            raise RuntimeError("Have not registered state elements")
+
+        agent = self.players[agent_id]
+        obs_dict = OrderedDict()
+        own_team = agent.team
+        protect_flag_loc = self.flags[int(own_team)].pos
+        retrieve_flag_loc = self.flags[not int(own_team)].pos
+        other_team = Team.BLUE_TEAM if own_team == Team.RED_TEAM else Team.RED_TEAM
+        obs = OrderedDict()
+        np_pos = np.array(agent.pos, dtype=np.float32)
+        # Goal flag
+        retrieve_flag_dist, retrieve_flag_bearing = mag_bearing_to(
+            np_pos, retrieve_flag_loc, agent.heading
+        )
+        # Defend flag
+        protect_flag_dist, protect_flag_bearing = mag_bearing_to(
+            np_pos, protect_flag_loc, agent.heading
+        )
+
+        # Agent home
+        agent_home_dist, agent_home_bearing = mag_bearing_to(
+            np_pos, self.flags[int(own_team)].home, agent.heading
+        )
+        # TODO: consider swapping goal location once flag is retrieved
+        #       especially if we're bringing the flag all the way back
+
+        obs["retrieve_flag_bearing"] = retrieve_flag_bearing
+        obs["retrieve_flag_distance"] = retrieve_flag_dist
+        obs["protect_flag_bearing"] = protect_flag_bearing
+        obs["protect_flag_distance"] = protect_flag_dist
+        obs["agent_home_distance"] = agent_home_dist
+        obs["agent_home_bearing"] = agent_home_bearing
+        # Walls
+        wall_0_closest_point = closest_point_on_line(
+            self.boundary_ul, self.boundary_ur, np_pos
+        )
+        wall_0_dist, wall_0_bearing = mag_bearing_to(
+            np_pos, wall_0_closest_point, agent.heading
+        )
+        obs["wall_0_bearing"] = wall_0_bearing
+        obs["wall_0_distance"] = wall_0_dist
+
+        wall_1_closest_point = closest_point_on_line(
+            self.boundary_ur, self.boundary_lr, np_pos
+        )
+        wall_1_dist, wall_1_bearing = mag_bearing_to(
+            np_pos, wall_1_closest_point, agent.heading
+        )
+        obs["wall_1_bearing"] = wall_1_bearing
+        obs["wall_1_distance"] = wall_1_dist
+
+        wall_2_closest_point = closest_point_on_line(
+            self.boundary_lr, self.boundary_ll, np_pos
+        )
+        wall_2_dist, wall_2_bearing = mag_bearing_to(
+            np_pos, wall_2_closest_point, agent.heading
+        )
+        obs["wall_2_bearing"] = wall_2_bearing
+        obs["wall_2_distance"] = wall_2_dist
+
+        wall_3_closest_point = closest_point_on_line(
+            self.boundary_ll, self.boundary_ul, np_pos
+        )
+        wall_3_dist, wall_3_bearing = mag_bearing_to(
+            np_pos, wall_3_closest_point, agent.heading
+        )
+        obs["wall_3_bearing"] = wall_3_bearing
+        obs["wall_3_distance"] = wall_3_dist
+
+        # Own speed
+        obs["speed"] = agent.speed
+        # Own flag status
+        obs["has_flag"] = agent.has_flag
+        # On side
+        obs["on_side"] = agent.on_own_side
+        obs["tagging_cooldown"] = agent.tagging_cooldown
+
+        #Is tagged
+        obs["is_tagged"] = agent.is_tagged
+
+        # Relative observations to other agents
+        # teammates first
+        # TODO: consider sorting these by some metric
+        #       in an attempt to get permutation invariance
+        #       distance or maybe flag status (or some combination?)
+        #       i.e. sorted by perceived relevance
+        for team in [own_team, other_team]:
+            dif_agents = filter(lambda a: a.id != agent.id, self.agents_of_team[team])
+            for i, dif_agent in enumerate(dif_agents):
+                entry_name = f"teammate_{i}" if team == own_team else f"opponent_{i}"
+
+                dif_np_pos = np.array(dif_agent.pos, dtype=np.float32)
+                dif_agent_dist, dif_agent_bearing = mag_bearing_to(
+                    np_pos, dif_np_pos, agent.heading
+                )
+                _, hdg_to_agent = mag_bearing_to(dif_np_pos, np_pos)
+                hdg_to_agent = hdg_to_agent % 360
+                # bearing relative to the bearing to you
+                obs[(entry_name, "bearing")] = dif_agent_bearing
+                obs[(entry_name, "distance")] = dif_agent_dist
+                obs[(entry_name, "relative_heading")] = angle180(
+                    (dif_agent.heading - hdg_to_agent) % 360
+                )
+                obs[(entry_name, "speed")] = dif_agent.speed
+                obs[(entry_name, "has_flag")] = dif_agent.has_flag
+                obs[(entry_name, "on_side")] = dif_agent.on_own_side
+                obs[(entry_name, "tagging_cooldown")] = dif_agent.tagging_cooldown
+                obs[(entry_name, "is_tagged")] = dif_agent.is_tagged
+
+        obs_dict[agent.id] = obs
+        if self.normalize:
+            obs_dict[agent.id] = self.agent_obs_normalizer.normalized(
+                obs_dict[agent.id]
+            )
+        return obs_dict[agent.id]
+
+    def get_agent_observation_space(self):
+        """Overridden method inherited from `Gym`."""
+        if self.normalize:
+            agent_obs_space = self.agent_obs_normalizer.normalized_space
+        else:
+            agent_obs_space = self.agent_obs_normalizer.unnormalized_space
+            raise Warning(
+                "Unnormalized observation space has not been thoroughly tested"
+            )
+        return agent_obs_space
+
+    def get_agent_action_space(self):
+        """Overridden method inherited from `Gym`."""
+        return Discrete(len(ACTION_MAP))
+
+
+class PyQuaticusEnv(PyQuaticusEnvBase):
+    """
+    ### Description.
+    This environment simulates a game of capture the flag with agent dynamics based on MOOS-IvP
+    (https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarine#section5).
+
 
     ### Rewards
 
@@ -423,7 +458,7 @@ class PyQuaticusEnv(ParallelEnv):
         self.num_blue = team_size
         self.num_red = team_size
 
-        self.players = []
+        self.players = {} # a dictionary mapping player ids (or names) to player objects
         b_players = []
         r_players = []
         self.team_size = team_size
@@ -431,35 +466,34 @@ class PyQuaticusEnv(ParallelEnv):
         # Create players, use IDs from [0, (2 * team size) - 1] so their IDs can also be used as indices.
         for i in range(0, self.team_size):
             b_players.append(
-                Player(i, Team.BLUE_TEAM, (self.agent_radius * self.pixel_size))
+                RenderingPlayer(i, Team.BLUE_TEAM, (self.agent_radius * self.pixel_size), self.config_dict)
             )
         for i in range(self.team_size, 2 * self.team_size):
             r_players.append(
-                Player(i, Team.RED_TEAM, (self.agent_radius * self.pixel_size))
+                RenderingPlayer(i, Team.RED_TEAM, (self.agent_radius * self.pixel_size), self.config_dict)
             )
-        self.players = b_players + r_players
-        self.player_ids = {p.id for p in self.players}
+        self.players = {player.id:player for player in itertools.chain(b_players, r_players)}
 
-        self.agents = [p.id for p in self.players]
+        self.agents = [agent_id for agent_id in self.players]
         self.possible_agents = self.agents[:]
 
         self.agents_of_team = {Team.BLUE_TEAM: b_players, Team.RED_TEAM: r_players}
 
         # Setup Rewards
         self.reward_config = {} if reward_config is None else reward_config
-        for a in self.player_ids:
+        for a in self.players:
             if a not in self.reward_config:
                 self.reward_config[a] = None
         # Create a PID controller for each agent
         self._pid_controllers = {}
-        for player in self.players:
+        for player in self.players.values():
             self._pid_controllers[player.id] = {
                 "speed": PID(self.tau, kp=1.0, ki=0.0, kd=0.0, integral_max=0.07),
                 "heading": PID(self.tau, kp=0.35, ki=0.0, kd=0.07, integral_max=0.07),
             }
 
-        self.params = {agent.id: {} for agent in self.players}
-        self.prev_params = {agent.id: {} for agent in self.players}
+        self.params = {agent_id: {} for agent_id in self.players}
+        self.prev_params = {agent_id: {} for agent_id in self.players}
         # Create the list of flags that are indexed by self.flags[int(player.team)]
 
         self.flags = []
@@ -467,16 +501,21 @@ class PyQuaticusEnv(ParallelEnv):
             self.flags.append(Flag(team))
 
         # Set tagging cooldown
-        for player in self.players:
+        for player in self.players.values():
             player.tagging_cooldown = self.tagging_cooldown
 
-        self.agent_obs_normalizer = self._register_state_elements()
+
+        assert len(self.agents_of_team[Team.BLUE_TEAM]) == len(
+            self.agents_of_team[Team.RED_TEAM]
+        )
+        num_on_team = len(self.agents_of_team[Team.BLUE_TEAM])
+        self.agent_obs_normalizer = self._register_state_elements(num_on_team)
 
         self.action_spaces = {
-            agent: self.action_space(agent) for agent in self.player_ids
+            agent_id: self.get_agent_action_space() for agent_id in self.players
         }
         self.observation_spaces = {
-            agent: self.observation_space(agent) for agent in self.player_ids
+            agent_id: self.get_agent_observation_space() for agent_id in self.players
         }
 
         self.render_mode = render_mode
@@ -535,13 +574,13 @@ class PyQuaticusEnv(ParallelEnv):
         # set the time
         self.current_time += self.tau
         self.state["current_time"] = self.current_time
-        if not set(raw_action_dict.keys()) <= self.player_ids:
+        if not set(raw_action_dict.keys()) <= set(self.players):
             raise ValueError(
                 "Keys of action dict should be player ids but got"
                 f" {raw_action_dict.keys()}"
             )
 
-        for player in self.players:
+        for player in self.players.values():
             if player.tagging_cooldown != self.tagging_cooldown:
                 # player is still under a cooldown from tagging, advance their cooldown timer, clip at the configured tagging cooldown
                 player.tagging_cooldown = self._min(
@@ -569,9 +608,9 @@ class PyQuaticusEnv(ParallelEnv):
         if self.message and self.render_mode:
             print(self.message)
 
-        rewards = {agent.id: self.compute_rewards(agent.id) for agent in self.players}
-        obs = {agent: self.state_to_obs(agent) for agent in raw_action_dict}
-        info = {agent: {"blue": {}, "red": {}} for agent in range(self.num_agents)}
+        rewards = {agent_id: self.compute_rewards(agent_id) for agent_id in self.players}
+        obs = {agent_id: self.state_to_obs(agent_id) for agent_id in raw_action_dict}
+        info = {}
 
         terminated = False
         truncated = False
@@ -587,7 +626,7 @@ class PyQuaticusEnv(ParallelEnv):
 
     def _move_agents(self, action_dict, dt):
         """Moves agents in the space according to the specified speed/heading in `action_dict`."""
-        for player in self.players:
+        for player in self.players.values():
             pos_x = player.pos[0]
             pos_y = player.pos[1]
             flag_loc = self.flags[int(player.team)].home
@@ -601,15 +640,10 @@ class PyQuaticusEnv(ParallelEnv):
             #         desired_thrust  and  desired_rudder
             # requested heading is relative so it directly maps to the heading error
             
-            if player.is_tagged and not config_dict_std["teleport_on_tag"]:
-                team = int(player.team)
-                flag_home = self.flags[team].home
-                home_flag_dist, home_flag_bearing = mag_bearing_to(
-                    np.array(player.pos, dtype=np.float32), flag_home, player.heading
-                )
-                ag_vect = self._bearing_to_vec(home_flag_bearing)
-                heading_error = self._vec_to_heading(ag_vect)
-                desired_speed = MAX_SPEED
+            if player.is_tagged and not self.config_dict["teleport_on_tag"]:
+                flag_home = self.flags[int(player.team)].home
+                _, heading_error = mag_bearing_to(player.pos, flag_home, player.heading)
+                desired_speed = self.config_dict["max_speed"]
             else:
                 desired_speed, heading_error = action_dict[player.id]
 
@@ -725,39 +759,9 @@ class PyQuaticusEnv(ParallelEnv):
             player.heading = angle180(new_heading)
             player.thrust = desired_thrust
 
-    def _to_speed_heading(self, action_dict):
-        """Returns an array of velocities for each agent."""
-        processed_action_dict = OrderedDict()
-        for player in self.players:
-            if player.id in action_dict:
-                speed, heading = ACTION_MAP[action_dict[player.id]]
-            else:
-                # if no action provided, stop moving
-                speed, heading = 0.0, player.heading
-            processed_action_dict[player.id] = np.array(
-                [speed, heading], dtype=np.float32
-            )
-        return processed_action_dict
-    
-    def _bearing_to_vec(self, heading):
-        return [np.cos(np.deg2rad(heading)), np.sin(np.deg2rad(heading))]
-    
-    def _vec_to_heading(self, vec):
-        """Converts a vector to a magnitude and heading (deg)."""
-        angle = math.degrees(math.atan2(vec[1], vec[0]))
-        return self.angle180(angle)
-    
-    def angle180(self, deg):
-        """Rotates an angle to be between -180 and +180 degrees."""
-        while deg > 180:
-            deg -= 360
-        while deg < -180:
-            deg += 360
-        return deg
-    
     def _check_pickup_flags(self):
         """Updates player states if they picked up the flag."""
-        for player in self.players:
+        for player in self.players.values():
             team = int(player.team)
             other_team = int(not team)
             if not (player.has_flag or self.state["flag_taken"][other_team]) and (not player.is_tagged):
@@ -776,7 +780,7 @@ class PyQuaticusEnv(ParallelEnv):
                         break
     def _check_untag(self):
         """Untags the player if they return to their own flag."""
-        for player in self.players:
+        for player in self.players.values():
             team = int(player.team)
             flag_home = self.flags[team].home
             distance_to_flag = self.get_distance_between_2_points(
@@ -791,16 +795,16 @@ class PyQuaticusEnv(ParallelEnv):
         # Reset capture state if teleport_on_tag is true
         if config_dict_std["teleport_on_tag"] == True:
             self.state["agent_tagged"] = [0] * self.num_agents
-            for player in self.players:
+            for player in self.players.values():
                 player.is_tagged = False
 
         self.state["agent_captures"] = [None] * self.num_agents
-        for player in self.players:
+        for player in self.players.values():
             # Only continue logic check if player tagged someone if it's on its own side and is untagged.
             if player.on_own_side and (
                 player.tagging_cooldown == self.tagging_cooldown
             ) and not player.is_tagged:
-                for other_player in self.players:
+                for other_player in self.players.values():
                     o_team = int(other_player.team)
                     # Only do the rest if the other player is NOT on sides and they are not on the same team.
                     if (
@@ -848,7 +852,7 @@ class PyQuaticusEnv(ParallelEnv):
 
     def _check_flag_captures(self):
         """Updates states if a player captured a flag."""
-        for player in self.players:
+        for player in self.players.values():
             if player.on_own_side and player.has_flag:
                 if player.team == Team.BLUE_TEAM:
                     self.blue_team_flag_capture = True
@@ -1196,7 +1200,7 @@ class PyQuaticusEnv(ParallelEnv):
         self.message = ""
         self.current_time = 0
         self.reset_count += 1
-        reset_obs = {agent.id: self.state_to_obs(agent.id) for agent in self.players}
+        reset_obs = {agent_id: self.state_to_obs(agent_id) for agent_id in self.players}
 
         if self.render_mode:
             self._render()
@@ -1238,7 +1242,7 @@ class PyQuaticusEnv(ParallelEnv):
                 flag_locations[0], flag_locations[1]
             )
 
-        for player in self.players:
+        for player in self.players.values():
             player.is_tagged = False
             player.thrust = 0.0
             player.speed = 0.0
@@ -1300,7 +1304,7 @@ class PyQuaticusEnv(ParallelEnv):
         where each number is the corresponding agents min distance to a boundary wall.
         """
         distances_to_walls = defaultdict(dict)
-        for player in self.players:
+        for player in self.players.values():
             i = player.id
             x_pos = player.pos[0]
             y_pos = player.pos[1]
@@ -1316,11 +1320,11 @@ class PyQuaticusEnv(ParallelEnv):
         """Returns dictionary of distances between agents indexed by agent numbers."""
         agt_to_agt_vecs = {}
 
-        for player in self.players:
+        for player in self.players.values():
             i = player.id
             agt_to_agt_vecs[i] = {}
             i_pos = player.pos
-            for other_player in self.players:
+            for other_player in self.players.values():
                 j = other_player.id
                 j_pos = other_player.pos
                 agt_to_agt_vecs[i][j] = [j_pos[0] - i_pos[0], j_pos[1] - i_pos[1]]
@@ -1331,7 +1335,7 @@ class PyQuaticusEnv(ParallelEnv):
         """Returns a dictionary mapping observation keys to 2d arrays."""
         flag_vecs = {}
 
-        for player in self.players:
+        for player in self.players.values():
             flag_vecs[player.id] = {}
             team_idx = int(player.team)
             i_pos = player.pos
@@ -1347,267 +1351,6 @@ class PyQuaticusEnv(ParallelEnv):
             ]
 
         return flag_vecs
-
-    def _register_state_elements(self):
-        """Initializes the normalizer."""
-        agent_obs_normalizer = ObsNormalizer(True)
-        max_bearing = [180]
-        max_dist = [np.linalg.norm(self.world_size) + 10]  # add a ten meter buffer
-        min_dist = [0.0]
-        max_bool, min_bool = [1.0], [0.0]
-        max_speed, min_speed = [self.max_speed], [0.0]
-        agent_obs_normalizer.register("retrieve_flag_bearing", max_bearing)
-        agent_obs_normalizer.register("retrieve_flag_distance", max_dist, min_dist)
-        agent_obs_normalizer.register("protect_flag_bearing", max_bearing)
-        agent_obs_normalizer.register("protect_flag_distance", max_dist, min_dist)
-        agent_obs_normalizer.register("agent_home_distance", max_dist, min_dist)
-        agent_obs_normalizer.register("agent_home_bearing", max_bearing)
-        agent_obs_normalizer.register("wall_0_bearing", max_bearing)
-        agent_obs_normalizer.register("wall_0_distance", max_dist, min_dist)
-        agent_obs_normalizer.register("wall_1_bearing", max_bearing)
-        agent_obs_normalizer.register("wall_1_distance", max_dist, min_dist)
-        agent_obs_normalizer.register("wall_2_bearing", max_bearing)
-        agent_obs_normalizer.register("wall_2_distance", max_dist, min_dist)
-        agent_obs_normalizer.register("wall_3_bearing", max_bearing)
-        agent_obs_normalizer.register("wall_3_distance", max_dist, min_dist)
-        agent_obs_normalizer.register("speed", max_speed, min_speed)
-        agent_obs_normalizer.register("has_flag", max_bool, min_bool)
-        agent_obs_normalizer.register("on_side", max_bool, min_bool)
-        agent_obs_normalizer.register(
-            "tagging_cooldown", [self.tagging_cooldown], [0.0]
-        )
-        agent_obs_normalizer.register("is_tagged", max_bool, min_bool)
-        assert len(self.agents_of_team[Team.BLUE_TEAM]) == len(
-            self.agents_of_team[Team.RED_TEAM]
-        )
-        num_on_team = len(self.agents_of_team[Team.BLUE_TEAM])
-
-        for i in range(num_on_team - 1):
-            teammate_name = f"teammate_{i}"
-            agent_obs_normalizer.register((teammate_name, "bearing"), max_bearing)
-            agent_obs_normalizer.register(
-                (teammate_name, "distance"), max_dist, min_dist
-            )
-            agent_obs_normalizer.register(
-                (teammate_name, "relative_heading"), max_bearing
-            )
-            agent_obs_normalizer.register(
-                (teammate_name, "speed"), max_speed, min_speed
-            )
-            agent_obs_normalizer.register(
-                (teammate_name, "has_flag"), max_bool, min_bool
-            )
-            agent_obs_normalizer.register(
-                (teammate_name, "on_side"), max_bool, min_bool
-            )
-            agent_obs_normalizer.register(
-                (teammate_name, "tagging_cooldown"), [self.tagging_cooldown], [0.0]
-            )
-            agent_obs_normalizer.register(
-                (teammate_name, "is_tagged"), max_bool, min_bool
-            )
-
-        for i in range(num_on_team):
-            opponent_name = f"opponent_{i}"
-            agent_obs_normalizer.register((opponent_name, "bearing"), max_bearing)
-            agent_obs_normalizer.register(
-                (opponent_name, "distance"), max_dist, min_dist
-            )
-            agent_obs_normalizer.register(
-                (opponent_name, "relative_heading"), max_bearing
-            )
-            agent_obs_normalizer.register(
-                (opponent_name, "speed"), max_speed, min_speed
-            )
-            agent_obs_normalizer.register(
-                (opponent_name, "has_flag"), max_bool, min_bool
-            )
-            agent_obs_normalizer.register(
-                (opponent_name, "on_side"), max_bool, min_bool
-            )
-            agent_obs_normalizer.register(
-                (opponent_name, "tagging_cooldown"), [self.tagging_cooldown], [0.0]
-            )
-            agent_obs_normalizer.register(
-                (opponent_name, "is_tagged"), max_bool, min_bool
-            )
-
-        return agent_obs_normalizer
-
-    def state_to_obs(self, agent_id):
-        """
-        Returns a local observation space. These observations are
-        based entirely on the agent local coordinate frame rather
-        than the world frame.
-        This was originally designed so that observations can be
-        easily shared between different teams and agents.
-        Without this the world frame observations from the blue and
-        red teams are flipped (e.g., the goal is in the opposite
-        direction)
-        Observation Space (per agent):
-            Retrieve flag relative bearing (clockwise degrees)
-            Retrieve flag distance (meters)
-            Home flag relative bearing (clockwise degrees)
-            Home flag distance (meters)
-            Wall 1 relative bearing (clockwise degrees)
-            Wall 1 distance (meters)
-            Wall 2 relative bearing (clockwise degrees)
-            Wall 2 distance (meters)
-            Wall 3 relative bearing (clockwise degrees)
-            Wall 3 distance (meters)
-            Wall 4 relative bearing (clockwise degrees)
-            Wall 4 distance (meters)
-            Own speed (meters per second)
-            Own flag status (boolean)
-            On side (boolean)
-            Tagging cooldown (seconds) time elapsed since last tag (at max when you can tag again)
-            Is tagged (boolean)
-            For each other agent (teammates first) [Consider sorting teammates and opponents by distance or flag status]
-                Bearing from you (clockwise degrees)
-                Distance (meters)
-                Heading of other agent relative to the vector to you (clockwise degrees)
-                Speed (meters per second)
-                Has flag status (boolean)
-                On their side status (boolean)
-                Tagging cooldown (seconds)
-                Is tagged (boolean)
-        Note 1 : the angles are 0 when the agent is pointed directly at the object
-                 and increase in the clockwise direction
-        Note 2 : the wall distances can be negative when the agent is out of bounds
-        Note 3 : the boolean args Tag/Flag status are -1 false and +1 true
-        Developer Note 1: changes here should be reflected in _register_state_elements.
-        Developer Note 2: changes here should be reflected in register_state_elements in base_policies.py
-        """
-        agent = self.players[agent_id]
-        obs_dict = OrderedDict()
-        own_team = agent.team
-        protect_flag_loc = self.flags[int(own_team)].pos
-        retrieve_flag_loc = self.flags[not int(own_team)].pos
-        other_team = Team.BLUE_TEAM if own_team == Team.RED_TEAM else Team.RED_TEAM
-        obs = OrderedDict()
-        np_pos = np.array(agent.pos, dtype=np.float32)
-        # Goal flag
-        retrieve_flag_dist, retrieve_flag_bearing = mag_bearing_to(
-            np_pos, retrieve_flag_loc, agent.heading
-        )
-        # Defend flag
-        protect_flag_dist, protect_flag_bearing = mag_bearing_to(
-            np_pos, protect_flag_loc, agent.heading
-        )
-
-        # Agent home
-        agent_home_dist, agent_home_bearing = mag_bearing_to(
-            np_pos, self.flags[int(own_team)].home, agent.heading
-        )
-        # TODO: consider swapping goal location once flag is retrieved
-        #       especially if we're bringing the flag all the way back
-
-        obs["retrieve_flag_bearing"] = retrieve_flag_bearing
-        obs["retrieve_flag_distance"] = retrieve_flag_dist
-        obs["protect_flag_bearing"] = protect_flag_bearing
-        obs["protect_flag_distance"] = protect_flag_dist
-        obs["agent_home_distance"] = agent_home_dist
-        obs["agent_home_bearing"] = agent_home_bearing
-        # Walls
-        wall_0_closest_point = closest_point_on_line(
-            self.boundary_ul, self.boundary_ur, np_pos
-        )
-        wall_0_dist, wall_0_bearing = mag_bearing_to(
-            np_pos, wall_0_closest_point, agent.heading
-        )
-        obs["wall_0_bearing"] = wall_0_bearing
-        obs["wall_0_distance"] = wall_0_dist
-
-        wall_1_closest_point = closest_point_on_line(
-            self.boundary_ur, self.boundary_lr, np_pos
-        )
-        wall_1_dist, wall_1_bearing = mag_bearing_to(
-            np_pos, wall_1_closest_point, agent.heading
-        )
-        obs["wall_1_bearing"] = wall_1_bearing
-        obs["wall_1_distance"] = wall_1_dist
-
-        wall_2_closest_point = closest_point_on_line(
-            self.boundary_lr, self.boundary_ll, np_pos
-        )
-        wall_2_dist, wall_2_bearing = mag_bearing_to(
-            np_pos, wall_2_closest_point, agent.heading
-        )
-        obs["wall_2_bearing"] = wall_2_bearing
-        obs["wall_2_distance"] = wall_2_dist
-
-        wall_3_closest_point = closest_point_on_line(
-            self.boundary_ll, self.boundary_ul, np_pos
-        )
-        wall_3_dist, wall_3_bearing = mag_bearing_to(
-            np_pos, wall_3_closest_point, agent.heading
-        )
-        obs["wall_3_bearing"] = wall_3_bearing
-        obs["wall_3_distance"] = wall_3_dist
-
-        # Own speed
-        obs["speed"] = agent.speed
-        # Own flag status
-        obs["has_flag"] = agent.has_flag
-        # On side
-        obs["on_side"] = agent.on_own_side
-        obs["tagging_cooldown"] = agent.tagging_cooldown
-
-        #Is tagged
-        obs["is_tagged"] = agent.is_tagged
-
-        # Relative observations to other agents
-        # teammates first
-        # TODO: consider sorting these by some metric
-        #       in an attempt to get permutation invariance
-        #       distance or maybe flag status (or some combination?)
-        #       i.e. sorted by perceived relevance
-        for team in [own_team, other_team]:
-            dif_agents = filter(lambda a: a.id != agent.id, self.agents_of_team[team])
-            for i, dif_agent in enumerate(dif_agents):
-                entry_name = f"teammate_{i}" if team == own_team else f"opponent_{i}"
-
-                dif_np_pos = np.array(dif_agent.pos, dtype=np.float32)
-                dif_agent_dist, dif_agent_bearing = mag_bearing_to(
-                    np_pos, dif_np_pos, agent.heading
-                )
-                _, hdg_to_agent = mag_bearing_to(dif_np_pos, np_pos)
-                hdg_to_agent = hdg_to_agent % 360
-                # bearing relative to the bearing to you
-                obs[(entry_name, "bearing")] = dif_agent_bearing
-                obs[(entry_name, "distance")] = dif_agent_dist
-                obs[(entry_name, "relative_heading")] = angle180(
-                    (dif_agent.heading - hdg_to_agent) % 360
-                )
-                obs[(entry_name, "speed")] = dif_agent.speed
-                obs[(entry_name, "has_flag")] = dif_agent.has_flag
-                obs[(entry_name, "on_side")] = dif_agent.on_own_side
-                obs[(entry_name, "tagging_cooldown")] = dif_agent.tagging_cooldown
-                obs[(entry_name, "is_tagged")] = dif_agent.is_tagged
-
-        obs_dict[agent.id] = obs
-        if self.normalize:
-            obs_dict[agent.id] = self.agent_obs_normalizer.normalized(
-                obs_dict[agent.id]
-            )
-        return obs_dict[agent.id]
-
-    @functools.lru_cache(maxsize=None)
-    def observation_space(self, agent_id):
-        """Overridden method inherited from `Gym`."""
-        if self.normalize:
-            agent_obs_space = self.agent_obs_normalizer.normalized_space
-        else:
-            agent_obs_space = self.agent_obs_normalizer.unnormalized_space
-            raise Warning(
-                "Unnormalized observation space has not been thoroughly tested"
-            )
-        return agent_obs_space
-
-    @functools.lru_cache(maxsize=None)
-    def action_space(self, agent_id):
-        """Overridden method inherited from `Gym`."""
-        return Discrete(len(ACTION_MAP))
 
     def render(self):
         """Overridden method inherited from `Gym`."""
