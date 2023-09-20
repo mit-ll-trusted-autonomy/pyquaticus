@@ -250,7 +250,7 @@ class Player:
         self.thrust = 0
         self.is_tagged = False
         self.has_flag = False
-        self.on_sides = True
+        self.on_own_side = True
 
     def rotate(self, angle=180):
         """Method to rotate the player 180"""
@@ -1243,7 +1243,7 @@ class PyQuaticusEnv(ParallelEnv):
             player.thrust = 0.0
             player.speed = 0.0
             player.has_flag = False
-            player.on_sides = True
+            player.on_own_side = True
             player.tagging_cooldown = self.tagging_cooldown
             if self.random_init:
                 max_agent_separation = flags_separation - 2 * self.flag_keepout
@@ -1713,12 +1713,10 @@ class PyQuaticusEnv(ParallelEnv):
             self.screen, (0, 0, 0), top_middle, bottom_middle, width=self.border_width
         )
 
-        player_poses = {}
         for team in Team:
             flag = self.flags[int(team)]
             teams_players = self.agents_of_team[team]
             color = "blue" if team == Team.BLUE_TEAM else "red"
-            player_poses[color] = []
             if not self.state["flag_taken"][int(team)]:
                 # Flag is not captured, draw normally.
                 flag_pos_screen = self.world_to_screen(flag.pos)
@@ -1753,9 +1751,6 @@ class PyQuaticusEnv(ParallelEnv):
                 )
 
             for player in teams_players:
-                # add pos to player_poses
-                player_poses[color].append(player.pos)
-
                 # render tagging
                 player.render_tagging(self.tagging_cooldown)
 
@@ -1771,25 +1766,27 @@ class PyQuaticusEnv(ParallelEnv):
                 self.screen.blit(rotated_surface, blit_position)
 
         # visually indicate distances between players of both teams 
-        assert len(player_poses) == 2, "If number of teams > 2, update code that draws distance indicator lines"
-        blue_poses = np.asarray(player_poses["blue"])
-        red_poses = np.asarray(player_poses["red"])
+        assert len(self.agents_of_team) == 2, "If number of teams > 2, update code that draws distance indicator lines"
 
-        for blue_pos in player_poses["blue"]:
-            a2a_distances = np.linalg.norm(blue_pos - red_poses, axis=1)
-            for r, dis in enumerate(a2a_distances):
-                if dis <= 2*self.catch_radius:
-                    hsv_hue = (dis - self.catch_radius) / (2*self.catch_radius - self.catch_radius)
-                    hsv_hue = 0.33 * np.clip(hsv_hue, 0, 1)
-                    line_color = tuple(255 * np.asarray(colorsys.hsv_to_rgb(hsv_hue, 0.9, 0.9)))
+        for blue_player in self.agents_of_team[Team.BLUE_TEAM]:
+            if not blue_player.is_tagged or (blue_player.is_tagged and blue_player.on_own_side):
+                for red_player in self.agents_of_team[Team.RED_TEAM]:
+                    if not red_player.is_tagged or (red_player.is_tagged and red_player.on_own_side):
+                        blue_player_pos = np.asarray(blue_player.pos)
+                        red_player_pos = np.asarray(red_player.pos)
+                        a2a_dis = np.linalg.norm(blue_player_pos - red_player_pos)
+                        if a2a_dis <= 2*self.catch_radius:
+                            hsv_hue = (a2a_dis - self.catch_radius) / (2*self.catch_radius - self.catch_radius)
+                            hsv_hue = 0.33 * np.clip(hsv_hue, 0, 1)
+                            line_color = tuple(255 * np.asarray(colorsys.hsv_to_rgb(hsv_hue, 0.9, 0.9)))
 
-                    draw.line(
-                        self.screen, 
-                        line_color,
-                        self.world_to_screen(blue_pos),
-                        self.world_to_screen(red_poses[r]),
-                        width=self.a2a_line_width
-                    )
+                            draw.line(
+                                self.screen, 
+                                line_color,
+                                self.world_to_screen(blue_player_pos),
+                                self.world_to_screen(red_player_pos),
+                                width=self.a2a_line_width
+                            )
 
         if self.render_mode:
             pygame.event.pump()
