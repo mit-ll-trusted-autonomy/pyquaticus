@@ -112,25 +112,25 @@ class PyquaticusBridge(AquaticusTeamEnv):
         pnt, has_flag, on_side = agent_states[agent_name]
         np_pos = np.array([pnt.x, pnt.y], dtype=np.float32)
 
-        retrieve_flag_loc, protect_flag_loc = self.get_team_goal_defend(own_team)
+        opponent_home_loc, own_home_loc = self.get_team_goal_defend(own_team)
 
         obs = OrderedDict()
         # Goal flag
-        retrieve_flag_dist, retrieve_flag_bearing = mag_heading_to(
-            np_pos, retrieve_flag_loc, pnt.heading
+        opponent_home_dist, opponent_home_bearing = mag_heading_to(
+            np_pos, opponent_home_loc, pnt.heading
         )
         # Defend flag
-        protect_flag_dist, protect_flag_bearing = mag_heading_to(
-            np_pos, protect_flag_loc, pnt.heading
+        own_home_dist, own_home_bearing = mag_heading_to(
+            np_pos, own_home_loc, pnt.heading
         )
 
         # TODO: consider swapping goal location once flag is retrieved
         #       especially if we're bringing the flag all the way back
 
-        obs["retrieve_flag_bearing"] = retrieve_flag_bearing
-        obs["retrieve_flag_distance"] = retrieve_flag_dist
-        obs["protect_flag_bearing"] = protect_flag_bearing
-        obs["protect_flag_distance"] = protect_flag_dist
+        obs["opponent_home_bearing"] = opponent_home_bearing
+        obs["opponent_home_distance"] = opponent_home_dist
+        obs["own_home_bearing"] = own_home_bearing
+        obs["own_home_distance"] = own_home_dist
 
         # Walls
         wall_0_closest_point = closest_point_on_line(
@@ -239,10 +239,10 @@ class PyquaticusBridge(AquaticusTeamEnv):
         min_speed, max_speed = self._moos_config.speed_bounds
         max_speed += 2 # add some padding to the max speed
         min_speed, max_speed = [min_speed], [max_speed]
-        agent_obs_normalizer.register("retrieve_flag_bearing", max_bearing)
-        agent_obs_normalizer.register("retrieve_flag_distance", max_dist, min_dist)
-        agent_obs_normalizer.register("protect_flag_bearing", max_bearing)
-        agent_obs_normalizer.register("protect_flag_distance", max_dist, min_dist)
+        agent_obs_normalizer.register("opponent_home_bearing", max_bearing)
+        agent_obs_normalizer.register("opponent_home_distance", max_dist, min_dist)
+        agent_obs_normalizer.register("own_home_bearing", max_bearing)
+        agent_obs_normalizer.register("own_home_distance", max_dist, min_dist)
         agent_obs_normalizer.register("wall_0_bearing", max_bearing)
         agent_obs_normalizer.register("wall_0_distance", max_dist, min_dist)
         agent_obs_normalizer.register("wall_1_bearing", max_bearing)

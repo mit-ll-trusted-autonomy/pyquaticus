@@ -78,11 +78,11 @@ class BaseDefender(BaseAgentPolicy):
 
         if self.mode == "easy":
             ag_vect = [0, 0]
-            my_flag_vec = self.bearing_to_vec(my_obs["protect_flag_bearing"])
+            my_flag_vec = self.bearing_to_vec(my_obs["own_home_bearing"])
             
            
             # If far away from the flag, move towards it
-            if my_obs["protect_flag_distance"] > (
+            if my_obs["own_home_distance"] > (
                 self.flag_keepout + self.catch_radius + 1.0
             ):
                 ag_vect = my_flag_vec
@@ -103,7 +103,7 @@ class BaseDefender(BaseAgentPolicy):
                 act_index = 10
 
         elif self.mode == "medium":
-            my_flag_vec = self.bearing_to_vec(my_obs["protect_flag_bearing"])
+            my_flag_vec = self.bearing_to_vec(my_obs["own_home_bearing"])
     
             # If the blue team doesn't have the flag, guard it
             if self.opp_team_has_flag:
@@ -111,7 +111,7 @@ class BaseDefender(BaseAgentPolicy):
                 ag_vect = my_flag_vec
 
             else:
-                flag_dist = my_obs["protect_flag_distance"]
+                flag_dist = my_obs["own_home_distance"]
 
                 if flag_dist > (self.flag_keepout + self.catch_radius + 1.0):
                     ag_vect = my_flag_vec
@@ -213,7 +213,7 @@ class BaseDefender(BaseAgentPolicy):
 
                 ag_vect = guide_pt
             else:
-                ag_vect = self.bearing_to_vec(my_obs["protect_flag_bearing"])
+                ag_vect = self.bearing_to_vec(my_obs["own_home_bearing"])
 
             if wall_pos is not None:
                 ag_vect = ag_vect + self.get_avoid_vect(wall_pos)
