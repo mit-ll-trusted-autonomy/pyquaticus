@@ -147,8 +147,6 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         agent_obs_normalizer.register("opponent_home_distance", max_dist, min_dist)
         agent_obs_normalizer.register("own_home_bearing", max_bearing)
         agent_obs_normalizer.register("own_home_distance", max_dist, min_dist)
-        agent_obs_normalizer.register("agent_home_distance", max_dist, min_dist)
-        agent_obs_normalizer.register("agent_home_bearing", max_bearing)
         agent_obs_normalizer.register("wall_0_bearing", max_bearing)
         agent_obs_normalizer.register("wall_0_distance", max_dist, min_dist)
         agent_obs_normalizer.register("wall_1_bearing", max_bearing)
@@ -282,19 +280,11 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             np_pos, own_home_loc, agent.heading
         )
 
-        # Agent home
-        agent_home_dist, agent_home_bearing = mag_bearing_to(
-            np_pos, self.flags[int(own_team)].home, agent.heading
-        )
-        # TODO: consider swapping goal location once flag is retrieved
-        #       especially if we're bringing the flag all the way back
-
         obs["opponent_home_bearing"] = opponent_home_bearing
         obs["opponent_home_distance"] = opponent_home_dist
         obs["own_home_bearing"] = own_home_bearing
         obs["own_home_distance"] = own_home_dist
-        obs["agent_home_distance"] = agent_home_dist
-        obs["agent_home_bearing"] = agent_home_bearing
+
         # Walls
         wall_0_closest_point = closest_point_on_line(
             self.boundary_ul, self.boundary_ur, np_pos

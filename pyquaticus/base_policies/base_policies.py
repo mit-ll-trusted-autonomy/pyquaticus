@@ -92,7 +92,7 @@ class NoOp(Policy):
     def set_weights(self, weights):
         pass
     
-def AttackGen(agentid, team, mode, team_size):
+def AttackGen(agentid, team, mode, team_size, obs_normalizer):
 
     class AttackPolicy(Policy):
         """
@@ -104,7 +104,6 @@ def AttackGen(agentid, team, mode, team_size):
             Policy.__init__(self, observation_space, action_space, config)
             self.policy = BaseAttacker(agentid, team, mode=mode)
             self.action_dict = OrderedDict([(p, 16) for p in range(2*team_size)])
-            self.normalizer = register_state_elements(team_size)
 
         def compute_actions(self,
                             obs_batch,
@@ -120,7 +119,7 @@ def AttackGen(agentid, team, mode, team_size):
 
                 # Unnormalize and unpack numpy arrays to create a new dictionary
                 new_obs_dict = OrderedDict()
-                for key, value in self.normalizer.unnormalized(obs).items():
+                for key, value in obs_normalizer.unnormalized(obs).items():
                     if isinstance(value, np.ndarray) and value.size == 1:
                         new_obs_dict[key] = value.item()  # Unpack single-value numpy arrays
                     else:
@@ -142,7 +141,7 @@ def AttackGen(agentid, team, mode, team_size):
         
     return AttackPolicy
 
-def DefendGen(agentid, team, mode, team_size):
+def DefendGen(agentid, team, mode, team_size, obs_normalizer):
     class DefendPolicy(Policy):
         """
         Creates a defender policy
@@ -152,7 +151,6 @@ def DefendGen(agentid, team, mode, team_size):
             Policy.__init__(self, observation_space, action_space, config)
             self.policy = BaseDefender(agentid, team, mode=mode)
             self.action_dict = OrderedDict([(p, 16) for p in range(2*team_size)])
-            self.normalizer = register_state_elements(team_size)
 
         def compute_actions(self,
                             obs_batch,
@@ -167,7 +165,7 @@ def DefendGen(agentid, team, mode, team_size):
 
                 # Unnormalize and unpack numpy arrays to create a new dictionary
                 new_obs_dict = OrderedDict()
-                for key, value in self.normalizer.unnormalized(obs).items():
+                for key, value in obs_normalizer.unnormalized(obs).items():
                     if isinstance(value, np.ndarray) and value.size == 1:
                         new_obs_dict[key] = value.item()  # Unpack single-value numpy arrays
                     else:
@@ -186,9 +184,10 @@ def DefendGen(agentid, team, mode, team_size):
 
         def set_weights(self, weights):
             pass
+
     return DefendPolicy
 
-def CombinedGen(agentid, team, mode, team_size):
+def CombinedGen(agentid, team, mode, team_size, obs_normalizer):
     class CombinedPolicy(Policy):
         """
         Creates a combined (attacker and defender) policy
@@ -198,7 +197,6 @@ def CombinedGen(agentid, team, mode, team_size):
             Policy.__init__(self, observation_space, action_space, config)
             self.policy = Heuristic_CTF_Agent(agentid, team, mode=mode)
             self.action_dict = OrderedDict([(p, 16) for p in range(2*team_size)])
-            self.normalizer = register_state_elements(team_size)
 
         def compute_actions(self,
                             obs_batch,
@@ -212,7 +210,7 @@ def CombinedGen(agentid, team, mode, team_size):
 
                 # Unnormalize and unpack numpy arrays to create a new dictionary
                 new_obs_dict = OrderedDict()
-                for key, value in self.normalizer.unnormalized(obs).items():
+                for key, value in obs_normalizer.unnormalized(obs).items():
                     if isinstance(value, np.ndarray) and value.size == 1:
                         new_obs_dict[key] = value.item()  # Unpack single-value numpy arrays
                     else:
@@ -232,88 +230,3 @@ def CombinedGen(agentid, team, mode, team_size):
         def set_weights(self, weights):
             pass
     return CombinedPolicy
-
-# Function to create the normalizer for observations
-def register_state_elements(team_size):
-    """Initializes the normalizer."""
-    agent_obs_normalizer = ObsNormalizer(True)
-    max_bearing = [180]
-    max_dist = [np.linalg.norm(pyq.config_dict_std["world_size"]) + 10] # add a ten meter buffer
-    min_dist = [0.0]
-    max_bool, min_bool = [1.0], [0.0]
-    max_speed, min_speed = [pyq.config_dict_std["max_speed"]], [0.0]
-    agent_obs_normalizer.register("opponent_home_bearing", max_bearing)
-    agent_obs_normalizer.register("opponent_home_distance", max_dist, min_dist)
-    agent_obs_normalizer.register("own_home_bearing", max_bearing)
-    agent_obs_normalizer.register("own_home_distance", max_dist, min_dist)
-    agent_obs_normalizer.register("agent_home_distance", max_dist, min_dist)
-    agent_obs_normalizer.register("agent_home_bearing", max_bearing)
-    agent_obs_normalizer.register("wall_0_bearing", max_bearing)
-    agent_obs_normalizer.register("wall_0_distance", max_dist, min_dist)
-    agent_obs_normalizer.register("wall_1_bearing", max_bearing)
-    agent_obs_normalizer.register("wall_1_distance", max_dist, min_dist)
-    agent_obs_normalizer.register("wall_2_bearing", max_bearing)
-    agent_obs_normalizer.register("wall_2_distance", max_dist, min_dist)
-    agent_obs_normalizer.register("wall_3_bearing", max_bearing)
-    agent_obs_normalizer.register("wall_3_distance", max_dist, min_dist)
-    agent_obs_normalizer.register("speed", max_speed, min_speed)
-    agent_obs_normalizer.register("has_flag", max_bool, min_bool)
-    agent_obs_normalizer.register("on_side", max_bool, min_bool)
-    agent_obs_normalizer.register(
-        "tagging_cooldown", [pyq.config_dict_std["tagging_cooldown"]], [0.0]
-    )
-    agent_obs_normalizer.register("is_tagged", max_bool, min_bool)
-
-    num_on_team = team_size
-
-    for i in range(num_on_team - 1):
-        teammate_name = f"teammate_{i}"
-        agent_obs_normalizer.register((teammate_name, "bearing"), max_bearing)
-        agent_obs_normalizer.register(
-            (teammate_name, "distance"), max_dist, min_dist
-        )
-        agent_obs_normalizer.register(
-            (teammate_name, "relative_heading"), max_bearing
-        )
-        agent_obs_normalizer.register(
-            (teammate_name, "speed"), max_speed, min_speed
-        )
-        agent_obs_normalizer.register(
-            (teammate_name, "has_flag"), max_bool, min_bool
-        )
-        agent_obs_normalizer.register(
-            (teammate_name, "on_side"), max_bool, min_bool
-        )
-        agent_obs_normalizer.register(
-            (teammate_name, "tagging_cooldown"), [pyq.config_dict_std["tagging_cooldown"]], [0.0]
-        )
-        agent_obs_normalizer.register(
-            (teammate_name, "is_tagged"), max_bool, min_bool
-        )
-
-    for i in range(num_on_team):
-        opponent_name = f"opponent_{i}"
-        agent_obs_normalizer.register((opponent_name, "bearing"), max_bearing)
-        agent_obs_normalizer.register(
-            (opponent_name, "distance"), max_dist, min_dist
-        )
-        agent_obs_normalizer.register(
-            (opponent_name, "relative_heading"), max_bearing
-        )
-        agent_obs_normalizer.register(
-            (opponent_name, "speed"), max_speed, min_speed
-        )
-        agent_obs_normalizer.register(
-            (opponent_name, "has_flag"), max_bool, min_bool
-        )
-        agent_obs_normalizer.register(
-            (opponent_name, "on_side"), max_bool, min_bool
-        )
-        agent_obs_normalizer.register(
-            (opponent_name, "tagging_cooldown"), [pyq.config_dict_std["tagging_cooldown"]], [0.0]
-        )
-        agent_obs_normalizer.register(
-            (opponent_name, "is_tagged"), max_bool, min_bool
-        )
-
-    return agent_obs_normalizer
