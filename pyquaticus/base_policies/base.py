@@ -106,10 +106,10 @@ class BaseAgentPolicy:
         )
 
         self.home = (
-            my_obs["agent_home_distance"]
-            * np.cos(np.deg2rad(my_obs["agent_home_bearing"])),
-            my_obs["agent_home_distance"]
-            * np.sin(np.deg2rad(my_obs["agent_home_bearing"])),
+            my_obs["own_home_distance"]
+            * np.cos(np.deg2rad(my_obs["own_home_bearing"])),
+            my_obs["own_home_distance"]
+            * np.sin(np.deg2rad(my_obs["own_home_bearing"])),
         )
 
         # Copy the polar positions of each agent, separated by team and get their tag status
