@@ -1450,6 +1450,17 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             flag = self.flags[int(team)]
             teams_players = self.agents_of_team[team]
             color = "blue" if team == Team.BLUE_TEAM else "red"
+
+            # Draw team home region
+            home_center_screen = self.world_to_screen(self.flags[int(team)].home)
+            draw.circle(
+                    self.screen,
+                    (0, 0, 0),
+                    home_center_screen,
+                    self.catch_radius * self.pixel_size,
+                    width=round(self.agent_radius * self.pixel_size / 20),
+                )
+
             if not self.state["flag_taken"][int(team)]:
                 # Flag is not captured, draw normally.
                 flag_pos_screen = self.world_to_screen(flag.pos)
@@ -1464,13 +1475,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     color,
                     flag_pos_screen,
                     (self.flag_keepout - self.agent_radius) * self.pixel_size,
-                    width=round(self.agent_radius * self.pixel_size / 20),
-                )
-                draw.circle(
-                    self.screen,
-                    (0, 0, 0),
-                    flag_pos_screen,
-                    self.catch_radius * self.pixel_size,
                     width=round(self.agent_radius * self.pixel_size / 20),
                 )
             else:
