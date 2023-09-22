@@ -92,12 +92,17 @@ class BaseAgentPolicy:
         self.is_tagged = my_obs["is_tagged"]
 
         # Calculate the rectangular coordinates for the flags location relative to the agent.
+        self.my_flag_distance = my_obs["own_home_distance"]
+        self.my_flag_bearing = my_obs["own_home_bearing"]
         self.my_flag_loc = (
             my_obs["own_home_distance"]
             * np.cos(np.deg2rad(my_obs["own_home_bearing"])),
             my_obs["own_home_distance"]
             * np.sin(np.deg2rad(my_obs["own_home_bearing"])),
         )
+
+        self.opp_flag_distance = my_obs["opponent_home_distance"]
+        self.opp_flag_bearing = my_obs["opponent_home_bearing"]
         self.opp_flag_loc = (
             my_obs["opponent_home_distance"]
             * np.cos(np.deg2rad(my_obs["opponent_home_bearing"])),
@@ -113,6 +118,7 @@ class BaseAgentPolicy:
         )
 
         # Copy the polar positions of each agent, separated by team and get their tag status
+        # Update flag positions if picked up
         for k in my_obs:
             if type(k) is tuple:
                 if k[0].find("opponent_") != -1 and k[0] not in opp_team_ids:
@@ -123,6 +129,16 @@ class BaseAgentPolicy:
                     self.opp_team_has_flag = (
                         self.opp_team_has_flag or my_obs[k[0], "has_flag"]
                     )
+                    #update own flag position if flag has been picked up
+                    if my_obs[k[0], "has_flag"]:
+                        self.my_flag_distance = my_obs[(k[0], "distance")]
+                        self.my_flag_bearing = my_obs[(k[0], "bearing")]
+                        self.my_flag_loc = (
+                            my_obs[(k[0], "distance")]
+                            * np.cos(np.deg2rad(my_obs[(k[0], "bearing")])),
+                            my_obs[(k[0], "distance")]
+                            * np.sin(np.deg2rad(my_obs[(k[0], "bearing")])),
+                        )
                     self.opp_team_tag.append(
                         my_obs[(k[0], "is_tagged")]
                     )
@@ -134,9 +150,26 @@ class BaseAgentPolicy:
                     self.my_team_has_flag = (
                         self.my_team_has_flag or my_obs[(k[0], "has_flag")]
                     )
+                    #update opponent flag position if flag has been picked up by teammate
+                    if my_obs[k[0], "has_flag"]:
+                        self.opp_flag_distance = my_obs[(k[0], "distance")]
+                        self.opp_flag_bearing = my_obs[(k[0], "bearing")]
+                        self.opp_flag_loc = (
+                            my_obs[(k[0], "distance")]
+                            * np.cos(np.deg2rad(my_obs[(k[0], "bearing")])),
+                            my_obs[(k[0], "distance")]
+                            * np.sin(np.deg2rad(my_obs[(k[0], "bearing")])),
+                        )
                     self.my_team_tag.append(
                         my_obs[(k[0], "is_tagged")]
                     )
+
+            #update opponent flag position if flag has been picked up by agent
+            if self.has_flag:
+                self.opp_flag_distance = 0.
+                self.opp_flag_bearing = 0.
+                self.opp_flag_loc = (0., 0.)
+
         return my_obs
 
     def angle180(self, deg):

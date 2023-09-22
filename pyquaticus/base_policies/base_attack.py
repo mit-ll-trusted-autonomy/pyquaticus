@@ -79,7 +79,7 @@ class BaseAttacker(BaseAgentPolicy):
                 goal_vect = self.bearing_to_vec(my_obs["own_home_bearing"])
             # Otherwise go get the opponents flag
             else:
-                goal_vect = self.bearing_to_vec(my_obs["opponent_home_bearing"])
+                goal_vect = self.bearing_to_vec(self.opp_flag_bearing)
 
             # Convert the vector to a heading, and then pick the best discrete action to perform
             try:
@@ -113,7 +113,7 @@ class BaseAttacker(BaseAgentPolicy):
             # Otherwise, go get the other teams flag
             else:
                 goal_vect = np.multiply(
-                    2.00, self.bearing_to_vec(my_obs["opponent_home_bearing"])
+                    2.00, self.bearing_to_vec(self.opp_flag_bearing)
                 )
                 avoid_vect = self.get_avoid_vect(self.opp_team_pos)
                 my_action = goal_vect + avoid_vect
@@ -195,7 +195,7 @@ class BaseAttacker(BaseAgentPolicy):
 
             # Otherwise go get the flag
             else:
-                goal_vect = self.bearing_to_vec(my_obs["opponent_home_bearing"])
+                goal_vect = self.bearing_to_vec(self.opp_flag_bearing)
                 avoid_vect = self.get_avoid_vect(
                     self.opp_team_pos, avoid_threshold=avoid_thresh
                 )

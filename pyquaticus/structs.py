@@ -195,7 +195,7 @@ class RenderingPlayer(Player):
         self.pygame_agent = self.pygame_agent_base.copy()
 
         # render_is_tagged
-        if self.is_tagged :
+        if self.is_tagged:
             draw.circle(
                 self.pygame_agent,
                 (0, 255, 0),
