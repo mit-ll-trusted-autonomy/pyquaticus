@@ -11,7 +11,7 @@ config_dict_std = {
     "scrimmage_line": 55.0,  # horizontal location (meters)
     "agent_radius": 2.0,  # meters
     "catch_radius": 10.0,  # meters
-    "flag_keepout": 0.0,  # minimum distance (meters) between agent and flag centers
+    "flag_keepout": 5.0,  # minimum distance (meters) between agent and flag centers
     "max_speed": MAX_SPEED,  # meters / s
     "own_side_accel": (
         1.0
