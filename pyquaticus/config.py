@@ -3,12 +3,12 @@ import numpy as np
 
 from pyquaticus.utils.utils import get_screen_res
 
-MAX_SPEED = 5.0
+MAX_SPEED = 3.0
 
 config_dict_std = {
-    "world_size": [110.0, 55.0],  # meters
+    "world_size": [160.0, 80.0],  # meters
     "pixel_size": 10,  # pixels/meter
-    "scrimmage_line": 55.0,  # horizontal location (meters)
+    "scrimmage_line": 80.0,  # horizontal location (meters)
     "agent_radius": 2.0,  # meters
     "catch_radius": 10.0,  # meters
     "flag_keepout": 5.0,  # minimum distance (meters) between agent and flag centers
