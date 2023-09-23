@@ -88,9 +88,9 @@ if __name__ == '__main__':
             # change this to agent-1-policy to train both agents at once
             return "easy-defend-policy"
     
-    env.close()
     policies = {'agent-0-policy':(None, obs_space, act_space, {}), 
-                'easy-defend-policy': (DefendGen(1, 'red', 'easy', 1), obs_space, act_space, {})}
+                'easy-defend-policy': (DefendGen(1, 'red', 'easy', 1, env.par_env.agent_obs_normalizer), obs_space, act_space, {})}
+    env.close()
     ppo_config = PPOConfig().environment(env='pyquaticus').rollouts(num_rollout_workers=5).resources(num_cpus_per_worker=2, num_gpus=int(os.environ.get("RLLIB_NUM_GPUS", "0")))
     ppo_config.multi_agent(policies=policies, policy_mapping_fn=policy_mapping_fn, policies_to_train=["agent-0-policy"],)
     algo = ppo_config.build()
