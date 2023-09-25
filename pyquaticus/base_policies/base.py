@@ -34,6 +34,13 @@ class BaseAgentPolicy:
 
     def __init__(self, agent_id: int, team: Team, suppress_numpy_warnings=True):
         self.id = agent_id
+        if isinstance(team, str):
+            if team == 'red':
+                team = Team.RED_TEAM
+            elif team == 'blue':
+                team = Team.BLUE_TEAM
+            else:
+                raise ValueError(f"Got unknown team: {team}")
         self.team = team
         self.speed = 0.0
         self.has_flag = False
