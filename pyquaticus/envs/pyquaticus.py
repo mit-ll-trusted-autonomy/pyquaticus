@@ -840,7 +840,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                             # Set players tagging cooldown
                             player.tagging_cooldown = 0.0
 
-                            # Break loop (should not be allowed to tag again until next timestep)
+                            # Break loop (should not be allowed to tag again during current timestep)
                             break
 
     def _check_flag_captures(self):
