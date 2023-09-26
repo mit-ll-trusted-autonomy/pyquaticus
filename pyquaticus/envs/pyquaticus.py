@@ -856,7 +856,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 else:
                     self.red_team_score += 1
                     self.red_team_flag_pickup = False
-                scored_flag = self.flags[int(player.team)]
+                player.has_flag = False
+                scored_flag = self.flags[not int(player.team)]
+                self.state["flag_taken"][int(scored_flag.team)] = False
                 scored_flag.reset()
                 break
 
