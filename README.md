@@ -65,6 +65,11 @@ sudo docker build -t pyquaticus:test .
 sudo docker run -it -v ~/pyquaticus/docker/logs:/home/moos/logs --net host --entrypoint /bin/bash pyquaticus:test
 ```
 
+## Competition Instructions
+Submitted agents will be evaluated based on three metrics easy, medium, and a hidden metric for 2500 steps. The easy metric consists of the competition_easy attacker and defender base policies. The medium evaluates your submited agents agaisnt the hard attacker and defender base policies. Last metric used to evaluate your submitted agents won't be shared, you will recieve a score for this metric. The scores recieved repersent the total number of flag captures your team of agents was able to achieve in the 2500 game steps.
+
+An example submission zip folder can be found in rl_test, submissions should be a zip file only containing the learned policy network and the filled in solution.py (the file name and class name must remain solution.py).
+
 ## Distribution and Disclaimer Statements
 
 DISTRIBUTION STATEMENT A. Approved for public release. Distribution is unlimited.
