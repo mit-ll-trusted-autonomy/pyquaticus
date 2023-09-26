@@ -24,7 +24,7 @@ import numpy as np
 from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import config_dict_std, Team
 
-modes = {"easy", "medium", "hard"}
+modes = {"easy", "medium", "hard", "competition_nothing", "competition_easy"}
 
 
 class BaseDefender(BaseAgentPolicy):
@@ -47,7 +47,8 @@ class BaseDefender(BaseAgentPolicy):
         self.flag_keepout = flag_keepout
         self.catch_radius = catch_radius
         self.using_pyquaticus = using_pyquaticus
-
+        self.goal = []
+        self.competition_easy_1 = [135, 115]
     def set_mode(self, mode: str):
         """
         Determine which mode the agent is in:
@@ -101,6 +102,67 @@ class BaseDefender(BaseAgentPolicy):
                 act_index = 14
             elif act_heading > 1:
                 act_index = 10
+        
+        elif self.mode=="competition_nothing":
+            #If tagged return to untag
+            if self.is_tagged:
+                ag_vect = self.bearing_to_vec(my_obs["own_home_bearing"])
+
+            act_index = -1
+        elif self.mode=="competition_easy":
+            coords = [self.my_flag_loc]
+            #If tagged return to untagS
+            ag_vect = -1
+            if self.is_tagged:
+                ag_vect = self.bearing_to_vec(my_obs["own_home_bearing"])
+                self.competition_easy_1 = [135, 115]
+            else:
+                if self.team == Team.RED_TEAM:
+                    if self.competition_easy_1[1] <= my_obs["wall_1_distance"] <= self.competition_easy_1[0]: #If near halfline start protective behavior
+                        self.competition_easy_1 = [115, 95]
+                        if self.goal == []:
+                            self.goal = "wall_2"
+                        if my_obs[self.goal + "_distance"] < 15:
+                            if self.goal =="wall_0":
+                                ag_vect = self.bearing_to_vec(my_obs["wall_3_bearing"])
+                                self.goal = "wall_2"
+                            else:
+                                ag_vect = self.bearing_to_vec(my_obs["wall_1_bearing"])
+                                self.goal = "wall_0"
+                        else:
+                            ag_vect = self.bearing_to_vec(my_obs[self.goal+"_bearing"])
+
+                    else:
+                        ag_vect = self.bearing_to_vec(my_obs["wall_1_bearing"])
+                else:# Blue Team Wall Order is Different
+                    if self.competition_easy_1[1] <= my_obs["wall_3_distance"] <= self.competition_easy_1[0]: #If near halfline start protective behavior
+                        self.competition_easy_1 = [90, 55]
+                        if self.goal == []:
+                            self.goal = "wall_2"
+                        if my_obs[self.goal + "_distance"] < 15:
+                            if self.goal =="wall_0":
+                                ag_vect = self.bearing_to_vec(my_obs["wall_1_bearing"])
+                                self.goal = "wall_2"
+                            else:
+                                ag_vect = self.bearing_to_vec(my_obs["wall_3_bearing"])
+                                self.goal = "wall_0"
+                        else:
+                            ag_vect = self.bearing_to_vec(my_obs[self.goal+"_bearing"])
+
+                    else:
+                        ag_vect = self.bearing_to_vec(my_obs["wall_3_bearing"])
+
+            # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
+            try:
+                act_heading = self.angle180(self.vec_to_heading(ag_vect))
+                if 1 >= act_heading >= -1:
+                    act_index = 4
+                elif act_heading < -1:
+                    act_index = 6
+                elif act_heading > 1:
+                    act_index = 2
+            except:
+                act_index = -1
 
         elif self.mode == "medium":
             my_flag_vec = self.bearing_to_vec(self.my_flag_bearing)
