@@ -140,19 +140,22 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             truncated: always False (runs until you stop)
             info: additional information
         """
-        # translate actions and publish them
-        desired_spd, delta_hdg = self._discrete_action_to_speed_relheading(action)
-        desired_hdg = self._relheading_to_global_heading(
-            self.players[self._agent_name].heading,
-            delta_hdg)
-        # notify the moos agent that we're controlling it directly
-        # NOTE: the name of this variable depends on the mission files
         moostime = pymoos.time()
-        self._moos_comm.notify("ACTION", "CONTROL", moostime)
-        self._moos_comm.notify("RLA_SPEED", desired_spd, moostime)
-        self._moos_comm.notify("RLA_HEADING", desired_hdg, moostime)
-        self._action_count += 1
-        self._moos_comm.notify("RLA_ACTION_COUNT", self._action_count, moostime)
+        if isinstance(action,str):
+            self._moos_comm.notify("ACTION", action, moostime)
+        else:
+            # translate actions and publish them
+            desired_spd, delta_hdg = self._discrete_action_to_speed_relheading(action)
+            desired_hdg = self._relheading_to_global_heading(
+                self.players[self._agent_name].heading,
+                delta_hdg)
+            # notify the moos agent that we're controlling it directly
+            # NOTE: the name of this variable depends on the mission files
+            self._moos_comm.notify("ACTION", "CONTROL", moostime)
+            self._moos_comm.notify("RLA_SPEED", desired_spd, moostime)
+            self._moos_comm.notify("RLA_HEADING", desired_hdg, moostime)
+            self._action_count += 1
+            self._moos_comm.notify("RLA_ACTION_COUNT", self._action_count, moostime)
         # always returning zero reward for now
         # this is only for running policy, not traning
         # TODO: implement a sparse reward for evaluation
