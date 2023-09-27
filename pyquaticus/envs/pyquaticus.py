@@ -440,7 +440,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         #red_tags: The number of times the blue team successfully tagged an opponent
         #red_grabs: The number of times the blue team grabbed the opponents flag
         self.game_score = {'blue_captures':0, 'blue_tags':0, 'blue_grabs':0, 'red_captures':0, 'red_tags':0, 'red_grabs':0}    
-    
+        self.render_mode = render_mode
+
         # set variables from config
         self.set_config_values(self.config_dict)
 
@@ -517,7 +518,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             agent_id: self.get_agent_observation_space() for agent_id in self.players
         }
 
-        self.render_mode = render_mode
 
         # pygame screen
         self.screen = None
@@ -960,15 +960,16 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             # Suppress numpy warnings to avoid printing out extra stuff to the console
             np.seterr(all="ignore")
 
-        # check that world size (pixels) does not exceed the screen dimensions
-        world_screen_err_msg = (
-            "Specified world_size {} exceeds the maximum size {} in at least one"
-            " dimension".format(self.world_size, self.max_screen_size)
-        )
-        assert (
-            self.world_size[0] * self.pixel_size < self.max_screen_size[0]
-            and self.world_size[1] * self.pixel_size < self.max_screen_size[1]
-        ), world_screen_err_msg
+        if self.render_mode is not None:
+            # check that world size (pixels) does not exceed the screen dimensions
+            world_screen_err_msg = (
+                "Specified world_size {} exceeds the maximum size {} in at least one"
+                " dimension".format(self.world_size, self.max_screen_size)
+            )
+            assert (
+                self.world_size[0] * self.pixel_size < self.max_screen_size[0]
+                and self.world_size[1] * self.pixel_size < self.max_screen_size[1]
+            ), world_screen_err_msg
 
         # check that world dimensions (pixels) are even
         world_even_err_msg = (
