@@ -26,6 +26,7 @@ config_dict_std = {
         1 / 10
     ),  # length of timestep (seconds) between state updates and for updating action input from demonstrator or rl
     "max_time": 240.0,  # maximum time (seconds) per episode
+    "max_score": 1,     # maximum score per episode (until a winner is declared)
     "max_screen_size": get_screen_res(),
     "random_init": (
         False

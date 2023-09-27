@@ -46,6 +46,8 @@ class RewardMachine:
     }
 
     def __init__(self, init_state: str, env, agent_ind: int, debug: bool = True):
+        raise DeprecationWarning("RewardMachine is deprecated. Needs to be updated for use with Pyquaticus if needed.")
+
         if init_state not in RewardMachine.states_set:
             raise ValueError(
                 f"Got initial state {init_state}, but expecting state from:"

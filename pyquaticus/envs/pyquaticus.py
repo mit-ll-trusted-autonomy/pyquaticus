@@ -783,6 +783,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         self.game_score['red_grabs'] += 1
                         self.red_team_flag_pickup = True
                         break
+
     def _check_untag(self):
         """Untags the player if they return to their own flag."""
         for player in self.players.values():
@@ -864,18 +865,24 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
     def _check_flag_captures(self):
         """Updates states if a player captured a flag."""
+        # these are false except at the instance that the flag is captured
+        self.blue_team_flag_capture = False
+        self.red_team_flag_capture = False
         for player in self.players.values():
             if player.on_own_side and player.has_flag:
                 if player.team == Team.BLUE_TEAM:
                     self.blue_team_flag_capture = True
                     self.game_score['blue_captures'] += 1
+                    self.blue_team_flag_pickup = False
                 else:
                     self.red_team_flag_capture = True
                     self.game_score['red_captures'] += 1
+                    self.red_team_flag_pickup = False
+                player.has_flag = False
+                scored_flag = self.flags[not int(player.team)]
+                self.state["flag_taken"][int(scored_flag.team)] = False
+                scored_flag.reset()
                 break
-        if self.blue_team_flag_capture or self.red_team_flag_capture:
-            for flag in self.flags:
-                flag.reset()
 
     def get_full_state_info(self):
         """Return the full state."""
@@ -922,6 +929,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         )
         self.tau = config_dict.get("tau", config_dict_std["tau"])
         self.max_time = config_dict.get("max_time", config_dict_std["max_time"])
+        self.max_score = config_dict.get("max_score", config_dict_std["max_score"])
         self.max_screen_size = config_dict.get(
             "max_screen_size", config_dict_std["max_screen_size"]
         )
@@ -1018,12 +1026,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     def _set_dones(self):
         """Check all of the end game conditions."""
         # Check if all flags of one team are captured
-        if self.red_team_flag_capture:
+        if self.game_score["red_captures"] >= self.max_score:
             self.dones["red"] = True
             self.dones["__all__"] = True
             self.message = "Red Wins! Blue Loses"
 
-        elif self.blue_team_flag_capture:
+        elif self.game_score["blue_captures"] >= self.max_score:
             self.dones["blue"] = True
             self.dones["__all__"] = True
             self.message = "Blue Wins! Red Loses"
@@ -1207,10 +1215,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             "agent_oob": [0] * self.num_agents,  # if this agent went out of bounds
         }
 
+        for k in self.game_score:
+            self.game_score[k] = 0
+
         self.blue_team_flag_pickup = False
         self.red_team_flag_pickup = False
-        self.blue_team_flag_capture = False
-        self.red_team_flag_capture = False
+        self.blue_team_score = 0
+        self.blue_team_score_prev = 0
+        self.red_team_score = 0
+        self.red_team_score_prev = 0
         self.message = ""
         self.current_time = 0
         self.reset_count += 1
