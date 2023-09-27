@@ -24,7 +24,7 @@ import numpy as np
 from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import Team
 
-modes = {"easy", "medium", "hard"}
+modes = {"easy", "medium", "hard", "competition_nothing", "competition_easy", "competition_medium"}
 """
 Difficulty modes for the policy, each one has different behavior. 
 'easy' = Easy Attacker - Go straight to goal
@@ -49,6 +49,8 @@ class BaseAttacker(BaseAgentPolicy):
             raise AttributeError(f"Invalid team {team}")
 
         self.using_pyquaticus = using_pyquaticus
+        self.competition_easy = [15, 6, 50, 35]
+        self.goal = None
 
     def set_mode(self, mode: str):
         """Sets difficulty mode."""
@@ -98,6 +100,36 @@ class BaseAttacker(BaseAgentPolicy):
                 # If there is an error converting the vector to a heading, just go straight
                 act_index = 12
 
+        elif self.mode=="competition_nothing":
+            #If tagged return to untag
+            if self.is_tagged:
+                ag_vect = self.bearing_to_vec(my_obs["own_home_bearing"])
+            act_index = -1
+
+        elif self.mode=="competition_easy":
+            # If I or someone on my team has the flag, go back home
+            if self.has_flag:
+                goal_vect = self.bearing_to_vec(my_obs["own_home_bearing"])
+            # Otherwise go get the opponents flag
+            else:
+                goal_vect = self.bearing_to_vec(self.opp_flag_bearing)
+
+            # Convert the vector to a heading, and then pick the best discrete action to perform
+            try:
+                act_heading = self.angle180(self.vec_to_heading(goal_vect))
+
+                if 1 >= act_heading >= -1:
+                    act_index = 12
+                elif act_heading < -1:
+                    act_index = 14
+                elif act_heading > 1:
+                    act_index = 10
+                else:
+                    # Should only happen if the act_heading is somehow NAN
+                    act_index = 12
+            except:
+                # If there is an error converting the vector to a heading, just go straight
+                act_index = 12
         elif self.mode == "medium":
             
            
@@ -133,6 +165,106 @@ class BaseAttacker(BaseAgentPolicy):
                     act_index = 12
             except:
                 act_index = 12
+
+        elif self.mode == "competition_medium":
+            # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid
+            if my_obs["wall_0_distance"] < 10 and (-90 < my_obs["wall_0_bearing"] < 90):
+                wall_0_unit_vec = self.rb_to_rect(
+                    (my_obs["wall_0_distance"], my_obs["wall_0_bearing"])
+                )
+                self.opp_team_pos.append(
+                    (
+                        my_obs["wall_0_distance"] * wall_0_unit_vec[0],
+                        my_obs["wall_0_distance"] * wall_0_unit_vec[1],
+                    )
+                )
+            elif my_obs["wall_2_distance"] < 10 and (
+                -90 < my_obs["wall_2_bearing"] < 90
+            ):
+                wall_2_unit_vec = self.rb_to_rect(
+                    (my_obs["wall_2_distance"], my_obs["wall_2_bearing"])
+                )
+                self.opp_team_pos.append(
+                    (
+                        my_obs["wall_2_distance"] * wall_2_unit_vec[0],
+                        my_obs["wall_2_distance"] * wall_2_unit_vec[1],
+                    )
+                )
+            if my_obs["wall_1_distance"] < 10 and (-90 < my_obs["wall_1_bearing"] < 90):
+                wall_1_unit_vec = self.rb_to_rect(
+                    (my_obs["wall_1_distance"], my_obs["wall_1_bearing"])
+                )
+                self.opp_team_pos.append(
+                    (
+                        my_obs["wall_1_distance"] * wall_1_unit_vec[0],
+                        my_obs["wall_1_distance"] * wall_1_unit_vec[1],
+                    )
+                )
+            elif my_obs["wall_3_distance"] < 10 and (
+                -90 < my_obs["wall_3_bearing"] < 90
+            ):
+                wall_3_unit_vec = self.rb_to_rect(
+                    (my_obs["wall_3_distance"], my_obs["wall_3_bearing"])
+                )
+                self.opp_team_pos.append(
+                    (
+                        my_obs["wall_3_distance"] * wall_3_unit_vec[0],
+                        my_obs["wall_3_distance"] * wall_3_unit_vec[1],
+                    )
+                )
+
+            # Increase the avoidance threshold to start avoiding when farther away
+            avoid_thresh = 60.0
+            # If I have the flag, go back to my side
+            if self.has_flag :
+                goal_vect = np.multiply(
+                    1.25, self.bearing_to_vec(my_obs["own_home_bearing"])
+                )
+                avoid_vect = self.get_avoid_vect(
+                    self.opp_team_pos, avoid_threshold=avoid_thresh
+                )
+                my_action = goal_vect + (avoid_vect)
+
+            # Otherwise go get the flag
+            else:
+                goal_vect = self.bearing_to_vec(self.opp_flag_bearing)
+                avoid_vect = self.get_avoid_vect(
+                    self.opp_team_pos, avoid_threshold=avoid_thresh
+                )
+                if ((not np.any(goal_vect + (avoid_vect))) or (np.allclose(np.abs(np.abs(goal_vect) - np.abs(avoid_vect)), np.zeros(np.array(goal_vect).shape), atol = 1e-01, rtol=1e-02))):
+                    # Special case where a player is closely in line with the goal
+                    # vector such that the calculated avoid vector nearly negates the
+                    # action (the player is in a spot that causes the agent to just go
+                    # straight into them). In this case just start going towards the top
+                    # or bottom boundary, whichever is farthest.
+
+                    top_dist = my_obs["wall_0_distance"]
+                    bottom_dist = my_obs["wall_2_distance"]
+
+                    # Some bias towards teh bottom boundary to force it to stick with a
+                    # direction.
+                    if top_dist > 1.25 * bottom_dist:
+                        my_action = self.rb_to_rect((top_dist, my_obs["wall_0_bearing"]))
+                    else:
+                        my_action = self.rb_to_rect((bottom_dist, my_obs["wall_2_bearing"]))
+                else:
+                    my_action = np.multiply(1.25, goal_vect) + avoid_vect
+
+            # Try to convert the heading to a discrete action
+            try:
+                act_heading = self.angle180(self.vec_to_heading(my_action))
+                # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
+                if 1 >= act_heading >= -1:
+                    act_index = 4
+                elif act_heading < -1:
+                    act_index = 6
+                elif act_heading > 1:
+                    act_index = 2
+                else:
+                    # Should only happen if the act_heading is somehow NAN
+                    act_index = 4
+            except:
+                act_index = 4
 
         elif self.mode == "hard":
             # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid

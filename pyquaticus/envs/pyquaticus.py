@@ -432,6 +432,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         super().__init__()
         self.config_dict = config_dict
 
+        #Game score used to determine winner of game for MCTF competition
+        #blue_captures: Represents the number of times the blue team has grabbed reds flag and brought it back to their 'home' base
+        #blue_tags: The number of times the blue team successfully tagged an opponent
+        #blue_grabs: The number of times the blue team grabbed the opponents flag
+        #red_captures: Represents the number of times the blue team has grabbed reds flag and brought it back to their 'home' base
+        #red_tags: The number of times the blue team successfully tagged an opponent
+        #red_grabs: The number of times the blue team grabbed the opponents flag
+        self.game_score = {'blue_captures':0, 'blue_tags':0, 'blue_grabs':0, 'red_captures':0, 'red_tags':0, 'red_grabs':0}    
+    
         # set variables from config
         self.set_config_values(self.config_dict)
 
@@ -681,6 +690,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     self.agent_radius <= pos_y <= self.world_size[1] - self.agent_radius
                 )
             ):
+                if player.team == Team.RED_TEAM:
+                    self.game_score['blue_tags'] += 1
+                else:
+                    self.game_score['red_tags'] += 1
                 if player.has_flag:
                     # If they have a flag, return the flag to it's home area
                     self.flags[int(not int(player.team))].reset()
@@ -764,8 +777,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     player.has_flag = True
                     self.state["flag_taken"][other_team] = 1
                     if player.team == Team.BLUE_TEAM:
+                        self.game_score['blue_grabs'] += 1
                         self.blue_team_flag_pickup = True
                     else:
+                        self.game_score['red_grabs'] += 1
                         self.red_team_flag_pickup = True
                         break
     def _check_untag(self):
@@ -809,6 +824,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                             dist_between_agents > 0.0
                             and dist_between_agents < self.catch_radius
                         ):
+                            if other_player.team == Team.RED_TEAM:
+                                self.game_score['blue_tags'] += 1
+                            else:
+                                self.game_score['red_tags'] += 1
                             self.state["agent_tagged"][other_player.id] = 1
                             other_player.is_tagged = True
                             self.state["agent_captures"][player.id] = other_player.id
@@ -849,8 +868,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             if player.on_own_side and player.has_flag:
                 if player.team == Team.BLUE_TEAM:
                     self.blue_team_flag_capture = True
+                    self.game_score['blue_captures'] += 1
                 else:
                     self.red_team_flag_capture = True
+                    self.game_score['red_captures'] += 1
                 break
         if self.blue_team_flag_capture or self.red_team_flag_capture:
             for flag in self.flags:
