@@ -48,6 +48,19 @@ You can then activate the environment with: `conda activate pyquaticus-lightenv`
   * **Orange/Yellow**: within `1.5*catch_radius`
   * **Red**: within `catch_radius`
 
+## Configurable Reward
+
+`Pyquaticus` comes with a simple sparse reward, but it can be extended with different reward structures. See [rewards.py](https://github.com/mit-ll-trusted-autonomy/pyquaticus/blob/main/pyquaticus/utils/rewards.py) for more information. Here is an example of insantiating the environment with sparse rewards for all agents in a 2v2 environment:
+
+```
+from pyquaticus import pyquaticus_v0
+import pyquaticus.utils.rewards as reward
+
+env = pyquaticus_v0.PyQuaticusEnv(render_mode="human", team_size=2, {i: reward.sparse for i in range(4)})
+```
+
+Note: agent ids are ordered with all the blue agents followed by all the red agents.
+
 ## Docker 
 
 The docker directory contains the files for the bridge over to the MOOS environment. If you just want to run your agents in MOOS, you do not need to build the docker. Install gym-aquaticus with `pip install -e /gym-aquaticus ` and then run the pyquaticus_bridge_test.py or pyquaticus_bridge_single_sim.py. 
@@ -64,6 +77,11 @@ sudo docker build -t pyquaticus:test .
 # runs the docker and mounts a volume to the logs directory on the host computer
 sudo docker run -it -v ~/pyquaticus/docker/logs:/home/moos/logs --net host --entrypoint /bin/bash pyquaticus:test
 ```
+
+## Competition Instructions
+Submitted agents will be evaluated based on three metrics easy, medium, and a hidden metric for 2500 steps. The easy metric consists of the competition_easy attacker and defender base policies. The medium evaluates your submited agents agaisnt the hard attacker and defender base policies. Last metric used to evaluate your submitted agents won't be shared, you will recieve a score for this metric. The scores recieved repersent the total number of flag captures your team of agents was able to achieve in the 2500 game steps.
+
+An example submission zip folder can be found in rl_test, submissions should be a zip file only containing the learned policy network and the filled in solution.py (the file name and class name must remain solution.py).
 
 ## Distribution and Disclaimer Statements
 
