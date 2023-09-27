@@ -1215,6 +1215,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             "agent_oob": [0] * self.num_agents,  # if this agent went out of bounds
         }
 
+        for k in self.game_score:
+            self.game_score[k] = 0
+
         self.blue_team_flag_pickup = False
         self.red_team_flag_pickup = False
         self.blue_team_score = 0
