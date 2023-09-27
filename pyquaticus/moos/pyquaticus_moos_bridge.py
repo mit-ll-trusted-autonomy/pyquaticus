@@ -93,6 +93,9 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             for agent in agent_list:
                 self.players[agent.id] = agent
 
+        # reset auto return status
+        self._auto_returning_flag = False
+
         # Set tagging cooldown
         for player in self.players.values():
             player.tagging_cooldown = self.tagging_cooldown
@@ -143,6 +146,12 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         moostime = pymoos.time()
         if isinstance(action,str):
             self._moos_comm.notify("ACTION", action, moostime)
+            self._auto_returning_flag = False
+        elif self.players[self._agent_name].on_own_side and self.players[self._agent_name].has_flag:
+            self._moos_comm.notify("ACTION", "ATTACK_E", moostime)
+            if self._auto_returning_flag:
+                print("Taking over control and driving flag to home region.")
+            self._auto_returning_flag = True
         else:
             # translate actions and publish them
             desired_spd, delta_hdg = self._discrete_action_to_speed_relheading(action)
@@ -156,6 +165,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             self._moos_comm.notify("RLA_HEADING", desired_hdg, moostime)
             self._action_count += 1
             self._moos_comm.notify("RLA_ACTION_COUNT", self._action_count, moostime)
+            self._auto_returning_flag = False
         # always returning zero reward for now
         # this is only for running policy, not traning
         # TODO: implement a sparse reward for evaluation
