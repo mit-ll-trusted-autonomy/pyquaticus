@@ -48,6 +48,19 @@ You can then activate the environment with: `conda activate pyquaticus-lightenv`
   * **Orange/Yellow**: within `1.5*catch_radius`
   * **Red**: within `catch_radius`
 
+## Configurable Reward
+
+`Pyquaticus` comes with a simple sparse reward, but it can be extended with different reward structures. See [rewards.py](https://github.com/mit-ll-trusted-autonomy/pyquaticus/blob/main/pyquaticus/utils/rewards.py) for more information. Here is an example of insantiating the environment with sparse rewards for all agents in a 2v2 environment:
+
+```
+from pyquaticus import pyquaticus_v0
+import pyquaticus.utils.rewards as reward
+
+env = pyquaticus_v0.PyQuaticusEnv(render_mode="human", team_size=2, {i: reward.sparse for i in range(4)})
+```
+
+Note: agent ids are ordered with all the blue agents followed by all the red agents.
+
 ## Docker 
 
 The docker directory contains the files for the bridge over to the MOOS environment. If you just want to run your agents in MOOS, you do not need to build the docker. Install gym-aquaticus with `pip install -e /gym-aquaticus ` and then run the pyquaticus_bridge_test.py or pyquaticus_bridge_single_sim.py. 
