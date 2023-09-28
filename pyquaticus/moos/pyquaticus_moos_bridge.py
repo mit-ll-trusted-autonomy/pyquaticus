@@ -6,6 +6,7 @@ import time
 from pyquaticus.envs.pyquaticus import PyQuaticusEnvBase
 from pyquaticus.structs import Player, Team, Flag
 from pyquaticus.config import config_dict_std
+from pyquaticus.utils.utils import mag_bearing_to
 
 
 class PyQuaticusMoosBridge(PyQuaticusEnvBase):
@@ -143,21 +144,29 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             truncated: always False (runs until you stop)
             info: additional information
         """
+        player = self.players[self._agent_name]
         moostime = pymoos.time()
         if isinstance(action,str):
             self._moos_comm.notify("ACTION", action, moostime)
             self._auto_returning_flag = False
-        elif self.players[self._agent_name].on_own_side and self.players[self._agent_name].has_flag:
-            self._moos_comm.notify("ACTION", "ATTACK_E", moostime)
-            if self._auto_returning_flag:
-                print("Taking over control and driving flag to home region.")
+        elif player.on_own_side and player.has_flag:
+            desired_spd = self.max_speed
+            player_flag_home = self.flags[int(self.team)].home
+            _, desired_hdg = mag_bearing_to(player.pos,
+                                            player_flag_home)
+            if not self._auto_returning_flag:
+                print("Taking over control to return flag")
             self._auto_returning_flag = True
+            self._moos_comm.notify("ACTION", "CONTROL", moostime)
+            self._moos_comm.notify("RLA_SPEED", desired_spd, moostime)
+            self._moos_comm.notify("RLA_HEADING", desired_hdg, moostime)
         else:
             # translate actions and publish them
             desired_spd, delta_hdg = self._discrete_action_to_speed_relheading(action)
             desired_hdg = self._relheading_to_global_heading(
                 self.players[self._agent_name].heading,
                 delta_hdg)
+
             # notify the moos agent that we're controlling it directly
             # NOTE: the name of this variable depends on the mission files
             self._moos_comm.notify("ACTION", "CONTROL", moostime)
@@ -165,6 +174,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             self._moos_comm.notify("RLA_HEADING", desired_hdg, moostime)
             self._action_count += 1
             self._moos_comm.notify("RLA_ACTION_COUNT", self._action_count, moostime)
+            # if close enough to flag, will attempt to grab
+            self._flag_grab_publisher()
             self._auto_returning_flag = False
         # always returning zero reward for now
         # this is only for running policy, not traning
@@ -315,6 +326,18 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         agent.speed = float(data["SPD"])
         agent.heading = float(data["HDG"])
 
+    def _flag_grab_publisher(self):
+        player = self.players[self._agent_name]
+        if any([a.has_flag for a in self.agents_of_team[self.team]]) or player.is_tagged:
+            return
+
+        goal_flag = self.flags[not int(self.team)]
+        flag_dist = np.hypot(goal_flag.home[0]-player.pos[0],
+                             goal_flag.home[1]-player.pos[1])
+        if (flag_dist < self.capture_radius):
+            print("SENDING A FLAG GRAB REQUEST!")
+            self._moos_comm.notify('FLAG_GRAB_REQUEST', f'vname={self._agent_name}', -1)
+
     def set_config(self, moos_config):
         """
         Reads a configuration object to set the field and other configuration variables
@@ -339,6 +362,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.scrimmage_pnts = np.asarray(self._moos_config.scrimmage_pnts, dtype=np.float32)
         # define function for checking which side an agent is on
         if abs(self.scrimmage_pnts[0][0] - self.scrimmage_pnts[1][0]) < 1e-2:
+            # Vertical scrimmage line
             if self._red_flag[0] > self.scrimmage_pnts[0][0]:
                 def check_side(agent):
                     x, y = agent.pos
@@ -357,7 +381,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         elif abs(self.scrimmage_pnts[0][1] - self.scrimmage_pnts[1][1]) < 1e-2:
             raise RuntimeError('Horizontal scrimmage lines not yet supported')
         else:
-            m = (self.scrimmage_pnts[1][1] - self.scrimmage_pnts[0][1]) / (self.scrimmage_pnts[1][0] - self.scrimmage_pnts[0][1])
+            m = (self.scrimmage_pnts[1][1] - self.scrimmage_pnts[0][1]) / (self.scrimmage_pnts[1][0] - self.scrimmage_pnts[0][0])
             b = self.scrimmage_pnts[0][1] - m*self.scrimmage_pnts[0][0]
 
             if self._red_flag[1] > m*self._red_flag[0] + b:
@@ -393,6 +417,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
         # add some padding becaus it can end up going faster than requested speed
         self.max_speed = self._moos_config.speed_bounds[1] + 0.5
+
+        self.capture_radius = self._moos_config.capture_radius
 
         # mark this function called already
         # if called again, nothing will happen
