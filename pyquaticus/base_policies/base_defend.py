@@ -104,17 +104,12 @@ class BaseDefender(BaseAgentPolicy):
                 act_index = 10
         
         elif self.mode=="competition_nothing":
-            #If tagged return to untag
-            if self.is_tagged:
-                ag_vect = self.bearing_to_vec(my_obs["own_home_bearing"])
-
             act_index = -1
+
         elif self.mode=="competition_easy":
             coords = [self.my_flag_loc]
-            #If tagged return to untagS
             ag_vect = -1
             if self.is_tagged:
-                ag_vect = self.bearing_to_vec(my_obs["own_home_bearing"])
                 self.competition_easy_1 = [135, 115]
             else:
                 if self.team == Team.RED_TEAM:
@@ -241,12 +236,12 @@ class BaseDefender(BaseAgentPolicy):
 
             ag_vect = [0, 0]
             defense_perim = 5 * self.flag_keepout
-            # Get nearest enemy:
+            # Get nearest untagged enemy:
             min_enemy_distance = 1000.00
-            for enem in self.opp_team_pos:
-                if enem[0] < min_enemy_distance:
-                    min_enemy_distance = enem[0]
-                    enemy_loc = self.rb_to_rect(enem)
+            for enem, pos in self.opp_team_pos_dict.items():
+                if pos[0] < min_enemy_distance and not my_obs[(enem, "is_tagged")]:
+                    min_enemy_distance = pos[0]
+                    enemy_loc = self.rb_to_rect(pos)
 
             if not self.opp_team_has_flag:
                 defend_pt = self.closest_point_on_line(
