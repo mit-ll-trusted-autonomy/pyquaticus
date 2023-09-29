@@ -101,9 +101,6 @@ class BaseAttacker(BaseAgentPolicy):
                 act_index = 12
 
         elif self.mode=="competition_nothing":
-            #If tagged return to untag
-            if self.is_tagged:
-                ag_vect = self.bearing_to_vec(my_obs["own_home_bearing"])
             act_index = -1
 
         elif self.mode=="competition_easy":
