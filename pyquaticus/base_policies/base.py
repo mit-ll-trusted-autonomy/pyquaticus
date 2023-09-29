@@ -82,6 +82,7 @@ class BaseAgentPolicy:
 
         """
         self.opp_team_pos = []
+        self.opp_team_pos_dict = {} #for labeling by agent_id
         self.my_team_pos = []
         self.opp_team_tag = []
         self.my_team_tag = []
@@ -131,6 +132,9 @@ class BaseAgentPolicy:
                 if k[0].find("opponent_") != -1 and k[0] not in opp_team_ids:
                     opp_team_ids.add(k[0])
                     self.opp_team_pos.append(
+                        (my_obs[(k[0], "distance")], my_obs[(k[0], "bearing")])
+                    )
+                    self.opp_team_pos_dict[k[0]] = (
                         (my_obs[(k[0], "distance")], my_obs[(k[0], "bearing")])
                     )
                     self.opp_team_has_flag = (
