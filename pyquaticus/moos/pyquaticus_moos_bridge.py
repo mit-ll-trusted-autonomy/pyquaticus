@@ -150,6 +150,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             self._moos_comm.notify("ACTION", action, moostime)
             self._auto_returning_flag = False
         elif player.on_own_side and player.has_flag:
+            # automatically return agent to home region
             desired_spd = self.max_speed
             player_flag_home = self.flags[int(self.team)].home
             _, desired_hdg = mag_bearing_to(player.pos,
