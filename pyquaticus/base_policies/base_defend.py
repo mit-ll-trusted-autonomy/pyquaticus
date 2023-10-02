@@ -238,10 +238,19 @@ class BaseDefender(BaseAgentPolicy):
             defense_perim = 5 * self.flag_keepout
             # Get nearest untagged enemy:
             min_enemy_distance = 1000.00
+            enemy_dis_dict = {}
+            closest_enemy = None
             for enem, pos in self.opp_team_pos_dict.items():
+                enemy_dis_dict[enem] = pos[0]
                 if pos[0] < min_enemy_distance and not my_obs[(enem, "is_tagged")]:
                     min_enemy_distance = pos[0]
+                    closest_enemy = enem
                     enemy_loc = self.rb_to_rect(pos)
+
+            if closest_enemy == None:
+                min_enemy_distance = min(enemy_dis_dict.values())
+                closest_enemy = min(enemy_dis_dict, key=enemy_dis_dict.get)
+                enemy_loc = self.rb_to_rect(self.opp_team_pos_dict[closest_enemy])
 
             if not self.opp_team_has_flag:
                 defend_pt = self.closest_point_on_line(
@@ -257,8 +266,8 @@ class BaseDefender(BaseAgentPolicy):
                     enemy_loc, self.my_flag_loc
                 )
 
-                if enemy_dist_2_flag > defense_perim:
-                    if defend_pt_flag_dist > defense_perim:
+                if enemy_dist_2_flag > defense_perim or my_obs[(closest_enemy, "is_tagged")]:
+                    if defend_pt_flag_dist > defense_perim or my_obs[(closest_enemy, "is_tagged")]:
                         guide_pt = [
                             self.my_flag_loc[0] + (unit_def_flag[0] * defense_perim),
                             self.my_flag_loc[1] + (unit_def_flag[1] * defense_perim),

@@ -523,17 +523,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.screen = None
         self.clock = None
         self.isopen = False
-        if self.render_mode:
-            # Pygame Orientation Vector
-            self.UP = Vector2((0.0, 1.0))
-
-            # arena
-            self.arena_offset = 20  # pixels
-            self.border_width = 4  # pixels
-            self.a2a_line_width = 3 #pixels
-
-            self.arena_width = self.world_size[0] * self.pixel_size
-            self.arena_height = self.world_size[1] * self.pixel_size
 
     def seed(self, seed=None):
         """
@@ -961,14 +950,32 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             np.seterr(all="ignore")
 
         if self.render_mode is not None:
+            # Pygame Orientation Vector
+            self.UP = Vector2((0.0, 1.0))
+
+            # arena
+            self.arena_offset = 20  # pixels
+            self.border_width = 4  # pixels
+            self.a2a_line_width = 3 #pixels
+
+            self.arena_width = self.world_size[0] * self.pixel_size
+            self.arena_height = self.world_size[1] * self.pixel_size
+
             # check that world size (pixels) does not exceed the screen dimensions
             world_screen_err_msg = (
                 "Specified world_size {} exceeds the maximum size {} in at least one"
-                " dimension".format(self.world_size, self.max_screen_size)
+                " dimension".format(
+                    [
+                        round(2*self.arena_offset + self.pixel_size * self.world_size[0]),
+                        round(2*self.arena_offset + self.pixel_size * self.world_size[1])
+                    ], 
+                    self.max_screen_size
+                )
             )
+            print(world_screen_err_msg)
             assert (
-                self.world_size[0] * self.pixel_size < self.max_screen_size[0]
-                and self.world_size[1] * self.pixel_size < self.max_screen_size[1]
+                2*self.arena_offset + self.pixel_size * self.world_size[0] <= self.max_screen_size[0]
+                and 2*self.arena_offset + self.pixel_size * self.world_size[1] <= self.max_screen_size[1]
             ), world_screen_err_msg
 
         # check that world dimensions (pixels) are even
