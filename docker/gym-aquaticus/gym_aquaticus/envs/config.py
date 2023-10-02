@@ -138,24 +138,27 @@ class WestPointConfig(MITConfig):
         # when setting the observation limits for normalizing
         self.speed_bounds = (0.0, 5.)
 
-        # THIS
         # defined in meta_shoreside.moos and must match
-        # zone_one = pts={ 266,107: 286,158.3 : 234.7,178.3: 214.7, 127 }
-        # zone_two = pts={ 246,55.7 : 266, 107 : 214.7, 127: 194.7, 75.7 }
+        # October Competition:
+        #   zone_one = pts={ 266,107: 286,158.3 : 234.7,178.3: 214.7, 127 }
+        #   zone_two = pts={ 246,55.7 : 266, 107 : 214.7, 127: 194.7, 75.7 }
+        # Pyquaticus Mission Files:
+        #   zone_one = pts={214.74,126.92 : 234.72,178.16 : 285.96,157.88: 265.98,106.94 }
+        #   zone_two = pts={194.76,75.68 : 214.74,126.92 : 265.98,106.94: 246.00,55.70 }
 
-        self.red_zone_ll = [214.7, 127]
-        self.red_zone_lr = [266, 107]
-        self.red_zone_ur = [286, 158.3]
-        self.red_zone_ul = [234.7, 178.3]
+        self.red_zone_ll = [214.74, 126.92]
+        self.red_zone_lr = [265.98, 106.94]
+        self.red_zone_ur = [285.96, 157.88]
+        self.red_zone_ul = [234.72, 178.16]
 
-        self.blue_zone_ll = [194.7, 75.7]
+        self.blue_zone_ll = [194.76, 75.68]
         self.blue_zone_lr = [246, 55.7]
-        self.blue_zone_ur = [266, 107]
-        self.blue_zone_ul = [214.7, 127]
+        self.blue_zone_ur = [265.98, 106.94]
+        self.blue_zone_ul = [214.74, 126.92]
 
-        self.boundary_ll = [194.7, 75.7]
+        self.boundary_ll = [194.76, 75.68]
         self.boundary_lr = [246, 55.7]
-        self.boundary_ur = [286, 158.3]
-        self.boundary_ul = [234.7, 178.3]
+        self.boundary_ur = [285.96, 157.88]
+        self.boundary_ul = [234.72, 178.16]
 
         self.scrimmage_pnts = [self.blue_zone_ul, self.blue_zone_ur]
