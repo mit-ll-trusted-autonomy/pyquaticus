@@ -108,8 +108,24 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             self._moos_comm.close()
 
         self._init_moos_comm()
+        self._wait_for_all_players()
 
         return self.state_to_obs(self._agent_name)
+
+    def _wait_for_all_players(self):
+        wait_time = 5
+        missing_agents = [p.id for p in filter(lambda p: None in p.pos, self.players.values())]
+        num_iters = 0
+        while missing_agents:
+            print("Waiting for other players to connect...")
+            print(f"\tMissing Agents: {','.join(missing_agents)}")
+            time.sleep(wait_time)
+            missing_agents = [p.id for p in filter(lambda p: None in p.pos, self.players.values())]
+            num_iters += 1
+            if num_iters > 20:
+                raise RuntimeError(f"No other agents connected after {num_iters*wait_time} seconds. Failing and exiting.")
+        print("All agents connected!")
+        return
 
     def render(self, mode="human"):
         """
