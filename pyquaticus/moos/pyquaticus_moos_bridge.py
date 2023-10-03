@@ -316,8 +316,6 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         # update all player objects
         for name, agent in self.players.items():
             tag_status = name in tagged_agents
-            if tag_status != agent.is_tagged:
-                print(f"Warning: getting no tag cooldown information!")
             agent.is_tagged = tag_status
 
     def _cantag_handler(self, msg):
