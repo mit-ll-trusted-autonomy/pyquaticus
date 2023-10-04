@@ -1048,6 +1048,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.message = "Game Over. No Winner"
 
     def update_params(self, agent_id):
+        # Important Note: Be sure to deep copy anything other than plain-old-data, e.g.,
+        # lists from self.state
+        # Otherwise it will point to the same object and prev_params/params will be identical
         agent = self.players[agent_id]
         self.normalize = False
         obs = self.state_to_obs(agent.id)
@@ -1055,7 +1058,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.params[agent.id]["team"] = agent.team
         self.params[agent.id]["capture_radius"] = self.catch_radius
         self.params[agent.id]["agent_id"] = agent.id
-        self.params[agent.id]["agent_oob"] = self.state["agent_oob"]
+        self.params[agent.id]["agent_oob"] = copy.deepcopy(self.state["agent_oob"])
         if agent.team == Team.RED_TEAM:
             # Game Events
             self.params[agent.id]["num_teammates"] = self.num_red
@@ -1066,7 +1069,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.params[agent.id]["opponent_flag_capture"] = self.blue_team_flag_capture
             # Elements
             self.params[agent.id]["team_flag_home"] = self.get_distance_between_2_points(
-                    agent.pos, self.state["flag_home"][1]
+                    agent.pos, copy.deepcopy(self.state["flag_home"][1])
                 )
             self.params[agent.id]["team_flag_bearing"] = obs["own_home_bearing"]
             self.params[agent.id]["team_flag_distance"] = obs["own_home_distance"]
@@ -1086,7 +1089,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.params[agent.id]["opponent_flag_capture"] = self.red_team_flag_capture
             # Elements
             self.params[agent.id]["team_flag_home"] = self.get_distance_between_2_points(
-                    agent.pos, self.state["flag_home"][0]
+                    agent.pos, copy.deepcopy(self.state["flag_home"][0])
                 )
             self.params[agent.id]["team_flag_bearing"] = obs["own_home_bearing"]
             self.params[agent.id]["team_flag_distance"] = obs["own_home_distance"]
@@ -1115,8 +1118,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.params[agent.id]["wall_3_bearing"] = obs["wall_3_bearing"]
         self.params[agent.id]["wall_3_distance"] = obs["wall_3_distance"]
         self.params[agent.id]["wall_distances"] =  self._get_dists_to_boundary()[agent.id]
-        self.params[agent.id]["agent_captures"] = self.state["agent_captures"]
-        self.params[agent.id]["agent_tagged"] = self.state["agent_tagged"]
+        self.params[agent.id]["agent_captures"] = copy.deepcopy(self.state["agent_captures"])
+        self.params[agent.id]["agent_tagged"] = copy.deepcopy(self.state["agent_tagged"])
         own_team = agent.team
         other_team = Team.BLUE_TEAM if own_team == Team.RED_TEAM else Team.RED_TEAM
         # Add Teamate and Opponent Information
@@ -1152,11 +1155,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if self.reward_config[agent_id] is None:
             return 0
         # Update Prev Params
-        self.prev_params[agent_id] = self.params[agent_id].copy()
+        self.prev_params[agent_id] = copy.deepcopy(self.params[agent_id])
         # Update Params
         self.update_params(agent_id)
         if self.prev_params[agent_id] == {}:
-            self.prev_params[agent_id] = self.params[agent_id].copy()
+            self.prev_params[agent_id] = copy.deepcopy(self.params[agent_id])
         # Get reward based on the passed in reward function
         return self.reward_config[agent_id](
             agent_id, self.params[agent_id], self.prev_params[agent_id]
