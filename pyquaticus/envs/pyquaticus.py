@@ -972,7 +972,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     self.max_screen_size
                 )
             )
-            print(world_screen_err_msg)
             assert (
                 2*self.arena_offset + self.pixel_size * self.world_size[0] <= self.max_screen_size[0]
                 and 2*self.arena_offset + self.pixel_size * self.world_size[1] <= self.max_screen_size[1]
