@@ -12,12 +12,14 @@
 # work.
 
 # SPDX-License-Identifier: BSD-3-Clause
+
 import argparse
 import gymnasium as gym
 import numpy as np
 import pygame
+from pygame import KEYDOWN, QUIT, K_ESCAPE
 import ray
-from ray.rllib.algorithms.ppo import PPOConfig
+from ray.rllib.algorithms.ppo import PPOConfig, PPOTF1Policy, PPOTorchPolicy
 from ray.tune.logger import pretty_print
 from ray.tune.registry import register_env
 from pyquaticus.envs.rllib_pettingzoo_wrapper import ParallelPettingZooWrapper
@@ -28,55 +30,30 @@ import pyquaticus
 from pyquaticus import pyquaticus_v0
 from ray import air, tune
 from ray.rllib.algorithms.ppo import PPOTF2Policy, PPOConfig
-from ray.rllib.policy.policy import PolicySpec, Policy
+from ray.rllib.policy.policy import PolicySpec
 import os
-import pyquaticus.utils.rewards as rew
 from pyquaticus.base_policies.base_policies import DefendGen, AttackGen
+from pyquaticus.base_policies.base_attack import BaseAttacker
+from pyquaticus.base_policies.base_defend import BaseDefender
+from pyquaticus.base_policies.base_combined import Heuristic_CTF_Agent
+from ray.rllib.algorithms.ppo import PPO
+from ray.rllib.policy.policy import Policy
 
 
-class RandPolicy(Policy):
-    """
-    Example wrapper for training against a random policy.
-
-    To use a base policy, insantiate it inside a wrapper like this,
-    and call it from self.compute_actions
-
-    See policies and policy_mapping_fn for how policies are associated
-    with agents
-    """
-    def __init__(self, observation_space, action_space, config):
-        Policy.__init__(self, observation_space, action_space, config)
-
-    def compute_actions(self,
-                        obs_batch,
-                        state_batches,
-                        prev_action_batch=None,
-                        prev_reward_batch=None,
-                        info_batch=None,
-                        episodes=None,
-                        **kwargs):
-        return [self.action_space.sample() for _ in obs_batch], [], {}
-
-    def get_weights(self):
-        return {}
-
-    def learn_on_batch(self, samples):
-        return {}
-
-    def set_weights(self, weights):
-        pass
-
-
+RENDER_MODE = None
+#RENDER_MODE = None
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train a 2v2 policy in a 2v2 PyQuaticus environment')
-    parser.add_argument('--render', help='Enable rendering', action='store_true')
-    reward_config = {0:rew.sparse, 1:rew.custom_v1, 2:None, 3:None} # Example Reward Config
+    parser.add_argument('checkpoint', help='Please enter the path to the model you would like to load in')
+    reward_config = {0:None, 1:None, 2:None, 3:None}#{0:rew.sparse, 1:rew.custom_v1, 2:None, 3:None} # Example Reward Config
     #Competitors: reward_config should be updated to reflect how you want to reward your learning agent
     
+    e_normalizer = pyquaticus_v0.PyQuaticusEnv(render_mode=None, team_size=2)
+
     args = parser.parse_args()
 
 
-    RENDER_MODE = 'human' if args.render else None #set to 'human' if you want rendered output
+    #RENDER_MODE = 'human' if args.render else None #set to 'human' if you want rendered output
     
     env_creator = lambda config: pyquaticus_v0.PyQuaticusEnv(render_mode=RENDER_MODE, reward_config=reward_config, team_size=2)
     env = ParallelPettingZooWrapper(pyquaticus_v0.PyQuaticusEnv(render_mode=RENDER_MODE, reward_config=reward_config, team_size=2))
@@ -103,11 +80,10 @@ if __name__ == '__main__':
     #If your system allows changing the number of rollouts can significantly reduce training times (num_rollout_workers=15)
     ppo_config.multi_agent(policies=policies, policy_mapping_fn=policy_mapping_fn, policies_to_train=["agent-0-policy", "agent-1-policy"],)
     algo = ppo_config.build()
+    algo.restore(args.checkpoint)
 
-    for i in range(6):
-        print("Looping: ", i)
-        algo.train()
-        if np.mod(i, 5) == 0:
-            print("Saving Checkpoint: ", i)
-            chkpt_file = algo.save('./ray_test/')
-            print(f'Saved to {chkpt_file}', flush=True)
+    agent_0_policy = algo.get_policy(policy_id="agent-0-policy")
+    agent_1_policy = algo.get_policy(policy_id="agent-1-policy")
+
+    agent_0_policy.export_checkpoint("./policies/agent-0-policy")
+    agent_1_policy.export_checkpoint("./policies/agent-1-policy")
