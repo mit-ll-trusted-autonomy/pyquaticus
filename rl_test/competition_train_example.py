@@ -73,8 +73,6 @@ if __name__ == '__main__':
     reward_config = {0:rew.sparse, 1:rew.custom_v1, 2:None, 3:None} # Example Reward Config
     #Competitors: reward_config should be updated to reflect how you want to reward your learning agent
     
-    e_normalizer = pyquaticus_v0.PyQuaticusEnv(render_mode='human', team_size=2)
-
     args = parser.parse_args()
 
 
