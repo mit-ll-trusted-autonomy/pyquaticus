@@ -43,6 +43,7 @@ class Player:
         has_flag: Indicator for whether or not the agent has the flag
         on_own_side: Indicator for whether or not the agent is on its own side of the field.
         tagging_cooldown: reset to 0 after this player tags another agent then counts up to the configured cooldown
+        cantag_time: at this timestamp, the player can tag again (Note: only used in PyQuaticusMoosBridge, not regular Pyquaticus)
         is_tagged: True iff this player is currently tagged
     """
 
@@ -56,6 +57,7 @@ class Player:
     has_flag: bool = field(init=False, default=False)
     on_own_side: bool = field(init=False, default=True)
     tagging_cooldown: float = field(init=False)
+    cantag_time: float = field(init=False, default=0.0)
     is_tagged: bool = field(init = False, default=False)
 
 

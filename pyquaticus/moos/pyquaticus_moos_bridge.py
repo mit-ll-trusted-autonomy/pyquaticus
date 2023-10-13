@@ -214,6 +214,10 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         # set on_own_side for each agent using _check_side(player)
         for agent in self.players.values():
             agent.on_own_side = self._check_on_side(agent)
+        # update tagging_cooldown value
+        for agent in self.players.values():
+            # should count up from 0.0 to tagging_cooldown (at which point it can tag again)
+            agent.tagging_cooldown = self.tagging_cooldown - max(0.0, agent.cantag_time - time.time())
         return super().state_to_obs(agent_id)
 
     def _init_moos_comm(self):
@@ -225,7 +229,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             "NAV_X", "NAV_Y",
             "NAV_SPEED", "NAV_HEADING",
             "FLAG_SUMMARY",
-            "TAGGED_VEHICLES"
+            "TAGGED_VEHICLES",
+            "CANTAG_SUMMARY"
         ]
         self._moos_vars.extend([
             f"NODE_REPORT_{n.upper()}"
@@ -280,6 +285,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             self._tag_handler(msg)
         elif "NODE_REPORT_" in msg.key():
             self._node_report_handler(msg)
+        elif "CANTAG_SUMMARY" in msg.key():
+            self._cantag_handler(msg)
         else:
             raise ValueError(f"Unexpected message: {msg.key()}")
 
@@ -325,9 +332,22 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         # update all player objects
         for name, agent in self.players.items():
             tag_status = name in tagged_agents
-            if tag_status != agent.is_tagged:
-                print(f"Warning: getting no tag cooldown information!")
             agent.is_tagged = tag_status
+
+    def _cantag_handler(self, msg):
+        """
+        Handles messages about whether an agent can tag
+        """
+        # reset all cantag times to 0
+        for p in self.players.values():
+            p.cantag_time = 0.0
+        strmsg = msg.string().strip()
+        if not strmsg:
+            return
+        for entry in strmsg.split(","):
+            # the agent cannot tag again until the specified utc
+            agent_name, utc = entry.split('=')
+            self.players[agent_name].cantag_time = float(utc)
 
     def _node_report_handler(self, msg):
         """
