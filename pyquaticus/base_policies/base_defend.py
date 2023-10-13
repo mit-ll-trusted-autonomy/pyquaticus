@@ -131,7 +131,7 @@ class BaseDefender(BaseAgentPolicy):
                         ag_vect = self.bearing_to_vec(my_obs["wall_1_bearing"])
                 else:# Blue Team Wall Order is Different
                     if self.competition_easy_1[1] <= my_obs["wall_3_distance"] <= self.competition_easy_1[0]: #If near halfline start protective behavior
-                        self.competition_easy_1 = [90, 55]
+                        self.competition_easy_1 = [115, 95]
                         if self.goal == []:
                             self.goal = "wall_2"
                         if my_obs[self.goal + "_distance"] < 15:
