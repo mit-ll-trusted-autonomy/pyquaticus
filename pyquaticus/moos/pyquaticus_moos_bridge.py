@@ -218,6 +218,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         for agent in self.players.values():
             # should count up from 0.0 to tagging_cooldown (at which point it can tag again)
             agent.tagging_cooldown = self.tagging_cooldown - max(0.0, agent.cantag_time - time.time())
+            agent.tagging_cooldown = max(0, min(self.tagging_cooldown, agent.tagging_cooldown))
         return super().state_to_obs(agent_id)
 
     def _init_moos_comm(self):
