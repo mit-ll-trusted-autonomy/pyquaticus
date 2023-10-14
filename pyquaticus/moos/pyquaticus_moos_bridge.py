@@ -316,16 +316,16 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         # Note: assuming the underlying MOOS logic only allows
         #       agents to grab the opponent's flag, so not even
         #       checking for that
+        flag_holders = set()
         for msg_entry in msg.string().split("#"):
-            flag_holders = set()
             for col in msg_entry.split(","):
                 field, val = col.split("=")
                 if field.lower() == "owner":
                     # the value for owner is the agent name
                     flag_holders.add(val)
-            # update all player objects
-            for name, agent in self.players.items():
-                agent.has_flag = name in flag_holders
+        # update all player objects
+        for name, agent in self.players.items():
+            agent.has_flag = name in flag_holders
 
     def _tag_handler(self, msg):
         """
