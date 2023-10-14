@@ -176,7 +176,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             self._auto_returning_flag = True
             self._moos_comm.notify("ACTION", "CONTROL", moostime)
             self._moos_comm.notify("RLA_SPEED", desired_spd, moostime)
-            self._moos_comm.notify("RLA_HEADING", desired_hdg, moostime)
+            self._moos_comm.notify("RLA_HEADING", desired_hdg%360, moostime)
         else:
             # translate actions and publish them
             desired_spd, delta_hdg = self._discrete_action_to_speed_relheading(action)
@@ -188,7 +188,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             # NOTE: the name of this variable depends on the mission files
             self._moos_comm.notify("ACTION", "CONTROL", moostime)
             self._moos_comm.notify("RLA_SPEED", desired_spd, moostime)
-            self._moos_comm.notify("RLA_HEADING", desired_hdg, moostime)
+            self._moos_comm.notify("RLA_HEADING", desired_hdg%360, moostime)
             self._action_count += 1
             self._moos_comm.notify("RLA_ACTION_COUNT", self._action_count, moostime)
             # if close enough to flag, will attempt to grab
@@ -272,6 +272,9 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         except Exception as e:
             print(f"Got exception: {e}")
             return False
+
+    def pause(self):
+        self._moos_comm.notify("DEPLOY_ALL", "FALSE", pymoos.time())
 
     def _dispatch_message(self, msg):
         """
