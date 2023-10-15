@@ -219,7 +219,7 @@ class JervisBayConfig:
     This is the configuration for Jervis Bay 2023.
     '''
     def __init__(self, script='./get_field.sh'):
-        subprocess.call(['.sh', script])
+        subprocess.call(['sh', script])
         #Get Values from saved value
         f = open('field.txt', 'r')
         x = f.readlines()[:3]
