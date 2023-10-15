@@ -179,25 +179,31 @@ class JervisBayConfig:
         # and stored in region_info.txt
         # The flag positions are defined in shoreside/launch_shoreside.sh
         # (propagated to targ_shoreside.moos) and must be matched here
-        self.blue_flag = [140.0, 190.0]
-        self.red_flag =  [20.0,  190.0]
+        # copy-pasted from region_info.txt
+        # BLUE_FLAG="x=76.4,y=130.6"
+        # RED_FLAG="x=14.59,y=233.46"
+        # RED_ZONE="pts={-30,230:38.57,271.2:79.77,202.63:11.2,161.43}"
+        # BLUE_ZONE="pts={11.2,161.43:79.77,202.63:120.98,134.05:52.41,92.85}"
 
-        self.red_zone_ul = [0.0,  230.0]
-        self.red_zone_ur = [80.0, 230.0]
-        self.red_zone_ll = [0.0,  150.0]
-        self.red_zone_lr = [80.0, 150.0]
+        self.blue_flag = [76.4, 130.6]
+        self.red_flag = [14.59, 233.46]
 
-        self.blue_zone_ul = [80.0,  230.0]
-        self.blue_zone_ur = [160.0, 230.0]
-        self.blue_zone_ll = [80.0,  150.0]
-        self.blue_zone_lr = [160.0, 150.0]
+        self.red_zone_ul = [-30., 230.]
+        self.red_zone_ur = [38.57, 271.2]
+        self.red_zone_lr = [79.77, 202.63]
+        self.red_zone_ll = [11.2, 161.43]
+
+        self.blue_zone_ul = [11.2, 161.43]
+        self.blue_zone_ur = [79.77, 202.63]
+        self.blue_zone_lr = [120.98, 134.05]
+        self.blue_zone_ll = [52.41, 92.85]
 
         self.boundary_ul = self.red_zone_ul
-        self.boundary_ur = self.blue_zone_ur
-        self.boundary_ll = self.red_zone_ll
+        self.boundary_ur = self.red_zone_ur
+        self.boundary_ll = self.blue_zone_ll
         self.boundary_lr = self.blue_zone_lr
 
-        self.scrimmage_pnts = [self.red_zone_lr, self.red_zone_ur]
+        self.scrimmage_pnts = [self.red_zone_ll, self.red_zone_lr]
 
         self.speed_bounds = (0.0, 3.)
         self.heading_bounds = (0.0, 360.0)
