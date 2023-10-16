@@ -92,7 +92,7 @@ class BaseAgentPolicy:
         my_team_ids = set()
 
         # Copy this agents state from the observation
-        my_obs = obs[self.id]
+        my_obs = obs#[self.id]
         self.speed = my_obs["speed"]
         self.on_sides = my_obs["on_side"]
         self.has_flag = my_obs["has_flag"]
