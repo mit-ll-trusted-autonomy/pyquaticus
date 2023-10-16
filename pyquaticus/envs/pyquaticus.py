@@ -687,6 +687,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     # If they have a flag, return the flag to it's home area
                     self.flags[int(not int(player.team))].reset()
                     self.state["flag_taken"][int(not int(player.team))] = 0
+                    if player.team == Team.RED_TEAM:
+                        self.red_team_flag_pickup = False
+                    else:
+                        self.blue_team_flag_pickup = False
                 self.state["agent_oob"][player.id] = 1
                 if config_dict_std["teleport_on_tag"]:
                     player.reset()
