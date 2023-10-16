@@ -176,7 +176,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             self._auto_returning_flag = True
             self._moos_comm.notify("ACTION", "CONTROL", moostime)
             self._moos_comm.notify("RLA_SPEED", desired_spd, moostime)
-            self._moos_comm.notify("RLA_HEADING", desired_hdg, moostime)
+            self._moos_comm.notify("RLA_HEADING", desired_hdg%360, moostime)
         else:
             # translate actions and publish them
             desired_spd, delta_hdg = self._discrete_action_to_speed_relheading(action)
@@ -188,7 +188,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             # NOTE: the name of this variable depends on the mission files
             self._moos_comm.notify("ACTION", "CONTROL", moostime)
             self._moos_comm.notify("RLA_SPEED", desired_spd, moostime)
-            self._moos_comm.notify("RLA_HEADING", desired_hdg, moostime)
+            self._moos_comm.notify("RLA_HEADING", desired_hdg%360, moostime)
             self._action_count += 1
             self._moos_comm.notify("RLA_ACTION_COUNT", self._action_count, moostime)
             # if close enough to flag, will attempt to grab
@@ -218,6 +218,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         for agent in self.players.values():
             # should count up from 0.0 to tagging_cooldown (at which point it can tag again)
             agent.tagging_cooldown = self.tagging_cooldown - max(0.0, agent.cantag_time - time.time())
+            agent.tagging_cooldown = max(0, min(self.tagging_cooldown, agent.tagging_cooldown))
         return super().state_to_obs(agent_id)
 
     def _init_moos_comm(self):
@@ -273,6 +274,9 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             print(f"Got exception: {e}")
             return False
 
+    def pause(self):
+        self._moos_comm.notify("DEPLOY_ALL", "FALSE", pymoos.time())
+
     def _dispatch_message(self, msg):
         """
         Dispatch MOOSDB messages to appropriate handlers
@@ -313,16 +317,16 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         # Note: assuming the underlying MOOS logic only allows
         #       agents to grab the opponent's flag, so not even
         #       checking for that
+        flag_holders = set()
         for msg_entry in msg.string().split("#"):
-            flag_holders = set()
             for col in msg_entry.split(","):
                 field, val = col.split("=")
                 if field.lower() == "owner":
                     # the value for owner is the agent name
                     flag_holders.add(val)
-            # update all player objects
-            for name, agent in self.players.items():
-                agent.has_flag = name in flag_holders
+        # update all player objects
+        for name, agent in self.players.items():
+            agent.has_flag = name in flag_holders
 
     def _tag_handler(self, msg):
         """

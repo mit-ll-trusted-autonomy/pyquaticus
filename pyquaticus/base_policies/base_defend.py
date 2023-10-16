@@ -113,7 +113,7 @@ class BaseDefender(BaseAgentPolicy):
                 self.competition_easy_1 = [135, 115]
             else:
                 if self.team == Team.RED_TEAM:
-                    if self.competition_easy_1[1] <= my_obs["wall_1_distance"] <= self.competition_easy_1[0]: #If near halfline start protective behavior
+                    if self.competition_easy_1[1] <= my_obs["wall_1_distance"]: #If near halfline start protective behavior
                         self.competition_easy_1 = [115, 95]
                         if self.goal == []:
                             self.goal = "wall_2"
