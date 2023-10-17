@@ -3,6 +3,7 @@
 #
 # originally developed at NRL and modified at MIT LL
 import subprocess
+import os
 
 class MITConfig:
     '''
@@ -218,8 +219,9 @@ class JervisBayConfig:
     '''
     This is the configuration for Jervis Bay 2023.
     '''
-    def __init__(self, script='./get_field.sh'):
-        subprocess.call(['sh', script])
+    def __init__(self, script=f'{os.path.dirname(__file__)}//get_field.sh'):
+        print(f"Using field script: {script}")
+        subprocess.call([script])
         #Get Values from saved value
         f = open('field.txt', 'r')
         x = f.readlines()[:3]
