@@ -2,6 +2,7 @@
 # config.py -- configuration parameters for Python wrappers of MOOS-IvP
 #
 # originally developed at NRL and modified at MIT LL
+import os
 import subprocess
 
 class MITConfig:
@@ -218,8 +219,13 @@ class JervisBayConfig:
     '''
     This is the configuration for Jervis Bay 2023.
     '''
-    def __init__(self, script='./get_field.sh'):
-        subprocess.call(['sh', script])
+    def __init__(self, script='get_field.sh'):
+        if script[0] in {".", "/", "\\"}:
+            script_name = script
+        else:
+            config_dir = os.path.dirname(__file__)
+            script_name = f"{config_dir}/{script}"
+        subprocess.call([script_name])
         #Get Values from saved value
         f = open('field.txt', 'r')
         x = f.readlines()[:3]
