@@ -137,7 +137,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
     def _register_state_elements(self, num_on_team):
         """Initializes the normalizer."""
-        agent_obs_normalizer = ObsNormalizer(True)
+        agent_obs_normalizer = ObsNormalizer(False)
         max_bearing = [180]
         max_dist = [np.linalg.norm(self.world_size) + 10]  # add a ten meter buffer
         min_dist = [0.0]
