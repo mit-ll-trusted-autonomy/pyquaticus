@@ -140,6 +140,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         agent_obs_normalizer = ObsNormalizer(True)
         max_bearing = [180]
         max_dist = [np.linalg.norm(self.world_size) + 10]  # add a ten meter buffer
+        max_dist_scrimmage = [self.scrimmage - self.agent_radius] # add a buffer of size agent radius
         min_dist = [0.0]
         max_bool, min_bool = [1.0], [0.0]
         max_speed, min_speed = [self.max_speed], [0.0]
@@ -155,6 +156,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         agent_obs_normalizer.register("wall_2_distance", max_dist, min_dist)
         agent_obs_normalizer.register("wall_3_bearing", max_bearing)
         agent_obs_normalizer.register("wall_3_distance", max_dist, min_dist)
+        agent_obs_normalizer.register("scrimmage_line_bearing", max_bearing)
+        agent_obs_normalizer.register("scrimmage_line_distance", max_dist_scrimmage, min_dist)
         agent_obs_normalizer.register("speed", max_speed, min_speed)
         agent_obs_normalizer.register("has_flag", max_bool, min_bool)
         agent_obs_normalizer.register("on_side", max_bool, min_bool)
@@ -321,6 +324,16 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         )
         obs["wall_3_bearing"] = wall_3_bearing
         obs["wall_3_distance"] = wall_3_dist
+
+        # Scrimmage line
+        scrimmage_line_closest_point = closest_point_on_line(
+            self.scrimmage_l, self.scrimmage_u, np_pos
+        )
+        scrimmage_line_dist, scrimmage_line_bearing = mag_bearing_to(
+            np_pos, scrimmage_line_closest_point, agent.heading
+        )
+        obs["scrimmage_line_bearing"] = scrimmage_line_bearing
+        obs["scrimmage_line_distance"] = scrimmage_line_dist
 
         # Own speed
         obs["speed"] = agent.speed
@@ -1019,8 +1032,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # ul = upper left, ur = upper right
         self.boundary_ll = np.array([0.0, 0.0], dtype=np.float32)
         self.boundary_lr = np.array([self.world_size[0], 0.0], dtype=np.float32)
-        self.boundary_ul = np.array([0.0, self.world_size[1]])
+        self.boundary_ul = np.array([0.0, self.world_size[1]], dtype=np.float32)
         self.boundary_ur = np.array(self.world_size, dtype=np.float32)
+        self.scrimmage_l = np.array([self.world_size[0]/2, 0.0], dtype=np.float32)
+        self.scrimmage_u = np.array([self.world_size[0]/2, self.world_size[1]], dtype=np.float32)
 
     def get_distance_between_2_points(self, start: np.array, end: np.array) -> float:
         """
