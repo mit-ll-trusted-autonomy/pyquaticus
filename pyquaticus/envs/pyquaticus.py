@@ -140,7 +140,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         agent_obs_normalizer = ObsNormalizer(True)
         max_bearing = [180]
         max_dist = [np.linalg.norm(self.world_size) + 10]  # add a ten meter buffer
-        max_dist_scrimmage = [self.scrimmage - self.agent_radius] # add a buffer of size agent radius
+        max_dist_scrimmage = [self.scrimmage]
         min_dist = [0.0]
         max_bool, min_bool = [1.0], [0.0]
         max_speed, min_speed = [self.max_speed], [0.0]
