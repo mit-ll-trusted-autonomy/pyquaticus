@@ -1034,8 +1034,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.boundary_lr = np.array([self.world_size[0], 0.0], dtype=np.float32)
         self.boundary_ul = np.array([0.0, self.world_size[1]], dtype=np.float32)
         self.boundary_ur = np.array(self.world_size, dtype=np.float32)
-        self.scrimmage_l = np.array([self.world_size[0]/2, 0.0], dtype=np.float32)
-        self.scrimmage_u = np.array([self.world_size[0]/2, self.world_size[1]], dtype=np.float32)
+        self.scrimmage_l = np.array([self.scrimmage, 0.0], dtype=np.float32)
+        self.scrimmage_u = np.array([self.scrimmage, self.world_size[1]], dtype=np.float32)
 
     def get_distance_between_2_points(self, start: np.array, end: np.array) -> float:
         """
