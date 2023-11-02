@@ -47,6 +47,7 @@ def run_one_episode(env, quittable=True, render=RENDER_MODE):
                     sys.exit()
 
         full_action = {agent_id:env.action_space(agent_id).sample() for agent_id in env.players}
+        #full_action[0] = "PM"
         new_obs, reward, terminated, truncated, info = env.step(full_action)
         for k in terminated:
             if terminated[k] == True or truncated[k] == True:
