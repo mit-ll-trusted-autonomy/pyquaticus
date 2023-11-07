@@ -1,11 +1,27 @@
 #!/bin/bash
+
+if [ $# -lt 1 ]; then
+	echo "usage: $0 <path to mission directory>"
+fi
+
+MISSION_DIR="$1"
+echo "Using Mission directory: $MISSION_DIR"
+
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 DEPS=$(realpath $SCRIPT_DIR/../../../)
-MISSION_DIR="$DEPS/moos-ivp-aquaticus/missions/jervis-2023"
-echo "Using Mission directory: $MISSION_DIR"
-pattern="$MISSION_DIR/surveyor/region_info_*.txt"
-files=( $pattern )
-REGION_INFO="${files[0]}"
-echo "Using region info file: $REGION_INFO"
+
+cd $MISSION_DIR
+if [ -f "$MISSION_DIR/jerop.sh" ]; then
+	GENSCRIPT="$MISSION_DIR/jerop.sh"
+elif [ -f "$MISSION_DIR/genop.sh" ]; then
+	GENSCRIPT="$MISSION_DIR/genop.sh"
+else
+	echo "Missing jerop.sh or genop.sh region generation script."
+	exit 1
+fi
+echo "Using region generation script: $GENSCRIPT"
+REGION_INFO="region_info.txt"
+$GENSCRIPT > $REGION_INFO
+echo "Dumped region info to file: $REGION_INFO"
 grep -A 2 REGION $REGION_INFO > field.txt
 grep -A 1 BLUE_FLAG $REGION_INFO > flags.txt
