@@ -270,34 +270,20 @@ class FieldReaderConfig:
         self.blue_flag = bf#[140.0, 190.0]
         self.red_flag =  rf#[20.0,  190.0]
 
-        # Zone order in dumped info is clockwise from top right
-        self.blue_zone_ur = blue_zone[0]
-        self.blue_zone_lr = blue_zone[1]
-        self.blue_zone_ll = blue_zone[2]
-        self.blue_zone_ul = blue_zone[3]
+        # Zone order in dumped info is clockwise from north west by default (upper left in Pyquaticus terminology)
+        self.blue_zone_ul = blue_zone[0]
+        self.blue_zone_ur = blue_zone[1]
+        self.blue_zone_lr = blue_zone[2]
+        self.blue_zone_ll = blue_zone[3]
 
-        self.red_zone_ur = red_zone[0]
-        self.red_zone_lr = red_zone[1]
-        self.red_zone_ll = red_zone[2]
-        self.red_zone_ul = red_zone[3]
+        self.red_zone_ul = red_zone[0]
+        self.red_zone_ur = red_zone[1]
+        self.red_zone_lr = red_zone[2]
+        self.red_zone_ll = red_zone[3]
 
-        if (abs(self.blue_zone_ur[1] - self.red_zone_ul[1]) < 1e-2 and
-            abs(self.blue_zone_ur[0] - self.red_zone_ul[0]) < 1e-2):
-            print("Blue zone to the left of red zone")
-            self.scrimmage_pnts = [self.red_zone_ll, self.red_zone_ul]
-            self.boundary_ul = self.blue_zone_ul
-            self.boundary_ur = self.red_zone_ur
-            self.boundary_ll = self.blue_zone_ll
-            self.boundary_lr = self.red_zone_lr
-        else:
-            assert (abs(self.blue_zone_ul[1] - self.red_zone_ur[1]) < 1e-2 and
-                    abs(self.blue_zone_ul[0] - self.red_zone_ur[0]) < 1e-2), "Cannot determine relative blue/red field location"
-            print("Red zone to the left of the blue zone")
-            self.scrimmage_pnts = [self.red_zone_lr, self.red_zone_ur]
-            self.boundary_ul = self.red_zone_ul
-            self.boundary_ur = self.blue_zone_ur
-            self.boundary_ll = self.red_zone_ll
-            self.boundary_lr = self.blue_zone_lr
+        while not self._set_boundary_and_scrimmage():
+            # keep rotating until the scrimmage points make sense
+            self._rotate_zone_points()
 
         print("############### Inferred Region Configuration ##################")
         print("Blue Zone:")
@@ -326,6 +312,43 @@ class FieldReaderConfig:
         # MOOS Timewarp is the simulation speed-up factor
         # This must match the value in your simulation script
         self.moos_timewarp = 4.0
+
+    def _set_boundary_and_scrimmage(self):
+        """
+        Sets the boundaries and scrimmage points assuming the blue_zone_* and red_zone_*
+        have already been populated.
+
+        Returns a boolean indicating success.
+        """
+        if (abs(self.blue_zone_ur[1] - self.red_zone_ul[1]) < 1e-2 and
+            abs(self.blue_zone_ur[0] - self.red_zone_ul[0]) < 1e-2):
+            print("Blue zone to the left of red zone")
+            self.scrimmage_pnts = [self.red_zone_ll, self.red_zone_ul]
+            self.boundary_ul = self.blue_zone_ul
+            self.boundary_ur = self.red_zone_ur
+            self.boundary_ll = self.blue_zone_ll
+            self.boundary_lr = self.red_zone_lr
+            return True
+        elif (abs(self.blue_zone_ul[1] - self.red_zone_ur[1]) < 1e-2 and
+              abs(self.blue_zone_ul[0] - self.red_zone_ur[0]) < 1e-2):
+            print("Red zone to the left of the blue zone")
+            self.scrimmage_pnts = [self.red_zone_lr, self.red_zone_ur]
+            self.boundary_ul = self.red_zone_ul
+            self.boundary_ur = self.blue_zone_ur
+            self.boundary_ll = self.red_zone_ll
+            self.boundary_lr = self.blue_zone_lr
+            return True
+        else:
+            return False
+
+    def _rotate_zone_points(self):
+        """
+        Rotates the zone points for red and blue zone clockwise once.
+        """
+        self.blue_zone_ur, self.blue_zone_lr, self.blue_zone_ll, self.blue_zone_ul = \
+        self.blue_zone_ul, self.blue_zone_ur, self.blue_zone_lr, self.blue_zone_ll
+        self.red_zone_ur, self.red_zone_lr, self.red_zone_ll, self.red_zone_ul = \
+        self.red_zone_ul, self.red_zone_ur, self.red_zone_lr, self.red_zone_ll
 
 # for backwards compatibility with assumed docker folder structure
 class JervisBayConfig(FieldReaderConfig):
