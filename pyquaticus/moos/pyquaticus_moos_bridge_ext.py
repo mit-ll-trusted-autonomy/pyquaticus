@@ -30,6 +30,15 @@ class PyQuaticusMoosBridgeFullObs(PyQuaticusMoosBridge):
         super().__init__(server, agent_name, agent_port, team_names, opponent_names, moos_config,
                          quiet, team, timewarp, tagging_cooldown, normalize)
 
+    def reset(self):
+        super().reset()
+        unnormalized_obs = OrderedDict((n, self.state_to_obs(n, False)) for n in self.players)
+        normalized_obs = OrderedDict()
+        for n, obs in unnormalized_obs.items():
+            normalized_obs[n] = self.agent_obs_normalizer.normalized(obs)
+
+        return normalized_obs, unnormalized_obs
+
     def step(self, action):
         _, reward, terminated, truncated, info = super().step(action)
 
