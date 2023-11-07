@@ -37,6 +37,6 @@ class PyQuaticusMoosBridgeFullObs(PyQuaticusMoosBridge):
         normalized_obs = OrderedDict()
         for n, obs in unnormalized_obs.items():
             normalized_obs[n] = self.agent_obs_normalizer.normalized(obs)
-        
+
         info['unnormalized_obs'] = unnormalized_obs
         return normalized_obs, reward, terminated, truncated, info
