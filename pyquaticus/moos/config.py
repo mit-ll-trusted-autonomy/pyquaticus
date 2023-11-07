@@ -227,18 +227,20 @@ class FieldReaderConfig:
         # get values from saved value
         f = open(f'{mission_dir}/field.txt', 'r')
         x = f.readlines()[:3]
-        field_bounds = []
-        zone1 = []
-        zone2 = []
-        for v in range(len(x)):
-            for i in x[v].split('{')[1].split('}')[0].split(':'):
-                vals = i.split(',')
-                if v == 0:
-                    field_bounds.append((float(vals[0]), float(vals[1])))
-                elif v == 1:
-                    zone1.append((float(vals[0]), float(vals[1])))
-                else:
-                    zone2.append((float(vals[0]), float(vals[1])))
+        red_zone = []
+        blue_zone = []
+        for zone in x:
+            pts = []
+            for coord in zone.split('{')[1].split('}')[0].split(':'):
+                vals = coord.split(',')
+                pts.append((float(vals[0]), float(vals[1])))
+
+            if zone[:3].lower() == "red":
+                red_zone.extend(pts)
+            else:
+                assert zone[:4].lower() == "blue"
+                blue_zone.extend(pts)
+
         f.close()
         f = open(f'{mission_dir}/flags.txt', 'r')
         flags = f.readlines()
@@ -247,10 +249,11 @@ class FieldReaderConfig:
         rf = []
         i = 0
         for flag in flags[:2]:
-            if i == 0:
-                bf = [float(flag.split(',')[0].split('=')[-1]), float(flag.split(',')[1].split('=')[-1].split('\"')[0])]
-            else:
+            if flag[:3].lower() == "red":
                 rf = [float(flag.split(',')[0].split('=')[-1]), float(flag.split(',')[1].split('=')[-1].split('\"')[0])]
+            else:
+                assert flag[:4].lower() == "blue"
+                bf = [float(flag.split(',')[0].split('=')[-1]), float(flag.split(',')[1].split('=')[-1].split('\"')[0])]
             i += 1
         f.close()
 
@@ -267,22 +270,53 @@ class FieldReaderConfig:
         self.blue_flag = bf#[140.0, 190.0]
         self.red_flag =  rf#[20.0,  190.0]
 
-        self.blue_zone_ul = [zone2[1][0],  zone2[1][1]]
-        self.blue_zone_ur = [zone2[2][0], zone2[2][1]]
-        self.blue_zone_ll = [zone2[0][0], zone2[0][1]]
-        self.blue_zone_lr = [zone2[3][0], zone2[3][1]]
+        # Zone order in dumped info is clockwise from top right
+        self.blue_zone_ur = blue_zone[0]
+        self.blue_zone_lr = blue_zone[1]
+        self.blue_zone_ll = blue_zone[2]
+        self.blue_zone_ul = blue_zone[3]
 
-        self.red_zone_ul = [zone1[1][0],  zone1[1][1]]
-        self.red_zone_ur = [zone1[2][0],  zone1[2][1]]
-        self.red_zone_ll = [zone1[0][0],  zone1[0][1]]
-        self.red_zone_lr = [zone1[3][0],  zone1[3][1]]
+        self.red_zone_ur = red_zone[0]
+        self.red_zone_lr = red_zone[1]
+        self.red_zone_ll = red_zone[2]
+        self.red_zone_ul = red_zone[3]
 
-        self.boundary_ul = self.red_zone_ul
-        self.boundary_ur = self.blue_zone_ur
-        self.boundary_ll = self.red_zone_ll
-        self.boundary_lr = self.blue_zone_lr
+        if (abs(self.blue_zone_ur[1] - self.red_zone_ul[1]) < 1e-2 and
+            abs(self.blue_zone_ur[0] - self.red_zone_ul[0]) < 1e-2):
+            print("Blue zone to the left of red zone")
+            self.scrimmage_pnts = [self.red_zone_ll, self.red_zone_ul]
+            self.boundary_ul = self.blue_zone_ul
+            self.boundary_ur = self.red_zone_ur
+            self.boundary_ll = self.blue_zone_ll
+            self.boundary_lr = self.red_zone_lr
+        else:
+            assert (abs(self.blue_zone_ul[1] - self.red_zone_ur[1]) < 1e-2 and
+                    abs(self.blue_zone_ul[0] - self.red_zone_ur[0]) < 1e-2), "Cannot determine relative blue/red field location"
+            print("Red zone to the left of the blue zone")
+            self.scrimmage_pnts = [self.red_zone_lr, self.red_zone_ur]
+            self.boundary_ul = self.red_zone_ul
+            self.boundary_ur = self.blue_zone_ur
+            self.boundary_ll = self.red_zone_ll
+            self.boundary_lr = self.blue_zone_lr
 
-        self.scrimmage_pnts = [self.red_zone_lr, self.red_zone_ur]
+        print("############### Inferred Region Configuration ##################")
+        print("Blue Zone:")
+        print(self.blue_zone_ur)
+        print(self.blue_zone_lr)
+        print(self.blue_zone_ll)
+        print(self.blue_zone_ul)
+        print("Red Zone:")
+        print(self.red_zone_ur)
+        print(self.red_zone_lr)
+        print(self.red_zone_ll)
+        print(self.red_zone_ul)
+        print("Boundaries:")
+        print(self.boundary_ur)
+        print(self.boundary_lr)
+        print(self.boundary_ll)
+        print(self.boundary_ul)
+        print("Scrimmage:")
+        print(self.scrimmage_pnts)
 
         self.speed_bounds = (0.0, 3.)
         self.heading_bounds = (0.0, 360.0)

@@ -23,5 +23,5 @@ echo "Using region generation script: $GENSCRIPT"
 REGION_INFO="region_info.txt"
 $GENSCRIPT > $REGION_INFO
 echo "Dumped region info to file: $REGION_INFO"
-grep -A 2 REGION $REGION_INFO > field.txt
-grep -A 1 BLUE_FLAG $REGION_INFO > flags.txt
+grep -e "^\(RED\|BLUE\)_ZONE" $REGION_INFO > field.txt
+grep -e "^\(RED\|BLUE\)_FLAG" $REGION_INFO > flags.txt
