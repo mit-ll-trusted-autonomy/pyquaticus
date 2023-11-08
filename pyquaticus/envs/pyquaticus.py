@@ -1530,8 +1530,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.screen, (0, 0, 0), top_middle, bottom_middle, width=self.border_width
         )
         #Draw Points Debugging
-        for v in self.config_dict["aquaticus_field_points"]:
-            draw.circle(self.screen, (128,0,128), self.world_to_screen(self.config_dict["aquaticus_field_points"][v]), 5,)
+        if self.config_dict["render_field_points"]:
+            for v in self.config_dict["aquaticus_field_points"]:
+                draw.circle(self.screen, (128,0,128), self.world_to_screen(self.config_dict["aquaticus_field_points"][v]), 5,)
         for team in Team:
             flag = self.flags[int(team)]
             teams_players = self.agents_of_team[team]

@@ -53,6 +53,8 @@ config_dict_std = {
     ),
     "teleport_on_tag" : False, 
     # Option for the agent when tagged, either out of bounds or by opponent, to teleport home or not
+    "render_field_points": False,
+    #Debugging lets you see where the field points are on the field
 }
 #Build Point Field - Taken from Moos-IvP-Aquaticus Michael Benjamin
 #=================================================================
