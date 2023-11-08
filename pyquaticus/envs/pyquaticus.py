@@ -124,10 +124,15 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                     speed, heading = self._discrete_action_to_speed_relheading(action_dict[player.id])
                 else:
                     #Make point system the same on both blue and red side
-                    if player.team == Team.BLUE_TEAM and 'X' not in action_dict[player.id]:
-                        action_dict[player.id] += 'X'
-                    else:
-                        action_dict[player.id] = action_dict[player.id][:-1]
+                    if player.team == Team.BLUE_TEAM:
+                        if 'P' in action_dict[player.id]:
+                            action_dict[player.id] = 'S' + action_dict[player.id][1:]
+                        elif 'S' in action_dict[player.id]:
+                            action_dict[player.id] = 'P' + action_dict[player.id][1:]
+                        if 'X' not in action_dict[player.id] and action_dict[player.id] not in ['SC', 'CC', 'PC']:
+                            action_dict[player.id] += 'X'
+                        elif action_dict[player.id] not in ['SC', 'CC', 'PC']:
+                            action_dict[player.id] = action_dict[player.id][:-1]
 
                     _, heading = mag_bearing_to(player.pos, self.config_dict["aquaticus_field_points"][action_dict[player.id]], player.heading)
                     if -0.3 <= self.get_distance_between_2_points(player.pos, self.config_dict["aquaticus_field_points"][action_dict[player.id]]) <= 0.3: #
