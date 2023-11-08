@@ -120,7 +120,25 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         processed_action_dict = OrderedDict()
         for player in self.players.values():
             if player.id in action_dict:
-                speed, heading = self._discrete_action_to_speed_relheading(action_dict[player.id])
+                if type(action_dict[player.id]) is not str:
+                    speed, heading = self._discrete_action_to_speed_relheading(action_dict[player.id])
+                else:
+                    #Make point system the same on both blue and red side
+                    if player.team == Team.BLUE_TEAM:
+                        if 'P' in action_dict[player.id]:
+                            action_dict[player.id] = 'S' + action_dict[player.id][1:]
+                        elif 'S' in action_dict[player.id]:
+                            action_dict[player.id] = 'P' + action_dict[player.id][1:]
+                        if 'X' not in action_dict[player.id] and action_dict[player.id] not in ['SC', 'CC', 'PC']:
+                            action_dict[player.id] += 'X'
+                        elif action_dict[player.id] not in ['SC', 'CC', 'PC']:
+                            action_dict[player.id] = action_dict[player.id][:-1]
+
+                    _, heading = mag_bearing_to(player.pos, self.config_dict["aquaticus_field_points"][action_dict[player.id]], player.heading)
+                    if -0.3 <= self.get_distance_between_2_points(player.pos, self.config_dict["aquaticus_field_points"][action_dict[player.id]]) <= 0.3: #
+                        speed = 0.0
+                    else:
+                        speed = self.max_speed
             else:
                 # if no action provided, stop moving
                 speed, heading = 0.0, player.heading
@@ -1511,7 +1529,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         draw.line(
             self.screen, (0, 0, 0), top_middle, bottom_middle, width=self.border_width
         )
-
+        #Draw Points Debugging
+        if self.config_dict["render_field_points"]:
+            for v in self.config_dict["aquaticus_field_points"]:
+                draw.circle(self.screen, (128,0,128), self.world_to_screen(self.config_dict["aquaticus_field_points"][v]), 5,)
         for team in Team:
             flag = self.flags[int(team)]
             teams_players = self.agents_of_team[team]

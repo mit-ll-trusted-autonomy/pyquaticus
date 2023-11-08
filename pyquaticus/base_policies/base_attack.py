@@ -22,7 +22,7 @@
 import numpy as np
 
 from pyquaticus.base_policies.base import BaseAgentPolicy
-from pyquaticus.envs.pyquaticus import Team
+from pyquaticus.envs.pyquaticus import config_dict_std, Team
 
 modes = {"easy", "medium", "hard", "competition_nothing", "competition_easy", "competition_medium"}
 """
@@ -40,7 +40,6 @@ class BaseAttacker(BaseAgentPolicy):
         self, agent_id: int, team=Team.RED_TEAM, mode="easy", using_pyquaticus=True
     ):
         super().__init__(agent_id, team)
-
         if mode not in modes:
             raise AttributeError(f"Invalid mode {mode}")
         self.mode = mode
@@ -50,7 +49,7 @@ class BaseAttacker(BaseAgentPolicy):
 
         self.using_pyquaticus = using_pyquaticus
         self.competition_easy = [15, 6, 50, 35]
-        self.goal = None
+        self.goal = 'SC'
 
     def set_mode(self, mode: str):
         """Sets difficulty mode."""
@@ -104,29 +103,33 @@ class BaseAttacker(BaseAgentPolicy):
             act_index = -1
 
         elif self.mode=="competition_easy":
-            # If I or someone on my team has the flag, go back home
-            if self.has_flag:
-                goal_vect = self.bearing_to_vec(my_obs["own_home_bearing"])
-            # Otherwise go get the opponents flag
-            else:
-                goal_vect = self.bearing_to_vec(self.opp_flag_bearing)
+            estimated_position = [my_obs["wall_3_distance"], my_obs["wall_2_distance"]]
+            value = self.goal
 
-            # Convert the vector to a heading, and then pick the best discrete action to perform
-            try:
-                act_heading = self.angle180(self.vec_to_heading(goal_vect))
+            if self.team == Team.BLUE_TEAM:
+                if 'P' in self.goal:
+                    value = 'S' + value[1:]
+                elif 'S' in self.goal:
+                    value = 'P' + value[1:]
+                if 'X' not in self.goal and self.goal not in ['SC', 'CC', 'PC']:
+                    value += 'X'
+                elif self.goal not in ['SC', 'CC', 'PC']:
+                    value = value[:-1]
+            if my_obs["is_tagged"]:
+                self.goal = 'SC'
 
-                if 1 >= act_heading >= -1:
-                    act_index = 12
-                elif act_heading < -1:
-                    act_index = 14
-                elif act_heading > 1:
-                    act_index = 10
-                else:
-                    # Should only happen if the act_heading is somehow NAN
-                    act_index = 12
-            except:
-                # If there is an error converting the vector to a heading, just go straight
-                act_index = 12
+            if -1 <= self.get_distance_between_2_points(estimated_position, config_dict_std["aquaticus_field_points"][value]) <= 1:
+                
+                if self.goal == 'SC':
+                    self.goal = 'CFX'
+                elif self.goal == 'CFX':
+                    self.goal = 'PC'
+                elif self.goal == 'PC':
+                    self.goal = 'CF'
+                elif self.goal == 'CF':
+                    self.goal = 'SC'
+
+            return self.goal
         elif self.mode == "medium":
             
            
