@@ -110,6 +110,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self._init_moos_comm()
         self._wait_for_all_players()
 
+        self._determine_team_wall_orient()
+
         return self.state_to_obs(self._agent_name)
 
     def _wait_for_all_players(self):

@@ -79,14 +79,16 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             Opponent home flag distance (meters)
             Own home flag relative bearing (clockwise degrees)
             Own home flag distance (meters)
+            Wall 0 relative bearing (clockwise degrees)
+            Wall 0 distance (meters)
             Wall 1 relative bearing (clockwise degrees)
             Wall 1 distance (meters)
             Wall 2 relative bearing (clockwise degrees)
             Wall 2 distance (meters)
             Wall 3 relative bearing (clockwise degrees)
             Wall 3 distance (meters)
-            Wall 4 relative bearing (clockwise degrees)
-            Wall 4 distance (meters)
+            Scrimmage line bearing (clockwise degrees)
+            Scrimmage line distance (meters)
             Own speed (meters per second)
             Own flag status (boolean)
             On side (boolean)
@@ -234,14 +236,16 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             Opponent home distance (meters)
             Home relative bearing (clockwise degrees)
             Home distance (meters)
+            Wall 0 relative bearing (clockwise degrees)
+            Wall 0 distance (meters)
             Wall 1 relative bearing (clockwise degrees)
             Wall 1 distance (meters)
             Wall 2 relative bearing (clockwise degrees)
             Wall 2 distance (meters)
             Wall 3 relative bearing (clockwise degrees)
             Wall 3 distance (meters)
-            Wall 4 relative bearing (clockwise degrees)
-            Wall 4 distance (meters)
+            Scrimmage line bearing (clockwise degrees)
+            Scrimmage line distance (meters)
             Own speed (meters per second)
             Own flag status (boolean)
             On side (boolean)
@@ -289,41 +293,15 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         obs["own_home_distance"] = own_home_dist
 
         # Walls
-        wall_0_closest_point = closest_point_on_line(
-            self.boundary_ul, self.boundary_ur, np_pos
-        )
-        wall_0_dist, wall_0_bearing = mag_bearing_to(
-            np_pos, wall_0_closest_point, agent.heading
-        )
-        obs["wall_0_bearing"] = wall_0_bearing
-        obs["wall_0_distance"] = wall_0_dist
-
-        wall_1_closest_point = closest_point_on_line(
-            self.boundary_ur, self.boundary_lr, np_pos
-        )
-        wall_1_dist, wall_1_bearing = mag_bearing_to(
-            np_pos, wall_1_closest_point, agent.heading
-        )
-        obs["wall_1_bearing"] = wall_1_bearing
-        obs["wall_1_distance"] = wall_1_dist
-
-        wall_2_closest_point = closest_point_on_line(
-            self.boundary_lr, self.boundary_ll, np_pos
-        )
-        wall_2_dist, wall_2_bearing = mag_bearing_to(
-            np_pos, wall_2_closest_point, agent.heading
-        )
-        obs["wall_2_bearing"] = wall_2_bearing
-        obs["wall_2_distance"] = wall_2_dist
-
-        wall_3_closest_point = closest_point_on_line(
-            self.boundary_ll, self.boundary_ul, np_pos
-        )
-        wall_3_dist, wall_3_bearing = mag_bearing_to(
-            np_pos, wall_3_closest_point, agent.heading
-        )
-        obs["wall_3_bearing"] = wall_3_bearing
-        obs["wall_3_distance"] = wall_3_dist
+        for i, wall in enumerate(self._walls[int(own_team)]):
+            wall_closest_point = closest_point_on_line(
+                wall[0], wall[1], np_pos
+            )
+            wall_dist, wall_bearing = mag_bearing_to(
+                np_pos, wall_closest_point, agent.heading
+            )
+            obs[f"wall_{i}_bearing"] = wall_bearing
+            obs[f"wall_{i}_distance"] = wall_dist
 
         # Scrimmage line
         scrimmage_line_closest_point = closest_point_on_line(
@@ -396,6 +374,59 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
     def get_agent_action_space(self):
         """Overridden method inherited from `Gym`."""
         return Discrete(len(ACTION_MAP))
+
+    def _determine_team_wall_orient(self):
+        """
+        To ensure that the observation space is symmetric for both teams,
+        we rotate the order wall observations are reported. Otherwise
+        there will be differences between which wall is closest to your
+        defend flag vs capture flag.
+
+        For backwards compatability reasons, here is the order:
+
+             _____________ 0 _____________
+            |                             |
+            |                             |
+            |   opp                own    |
+            3   flag               flag   1
+            |                             |
+            |                             |
+            |_____________ 2 _____________|
+
+        Note that for the other team, the walls will be rotated such that the
+        first wall observation is from the wall to the right if facing away
+        from your own flag.
+        """
+
+        all_walls = [
+            [self.boundary_ul, self.boundary_ur],
+            [self.boundary_ur, self.boundary_lr],
+            [self.boundary_lr, self.boundary_ll],
+            [self.boundary_ll, self.boundary_ul]
+        ]
+
+        def rotate_walls(walls, amt):
+            rot_walls = copy.deepcopy(walls)
+            return rot_walls[amt:] + rot_walls[:amt]
+
+        def dist_from_wall(flag_pos, wall):
+            pt = closest_point_on_line(wall[0], wall[1], flag_pos)
+            dist, _ = mag_bearing_to(flag_pos, pt)
+            return dist
+
+        # short walls are at index 1 and 3
+        blue_flag = self.flags[int(Team.BLUE_TEAM)].home
+        red_flag  = self.flags[int(Team.RED_TEAM)].home
+        self._walls = {}
+        if dist_from_wall(blue_flag, all_walls[1]) < dist_from_wall(blue_flag, all_walls[3]):
+            self._walls[int(Team.BLUE_TEAM)] = all_walls
+            self._walls[int(Team.RED_TEAM)] = rotate_walls(all_walls, 2)
+        else:
+            assert dist_from_wall(red_flag, all_walls[1]) < dist_from_wall(red_flag, all_walls[3])
+            self._walls[int(Team.RED_TEAM)] = all_walls
+            self._walls[int(Team.BLUE_TEAM)] = rotate_walls(all_walls, 2)
+
+
 
 
 class PyQuaticusEnv(PyQuaticusEnvBase):
@@ -1244,6 +1275,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         for k in self.game_score:
             self.game_score[k] = 0
+
+        self._determine_team_wall_orient()
 
         self.blue_team_flag_pickup = False
         self.red_team_flag_pickup = False
