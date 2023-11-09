@@ -33,6 +33,7 @@ You can then activate the environment with: `conda activate pyquaticus-lightenv`
 * Random action: `python ./test/rand_env_test.py`
 * Control with arrow keys: `python ./test/arrowkeys_test.py`
   * control agents with WASD and the arrow keys
+* Base Policy Test: `python ./test/base_policy_test.py`
 
 ## Environment Visuals
 
