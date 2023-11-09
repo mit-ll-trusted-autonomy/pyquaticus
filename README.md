@@ -1,5 +1,5 @@
 # Pyquaticus
-This is a [PettingZoo](https://pettingzoo.farama.org/) environment for maritime Capture the Flag with uncrewed surface vehicles (USVs).
+This is a [PettingZoo](https://pettingzoo.farama.org/) environment for maritime Capture the Flag with uncrewed surface vehicles (USVs). This is a fork of the main repository (https://github.com/mit-ll-trusted-autonomy/pyquaticus) to be used for class maritime capture the flag competitions.
 
 ## Motivation
 This PettingZoo is a _lightweight_ environment for developing algorithms to play multi-agent Capture-the-Flag with surface vehicle dynamics.
@@ -49,6 +49,18 @@ You can then activate the environment with: `conda activate pyquaticus-lightenv`
   * **Orange/Yellow**: within `1.5*catch_radius`
   * **Red**: within `catch_radius`
 
+
+## Training Agents
+There is an example Python script for training two agents of a team playing a 1-v-1 MCTF game located in rl_test/competition_train_example.py. The other two agents of the opposing team (agents not being trained) follow a hardcoded movement strategy – Attack: Easy, and Defender: Easy as specified in competition_train_example.py Line: 86 & 97
+
+* Run Command for Training
+Command for training without visualization: python competition_train_example.py 
+Command for training with visualization: python competition_train_example.py --render // Displays the Pyquaticus MCTF game during training.
+
+* Output of the Training Script
+The training script trains the models or policies for the two agents being trained and saves both models as checkpoint files into a folder named ray_tests/ in the same folder where the training script is run. The saved policies are located in the file: ray_tests/<checkpoint_num>/policies/<policy-name>. More information about the policy_name is given in the ‘More Information on Training Agents: Agent Policies and Policy Mapping Function’ section below. The frequency at which models are saved in checkpoints can be modified in competition_train_example.py Line:112.
+
+* More Information on Training Agents
 ## Configurable Reward
 
 `Pyquaticus` comes with a simple sparse reward, but it can be extended with different reward structures. See [rewards.py](https://github.com/mit-ll-trusted-autonomy/pyquaticus/blob/main/pyquaticus/utils/rewards.py) for more information. Here is an example of insantiating the environment with sparse rewards for all agents in a 2v2 environment:
