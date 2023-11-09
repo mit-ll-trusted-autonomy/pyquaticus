@@ -137,7 +137,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
     def _register_state_elements(self, num_on_team):
         """Initializes the normalizer."""
-        agent_obs_normalizer = ObsNormalizer(True)
+        agent_obs_normalizer = ObsNormalizer(False)
         max_bearing = [180]
         max_dist = [np.linalg.norm(self.world_size) + 10]  # add a ten meter buffer
         max_dist_scrimmage = [self.scrimmage]
@@ -219,7 +219,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         self._state_elements_initialized = True
         return agent_obs_normalizer
 
-    def state_to_obs(self, agent_id):
+    def state_to_obs(self, agent_id, normalize=True):
         """
         Returns a local observation space. These observations are
         based entirely on the agent local coordinate frame rather
@@ -376,7 +376,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                 obs[(entry_name, "is_tagged")] = dif_agent.is_tagged
 
         obs_dict[agent.id] = obs
-        if self.normalize:
+        if normalize:
             obs_dict[agent.id] = self.agent_obs_normalizer.normalized(
                 obs_dict[agent.id]
             )
@@ -610,7 +610,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             print(self.message)
 
         rewards = {agent_id: self.compute_rewards(agent_id) for agent_id in self.players}
-        obs = {agent_id: self.state_to_obs(agent_id) for agent_id in raw_action_dict}
+        obs = {agent_id: self.state_to_obs(agent_id, self.normalize) for agent_id in raw_action_dict}
         info = {}
 
         terminated = False
@@ -1071,9 +1071,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # lists from self.state
         # Otherwise it will point to the same object and prev_params/params will be identical
         agent = self.players[agent_id]
-        self.normalize = False
-        obs = self.state_to_obs(agent.id)
-        self.normalize = True
+        obs = self.state_to_obs(agent.id, False)
         self.params[agent.id]["team"] = agent.team
         self.params[agent.id]["capture_radius"] = self.catch_radius
         self.params[agent.id]["agent_id"] = agent.id
@@ -1256,7 +1254,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.message = ""
         self.current_time = 0
         self.reset_count += 1
-        reset_obs = {agent_id: self.state_to_obs(agent_id) for agent_id in self.players}
+        reset_obs = {agent_id: self.state_to_obs(agent_id, self.normalize) for agent_id in self.players}
 
         if self.render_mode:
             self._render()
