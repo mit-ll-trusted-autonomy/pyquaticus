@@ -60,7 +60,11 @@ Command for training with visualization: python competition_train_example.py --r
 * Output of the Training Script
 The training script trains the models or policies for the two agents being trained and saves both models as checkpoint files into a folder named ray_tests/ in the same folder where the training script is run. The saved policies are located in the file: ray_tests/<checkpoint_num>/policies/<policy-name>. More information about the policy_name is given in the ‘More Information on Training Agents: Agent Policies and Policy Mapping Function’ section below. The frequency at which models are saved in checkpoints can be modified in competition_train_example.py Line:112.
 
-* More Information on Training Agents
+# More Information on Training Agents
+There are three main parts in the competition_train_example.py script that is relevant for training agents. To get started with training your own agents, we recommend modifying some key aspects in the training script, as described below:
+* Modifying an agent’s reward function:
+* ** Changing the mapping between agents and reward functions: competition_train_example.py Line 73 defines a reward_config dictionary that specifies the mapping from an agent’s id to its reward function, in the format <agent-id:reward-function>.In this example, the reward function that is passed to agent with agent-id=0 is a sparse reward (rew.sparse), and, the reward function that is passed to agent-id=1 is a dummy reward function called custom_v1 (rew.custom_v1).  You can change the entries inside reward_config dictionary to make different agents use different reward functions.
+*  ** Changing the reward function: The code for the sparse reward function is inside the pyquaticus/utils/rewards.py file inside the sparse() method. As shown in the sparse() method, a reward function is passed two labeled parameter  dictionaries called params and prev_params, which contain the important features (states and events) of the current and last observations respectively. These features can be used to configure your 
 ## Configurable Reward
 
 `Pyquaticus` comes with a simple sparse reward, but it can be extended with different reward structures. See [rewards.py](https://github.com/mit-ll-trusted-autonomy/pyquaticus/blob/main/pyquaticus/utils/rewards.py) for more information. Here is an example of insantiating the environment with sparse rewards for all agents in a 2v2 environment:
