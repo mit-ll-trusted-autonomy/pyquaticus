@@ -117,7 +117,10 @@ class BaseDefender(BaseAgentPolicy):
             act_index = -1
 
         elif self.mode=="competition_easy":
-            estimated_position = [my_obs["wall_3_distance"], my_obs["wall_2_distance"]]
+            if self.team == Team.RED_TEAM:
+                estimated_position = [my_obs["wall_1_distance"], my_obs["wall_0_distance"]]
+            else:
+                estimated_position = [my_obs["wall_3_distance"], my_obs["wall_2_distance"]]
             value = self.goal
 
             if self.team == Team.BLUE_TEAM:
