@@ -122,7 +122,12 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         processed_action_dict = OrderedDict()
         for player in self.players.values():
             if player.id in action_dict:
-                if type(action_dict[player.id]) is not str:
+                default_action = True
+                try:
+                    action_dict[player.id] / 2
+                except:
+                    default_action = False
+                if default_action:
                     speed, heading = self._discrete_action_to_speed_relheading(action_dict[player.id])
                 else:
                     #Make point system the same on both blue and red side
