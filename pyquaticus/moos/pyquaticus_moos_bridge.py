@@ -110,6 +110,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self._init_moos_comm()
         self._wait_for_all_players()
 
+        self._determine_team_wall_orient()
+
         return self.state_to_obs(self._agent_name)
 
     def _wait_for_all_players(self):
@@ -207,7 +209,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         obs = self.state_to_obs(self._agent_name)
         return obs, reward, terminated, truncated, {}
 
-    def state_to_obs(self, agent_id):
+    def state_to_obs(self, agent_id, normalize=True):
         """
         Light wrapper around parent class state_to_obs function
         """
@@ -219,7 +221,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             # should count up from 0.0 to tagging_cooldown (at which point it can tag again)
             agent.tagging_cooldown = self.tagging_cooldown - max(0.0, agent.cantag_time - time.time())
             agent.tagging_cooldown = max(0, min(self.tagging_cooldown, agent.tagging_cooldown))
-        return super().state_to_obs(agent_id)
+        return super().state_to_obs(agent_id, normalize)
 
     def _init_moos_comm(self):
         """

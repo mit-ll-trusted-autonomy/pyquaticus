@@ -1,14 +1,22 @@
+import argparse
+import os
 import time
 
 from pyquaticus.moos.pyquaticus_moos_bridge import PyQuaticusMoosBridge
-from pyquaticus.moos.config import WestPointConfig, JervisBayConfig
+# Note: can use pyquaticus.moos.pyquaticus_moos_bridge_ext import PyQuaticusMoosBridgeFullObs
+# if you want to see observations from all agents in the field
+from pyquaticus.moos.config import FieldReaderConfig
 
 if __name__ == "__main__":
-    # NOTE must pick the corresponding configuration object based on which mission you're running
-    # and must choose the correct teammates/opponents and timewarp
+    parser = argparse.ArgumentParser(description="Run the MOOS bridge for a given mission")
+    parser.add_argument("mission_dir", help="The path to the mission directory")
+    args = parser.parse_args()
+
+    # Assuming 2v2
+    # NOTE: timewarp MUST match how you've started shoreside/vehicles
     env = PyQuaticusMoosBridge("localhost", "red_one", 9011,
-                      [], ["blue_one"], moos_config=WestPointConfig(),
-                      timewarp=4, quiet=False)
+                      ["red_two"], ["blue_one", "blue_two"], moos_config=FieldReaderConfig(args.mission_dir),
+                      timewarp=1, quiet=False)
 
     try:
         obs = env.reset()
