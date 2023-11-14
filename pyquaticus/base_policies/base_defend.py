@@ -47,8 +47,7 @@ class BaseDefender(BaseAgentPolicy):
         self.flag_keepout = flag_keepout
         self.catch_radius = catch_radius
         self.using_pyquaticus = using_pyquaticus
-        self.goal = []
-        self.competition_easy_1 = [135, 115]
+        self.goal = 'PM'
     def set_mode(self, mode: str):
         """
         Determine which mode the agent is in:
@@ -59,6 +58,17 @@ class BaseDefender(BaseAgentPolicy):
         if mode not in modes:
             raise ValueError(f"mode {mode} not in set of valid modes {modes}")
         self.mode = mode
+    def get_distance_between_2_points(self, start: np.array, end: np.array) -> float:
+        """
+        Convenience method for returning distance between two points.
+
+        Args:
+            start: Starting position to measure from
+            end: Point to measure to
+        Returns:
+            The distance between `start` and `end`
+        """
+        return np.linalg.norm(np.asarray(start) - np.asarray(end))
 
     def compute_action(self, obs):
         """
@@ -107,58 +117,29 @@ class BaseDefender(BaseAgentPolicy):
             act_index = -1
 
         elif self.mode=="competition_easy":
-            coords = [self.my_flag_loc]
-            ag_vect = -1
-            if self.is_tagged:
-                self.competition_easy_1 = [135, 115]
+            if self.team == Team.RED_TEAM:
+                estimated_position = [my_obs["wall_1_distance"], my_obs["wall_0_distance"]]
             else:
-                if self.team == Team.RED_TEAM:
-                    if self.competition_easy_1[1] <= my_obs["wall_1_distance"]: #If near halfline start protective behavior
-                        self.competition_easy_1 = [115, 95]
-                        if self.goal == []:
-                            self.goal = "wall_2"
-                        if my_obs[self.goal + "_distance"] < 15:
-                            if self.goal =="wall_0":
-                                ag_vect = self.bearing_to_vec(my_obs["wall_3_bearing"])
-                                self.goal = "wall_2"
-                            else:
-                                ag_vect = self.bearing_to_vec(my_obs["wall_1_bearing"])
-                                self.goal = "wall_0"
-                        else:
-                            ag_vect = self.bearing_to_vec(my_obs[self.goal+"_bearing"])
+                estimated_position = [my_obs["wall_3_distance"], my_obs["wall_2_distance"]]
+            value = self.goal
 
-                    else:
-                        ag_vect = self.bearing_to_vec(my_obs["wall_1_bearing"])
-                else:# Blue Team Wall Order is Different
-                    if self.competition_easy_1[1] <= my_obs["wall_3_distance"] <= self.competition_easy_1[0]: #If near halfline start protective behavior
-                        self.competition_easy_1 = [115, 95]
-                        if self.goal == []:
-                            self.goal = "wall_2"
-                        if my_obs[self.goal + "_distance"] < 15:
-                            if self.goal =="wall_0":
-                                ag_vect = self.bearing_to_vec(my_obs["wall_1_bearing"])
-                                self.goal = "wall_2"
-                            else:
-                                ag_vect = self.bearing_to_vec(my_obs["wall_3_bearing"])
-                                self.goal = "wall_0"
-                        else:
-                            ag_vect = self.bearing_to_vec(my_obs[self.goal+"_bearing"])
-
-                    else:
-                        ag_vect = self.bearing_to_vec(my_obs["wall_3_bearing"])
-
-            # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
-            try:
-                act_heading = self.angle180(self.vec_to_heading(ag_vect))
-                if 1 >= act_heading >= -1:
-                    act_index = 4
-                elif act_heading < -1:
-                    act_index = 6
-                elif act_heading > 1:
-                    act_index = 2
-            except:
-                act_index = -1
-
+            if self.team == Team.BLUE_TEAM:
+                if 'P' in self.goal:
+                    value = 'S' + value[1:]
+                elif 'S' in self.goal:
+                    value = 'P' + value[1:]
+                if 'X' not in self.goal and self.goal not in ['SC', 'CC', 'PC']:
+                    value += 'X'
+                elif self.goal not in ['SC', 'CC', 'PC']:
+                    value = value[:-1]
+            if my_obs["is_tagged"]:
+                self.goal = 'SC'
+            if -1.0 <= self.get_distance_between_2_points(estimated_position, config_dict_std["aquaticus_field_points"][value]) <= 1.0:
+                if self.goal == 'SM':
+                    self.goal = 'PM'
+                else:
+                    self.goal = 'SM'
+            return self.goal
         elif self.mode == "medium":
             my_flag_vec = self.bearing_to_vec(self.my_flag_bearing)
     

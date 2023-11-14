@@ -50,9 +50,8 @@ class KeyTest:
         self.obs = env.reset(options=reset_opts)
         self.env = env
         
-        self.blue_policy = BaseAttacker(env.players[0].id, env.players[0].team, mode='competition_easy')
+        self.blue_policy = BaseDefender(env.players[1].id, env.players[1].team, mode='competition_easy')
         
-
         self.quittable = quittable
         self.no_op_action = 16
         straight = 4
@@ -69,9 +68,8 @@ class KeyTest:
                                  K_UP + K_RIGHT : straightright
                                 }
 
-        self.blue_agent_id = self.env.agents_of_team[Team.BLUE_TEAM][0].id
-        self.red_agent_id  = self.env.agents_of_team[Team.RED_TEAM][0].id
-
+        self.blue_agent_id = self.env.agents_of_team[Team.RED_TEAM][0].id
+        self.red_agent_id  = self.env.agents_of_team[Team.BLUE_TEAM][0].id
 
     def begin(self):
         while True:
@@ -103,7 +101,6 @@ class KeyTest:
         red_keys = K_RIGHT*is_key_pressed[K_RIGHT] + K_LEFT*is_key_pressed[K_LEFT]*(is_key_pressed[K_LEFT] - is_key_pressed[K_RIGHT]) + K_UP*is_key_pressed[K_UP]
         red_action = self.red_keys_to_action[red_keys]
         action_dict[self.red_agent_id] = red_action
-
         return action_dict
     
 if __name__ == '__main__':

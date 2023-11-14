@@ -331,3 +331,15 @@ def clip(val, minimum, maximum):
         return minimum
     else:
         return val
+def global_point(point_name, team):
+    point = point_name
+    if team == Team.BLUE_TEAM:
+        if 'P' in point_name:
+            point = 'S' + point_name[1:]
+        elif 'S' in point_name:
+            point = 'P' + point_name[1:]
+        if 'X' not in point_name and point_name not in ['SC', 'CC', 'PC']:
+            point += 'X'
+        elif point_name not in ['SC', 'CC', 'PC']:
+            point = point_name[:-1]
+    return point
