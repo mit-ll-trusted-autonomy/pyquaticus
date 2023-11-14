@@ -945,9 +945,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         self.world_size = config_dict.get("world_size", config_dict_std["world_size"])
         self.pixel_size = config_dict.get("pixel_size", config_dict_std["pixel_size"])
-        self.scrimmage = config_dict.get(
-            "scrimmage_line", config_dict_std["scrimmage_line"]
-        )
         self.agent_radius = config_dict.get(
             "agent_radius", config_dict_std["agent_radius"]
         )
@@ -1082,6 +1079,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.boundary_lr = np.array([self.world_size[0], 0.0], dtype=np.float32)
         self.boundary_ul = np.array([0.0, self.world_size[1]], dtype=np.float32)
         self.boundary_ur = np.array(self.world_size, dtype=np.float32)
+        self.scrimmage = 0.5*self.world_size[0] #horizontal (x) location of scrimmage line (relative to world)
         self.scrimmage_l = np.array([self.scrimmage, 0.0], dtype=np.float32)
         self.scrimmage_u = np.array([self.scrimmage, self.world_size[1]], dtype=np.float32)
 
