@@ -403,6 +403,9 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             self.flags.append(flag)
 
         self.scrimmage_pnts = np.asarray(self._moos_config.scrimmage_pnts, dtype=np.float32)
+        self.scrimmage = self.scrimmage_pnts[0][0]
+        self.scrimmage_l = self.scrimmage_pnts[0]
+        self.scrimmage_u = self.scrimmage_pnts[1]
         # define function for checking which side an agent is on
         if abs(self.scrimmage_pnts[0][0] - self.scrimmage_pnts[1][0]) < 1e-2:
             # Vertical scrimmage line
