@@ -403,9 +403,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             self.flags.append(flag)
 
         self.scrimmage_pnts = np.asarray(self._moos_config.scrimmage_pnts, dtype=np.float32)
-        # save the scrimmage X value as well as
-        # the lower and upper point (used to determine distance to scrimmage line)
-        self.scrimmage = self.scrimmage_pnts[0][0]
+        # save the lower and upper point (used to determine distance to scrimmage line)
         self.scrimmage_l = self.scrimmage_pnts[0]
         self.scrimmage_u = self.scrimmage_pnts[1]
         # define function for checking which side an agent is on
@@ -456,6 +454,10 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.boundary_lr = np.asarray(self._moos_config.boundary_lr, dtype=np.float32)
         self.world_size  = np.array([np.linalg.norm(self.boundary_lr - self.boundary_ll),
                                      np.linalg.norm(self.boundary_ul - self.boundary_ll)])
+        
+        # save the horizontal location of scrimmage line (relative to world/ playing field)
+        self.scrimmage = 0.5*self.world_size[0]
+        
         if self.timewarp is not None:
             self._moos_config.moos_timewarp = self.timewarp
             self._moos_config.sim_timestep = self._moos_config.moos_timewarp / 10.0

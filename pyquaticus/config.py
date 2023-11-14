@@ -8,7 +8,6 @@ MAX_SPEED = 3.0
 config_dict_std = {
     "world_size": [160.0, 80.0],  # meters
     "pixel_size": 10,  # pixels/meter
-    "scrimmage_line": 80.0,  # horizontal location (meters)
     "agent_radius": 2.0,  # meters
     "catch_radius": 10.0,  # meters
     "flag_keepout": 5.0,  # minimum distance (meters) between agent and flag centers
