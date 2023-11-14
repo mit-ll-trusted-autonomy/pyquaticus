@@ -1478,7 +1478,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     )
                 )
                 self.isopen = True
-                self.font = pygame.font.SysFont(None, 2*self.pixel_size*self.agent_radius)
+                self.font = pygame.font.SysFont(None, int(2*self.pixel_size*self.agent_radius))
             else:
                 raise Exception(
                     "Sorry, render modes other than 'human' are not supported"
