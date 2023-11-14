@@ -403,6 +403,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             self.flags.append(flag)
 
         self.scrimmage_pnts = np.asarray(self._moos_config.scrimmage_pnts, dtype=np.float32)
+        # save the scrimmage X value as well as
+        # the lower and upper point (used to determine distance to scrimmage line)
         self.scrimmage = self.scrimmage_pnts[0][0]
         self.scrimmage_l = self.scrimmage_pnts[0]
         self.scrimmage_u = self.scrimmage_pnts[1]
