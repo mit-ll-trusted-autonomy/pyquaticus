@@ -58,7 +58,7 @@ class Player:
     on_own_side: bool = field(init=False, default=True)
     tagging_cooldown: float = field(init=False)
     cantag_time: float = field(init=False, default=0.0)
-    is_tagged: bool = field(init = False, default=False)
+    is_tagged: bool = field(init=False, default=False)
 
 
 @dataclass
@@ -117,7 +117,7 @@ class RenderingPlayer(Player):
                 (0, 0, 255),
                 (self.r, self.r),
                 self.r,
-                width=round(self.r / 20),
+                width=1
             )
             draw.polygon(
                 self.pygame_agent,
@@ -136,7 +136,7 @@ class RenderingPlayer(Player):
                 (255, 0, 0),
                 (self.r, self.r),
                 self.r,
-                width=round(self.r / 20),
+                width=1
             )
             draw.polygon(
                 self.pygame_agent,
@@ -203,7 +203,7 @@ class RenderingPlayer(Player):
                 (0, 255, 0),
                 (self.r, self.r),
                 self.r,
-                width=5,
+                width=round(self.r/4),
             )
 
         # render_tagging_cooldown

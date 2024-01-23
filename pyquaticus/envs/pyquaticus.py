@@ -1,4 +1,4 @@
-# DISTRIBUTION STATEMENT A. Approved for public release. Distribution is unlimited.
+#DISTRIBUTION STATEMENT A. Approved for public release. Distribution is unlimited.
 #
 # This material is based upon work supported by the Under Secretary of Defense for
 # Research and Engineering under Air Force Contract No. FA8702-15-D-0001. Any opinions,
@@ -53,6 +53,7 @@ from pyquaticus.utils.utils import (
     rot2d,
     vec_to_mag_heading,
 )
+import warnings
 
 class PyQuaticusEnvBase(ParallelEnv, ABC):
     """
@@ -495,6 +496,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         reward_config: dict = None,
         config_dict=config_dict_std,
         render_mode: Optional[str] = None,
+        render_agent_ids: Optional[bool] = False
     ):
         super().__init__()
         self.config_dict = config_dict
@@ -508,6 +510,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         #red_grabs: The number of times the blue team grabbed the opponents flag
         self.game_score = {'blue_captures':0, 'blue_tags':0, 'blue_grabs':0, 'red_captures':0, 'red_tags':0, 'red_grabs':0}    
         self.render_mode = render_mode
+        self.render_ids = render_agent_ids
 
         # set variables from config
         self.set_config_values(self.config_dict)
@@ -647,7 +650,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         action_dict = self._to_speed_heading(raw_action_dict)
         if self.render_mode:
             for _i in range(self.num_renders_per_step):
-                self._move_agents(action_dict, self.tau / self.num_renders_per_step)
+                for j in range(self.sim_speedup_factor):
+                    self._move_agents(action_dict, self.tau / self.num_renders_per_step)
                 self._render()
         else:
             self._move_agents(action_dict, self.tau)
@@ -964,9 +968,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         self.world_size = config_dict.get("world_size", config_dict_std["world_size"])
         self.pixel_size = config_dict.get("pixel_size", config_dict_std["pixel_size"])
-        self.scrimmage = config_dict.get(
-            "scrimmage_line", config_dict_std["scrimmage_line"]
-        )
         self.agent_radius = config_dict.get(
             "agent_radius", config_dict_std["agent_radius"]
         )
@@ -988,6 +989,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             "wall_bounce", config_dict_std["wall_bounce"]
         )
         self.tau = config_dict.get("tau", config_dict_std["tau"])
+        self.sim_speedup_factor = config_dict.get("sim_speedup_factor", config_dict_std["sim_speedup_factor"])
         self.max_time = config_dict.get("max_time", config_dict_std["max_time"])
         self.max_score = config_dict.get("max_score", config_dict_std["max_score"])
         self.max_screen_size = config_dict.get(
@@ -1068,6 +1070,18 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         self.num_renders_per_step = int(self.render_fps * self.tau)
 
+        # check that time warp is a integer >= 1 and only active if rendering is on
+        if self.sim_speedup_factor < 1:
+            print("Warning: sim_speedup_factor must be an integer >= 1! Defaulting to 1.")
+            self.sim_speedup_factor = 1
+
+        if type(self.sim_speedup_factor) != int:
+            self.sim_speedup_factor = int(np.round(self.sim_speedup_factor))
+            print(f"Warning: Converted sim_speedup_factor to integer: {self.sim_speedup_factor}")
+
+        if self.sim_speedup_factor > 1 and self.render_mode is None:
+            print("Warning: sim_speedup_factor has no effect when rendering is off")
+
         # check that agents and flags properly fit within world
         agent_flag_err_msg = (
             "Specified agent_radius ({}), flag_radius ({}), and flag_keepout ({})"
@@ -1088,6 +1102,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.boundary_lr = np.array([self.world_size[0], 0.0], dtype=np.float32)
         self.boundary_ul = np.array([0.0, self.world_size[1]], dtype=np.float32)
         self.boundary_ur = np.array(self.world_size, dtype=np.float32)
+        self.scrimmage = 0.5*self.world_size[0] #horizontal (x) location of scrimmage line (relative to world)
         self.scrimmage_l = np.array([self.scrimmage, 0.0], dtype=np.float32)
         self.scrimmage_u = np.array([self.scrimmage, self.world_size[1]], dtype=np.float32)
 
@@ -1484,7 +1499,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     )
                 )
                 self.isopen = True
-                self.font = pygame.font.Font(None, 64)
+                self.font = pygame.font.SysFont(None, int(2*self.pixel_size*self.agent_radius))
             else:
                 raise Exception(
                     "Sorry, render modes other than 'human' are not supported"
@@ -1569,6 +1584,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if self.config_dict["render_field_points"]:
             for v in self.config_dict["aquaticus_field_points"]:
                 draw.circle(self.screen, (128,0,128), self.world_to_screen(self.config_dict["aquaticus_field_points"][v]), 5,)
+
+        agent_id_blit_poses = {}
+
         for team in Team:
             flag = self.flags[int(team)]
             teams_players = self.agents_of_team[team]
@@ -1581,7 +1599,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     (0, 0, 0),
                     home_center_screen,
                     self.catch_radius * self.pixel_size,
-                    width=round(self.agent_radius * self.pixel_size / 20),
+                    width=round(self.pixel_size / 10),
                 )
 
             if not self.state["flag_taken"][int(team)]:
@@ -1598,7 +1616,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     color,
                     flag_pos_screen,
                     (self.flag_keepout - self.agent_radius) * self.pixel_size,
-                    width=round(self.agent_radius * self.pixel_size / 20),
+                    width=round(self.pixel_size / 10),
                 )
             else:
                 # Flag is captured so draw a different shape
@@ -1607,7 +1625,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     self.screen,
                     color,
                     flag_pos_screen,
-                    self.agent_radius * self.pixel_size / 2,
+                    0.55*(self.pixel_size * self.agent_radius)
                 )
 
             for player in teams_players:
@@ -1619,11 +1637,28 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 ref_angle = -orientation.angle_to(self.UP)
 
                 # transform position to pygame coordinates
-                blit_position = self.world_to_screen(player.pos)
+                blit_pos = self.world_to_screen(player.pos)
                 rotated_surface = rotozoom(player.pygame_agent, ref_angle, 1.0)
                 rotated_surface_size = np.array(rotated_surface.get_size())
-                blit_position -= 0.5 * rotated_surface_size
-                self.screen.blit(rotated_surface, blit_position)
+                rotated_blit_pos = blit_pos - 0.5*rotated_surface_size
+
+                # blit agent onto screen
+                self.screen.blit(rotated_surface, rotated_blit_pos)
+
+                #blit agent number onto agent
+                agent_id_blit_poses[player.id] = (
+                    blit_pos[0] - 0.35*self.pixel_size*self.agent_radius,
+                    blit_pos[1] - 0.6*self.pixel_size*self.agent_radius
+                )
+
+        # render agent ids
+        if self.render_ids:
+            for team in Team:
+                teams_players = self.agents_of_team[team]
+                font_color = "white" if team == Team.BLUE_TEAM else "black"
+                for player in teams_players:
+                    player_number_label = self.font.render(str(player.id), True, font_color)
+                    self.screen.blit(player_number_label, agent_id_blit_poses[player.id])
 
         # visually indicate distances between players of both teams 
         assert len(self.agents_of_team) == 2, "If number of teams > 2, update code that draws distance indicator lines"

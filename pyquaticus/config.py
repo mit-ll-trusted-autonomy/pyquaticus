@@ -3,12 +3,11 @@ import numpy as np
 
 from pyquaticus.utils.utils import get_screen_res
 
-MAX_SPEED = 3.0
+MAX_SPEED = 1.5
 
 config_dict_std = {
     "world_size": [160.0, 80.0],  # meters
     "pixel_size": 10,  # pixels/meter
-    "scrimmage_line": 80.0,  # horizontal location (meters)
     "agent_radius": 2.0,  # meters
     "catch_radius": 10.0,  # meters
     "flag_keepout": 5.0,  # minimum distance (meters) between agent and flag centers
@@ -24,7 +23,8 @@ config_dict_std = {
     ),  # [0, 1] percentage of current speed (x or y) at which an agent is repelled from a wall (vertical or horizontal)
     "tau": (
         1 / 10
-    ),  # length of timestep (seconds) between state updates and for updating action input from demonstrator or rl
+    ),  # max dt (seconds) for updating the simulation
+    "sim_speedup_factor": 1, # simulation speed multiplier (integer >= 1)
     "max_time": 240.0,  # maximum time (seconds) per episode
     "max_score": 1,     # maximum score per episode (until a winner is declared)
     "max_screen_size": get_screen_res(),
