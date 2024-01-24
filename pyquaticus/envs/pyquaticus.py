@@ -271,7 +271,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         Note 2 : the wall distances can be negative when the agent is out of bounds
         Note 3 : the boolean args Tag/Flag status are -1 false and +1 true
         Developer Note 1: changes here should be reflected in _register_state_elements.
-        Developer Note 2: check that variables used here are available to PyQuaticusMoosBridge in pyquaticus_team_env_bridge.py
+        Developer Note 2: check that variables used here are available to PyQuaticusMoosBridge in pyquaticus_moos_bridge.py
         """
         if not hasattr(self, '_state_elements_initialized') or not self._state_elements_initialized:
             raise RuntimeError("Have not registered state elements")
