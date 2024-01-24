@@ -22,8 +22,8 @@
 class PID:
     """Simple class for scalar PID control."""
 
-    def __init__(self, tau, kp, ki, kd, integral_max=float("inf")):
-        self._tau = tau
+    def __init__(self, dt, kp, ki, kd, integral_max=float("inf")):
+        self._dt = dt
         self._kp = kp
         self._ki = ki
         self._kd = kd
@@ -33,8 +33,8 @@ class PID:
         self._integral = 0.0
 
     def __call__(self, error):
-        self._integral = min(self._integral + error * self._tau, self._integral_max)
-        deriv = (error - self._prev_error) / self._tau
+        self._integral = min(self._integral + error * self._dt, self._integral_max)
+        deriv = (error - self._prev_error) / self._dt
 
         self._prev_error = error
 

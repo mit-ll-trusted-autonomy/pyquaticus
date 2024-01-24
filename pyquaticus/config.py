@@ -35,7 +35,7 @@ config_dict_std = {
     "render_fps": 30,
     "normalize": True,  # Flag for normalizing the observation space.
     "tagging_cooldown": (
-        10.0
+        30.0
     ),  # Cooldown on an agent after they tag another agent, to prevent consecutive tags
     # MOOS dynamics parameters
     "speed_factor": 20.0,  # Multiplicative factor for desired_speed -> desired_thrust
