@@ -546,7 +546,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.reward_config[a] = None
         # Create a PID controller for each agent
         if self.render_mode:
-            dt = self.tau/self.num_renders_per_step
+            dt = 1/self.render_fps
         else:
             dt = self.tau
 
