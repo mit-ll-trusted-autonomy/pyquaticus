@@ -147,6 +147,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         min_dist = [0.0]
         max_bool, min_bool = [1.0], [0.0]
         max_speed, min_speed = [self.max_speed], [0.0]
+        max_score, min_score = [self.max_score], [0.0]
         agent_obs_normalizer.register("opponent_home_bearing", max_bearing)
         agent_obs_normalizer.register("opponent_home_distance", max_dist, min_dist)
         agent_obs_normalizer.register("own_home_bearing", max_bearing)
@@ -168,6 +169,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             "tagging_cooldown", [self.tagging_cooldown], [0.0]
         )
         agent_obs_normalizer.register("is_tagged", max_bool, min_bool)
+        agent_obs_normalizer.register("team_score", max_score, min_score)
+        agent_obs_normalizer.register("opponent_score", max_score, min_score)
 
         for i in range(num_on_team - 1):
             teammate_name = f"teammate_{i}"
@@ -252,6 +255,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             On side (boolean)
             Tagging cooldown (seconds) time elapsed since last tag (at max when you can tag again)
             Is tagged (boolean)
+            Team score (cummulative flag captures)
+            Opponent score (cummulative flag captures)
             For each other agent (teammates first) [Consider sorting teammates and opponents by distance or flag status]
                 Bearing from you (clockwise degrees)
                 Distance (meters)
@@ -266,7 +271,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         Note 2 : the wall distances can be negative when the agent is out of bounds
         Note 3 : the boolean args Tag/Flag status are -1 false and +1 true
         Developer Note 1: changes here should be reflected in _register_state_elements.
-        Developer Note 2: changes here should be reflected in register_state_elements in base_policies.py
+        Developer Note 2: changes here should be reflected in _register_state_elements in pyquaticus_team_env_bridge.py
         """
         if not hasattr(self, '_state_elements_initialized') or not self._state_elements_initialized:
             raise RuntimeError("Have not registered state elements")
@@ -320,10 +325,18 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         obs["has_flag"] = agent.has_flag
         # On side
         obs["on_side"] = agent.on_own_side
+        # Tagging cooldown
         obs["tagging_cooldown"] = agent.tagging_cooldown
-
         #Is tagged
         obs["is_tagged"] = agent.is_tagged
+
+        #Team score and Opponent score
+        if agent.team == Team.BLUE_TEAM:
+            obs["team_score"] = self.game_score["blue_captures"]
+            obs["opponent_score"] = self.game_score["red_captures"]
+        else:
+            obs["team_score"] = self.game_score["red_captures"]
+            obs["opponent_score"] = self.game_score["blue_captures"]
 
         # Relative observations to other agents
         # teammates first
@@ -479,10 +492,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.config_dict = config_dict
 
         #Game score used to determine winner of game for MCTF competition
-        #blue_captures: Represents the number of times the blue team has grabbed reds flag and brought it back to their 'home' base
+        #blue_captures: Represents the number of times the blue team has grabbed reds flag and brought it back to their side
         #blue_tags: The number of times the blue team successfully tagged an opponent
         #blue_grabs: The number of times the blue team grabbed the opponents flag
-        #red_captures: Represents the number of times the blue team has grabbed reds flag and brought it back to their 'home' base
+        #red_captures: Represents the number of times the blue team has grabbed reds flag and brought it back to their side
         #red_tags: The number of times the blue team successfully tagged an opponent
         #red_grabs: The number of times the blue team grabbed the opponents flag
         self.game_score = {'blue_captures':0, 'blue_tags':0, 'blue_grabs':0, 'red_captures':0, 'red_tags':0, 'red_grabs':0}    
@@ -532,11 +545,16 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             if a not in self.reward_config:
                 self.reward_config[a] = None
         # Create a PID controller for each agent
+        if self.render_mode:
+            dt = 1/self.render_fps
+        else:
+            dt = self.tau
+
         self._pid_controllers = {}
         for player in self.players.values():
             self._pid_controllers[player.id] = {
-                "speed": PID(self.tau, kp=1.0, ki=0.0, kd=0.0, integral_max=0.07),
-                "heading": PID(self.tau, kp=0.35, ki=0.0, kd=0.07, integral_max=0.07),
+                "speed": PID(dt=dt, kp=1.0, ki=0.0, kd=0.0, integral_max=0.07),
+                "heading": PID(dt=dt, kp=0.35, ki=0.0, kd=0.07, integral_max=0.07),
             }
 
         self.params = {agent_id: {} for agent_id in self.players}
@@ -607,7 +625,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             raise Exception("Call reset before using step method.")
 
         # set the time
-        self.current_time += self.tau
+        self.current_time += self.sim_speedup_factor * self.tau
         self.state["current_time"] = self.current_time
         if not set(raw_action_dict.keys()) <= set(self.players):
             raise ValueError(
@@ -619,7 +637,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             if player.tagging_cooldown != self.tagging_cooldown:
                 # player is still under a cooldown from tagging, advance their cooldown timer, clip at the configured tagging cooldown
                 player.tagging_cooldown = self._min(
-                    (player.tagging_cooldown + self.tau), self.tagging_cooldown
+                    (player.tagging_cooldown + self.sim_speedup_factor * self.tau), self.tagging_cooldown
                 )
 
         self.flag_collision_bool = np.zeros(self.num_agents)
@@ -627,11 +645,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         action_dict = self._to_speed_heading(raw_action_dict)
         if self.render_mode:
             for _i in range(self.num_renders_per_step):
-                for j in range(self.sim_speedup_factor):
-                    self._move_agents(action_dict, self.tau / self.num_renders_per_step)
+                for _j in range(self.sim_speedup_factor):
+                    self._move_agents(action_dict, 1/self.render_fps)
                 self._render()
         else:
-            self._move_agents(action_dict, self.tau)
+            for _ in range(self.sim_speedup_factor):
+                self._move_agents(action_dict, self.tau)
 
         # agent and flag capture checks and more
         self._check_pickup_flags()
@@ -999,7 +1018,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             # Suppress numpy warnings to avoid printing out extra stuff to the console
             np.seterr(all="ignore")
 
-        if self.render_mode is not None:
+        if self.render_mode:
             # Pygame Orientation Vector
             self.UP = Vector2((0.0, 1.0))
 
@@ -1055,9 +1074,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if type(self.sim_speedup_factor) != int:
             self.sim_speedup_factor = int(np.round(self.sim_speedup_factor))
             print(f"Warning: Converted sim_speedup_factor to integer: {self.sim_speedup_factor}")
-
-        if self.sim_speedup_factor > 1 and self.render_mode is None:
-            print("Warning: sim_speedup_factor has no effect when rendering is off")
 
         # check that agents and flags properly fit within world
         agent_flag_err_msg = (
