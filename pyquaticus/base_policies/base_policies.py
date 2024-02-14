@@ -184,7 +184,6 @@ def DefendGen(agentid, team, mode, team_size, obs_normalizer):
 
         def set_weights(self, weights):
             pass
-
     return DefendPolicy
 
 def CombinedGen(agentid, team, mode, team_size, obs_normalizer):
