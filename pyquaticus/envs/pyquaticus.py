@@ -1,4 +1,4 @@
-# DISTRIBUTION STATEMENT A. Approved for public release. Distribution is unlimited.
+#DISTRIBUTION STATEMENT A. Approved for public release. Distribution is unlimited.
 #
 # This material is based upon work supported by the Under Secretary of Defense for
 # Research and Engineering under Air Force Contract No. FA8702-15-D-0001. Any opinions,
@@ -123,7 +123,30 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         processed_action_dict = OrderedDict()
         for player in self.players.values():
             if player.id in action_dict:
-                speed, heading = self._discrete_action_to_speed_relheading(action_dict[player.id])
+                default_action = True
+                try:
+                    action_dict[player.id] / 2
+                except:
+                    default_action = False
+                if default_action:
+                    speed, heading = self._discrete_action_to_speed_relheading(action_dict[player.id])
+                else:
+                    #Make point system the same on both blue and red side
+                    if player.team == Team.BLUE_TEAM:
+                        if 'P' in action_dict[player.id]:
+                            action_dict[player.id] = 'S' + action_dict[player.id][1:]
+                        elif 'S' in action_dict[player.id]:
+                            action_dict[player.id] = 'P' + action_dict[player.id][1:]
+                        if 'X' not in action_dict[player.id] and action_dict[player.id] not in ['SC', 'CC', 'PC']:
+                            action_dict[player.id] += 'X'
+                        elif action_dict[player.id] not in ['SC', 'CC', 'PC']:
+                            action_dict[player.id] = action_dict[player.id][:-1]
+
+                    _, heading = mag_bearing_to(player.pos, self.config_dict["aquaticus_field_points"][action_dict[player.id]], player.heading)
+                    if -0.3 <= self.get_distance_between_2_points(player.pos, self.config_dict["aquaticus_field_points"][action_dict[player.id]]) <= 0.3: #
+                        speed = 0.0
+                    else:
+                        speed = self.max_speed
             else:
                 # if no action provided, stop moving
                 speed, heading = 0.0, player.heading
@@ -656,7 +679,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self._check_pickup_flags()
         self._check_agent_captures()
         self._check_flag_captures()
-        if not config_dict_std["teleport_on_tag"]:
+        if not self.teleport_on_tag:
             self._check_untag()
         self._set_dones()
 
@@ -695,7 +718,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             #         desired_thrust  and  desired_rudder
             # requested heading is relative so it directly maps to the heading error
             
-            if player.is_tagged and not self.config_dict["teleport_on_tag"]:
+            if player.is_tagged and not self.teleport_on_tag:
                 flag_home = self.flags[int(player.team)].home
                 _, heading_error = mag_bearing_to(player.pos, flag_home, player.heading)
                 desired_speed = self.config_dict["max_speed"]
@@ -759,11 +782,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     else:
                         self.blue_team_flag_pickup = False
                 self.state["agent_oob"][player.id] = 1
-                if config_dict_std["teleport_on_tag"]:
+                if self.teleport_on_tag:
                     player.reset()
                 else:
-                    self.state["agent_tagged"][player.id] = 1
-                    player.is_tagged = True
+                    if self.tag_on_wall_collision:
+                        self.state["agent_tagged"][player.id] = 1
+                        player.is_tagged = True
                     player.rotate()
                 continue
             else:
@@ -859,7 +883,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     def _check_agent_captures(self):
         """Updates player states if they tagged another player."""
         # Reset capture state if teleport_on_tag is true
-        if config_dict_std["teleport_on_tag"] == True:
+        if self.teleport_on_tag:
             self.state["agent_tagged"] = [0] * self.num_agents
             for player in self.players.values():
                 player.is_tagged = False
@@ -894,7 +918,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                             self.state["agent_captures"][player.id] = other_player.id
                             # If we get here, then `player` tagged `other_player` and we need to reset `other_player`
                             # Only if config["teleport_on_capture"] == True
-                            if config_dict_std["teleport_on_tag"]:
+                            if self.teleport_on_tag:
                                 buffer_sign = (
                                     1.0
                                     if self.flags[o_team].home[0] < self.scrimmage
@@ -1000,6 +1024,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.tagging_cooldown = config_dict.get(
             "tagging_cooldown", config_dict_std["tagging_cooldown"]
         )
+        self.teleport_on_tag = config_dict.get("teleport_on_tag", config_dict_std["teleport_on_tag"])
+        self.tag_on_wall_collision = config_dict.get("tag_on_wall_collision", config_dict_std["tag_on_wall_collision"])
+
         # MOOS Dynamics Parameters
         self.speed_factor = config_dict.get(
             "speed_factor", config_dict_std["speed_factor"]
@@ -1573,8 +1600,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         draw.line(
             self.screen, (0, 0, 0), top_middle, bottom_middle, width=self.border_width
         )
+        #Draw Points Debugging
+        if self.config_dict["render_field_points"]:
+            for v in self.config_dict["aquaticus_field_points"]:
+                draw.circle(self.screen, (128,0,128), self.world_to_screen(self.config_dict["aquaticus_field_points"][v]), 5,)
 
         agent_id_blit_poses = {}
+
         for team in Team:
             flag = self.flags[int(team)]
             teams_players = self.agents_of_team[team]

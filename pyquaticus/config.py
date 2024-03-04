@@ -51,9 +51,55 @@ config_dict_std = {
     "suppress_numpy_warnings": (
         True  # Option to stop numpy from printing warnings to the console
     ),
-    "teleport_on_tag" : False, 
-    # Option for the agent when tagged, either out of bounds or by opponent, to teleport home or not
+    "teleport_on_tag": False, # Option for the agent when tagged, either out of bounds or by opponent, to teleport home or not
+    "tag_on_wall_collision": False, # Option for setting the agent ot a tagged state upon wall collsion
+    "render_field_points": False, #Debugging lets you see where the field points are on the field
 }
+#Build Point Field - Taken from Moos-IvP-Aquaticus Michael Benjamin
+#=================================================================
+# Relative to ownship playing end
+#=================================================================
+#
+#                   PBX        CBX       SBX
+#   PPBX o---------o----------o---------o----------o SSBX  Row BX
+#        |                    |                    |
+#        |          PFX       |CFX       SFX       |
+#   PPFX o---------o----------o---------o----------o SSFX  Row FX
+#        |                    |                    |
+#        |          PHX       |CHX       SHX       |
+#   PPHX o---------o----------o---------o----------o SSHX  Row HX
+#        |                    |                    |
+#        |          PMX       |CMX       SMX       |
+#   PPMX o---------o----------o---------o----------o SSMX  Row MX
+#        |                    |                    |
+#        |          PC        |CC        SC        |
+#    PPC o=========o==========o=========o==========o SSC   Row C
+#        |                    |                    |
+#        |          PM        |CM        SM        |
+#    PPM o---------o----------o---------o----------o SSM   Row M
+#        |                    |                    |
+#        |          PH        |CH        SH        |
+#    PPH o---------o----------o---------o----------o SSH   Row H
+#        |                    |                    |
+#        |          PF        |CF        SF        |
+#    PPF o---------o----------o---------o----------o SSF   Row F
+#        |              ^     |     ^              |
+#        |          PB  |     |CB   |    SB        |
+#    PPB o---------o----------o---------o----------o SSB   Row B
+ws = config_dict_std["world_size"]
+inc_x = ws[0]/8
+inc_y = ws[1]/4
+config_dict_std["aquaticus_field_points"] ={"PPB":[0,inc_y*4],"PB":[0, inc_y * 3], "CB":[0, inc_y*2], "SB": [0, inc_y*1], "SSB":[0, 0],
+                                            "PPF":[inc_x, inc_y*4], "PF":[inc_x, inc_y*3], "CF":[inc_x, inc_y*2], "SF":[inc_x, inc_y], "SSF":[inc_x, 0],
+                                            "PPH":[inc_x*2, inc_y*4], "PH":[inc_x*2, inc_y*3], "CH":[inc_x*2, inc_y*2], "SH":[inc_x*2, inc_y], "SSH":[inc_x*2, 0],
+                                            "PPM":[inc_x*3, inc_y*4], "PM":[inc_x*3, inc_y*3], "CM":[inc_x*3, inc_y*2], "SM":[inc_x*3, inc_y], "SSM":[inc_x*3, 0],
+                                            "PPC":[inc_x*4, inc_y*4], "PC":[inc_x*4, inc_y*3], "CC":[inc_x*4, inc_y*2], "SC":[inc_x*4, inc_y], "SSC":[inc_x*4, 0],
+                                            "PPMX":[inc_x*5, inc_y*4], "PMX":[inc_x*5, inc_y*3], "CMX":[inc_x*5, inc_y*2], "SMX":[inc_x*5, inc_y], "SSMX":[inc_x*5, 0],
+                                            "PPHX":[inc_x*6, inc_y*4], "PHX":[inc_x*6, inc_y*3], "CHX":[inc_x*6, inc_y*2], "SHX":[inc_x*6, inc_y], "SSHX":[inc_x*6, 0],
+                                            "PPFX":[inc_x*7, inc_y*4], "PFX":[inc_x*7, inc_y*3], "CFX":[inc_x*7, inc_y*2], "SFX":[inc_x*7, inc_y], "SSFX":[inc_x*7, 0],
+                                            "PPBX":[inc_x*8, inc_y*4], "PBX":[inc_x*8, inc_y*3], "CBX":[inc_x*8, inc_y*2], "SBX":[inc_x*8, inc_y], "SSBX":[inc_x*8, 0]}
+
+
 """ Standard configuration setup """
 
 
