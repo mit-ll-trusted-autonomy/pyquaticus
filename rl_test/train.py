@@ -53,8 +53,8 @@ if __name__ == '__main__':
     env = ParallelPettingZooWrapper(pyquaticus_v0.PyQuaticusEnv(render_mode=RENDER_MODE, reward_config=reward_config, team_size=1))
     register_env('pyquaticus', lambda config: ParallelPettingZooWrapper(env_creator(config)))
     
-    obs_space = env.observation_space
-    act_space = env.action_space
+    obs_space = env.observation_space[0]
+    act_space = env.action_space[0]
     policies = {0:PolicySpec(policy_class=None, observation_space=None, action_space=None), 1:PolicySpec(policy_class=None, observation_space=None, action_space=None),}
     def policy_mapping_fn(agent_id, episode, worker, **kwargs):
         if agent_id == 0 or agent_id == 'agent-0':
