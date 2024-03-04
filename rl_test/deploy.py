@@ -56,8 +56,8 @@ if __name__ == '__main__':
     register_env('pyquaticus', lambda config: ParallelPettingZooEnv(env_creator(config)))
     
     
-    obs_space = env.observation_space
-    act_space = env.action_space
+    obs_space = env.observation_space[0]
+    act_space = env.action_space[0]
     policies = {0:PolicySpec(policy_class=None, observation_space=obs_space, action_space=act_space), 1:PolicySpec(policy_class=None, observation_space=obs_space, action_space=act_space),}
     def policy_mapping_fn(agent_id, episode, worker, **kwargs):
         if agent_id == 0 or agent_id == 'agent-0':

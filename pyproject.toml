@@ -36,8 +36,8 @@ authors = [
 	{ name = "John Kliem",      email = "john.kliem@nrl.navy.mil"}
 ]
 readme = "README.md"
-urls = { repository = "https://div3-gitlab.llan.ll.mit.edu/maestro/pyquaticus" } # FIXME when moved to GitHub
-requires-python = ">=3.8,<=3.11"
+urls = { repository = "https://github.com/mit-ll-trusted-autonomy/pyquaticus" }
+requires-python = ">=3.10,<=3.11"
 classifiers = [
 	"Development Status :: 4 - Beta",
 	"Programming Language :: Python",
@@ -57,16 +57,7 @@ dependencies = ["pettingzoo==1.23.0",
 dev = ["black", "ruff", "mypy >= 1.0.0", "pre-commit", "tox"]
 test = ["pytest", "pytest-cov"]
 torch = ["torch==1.13.1", "tensorflow-probability==0.19.0"]
-# Note: there is an unresolvable dependency conflict between pettingzoo and ray
-# Here is an example error message
-# ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
-# pettingzoo 1.23.0 requires gymnasium>=0.28.0, but you have gymnasium 0.26.3 which is incompatible.
-# we ignore that warning and install gymnasium==0.28.1 which works in practice
-# see
-#   https://github.com/ray-project/ray/pull/34696
-#   https://github.com/ray-project/ray/pull/35698
-# instead, we just install ray[rllib]==2.4.0 manually and ignore the error
-
+ray = ["ray[rllib]"]
 
 [tool.setuptools.packages.find]
 include = ["pyquaticus"]
