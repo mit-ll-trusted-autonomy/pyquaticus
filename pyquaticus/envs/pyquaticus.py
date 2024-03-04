@@ -679,7 +679,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self._check_pickup_flags()
         self._check_agent_captures()
         self._check_flag_captures()
-        if not config_dict_std["teleport_on_tag"]:
+        if not self.teleport_on_tag:
             self._check_untag()
         self._set_dones()
 
@@ -718,7 +718,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             #         desired_thrust  and  desired_rudder
             # requested heading is relative so it directly maps to the heading error
             
-            if player.is_tagged and not self.config_dict["teleport_on_tag"]:
+            if player.is_tagged and not self.teleport_on_tag:
                 flag_home = self.flags[int(player.team)].home
                 _, heading_error = mag_bearing_to(player.pos, flag_home, player.heading)
                 desired_speed = self.config_dict["max_speed"]
@@ -782,11 +782,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     else:
                         self.blue_team_flag_pickup = False
                 self.state["agent_oob"][player.id] = 1
-                if config_dict_std["teleport_on_tag"]:
+                if self.teleport_on_tag:
                     player.reset()
                 else:
-                    self.state["agent_tagged"][player.id] = 1
-                    player.is_tagged = True
+                    if self.tag_on_wall_collision:
+                        self.state["agent_tagged"][player.id] = 1
+                        player.is_tagged = True
                     player.rotate()
                 continue
             else:
@@ -882,7 +883,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     def _check_agent_captures(self):
         """Updates player states if they tagged another player."""
         # Reset capture state if teleport_on_tag is true
-        if config_dict_std["teleport_on_tag"] == True:
+        if self.teleport_on_tag:
             self.state["agent_tagged"] = [0] * self.num_agents
             for player in self.players.values():
                 player.is_tagged = False
@@ -917,7 +918,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                             self.state["agent_captures"][player.id] = other_player.id
                             # If we get here, then `player` tagged `other_player` and we need to reset `other_player`
                             # Only if config["teleport_on_capture"] == True
-                            if config_dict_std["teleport_on_tag"]:
+                            if self.teleport_on_tag:
                                 buffer_sign = (
                                     1.0
                                     if self.flags[o_team].home[0] < self.scrimmage
@@ -1023,6 +1024,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.tagging_cooldown = config_dict.get(
             "tagging_cooldown", config_dict_std["tagging_cooldown"]
         )
+        self.teleport_on_tag = config_dict.get("teleport_on_tag", config_dict_std["teleport_on_tag"])
+        self.tag_on_wall_collision = config_dict.get("tag_on_wall_collision", config_dict_std["tag_on_wall_collision"])
+
         # MOOS Dynamics Parameters
         self.speed_factor = config_dict.get(
             "speed_factor", config_dict_std["speed_factor"]

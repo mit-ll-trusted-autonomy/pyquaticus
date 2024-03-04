@@ -51,10 +51,9 @@ config_dict_std = {
     "suppress_numpy_warnings": (
         True  # Option to stop numpy from printing warnings to the console
     ),
-    "teleport_on_tag" : False, 
-    # Option for the agent when tagged, either out of bounds or by opponent, to teleport home or not
-    "render_field_points": False,
-    #Debugging lets you see where the field points are on the field
+    "teleport_on_tag": False, # Option for the agent when tagged, either out of bounds or by opponent, to teleport home or not
+    "tag_on_wall_collision": False, # Option for setting the agent ot a tagged state upon wall collsion
+    "render_field_points": False, #Debugging lets you see where the field points are on the field
 }
 #Build Point Field - Taken from Moos-IvP-Aquaticus Michael Benjamin
 #=================================================================
