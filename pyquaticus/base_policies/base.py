@@ -93,7 +93,7 @@ class BaseAgentPolicy:
 
         # Copy this agents state from the observation
         my_obs = obs[self.id]
-        self.speed = my_obs["speed"]
+        # self.speed = my_obs["speed"]
         self.on_sides = my_obs["on_side"]
         self.has_flag = my_obs["has_flag"]
         self.tagging_cooldown = my_obs["tagging_cooldown"]
