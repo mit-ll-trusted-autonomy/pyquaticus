@@ -89,71 +89,72 @@ class RenderingPlayer(Player):
 
     r: float
     config_dict: dict
+    render_mode: str
     home: list[float] = field(init=False, default_factory=list)
-    pygame_agent: Surface = field(init=False, default=None)
 
     def __post_init__(self):
         """Called automatically after __init__ to set up pygame object interface."""
-        # Create the shape of the arrow indicating agent orientation
-        top_vertex = (self.r, 0)
-        left_vertex = (
-            self.r - self.r * np.sqrt(2) / 2 + 1,
-            self.r + self.r * np.sqrt(2) / 2 - 1,
-        )
-        right_vertex = (
-            self.r + self.r * np.sqrt(2) / 2 - 1,
-            self.r + self.r * np.sqrt(2) / 2 - 1,
-        )
-        center_vertex = (self.r, 1.25 * self.r)
-
-        # Create the actual object
-        self.pygame_agent = Surface((2 * self.r, 2 * self.r), SRCALPHA)
-
-        # Adjust color based on which team
-        if self.team == Team.BLUE_TEAM:
-            draw.circle(self.pygame_agent, (0, 0, 255, 50), (self.r, self.r), self.r)
-            draw.circle(
-                self.pygame_agent,
-                (0, 0, 255),
-                (self.r, self.r),
-                self.r,
-                width=1
+        if self.render_mode is not None:
+            # Create the shape of the arrow indicating agent orientation
+            top_vertex = (self.r, 0)
+            left_vertex = (
+                self.r - self.r * np.sqrt(2) / 2 + 1,
+                self.r + self.r * np.sqrt(2) / 2 - 1,
             )
-            draw.polygon(
-                self.pygame_agent,
-                (0, 0, 255),
-                (
-                    top_vertex,
-                    left_vertex,
-                    center_vertex,
-                    right_vertex,
-                ),
+            right_vertex = (
+                self.r + self.r * np.sqrt(2) / 2 - 1,
+                self.r + self.r * np.sqrt(2) / 2 - 1,
             )
-        else:
-            draw.circle(self.pygame_agent, (255, 0, 0, 50), (self.r, self.r), self.r)
-            draw.circle(
-                self.pygame_agent,
-                (255, 0, 0),
-                (self.r, self.r),
-                self.r,
-                width=1
-            )
-            draw.polygon(
-                self.pygame_agent,
-                (255, 0, 0),
-                (
-                    top_vertex,
-                    left_vertex,
-                    center_vertex,
-                    right_vertex,
-                ),
-            )
+            center_vertex = (self.r, 1.25 * self.r)
 
-        # make a copy of pygame agent with nothing extra drawn on it
-        self.pygame_agent_base = self.pygame_agent.copy()
+            # Create the actual object
+            self.pygame_agent = Surface((2 * self.r, 2 * self.r), SRCALPHA)
 
-        # pygame Rect object the same size as pygame_agent Surface
-        self.pygame_agent_rect = pygame.Rect((0, 0), (2*self.r, 2*self.r))
+            # Adjust color based on which team
+            if self.team == Team.BLUE_TEAM:
+                draw.circle(self.pygame_agent, (0, 0, 255, 50), (self.r, self.r), self.r)
+                draw.circle(
+                    self.pygame_agent,
+                    (0, 0, 255),
+                    (self.r, self.r),
+                    self.r,
+                    width=1
+                )
+                draw.polygon(
+                    self.pygame_agent,
+                    (0, 0, 255),
+                    (
+                        top_vertex,
+                        left_vertex,
+                        center_vertex,
+                        right_vertex,
+                    ),
+                )
+            else:
+                draw.circle(self.pygame_agent, (255, 0, 0, 50), (self.r, self.r), self.r)
+                draw.circle(
+                    self.pygame_agent,
+                    (255, 0, 0),
+                    (self.r, self.r),
+                    self.r,
+                    width=1
+                )
+                draw.polygon(
+                    self.pygame_agent,
+                    (255, 0, 0),
+                    (
+                        top_vertex,
+                        left_vertex,
+                        center_vertex,
+                        right_vertex,
+                    ),
+                )
+
+            # make a copy of pygame agent with nothing extra drawn on it
+            self.pygame_agent_base = self.pygame_agent.copy()
+
+            # pygame Rect object the same size as pygame_agent Surface
+            self.pygame_agent_rect = pygame.Rect((0, 0), (2*self.r, 2*self.r))
 
     def reset(self):
         """Method to return a player to their original starting position."""

@@ -549,11 +549,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # Create players, use IDs from [0, (2 * team size) - 1] so their IDs can also be used as indices.
         for i in range(0, self.team_size):
             b_players.append(
-                RenderingPlayer(i, Team.BLUE_TEAM, (self.agent_radius * self.pixel_size), self.config_dict)
+                RenderingPlayer(i, Team.BLUE_TEAM, (self.agent_radius * self.pixel_size), self.config_dict, render_mode)
             )
         for i in range(self.team_size, 2 * self.team_size):
             r_players.append(
-                RenderingPlayer(i, Team.RED_TEAM, (self.agent_radius * self.pixel_size), self.config_dict)
+                RenderingPlayer(i, Team.RED_TEAM, (self.agent_radius * self.pixel_size), self.config_dict, render_mode)
             )
         self.players = {player.id:player for player in itertools.chain(b_players, r_players)}
 
