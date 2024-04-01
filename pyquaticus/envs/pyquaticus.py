@@ -765,7 +765,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             # to the next agent.
             player_hit_obstacle = False
             for obstacle in self.obstacles:
-                print(f"Checking obstacle: {obstacle}; Player pos: ({pos_x}, {pos_y}); player heading: {new_heading}")
                 collision = obstacle.detect_collision((pos_x, pos_y), radius = self.agent_radius)
                 if collision is True:
                     player_hit_obstacle = True
@@ -776,7 +775,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     self.agent_radius <= pos_y <= self.world_size[1] - self.agent_radius
                 )
             ):
-                print(f"Resetting player {player.id}")
                 if player.team == Team.RED_TEAM:
                     self.game_score['blue_tags'] += 1
                 else:
