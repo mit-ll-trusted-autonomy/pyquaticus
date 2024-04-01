@@ -169,7 +169,7 @@ class RenderingPlayer(Player):
         self.has_flag = False
         self.on_own_side = True
 
-    def rotate(self, angle=180):
+    def rotate(self, prev_pos, angle=180):
         """Method to rotate the player 180"""
         self.prev_pos = self.pos
         self.speed = 0
@@ -178,37 +178,8 @@ class RenderingPlayer(Player):
         # Rotate 180 degrees
         self.heading = angle180(self.heading + angle)
        
-        # Need to get which wall the agent bumped into
-        x_pos = self.pos[0]
-        y_pos = self.pos[1]
-
-        if (x_pos < self.r):
-            self.pos[0] += 1
-        elif(self.config_dict["world_size"][0] - self.r < x_pos):
-            self.pos[0] -= 1
-        else:
-            if 0 <= self.heading < 90:
-                self.pos[0] += 1
-            elif 90 <= self.heading < 180:
-                self.pos[0] += 1
-            elif -180 <= self.heading < -90:
-                self.pos[0] -= 1
-            else:
-                self.pos[0] -= 1
-        
-        if (y_pos < self.r):
-            self.pos[1] += 1
-        elif(self.config_dict["world_size"][1] - self.r < y_pos):
-            self.pos[1] -= 1
-        else:
-            if 0 <= self.heading < 90:
-                self.pos[1] += 1
-            elif 90 <= self.heading < 180:
-                self.pos[1] -= 1
-            elif -180 <= self.heading < -90:
-                self.pos[1] -= 1
-            else:
-                self.pos[1] += 1
+        self.pos[0] = prev_pos[0]
+        self.pos[1] = prev_pos[1]
         
         
 

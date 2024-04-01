@@ -765,16 +765,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             # to the next agent.
             player_hit_obstacle = False
             for obstacle in self.obstacles:
-                print(f"Checking obstacle: {obstacle}; Player pos: ({pos_x}, {pos_y})")
+                print(f"Checking obstacle: {obstacle}; Player pos: ({pos_x}, {pos_y}); player heading: {new_heading}")
                 collision = obstacle.detect_collision((pos_x, pos_y), radius = self.agent_radius)
-                print(f"Player {player.id} collided with obstacle? {collision}")
-                print(f"collision is True ? {collision is True} // collision == True ? {collision == True}")
                 if collision is True:
                     player_hit_obstacle = True
-                    print(f"Set player hit obstacle")
                     break
-                else:
-                    print(f"player {player.id} didn't collide")
             if player_hit_obstacle is True or not (
                 (self.agent_radius <= pos_x <= self.world_size[0] - self.agent_radius)
                 and (
@@ -801,7 +796,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     if self.tag_on_wall_collision:
                         self.state["agent_tagged"][player.id] = 1
                         player.is_tagged = True
-                    player.rotate()
+                    player.rotate(copy.deepcopy(player.prev_pos))
                 continue
             else:
                 self.state["agent_oob"][player.id] = 0
