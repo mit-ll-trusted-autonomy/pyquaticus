@@ -2,11 +2,11 @@ import copy
 from dataclasses import dataclass, field
 from enum import Enum
 import numpy as np
+from numpy.typing import NDArray
 import pygame
 from pygame import SRCALPHA, Surface, draw
 from typing import Hashable
-
-from pyquaticus.utils.utils import angle180
+from pyquaticus.utils.utils import angle180, closest_point_on_line
 
 class Team(Enum):
     """Enum for teams."""
@@ -175,6 +175,8 @@ class RenderingPlayer(Player):
         self.speed = 0
         self.thrust = 0
         self.has_flag = False
+        # Rotate 180 degrees
+        self.heading = angle180(self.heading + angle)
        
         # Need to get which wall the agent bumped into
         x_pos = self.pos[0]
@@ -184,14 +186,31 @@ class RenderingPlayer(Player):
             self.pos[0] += 1
         elif(self.config_dict["world_size"][0] - self.r < x_pos):
             self.pos[0] -= 1
+        else:
+            if 0 <= self.heading < 90:
+                self.pos[0] += 1
+            elif 90 <= self.heading < 180:
+                self.pos[0] += 1
+            elif -180 <= self.heading < -90:
+                self.pos[0] -= 1
+            else:
+                self.pos[0] -= 1
         
         if (y_pos < self.r):
             self.pos[1] += 1
         elif(self.config_dict["world_size"][1] - self.r < y_pos):
             self.pos[1] -= 1
+        else:
+            if 0 <= self.heading < 90:
+                self.pos[1] += 1
+            elif 90 <= self.heading < 180:
+                self.pos[1] -= 1
+            elif -180 <= self.heading < -90:
+                self.pos[1] -= 1
+            else:
+                self.pos[1] += 1
         
-        # Rotate 180 degrees
-        self.heading = angle180(self.heading + angle)
+        
 
     def render_tagging(self, cooldown_time):
         self.pygame_agent = self.pygame_agent_base.copy()
@@ -235,3 +254,58 @@ class Flag:
     def reset(self):
         """Resets the flags `pos` to be `home`."""
         self.pos = copy.deepcopy(self.home)
+
+@dataclass
+class Obstacle:
+    """Obstacle that agents can't travel through"""
+    def detect_collision(self, player_pos:tuple[float, float], radius:float = None):
+        raise NotImplementedError    
+
+@dataclass
+class PolygonObstacle(Obstacle):
+    """
+    Obstacle that agents can't travel through
+
+    Attributes:
+        anchor_points: A list of (X, Y) points that will form the polygon. Edges are 
+            assumed to be between each point (anchor_points[0], anchor_points[1]),
+            (anchor_points[1], anchor_points[2]), ..., 
+            (anchor_points[n], anchor_points[0]) 
+    """
+    anchor_points:list[tuple[float, float]] = field(default_factory=list)
+
+    def detect_collision(self, player_pos: tuple[float, float], radius: float, padding:float = 1e-4):
+        player = np.asarray(player_pos)
+        num_points = len(self.anchor_points)
+        for idx in range(num_points):
+            cv = np.asarray(self.anchor_points[idx])
+            nv = np.asarray(self.anchor_points[(idx+1)%num_points])
+            point_on_line = closest_point_on_line(cv, nv, player)
+            dist = (player[0] - point_on_line[0])**2 + (player[1] - point_on_line[1])**2
+            if dist < (radius**2)+padding:
+                return True
+        return False
+    
+
+@dataclass
+class CircleObstacle(Obstacle):
+    """Obstacle that agents can't travel through"""
+    radius:float
+    center_point:tuple[float, float] = field(default_factory=list)
+
+    def detect_collision(self, player:tuple[float, float], radius:float = None):
+        """
+        Collision check to determine if a player hit this object.
+        Args:
+            player: The player to check
+            
+        Returns:
+            True if the player is inside of (collided with) the circle
+        """
+        d = np.linalg.norm(np.absolute(np.asarray(self.center_point) - np.asarray(player)))
+        
+        if radius is not None:
+            return d < (self.radius + radius)
+        else:
+            return d < self.radius
+

@@ -38,7 +38,7 @@ from pygame.math import Vector2
 from pygame.transform import rotozoom
 
 from pyquaticus.config import config_dict_std, ACTION_MAP
-from pyquaticus.structs import Team, RenderingPlayer, Flag
+from pyquaticus.structs import Team, RenderingPlayer, Flag, CircleObstacle, PolygonObstacle
 from pyquaticus.utils.obs_utils import ObsNormalizer
 from pyquaticus.utils.pid import PID
 from pyquaticus.utils.utils import (
@@ -763,12 +763,25 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             # If the player hits a boundary, return them to their original starting position and skip
             # to the next agent.
-            if not (
+            player_hit_obstacle = False
+            for obstacle in self.obstacles:
+                print(f"Checking obstacle: {obstacle}; Player pos: ({pos_x}, {pos_y})")
+                collision = obstacle.detect_collision((pos_x, pos_y), radius = self.agent_radius)
+                print(f"Player {player.id} collided with obstacle? {collision}")
+                print(f"collision is True ? {collision is True} // collision == True ? {collision == True}")
+                if collision is True:
+                    player_hit_obstacle = True
+                    print(f"Set player hit obstacle")
+                    break
+                else:
+                    print(f"player {player.id} didn't collide")
+            if player_hit_obstacle is True or not (
                 (self.agent_radius <= pos_x <= self.world_size[0] - self.agent_radius)
                 and (
                     self.agent_radius <= pos_y <= self.world_size[1] - self.agent_radius
                 )
             ):
+                print(f"Resetting player {player.id}")
                 if player.team == Team.RED_TEAM:
                     self.game_score['blue_tags'] += 1
                 else:
@@ -1044,6 +1057,25 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         ):
             # Suppress numpy warnings to avoid printing out extra stuff to the console
             np.seterr(all="ignore")
+
+        self.obstacles = list()
+        obstacle_params = config_dict.get("obstacles", config_dict_std["obstacles"])
+        if obstacle_params is not None and isinstance(obstacle_params, dict):
+                circle_obstacles = obstacle_params.get("circle", None)
+                if circle_obstacles is not None and isinstance(circle_obstacles, list):
+                    for param in circle_obstacles:
+                        self.obstacles.append(CircleObstacle(param[0], (param[1][0], param[1][1])))
+                elif circle_obstacles is not None:
+                    raise TypeError(f"Expected circle obstacle parameters to be a list of tuples, not {type(circle_obstacles)}")
+                poly_obstacle = obstacle_params.get("polygon", None)
+                if poly_obstacle is not None and isinstance(poly_obstacle, list):
+                    for param in poly_obstacle:
+                        converted_param = [(p[0], p[1]) for p in param]
+                        self.obstacles.append(PolygonObstacle(converted_param))
+                elif poly_obstacle is not None:
+                    raise TypeError(f"Expected polygon obstacle parameters to be a list of tuples, not {type(poly_obstacle)}")
+        elif obstacle_params is not None:
+            raise TypeError(f"Expected obstacle_params to be None or a dict, not {type(obstacle_params)}")
 
         if self.render_mode:
             # Pygame Orientation Vector
@@ -1647,6 +1679,24 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     flag_pos_screen,
                     0.55*(self.pixel_size * self.agent_radius)
                 )
+
+            # Draw obstacles:
+            for obstacle in self.obstacles:
+                if isinstance(obstacle, CircleObstacle):
+                    draw.circle(
+                        self.screen,
+                        (128, 128, 128),
+                        self.world_to_screen(obstacle.center_point),
+                        obstacle.radius * self.pixel_size,
+                        width=1
+                    )
+                elif isinstance(obstacle, PolygonObstacle):
+                    draw.polygon(
+                            self.screen,
+                            (128, 128, 128),
+                            [self.world_to_screen(p) for p in obstacle.anchor_points],
+                            width=1
+                        )
 
             for player in teams_players:
                 # render tagging
