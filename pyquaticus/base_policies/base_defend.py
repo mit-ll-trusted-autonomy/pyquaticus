@@ -24,7 +24,7 @@ import numpy as np
 from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import config_dict_std, Team
 
-modes = {"easy", "medium", "hard", "competition_nothing", "competition_easy"}
+modes = {"nothing", "easy", "medium", "hard", "competition_easy", "competition_medium"}
 
 
 class BaseDefender(BaseAgentPolicy):
@@ -113,7 +113,7 @@ class BaseDefender(BaseAgentPolicy):
             elif act_heading > 1:
                 act_index = 10
         
-        elif self.mode=="competition_nothing":
+        elif self.mode=="nothing":
             act_index = -1
 
         elif self.mode=="competition_easy":
@@ -134,12 +134,50 @@ class BaseDefender(BaseAgentPolicy):
                     value = value[:-1]
             if my_obs["is_tagged"]:
                 self.goal = 'SC'
-            if -1.0 <= self.get_distance_between_2_points(estimated_position, config_dict_std["aquaticus_field_points"][value]) <= 1.0:
+            if -2.5 <= self.get_distance_between_2_points(estimated_position, config_dict_std["aquaticus_field_points"][value]) <= 2.5:
                 if self.goal == 'SM':
                     self.goal = 'PM'
                 else:
                     self.goal = 'SM'
             return self.goal
+        elif self.mode == "competition_medium":
+            my_flag_vec = self.bearing_to_vec(self.my_flag_bearing)
+            #Check if opponents are on teams side
+            min_enemy_distance = 1000.00
+            enemy_dis_dict = {}
+            closest_enemy = None
+            for enem, pos in self.opp_team_pos_dict.items():
+                enemy_dis_dict[enem] = pos[0]
+                if pos[0] < min_enemy_distance and not my_obs[(enem, "is_tagged")] and my_obs[(enem,'on_side')] == 0:
+                    min_enemy_distance = pos[0]
+                    closest_enemy = enem
+                    enemy_loc = self.rb_to_rect(pos)
+            # If the blue team doesn't have the flag, guard it
+            if self.opp_team_has_flag:
+                # If the blue team has the flag, chase them
+                ag_vect = my_flag_vec
+            elif not closest_enemy == None:
+                ag_vect = enemy_loc
+            else:
+                if self.team == Team.RED_TEAM:
+                    estimated_position = [my_obs["wall_1_distance"], my_obs["wall_0_distance"]]
+                else:
+                    estimated_position = [my_obs["wall_3_distance"], my_obs["wall_2_distance"]]
+                point = 'CH' if self.team == Team.RED_TEAM else  'CHX'
+                if -2.5 <= self.get_distance_between_2_points(estimated_position, config_dict_std["aquaticus_field_points"][point]) <= 2.5:
+                    return -1
+                else:
+                    return 'CH' 
+            try:
+                act_heading = self.angle180(self.vec_to_heading(ag_vect))
+                if 1 >= act_heading >= -1:
+                    act_index = 4
+                elif act_heading < -1:
+                    act_index = 6
+                elif act_heading > 1:
+                    act_index = 2
+            except:
+                act_index = 4
         elif self.mode == "medium":
             my_flag_vec = self.bearing_to_vec(self.my_flag_bearing)
     
