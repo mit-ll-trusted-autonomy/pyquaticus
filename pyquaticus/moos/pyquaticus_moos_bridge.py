@@ -385,7 +385,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         if msg.key() == "BLUE_SCORES":
             self.game_score['blue_captures'] = msg.double()
         elif msg.key() == "RED_SCORES":
-            self.game_score['blue_captures'] = msg.double()
+            self.game_score['red_captures'] = msg.double()
         else:
             raise ValueError(f"Unexpected message: {msg.key()}")
 
