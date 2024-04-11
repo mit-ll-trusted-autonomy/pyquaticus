@@ -75,9 +75,9 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.observation_space = self.get_agent_observation_space()
         self.action_space = self.get_agent_action_space()
 
-    def (self):
+    def reset(self):
         """
-        Sets up the players and s variables.
+        Sets up the players and resets variables.
         (Re)connects to MOOS node for the provided agent name.
         """
         self._action_count = 0
@@ -205,7 +205,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         # this is only for running policy, not traning
         # TODO: implement a sparse reward for evaluation
         reward = -1.
-        # just for evaluation, never need to  (might be running real robots)
+        # just for evaluation, never need to reset (might be running real robots)
         terminated, truncated = False, False
 
         # let the action occur
@@ -353,7 +353,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         """
         Handles messages about whether an agent can tag
         """
-        #  all cantag times to 0
+        # reset all cantag times to 0
         for p in self.players.values():
             p.cantag_time = 0.0
         strmsg = msg.string().strip()
