@@ -51,6 +51,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
         self.set_config(moos_config)
 
+        self.game_score = {'blue_captures':0, 'red_captures':0}
+
         if isinstance(team, str) and team.lower() in {"red", "blue"}:
             self.team = Team.RED_TEAM if team == "red" else Team.BLUE_TEAM
         elif "red" in agent_name and "blue" not in agent_name:
@@ -73,9 +75,9 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.observation_space = self.get_agent_observation_space()
         self.action_space = self.get_agent_action_space()
 
-    def reset(self):
+    def (self):
         """
-        Sets up the players and resets variables.
+        Sets up the players and s variables.
         (Re)connects to MOOS node for the provided agent name.
         """
         self._action_count = 0
@@ -109,6 +111,9 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
         self._init_moos_comm()
         self._wait_for_all_players()
+
+        for k in self.game_score:
+            self.game_score[k] = 0
 
         self._determine_team_wall_orient()
 
@@ -200,7 +205,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         # this is only for running policy, not traning
         # TODO: implement a sparse reward for evaluation
         reward = -1.
-        # just for evaluation, never need to reset (might be running real robots)
+        # just for evaluation, never need to  (might be running real robots)
         terminated, truncated = False, False
 
         # let the action occur
@@ -233,7 +238,9 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             "NAV_SPEED", "NAV_HEADING",
             "FLAG_SUMMARY",
             "TAGGED_VEHICLES",
-            "CANTAG_SUMMARY"
+            "CANTAG_SUMMARY",
+            "BLUE_SCORES",
+            "RED_SCORES"
         ]
         self._moos_vars.extend([
             f"NODE_REPORT_{n.upper()}"
@@ -293,6 +300,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             self._node_report_handler(msg)
         elif "CANTAG_SUMMARY" in msg.key():
             self._cantag_handler(msg)
+        elif "_SCORES" in msg.key():
+            self._score_handler(msg)
         else:
             raise ValueError(f"Unexpected message: {msg.key()}")
 
@@ -344,7 +353,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         """
         Handles messages about whether an agent can tag
         """
-        # reset all cantag times to 0
+        #  all cantag times to 0
         for p in self.players.values():
             p.cantag_time = 0.0
         strmsg = msg.string().strip()
@@ -368,6 +377,17 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         agent.pos = [float(data["X"]), float(data["Y"])]
         agent.speed = float(data["SPD"])
         agent.heading = float(data["HDG"])
+
+    def _score_handler(self, msg):
+        """
+        Handles messages about scores.
+        """
+        if msg.key() == "BLUE_SCORES":
+            self.game_score['blue_captures'] = msg.double()
+        elif msg.key() == "RED_SCORES":
+            self.game_score['blue_captures'] = msg.double()
+        else:
+            raise ValueError(f"Unexpected message: {msg.key()}")
 
     def _flag_grab_publisher(self):
         player = self.players[self._agent_name]
