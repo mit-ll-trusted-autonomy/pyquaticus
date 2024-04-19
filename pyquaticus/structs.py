@@ -6,7 +6,7 @@ from numpy.typing import NDArray
 import pygame
 from pygame import SRCALPHA, Surface, draw
 from typing import Hashable
-from pyquaticus.utils.utils import angle180, closest_point_on_line
+from pyquaticus.utils.utils import angle180, closest_point_on_line, mag_bearing_to
 
 class Team(Enum):
     """Enum for teams."""
@@ -229,8 +229,11 @@ class Flag:
 @dataclass
 class Obstacle:
     """Obstacle that agents can't travel through"""
-    def detect_collision(self, player_pos:tuple[float, float], radius:float = None):
-        raise NotImplementedError    
+    def detect_collision(self, player_pos:tuple[float, float], radius:float = None) -> bool:
+        raise NotImplementedError
+
+    def distance_from(self, player_pos:tuple[float, float], radius:float = None, heading:float = None) -> tuple[float, float]:
+        raise NotImplementedError
 
 @dataclass
 class PolygonObstacle(Obstacle):
@@ -245,7 +248,18 @@ class PolygonObstacle(Obstacle):
     """
     anchor_points:list[tuple[float, float]] = field(default_factory=list)
 
-    def detect_collision(self, player_pos: tuple[float, float], radius: float, padding:float = 1e-4):
+    def detect_collision(self, player_pos: tuple[float, float], radius: float, padding:float = 1e-4) -> bool:
+        """
+        Collision check to determine if a player collided with the polygon
+
+        Args:
+            player_pos: The player's X/Y position
+            radius: The players radius extending from the X/Y position
+            padding: A padding constant to reduce impact of floats that are too close
+                to one another
+        Returns:
+            True if the player collided with the object, false otherwise.
+        """
         player = np.asarray(player_pos)
         num_points = len(self.anchor_points)
         for idx in range(num_points):
@@ -256,6 +270,31 @@ class PolygonObstacle(Obstacle):
             if dist < (radius**2)+padding:
                 return True
         return False
+
+    def distance_from(self, player_pos: tuple[float, float], radius: float = None, heading: float = None) -> tuple[float, float]:
+        """
+        Determines the distance from a player to the closest point on an edge of the 
+        obstacle.
+
+        Args:
+            player_pos: The players X/Y position
+            radius: The players radius extending from the X/Y position.
+
+        Returns:
+            The distance from the closest point on the obstacle
+        """
+        distance_from_edges = list()
+        player = np.asarray(player_pos)
+        num_points = len(self.anchor_points)
+        for idx in range(num_points):
+            cv = np.asarray(self.anchor_points[idx])
+            nv = np.asarray(self.anchor_points[(idx+1)%num_points])
+            point_on_line = closest_point_on_line(cv, nv, player)
+            heading_to_point = mag_bearing_to(player, point_on_line, relative_hdg=heading)[1]
+            dist = np.linalg.norm(player - point_on_line) - radius
+            distance_from_edges.append((dist, heading_to_point))
+        return min(distance_from_edges, key=lambda k: k[0])
+
     
 
 @dataclass
@@ -264,7 +303,7 @@ class CircleObstacle(Obstacle):
     radius:float
     center_point:tuple[float, float] = field(default_factory=list)
 
-    def detect_collision(self, player:tuple[float, float], radius:float = None):
+    def detect_collision(self, player:tuple[float, float], radius:float = None) -> bool:
         """
         Collision check to determine if a player hit this object.
         Args:
@@ -279,4 +318,28 @@ class CircleObstacle(Obstacle):
             return d < (self.radius + radius)
         else:
             return d < self.radius
+        
+    def distance_from(self, player_pos: tuple[float, float], radius: float = None, heading: float = None) -> tuple[float, float]:
+        """
+        Computes the distance from the player to this object
 
+        Args:
+            player_pos: The player's X/Y position
+            radius: The player's radius extending from player_pos
+        
+        Returns:
+            The distance from the player to the object and the heading to the closest point.
+        """
+        heading_to_center = mag_bearing_to(player_pos, self.center_point, relative_hdg=heading)[1]
+
+        closest_point = (
+            self.center_point[0] + (self.radius * np.cos(np.deg2rad(heading_to_center))), 
+            self.center_point[1] + (self.radius * np.sin(np.deg2rad(heading_to_center)))
+        )
+
+        d = np.linalg.norm(np.asarray(closest_point) - np.asarray(player_pos))
+
+        if radius is not None:
+            d -= radius
+        
+        return (d, heading_to_center)

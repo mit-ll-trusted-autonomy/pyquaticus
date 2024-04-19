@@ -141,9 +141,14 @@ def main():
         "circle": [(4, (6, 5))],
         "polygon": [((70, 10), (85, 21), (83, 51), (72, 35))]
     }
+    config["sim_speedup_factor"] = 8
+    # config["normalize"] = False
     
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
-    env = pyquaticus_v0.PyQuaticusEnv(render_mode='human', team_size=1, config_dict=config)
+    try:
+        env = pyquaticus_v0.PyQuaticusEnv(render_mode='human', team_size=1, config_dict=config)
+    except Warning as err:
+        ...
     red_policy = args.red_policy
 
     kt = KeyTest(env, red_policy)
