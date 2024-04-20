@@ -490,6 +490,9 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
         self.capture_radius = self._moos_config.capture_radius
 
+        # game score
+        self.max_score = self._moos_config.max_score
+
         # mark this function called already
         # if called again, nothing will happen
         self._config_set = True
