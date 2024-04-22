@@ -2,11 +2,11 @@ import copy
 from dataclasses import dataclass, field
 from enum import Enum
 import numpy as np
+from numpy.typing import NDArray
 import pygame
 from pygame import SRCALPHA, Surface, draw
 from typing import Hashable
-
-from pyquaticus.utils.utils import angle180
+from pyquaticus.utils.utils import angle180, closest_point_on_line, mag_bearing_to
 
 class Team(Enum):
     """Enum for teams."""
@@ -170,29 +170,19 @@ class RenderingPlayer(Player):
         self.has_flag = False
         self.on_own_side = True
 
-    def rotate(self, angle=180):
+    def rotate(self, prev_pos, angle=180):
         """Method to rotate the player 180"""
         self.prev_pos = self.pos
         self.speed = 0
         self.thrust = 0
         self.has_flag = False
-       
-        # Need to get which wall the agent bumped into
-        x_pos = self.pos[0]
-        y_pos = self.pos[1]
-
-        if (x_pos < self.r):
-            self.pos[0] += 1
-        elif(self.config_dict["world_size"][0] - self.r < x_pos):
-            self.pos[0] -= 1
-        
-        if (y_pos < self.r):
-            self.pos[1] += 1
-        elif(self.config_dict["world_size"][1] - self.r < y_pos):
-            self.pos[1] -= 1
-        
         # Rotate 180 degrees
         self.heading = angle180(self.heading + angle)
+       
+        self.pos[0] = prev_pos[0]
+        self.pos[1] = prev_pos[1]
+        
+        
 
     def render_tagging(self, cooldown_time):
         self.pygame_agent = self.pygame_agent_base.copy()
@@ -236,3 +226,121 @@ class Flag:
     def reset(self):
         """Resets the flags `pos` to be `home`."""
         self.pos = copy.deepcopy(self.home)
+
+@dataclass
+class Obstacle:
+    """Obstacle that agents can't travel through"""
+    def detect_collision(self, player_pos:tuple[float, float], radius:float = None) -> bool:
+        raise NotImplementedError
+
+    def distance_from(self, player_pos:tuple[float, float], radius:float = None, heading:float = None) -> tuple[float, float]:
+        raise NotImplementedError
+
+@dataclass
+class PolygonObstacle(Obstacle):
+    """
+    Obstacle that agents can't travel through
+
+    Attributes:
+        anchor_points: A list of (X, Y) points that will form the polygon. Edges are 
+            assumed to be between each point (anchor_points[0], anchor_points[1]),
+            (anchor_points[1], anchor_points[2]), ..., 
+            (anchor_points[n], anchor_points[0]) 
+    """
+    anchor_points:list[tuple[float, float]] = field(default_factory=list)
+
+    def detect_collision(self, player_pos: tuple[float, float], radius: float, padding:float = 1e-4) -> bool:
+        """
+        Collision check to determine if a player collided with the polygon
+
+        Args:
+            player_pos: The player's X/Y position
+            radius: The players radius extending from the X/Y position
+            padding: A padding constant to reduce impact of floats that are too close
+                to one another
+        Returns:
+            True if the player collided with the object, false otherwise.
+        """
+        player = np.asarray(player_pos)
+        num_points = len(self.anchor_points)
+        for idx in range(num_points):
+            cv = np.asarray(self.anchor_points[idx])
+            nv = np.asarray(self.anchor_points[(idx+1)%num_points])
+            point_on_line = closest_point_on_line(cv, nv, player)
+            dist = (player[0] - point_on_line[0])**2 + (player[1] - point_on_line[1])**2
+            if dist < (radius**2)+padding:
+                return True
+        return False
+
+    def distance_from(self, player_pos: tuple[float, float], radius: float = None, heading: float = None) -> tuple[float, float]:
+        """
+        Determines the distance from a player to the closest point on an edge of the 
+        obstacle.
+
+        Args:
+            player_pos: The players X/Y position
+            radius: The players radius extending from the X/Y position.
+
+        Returns:
+            The distance from the closest point on the obstacle
+        """
+        distance_from_edges = list()
+        player = np.asarray(player_pos)
+        num_points = len(self.anchor_points)
+        for idx in range(num_points):
+            cv = np.asarray(self.anchor_points[idx])
+            nv = np.asarray(self.anchor_points[(idx+1)%num_points])
+            point_on_line = closest_point_on_line(cv, nv, player)
+            heading_to_point = mag_bearing_to(player, point_on_line, relative_hdg=heading)[1]
+            dist = np.linalg.norm(player - point_on_line) - radius
+            distance_from_edges.append((dist, heading_to_point))
+        return min(distance_from_edges, key=lambda k: k[0])
+
+    
+
+@dataclass
+class CircleObstacle(Obstacle):
+    """Obstacle that agents can't travel through"""
+    radius:float
+    center_point:tuple[float, float] = field(default_factory=list)
+
+    def detect_collision(self, player:tuple[float, float], radius:float = None) -> bool:
+        """
+        Collision check to determine if a player hit this object.
+        Args:
+            player: The player to check
+            
+        Returns:
+            True if the player is inside of (collided with) the circle
+        """
+        d = np.linalg.norm(np.absolute(np.asarray(self.center_point) - np.asarray(player)))
+        
+        if radius is not None:
+            return d < (self.radius + radius)
+        else:
+            return d < self.radius
+        
+    def distance_from(self, player_pos: tuple[float, float], radius: float = None, heading: float = None) -> tuple[float, float]:
+        """
+        Computes the distance from the player to this object
+
+        Args:
+            player_pos: The player's X/Y position
+            radius: The player's radius extending from player_pos
+        
+        Returns:
+            The distance from the player to the object and the heading to the closest point.
+        """
+        heading_to_center = mag_bearing_to(player_pos, self.center_point, relative_hdg=heading)[1]
+
+        closest_point = (
+            self.center_point[0] + (self.radius * np.cos(np.deg2rad(heading_to_center))), 
+            self.center_point[1] + (self.radius * np.sin(np.deg2rad(heading_to_center)))
+        )
+
+        d = np.linalg.norm(np.asarray(closest_point) - np.asarray(player_pos))
+
+        if radius is not None:
+            d -= radius
+        
+        return (d, heading_to_center)

@@ -54,6 +54,13 @@ config_dict_std = {
     "teleport_on_tag": False, # Option for the agent when tagged, either out of bounds or by opponent, to teleport home or not
     "tag_on_wall_collision": False, # Option for setting the agent ot a tagged state upon wall collsion
     "render_field_points": False, #Debugging lets you see where the field points are on the field
+    "obstacles": None, # Optional dictionary of obstacles in the enviornment
+    # Notes: obstacles are specified via dictionary. Keys are the obstacle type ("circle" or "polygon"). 
+    # Values are the parameters for the obstacle. 
+    # Note: For circles, it should be a list of tuples: (radius, (center_x, center_y)) all in meters
+    # Note: For polygons, it should be a list of tuples: ((x1, y1), (x2, y2), (x3, y3), ..., (xn, yn)) all in meters
+    # Note for polygons, there is an implied edge between (xn, yn) and (x1, y1), to complete the polygon.
+
 }
 #Build Point Field - Taken from Moos-IvP-Aquaticus Michael Benjamin
 #=================================================================
