@@ -392,7 +392,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                 obs[(entry_name, "relative_heading")] = angle180(
                     (dif_agent.heading - hdg_to_agent) % 360
                 )
-                # obs[(entry_name, "speed")] = dif_agent.speed
+                obs[(entry_name, "speed")] = dif_agent.speed
                 obs[(entry_name, "has_flag")] = dif_agent.has_flag
                 obs[(entry_name, "on_side")] = dif_agent.on_own_side
                 obs[(entry_name, "tagging_cooldown")] = dif_agent.tagging_cooldown
