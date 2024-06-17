@@ -24,7 +24,7 @@ import numpy as np
 from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import config_dict_std, Team
 
-modes = {"easy", "medium", "hard", "competition_nothing", "competition_easy", "competition_medium"}
+modes = {"nothing", "easy", "medium", "hard", "competition_easy", "competition_medium"}
 """
 Difficulty modes for the policy, each one has different behavior. 
 'easy' = Easy Attacker - Go straight to goal
@@ -99,7 +99,7 @@ class BaseAttacker(BaseAgentPolicy):
                 # If there is an error converting the vector to a heading, just go straight
                 act_index = 12
 
-        elif self.mode=="competition_nothing":
+        elif self.mode=="nothing":
             act_index = -1
 
         elif self.mode=="competition_easy":
@@ -121,7 +121,7 @@ class BaseAttacker(BaseAgentPolicy):
             if my_obs["is_tagged"]:
                 self.goal = 'SC'
 
-            if -1 <= self.get_distance_between_2_points(estimated_position, config_dict_std["aquaticus_field_points"][value]) <= 1:
+            if -2.5 <= self.get_distance_between_2_points(estimated_position, config_dict_std["aquaticus_field_points"][value]) <= 2.5:
                 
                 if self.goal == 'SC':
                     self.goal = 'CFX'
@@ -131,7 +131,8 @@ class BaseAttacker(BaseAgentPolicy):
                     self.goal = 'CF'
                 elif self.goal == 'CF':
                     self.goal = 'SC'
-
+            if self.goal == 'CF' and -6 <= self.get_distance_between_2_points(estimated_position, config_dict_std["aquaticus_field_points"][value]) <= 6:
+                self.goal = 'SC'
             return self.goal
         elif self.mode == "medium":
             

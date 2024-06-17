@@ -51,6 +51,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
         self.set_config(moos_config)
 
+        self.game_score = {'blue_captures':0, 'red_captures':0}
+
         if isinstance(team, str) and team.lower() in {"red", "blue"}:
             self.team = Team.RED_TEAM if team == "red" else Team.BLUE_TEAM
         elif "red" in agent_name and "blue" not in agent_name:
@@ -109,6 +111,9 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
         self._init_moos_comm()
         self._wait_for_all_players()
+
+        for k in self.game_score:
+            self.game_score[k] = 0
 
         self._determine_team_wall_orient()
 
@@ -233,7 +238,9 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             "NAV_SPEED", "NAV_HEADING",
             "FLAG_SUMMARY",
             "TAGGED_VEHICLES",
-            "CANTAG_SUMMARY"
+            "CANTAG_SUMMARY",
+            "BLUE_SCORES",
+            "RED_SCORES"
         ]
         self._moos_vars.extend([
             f"NODE_REPORT_{n.upper()}"
@@ -293,6 +300,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             self._node_report_handler(msg)
         elif "CANTAG_SUMMARY" in msg.key():
             self._cantag_handler(msg)
+        elif "_SCORES" in msg.key():
+            self._score_handler(msg)
         else:
             raise ValueError(f"Unexpected message: {msg.key()}")
 
@@ -368,6 +377,17 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         agent.pos = [float(data["X"]), float(data["Y"])]
         agent.speed = float(data["SPD"])
         agent.heading = float(data["HDG"])
+
+    def _score_handler(self, msg):
+        """
+        Handles messages about scores.
+        """
+        if msg.key() == "BLUE_SCORES":
+            self.game_score['blue_captures'] = msg.double()
+        elif msg.key() == "RED_SCORES":
+            self.game_score['red_captures'] = msg.double()
+        else:
+            raise ValueError(f"Unexpected message: {msg.key()}")
 
     def _flag_grab_publisher(self):
         player = self.players[self._agent_name]
@@ -469,6 +489,9 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.max_speed = self._moos_config.speed_bounds[1] + 0.5
 
         self.capture_radius = self._moos_config.capture_radius
+
+        # game score
+        self.max_score = self._moos_config.max_score
 
         # mark this function called already
         # if called again, nothing will happen

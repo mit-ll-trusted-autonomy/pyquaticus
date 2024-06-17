@@ -1186,7 +1186,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         elif self.state["current_time"] >= self.max_time:
             self.dones["__all__"] = True
-            self.message = "Game Over. No Winner"
+            if self.game_score['blue_captures'] > self.game_score['red_captures']:
+                self.message = "Blue Wins! Red Loses"
+            elif self.game_score['blue_captures'] > self.game_score['red_captures']:
+                self.message = "Blue Wins! Red Loses"
+            else:
+                self.message = "Game Over. No Winner"
 
     def update_params(self, agent_id):
         # Important Note: Be sure to deep copy anything other than plain-old-data, e.g.,
