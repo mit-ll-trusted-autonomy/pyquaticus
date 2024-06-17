@@ -38,7 +38,7 @@ from pygame.math import Vector2
 from pygame.transform import rotozoom
 
 from pyquaticus.config import config_dict_std, ACTION_MAP
-from pyquaticus.structs import Team, RenderingPlayer, Flag
+from pyquaticus.structs import Team, RenderingPlayer, Flag, CircleObstacle, PolygonObstacle
 from pyquaticus.utils.obs_utils import ObsNormalizer
 from pyquaticus.utils.pid import PID
 from pyquaticus.utils.utils import (
@@ -161,7 +161,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
     def _relheading_to_global_heading(self, player_heading, relheading):
         return angle180((player_heading + relheading) % 360)
 
-    def _register_state_elements(self, num_on_team):
+    def _register_state_elements(self, num_on_team, num_obstacles):
         """Initializes the normalizer."""
         agent_obs_normalizer = ObsNormalizer(False)
         max_bearing = [180]
@@ -243,6 +243,14 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             )
             agent_obs_normalizer.register(
                 (opponent_name, "is_tagged"), max_bool, min_bool
+            )
+        
+        for i in range(num_obstacles):
+            agent_obs_normalizer.register(
+                f"obstacle_{i}_distance", max_dist, min_dist
+            )
+            agent_obs_normalizer.register(
+                f"obstacle_{i}_bearing", max_bearing
             )
 
         self._state_elements_initialized = True
@@ -597,7 +605,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.agents_of_team[Team.RED_TEAM]
         )
         num_on_team = len(self.agents_of_team[Team.BLUE_TEAM])
-        self.agent_obs_normalizer = self._register_state_elements(num_on_team)
+        self.agent_obs_normalizer = self._register_state_elements(num_on_team, len(self.obstacles))
 
         self.action_spaces = {
             agent_id: self.get_agent_action_space() for agent_id in self.players
@@ -682,10 +690,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if not self.teleport_on_tag:
             self._check_untag()
         self._set_dones()
+        self._get_dist_to_obstacles()
 
         if self.message and self.render_mode:
             print(self.message)
-
         rewards = {agent_id: self.compute_rewards(agent_id) for agent_id in self.players}
         obs = {agent_id: self.state_to_obs(agent_id, self.normalize) for agent_id in raw_action_dict}
         info = {}
@@ -763,7 +771,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             # If the player hits a boundary, return them to their original starting position and skip
             # to the next agent.
-            if not (
+            player_hit_obstacle = False
+            for obstacle in self.obstacles:
+                collision = obstacle.detect_collision((pos_x, pos_y), radius = self.agent_radius)
+                if collision is True:
+                    player_hit_obstacle = True
+                    break
+            if player_hit_obstacle is True or not (
                 (self.agent_radius <= pos_x <= self.world_size[0] - self.agent_radius)
                 and (
                     self.agent_radius <= pos_y <= self.world_size[1] - self.agent_radius
@@ -788,7 +802,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     if self.tag_on_wall_collision:
                         self.state["agent_tagged"][player.id] = 1
                         player.is_tagged = True
-                    player.rotate()
+                    player.rotate(copy.deepcopy(player.prev_pos))
                 continue
             else:
                 self.state["agent_oob"][player.id] = 0
@@ -1045,6 +1059,25 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             # Suppress numpy warnings to avoid printing out extra stuff to the console
             np.seterr(all="ignore")
 
+        self.obstacles = list()
+        obstacle_params = config_dict.get("obstacles", config_dict_std["obstacles"])
+        if obstacle_params is not None and isinstance(obstacle_params, dict):
+                circle_obstacles = obstacle_params.get("circle", None)
+                if circle_obstacles is not None and isinstance(circle_obstacles, list):
+                    for param in circle_obstacles:
+                        self.obstacles.append(CircleObstacle(param[0], (param[1][0], param[1][1])))
+                elif circle_obstacles is not None:
+                    raise TypeError(f"Expected circle obstacle parameters to be a list of tuples, not {type(circle_obstacles)}")
+                poly_obstacle = obstacle_params.get("polygon", None)
+                if poly_obstacle is not None and isinstance(poly_obstacle, list):
+                    for param in poly_obstacle:
+                        converted_param = [(p[0], p[1]) for p in param]
+                        self.obstacles.append(PolygonObstacle(converted_param))
+                elif poly_obstacle is not None:
+                    raise TypeError(f"Expected polygon obstacle parameters to be a list of tuples, not {type(poly_obstacle)}")
+        elif obstacle_params is not None:
+            raise TypeError(f"Expected obstacle_params to be None or a dict, not {type(obstacle_params)}")
+
         if self.render_mode:
             # Pygame Orientation Vector
             self.UP = Vector2((0.0, 1.0))
@@ -1170,6 +1203,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.params[agent.id]["capture_radius"] = self.catch_radius
         self.params[agent.id]["agent_id"] = agent.id
         self.params[agent.id]["agent_oob"] = copy.deepcopy(self.state["agent_oob"])
+
+        # Obstacle Distance/Bearing
+        for i, obstacle in enumerate(self.state["dist_to_obstacles"][agent.id]):
+            self.params[agent.id][f"obstacle_{i}_distance"] = obstacle[0]
+            self.params[agent.id][f"obstacle_{i}_bearing"] = obstacle[1]
+
         if agent.team == Team.RED_TEAM:
             # Game Events
             self.params[agent.id]["num_teammates"] = self.num_red
@@ -1334,7 +1373,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             ] * self.num_agents,  # whether this agent tagged something
             "agent_tagged": [0] * self.num_agents,  # if this agent was tagged
             "agent_oob": [0] * self.num_agents,  # if this agent went out of bounds
+            "dist_to_obstacles": dict()
         }
+        agent_ids = list(self.players.keys())
+        for k in agent_ids:
+            self.state["dist_to_obstacles"][k] = [(0, 0)] * len(self.obstacles)
 
         for k in self.game_score:
             self.game_score[k] = 0
@@ -1501,7 +1544,19 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             ]
 
         return flag_vecs
-
+    
+    def _get_dist_to_obstacles(self):
+        """Computes the distance from each player to each obstacle"""
+        dist_to_obstacles = dict()
+        for player in self.players.values():
+            player_pos = player.pos
+            player_dists_to_obstacles = list()
+            for obstacle in self.obstacles:
+                dist_to_obstacle = obstacle.distance_from(player_pos, radius = self.agent_radius, heading=player.heading)
+                player_dists_to_obstacles.append(dist_to_obstacle)
+            dist_to_obstacles[player.id] = player_dists_to_obstacles
+        self.state["dist_to_obstacles"] = dist_to_obstacles
+    
     def render(self):
         """Overridden method inherited from `Gym`."""
         return self._render()
@@ -1653,6 +1708,24 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     0.55*(self.pixel_size * self.agent_radius)
                 )
 
+            # Draw obstacles:
+            for obstacle in self.obstacles:
+                if isinstance(obstacle, CircleObstacle):
+                    draw.circle(
+                        self.screen,
+                        (128, 128, 128),
+                        self.world_to_screen(obstacle.center_point),
+                        obstacle.radius * self.pixel_size,
+                        width=3
+                    )
+                elif isinstance(obstacle, PolygonObstacle):
+                    draw.polygon(
+                            self.screen,
+                            (128, 128, 128),
+                            [self.world_to_screen(p) for p in obstacle.anchor_points],
+                            width=3,
+                        )
+
             for player in teams_players:
                 # render tagging
                 player.render_tagging(self.tagging_cooldown)
@@ -1737,3 +1810,27 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             return a
         else:
             return b
+
+    def state_to_obs(self, agent_id, normalize=True):
+        """
+        Modified method to convert the state to agent observations. In addition to the
+        logic performed in the superclass state_to_obs, this method adds the distance
+        and bearing to obstacles into the observation and then performs the 
+        normalization.
+
+        Args:
+            agent_id: The agent who's observation is being generated
+            normalize: Flag to normalize the values in the observation
+        Returns
+            A dictionary containing the agents observation
+        """
+        orig_obs = super().state_to_obs(agent_id, normalize=False)
+        # Obstacle Distance/Bearing
+        for i, obstacle in enumerate(self.state["dist_to_obstacles"][agent_id]):
+            orig_obs[f"obstacle_{i}_distance"] = obstacle[0]
+            orig_obs[f"obstacle_{i}_bearing"] = obstacle[1]
+
+        if normalize:
+            orig_obs = self.agent_obs_normalizer.normalized(orig_obs)
+
+        return orig_obs

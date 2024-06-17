@@ -28,7 +28,8 @@ from pygame import KEYDOWN, QUIT, K_ESCAPE, K_SPACE, K_LEFT, K_UP, K_RIGHT, K_a,
 import sys
 import time
 from pyquaticus.envs.pyquaticus import Team
-import pyquaticus
+import pyquaticus.config
+import copy
 from pyquaticus import pyquaticus_v0
 import pyquaticus.utils.rewards as reward
 
@@ -134,9 +135,20 @@ def main():
     reward_config = {0:None, 1:None}
     #Alternative
     #reward_config = {0:reward.sparse, 1:reward.sparse}
+
+    config = copy.deepcopy(pyquaticus.config.config_dict_std)
+    config["obstacles"] = {
+        "circle": [(4, (6, 5))],
+        "polygon": [((70, 10), (85, 21), (83, 51), (72, 35))]
+    }
+    config["sim_speedup_factor"] = 8
+    # config["normalize"] = False
     
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
-    env = pyquaticus_v0.PyQuaticusEnv(render_mode='human', team_size=1)
+    try:
+        env = pyquaticus_v0.PyQuaticusEnv(render_mode='human', team_size=1, config_dict=config)
+    except Warning as err:
+        ...
     red_policy = args.red_policy
 
     kt = KeyTest(env, red_policy)
