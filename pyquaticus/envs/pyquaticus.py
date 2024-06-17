@@ -169,7 +169,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         max_dist_scrimmage = [self.scrimmage]
         min_dist = [0.0]
         max_bool, min_bool = [1.0], [0.0]
-        max_speed, min_speed = [self.max_speed], [0.0]
+        # max_speed, min_speed = [self.max_speed], [0.0]
         max_score, min_score = [self.max_score], [0.0]
         agent_obs_normalizer.register("opponent_home_bearing", max_bearing)
         agent_obs_normalizer.register("opponent_home_distance", max_dist, min_dist)
@@ -185,7 +185,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         agent_obs_normalizer.register("wall_3_distance", max_dist, min_dist)
         agent_obs_normalizer.register("scrimmage_line_bearing", max_bearing)
         agent_obs_normalizer.register("scrimmage_line_distance", max_dist_scrimmage, min_dist)
-        agent_obs_normalizer.register("speed", max_speed, min_speed)
+        # agent_obs_normalizer.register("speed", max_speed, min_speed)
         agent_obs_normalizer.register("has_flag", max_bool, min_bool)
         agent_obs_normalizer.register("on_side", max_bool, min_bool)
         agent_obs_normalizer.register(
@@ -204,9 +204,9 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             agent_obs_normalizer.register(
                 (teammate_name, "relative_heading"), max_bearing
             )
-            agent_obs_normalizer.register(
-                (teammate_name, "speed"), max_speed, min_speed
-            )
+            # agent_obs_normalizer.register(
+            #     (teammate_name, "speed"), max_speed, min_speed
+            # )
             agent_obs_normalizer.register(
                 (teammate_name, "has_flag"), max_bool, min_bool
             )
@@ -229,9 +229,9 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             agent_obs_normalizer.register(
                 (opponent_name, "relative_heading"), max_bearing
             )
-            agent_obs_normalizer.register(
-                (opponent_name, "speed"), max_speed, min_speed
-            )
+            # agent_obs_normalizer.register(
+            #     (opponent_name, "speed"), max_speed, min_speed
+            # )
             agent_obs_normalizer.register(
                 (opponent_name, "has_flag"), max_bool, min_bool
             )
@@ -351,7 +351,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         obs["scrimmage_line_distance"] = scrimmage_line_dist
 
         # Own speed
-        obs["speed"] = agent.speed
+        # obs["speed"] = agent.speed
         # Own flag status
         obs["has_flag"] = agent.has_flag
         # On side
@@ -392,7 +392,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                 obs[(entry_name, "relative_heading")] = angle180(
                     (dif_agent.heading - hdg_to_agent) % 360
                 )
-                obs[(entry_name, "speed")] = dif_agent.speed
+                # obs[(entry_name, "speed")] = dif_agent.speed
                 obs[(entry_name, "has_flag")] = dif_agent.has_flag
                 obs[(entry_name, "on_side")] = dif_agent.on_own_side
                 obs[(entry_name, "tagging_cooldown")] = dif_agent.tagging_cooldown
@@ -1288,9 +1288,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.params[agent.id][f"{status}_{dif_agent.id}_relative_heading"] = (
                     obs[(entry_name, "relative_heading")]
                 )
-                self.params[agent.id][f"{status}_{dif_agent.id}_speed"] = obs[
-                    (entry_name, "speed")
-                ]
+                # self.params[agent.id][f"{status}_{dif_agent.id}_speed"] = obs[
+                #     (entry_name, "speed")
+                # ]
                 self.params[agent.id][f"{status}_{dif_agent.id}_has_flag"] = obs[
                     (entry_name, "has_flag")
                 ]
