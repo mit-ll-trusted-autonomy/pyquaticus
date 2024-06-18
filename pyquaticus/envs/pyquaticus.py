@@ -480,33 +480,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     This environment simulates a game of capture the flag with agent dynamics based on MOOS-IvP
     (https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarine#section5).
 
-
-    ### Rewards
-
-    Reward functions will be learned using an inverse reinforcement learning algorithm (D-REX)
-
-    ### Starting State (need to update)
-
-    Each flag is placed at 0° latitude and 1/8 horizontal world size distance away from the back
-    wall of its respective team's territory.
-
-    If random_init is False, agents are spawned facing the scrimmage line at 0° latitude and
-    1/4 horizontal world size distance back from the scrimmage line.
-
-    If random_init is True, agents are spawned facing the scrimmage line at 0° latitude and
-    equidistant from the scrimmage line (this distance is variable). Then, they are shifted a variable
-    distance to either the left or right (same direction for both agents) with the constraints that
-    they cannot start inside the flag_keepout zone or behind their flag.
-
     ### Arguments
-
-    ```
-    gym.make('pyquaticus')
-    ```
     team_size: number of agents per team
     reward_config: a dictionary configuring the reward structure (see rewards.py)
     config_dict: a dictionary configuring the environment (see config_dict_std above)
-
     """
 
     metadata = {"render_modes": ["human"]}
