@@ -480,17 +480,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     This environment simulates a game of capture the flag with agent dynamics based on MOOS-IvP
     (https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarine#section5).
 
-    ### Starting State (TODO)
-
     ### Arguments
-
-    ```
-    gym.make('pyquaticus')
-    ```
     team_size: number of agents per team
     reward_config: a dictionary configuring the reward structure (see rewards.py)
     config_dict: a dictionary configuring the environment (see config_dict_std above)
-
     """
 
     metadata = {"render_modes": ["human"]}
