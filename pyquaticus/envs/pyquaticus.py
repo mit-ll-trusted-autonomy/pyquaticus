@@ -486,7 +486,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     config_dict: a dictionary configuring the environment (see config_dict_std above)
     """
 
-    metadata = {"render_modes": ["human"]}
+    metadata = {"render_modes": ["human", "rgb_array"]}
 
     def __init__(
         self,
@@ -977,7 +977,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         """
         # set variables from config
 
-        self.world_size = config_dict.get("world_size", config_dict_std["world_size"])
+        self.world_size = config_dict.get("env_size", config_dict_std["env_size"])
         self.pixel_size = config_dict.get("pixel_size", config_dict_std["pixel_size"])
         self.agent_radius = config_dict.get(
             "agent_radius", config_dict_std["agent_radius"]

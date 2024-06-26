@@ -1,7 +1,10 @@
 import contextily as cx
 import mercantile as mt
+import numpy as np
+
 from geographiclib.geodesic import Geodesic
 from PIL import Image
+from scipy.ndimage import label
 
 
 EPIC = (42.3495760, -71.1083459)
@@ -57,19 +60,28 @@ def crop_tiles(img, ext, w, s, e, n, ll=True):
 
 
 if __name__ == "__main__":
-    # source = cx.providers.CartoDB.VoyagerNoLabels
-    source = cx.providers.OpenStreetMap.Mapnik
+    # source = cx.providers.CartoDB.Voyager
+    source = cx.providers.CartoDB.DarkMatterNoLabels
+
+    print(source.get('attribution'))
+    print()
+
     img, ext = cx.bounds2img(
         w=EPIC[1], s=EPIC[0], e=MIT_SAILING_PAVILION[1], n=MIT_SAILING_PAVILION[0], zoom="auto", source=source, ll=True,
         wait=0, max_retries=2, n_connections=1, use_cache=False, zoom_adjust=None
     )
-    print(img[:,:,:-1].shape)
-    print()
+    print("Initial image size:", img[:,:,:-1].shape)
 
     img = crop_tiles(img[:,:,:-1], ext, EPIC[1], EPIC[0], MIT_SAILING_PAVILION[1], MIT_SAILING_PAVILION[0], ll=True)
-    print(img.shape)
+    print("Final image size:", img.shape)
 
     image = Image.fromarray(img)
     image.save("topo_test.png")
 
     # Geodesic.WGS84.Direct(lat1=34., lon1=148., azi1=90., s12=10_000.) #s12 is the distance from the first point to the second in meters
+    # obj_connectivity = np.array(
+    #     [[0, 1, 0],
+    #      [1, 1, 1],
+    #      [0, 1, 0]]
+    # )
+    # labeled_mask, n_objects = label(mask, structure=obj_connectivity)

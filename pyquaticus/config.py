@@ -6,8 +6,14 @@ from pyquaticus.utils.utils import get_screen_res
 MAX_SPEED = 1.5
 
 config_dict_std = {
-    "world_size": [160.0, 80.0],  # meters
-    "pixel_size": 10,  # pixels/meter
+    "gps_env": False, # real world game location
+    "env_size": [160.0, 80.0], # meters 
+    "env_bounds": "auto", # lat/lon (west, south, east, north)
+    "blue_flag_coords": [(42.3579241, -71.0881385)], #list of coordinates or "auto"
+    "red_flag_coords": [(42.3583364, -71.0868672)], #list of coordinates or "auto"
+    "flag_coord_unit": "xy", # "xy" (relative to env_size) or "ll" (lat/lon)
+    "scrimmage_line_coords": "auto",
+    "scrimmage_line_coord_unit": "xy", # "xy" (relative to env_size) or "ll" (lat/lon)
     "agent_radius": 2.0,  # meters
     "catch_radius": 10.0,  # meters
     "flag_keepout": 5.0,  # minimum distance (meters) between agent and flag centers
@@ -23,7 +29,7 @@ config_dict_std = {
     "normalize": True,  # Flag for normalizing the observation space.
     "tagging_cooldown": (
         30.0
-    ),  # Cooldown on an agent after they tag another agent, to prevent consecutive tags
+    ),  # Cooldown on an agent (seconds) after they tag another agent, to prevent consecutive tags
     # MOOS dynamics parameters
     "speed_factor": 20.0,  # Multiplicative factor for desired_speed -> desired_thrust
     "thrust_map": np.array(  # Piecewise linear mapping from desired_thrust to speed
@@ -80,7 +86,7 @@ config_dict_std = {
 #        |              ^     |     ^              |
 #        |          PB  |     |CB   |    SB        |
 #    PPB o---------o----------o---------o----------o SSB   Row B
-ws = config_dict_std["world_size"]
+ws = config_dict_std["env_size"]
 inc_x = ws[0]/8
 inc_y = ws[1]/4
 config_dict_std["aquaticus_field_points"] ={"PPB":[0,inc_y*4],"PB":[0, inc_y * 3], "CB":[0, inc_y*2], "SB": [0, inc_y*1], "SSB":[0, 0],
