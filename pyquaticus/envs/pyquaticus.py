@@ -480,23 +480,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     This environment simulates a game of capture the flag with agent dynamics based on MOOS-IvP
     (https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarine#section5).
 
-
-    ### Rewards
-
-    Reward functions will be learned using an inverse reinforcement learning algorithm (D-REX)
-
-    ### Starting State (need to update)
-
-    Each flag is placed at 0° latitude and 1/8 horizontal world size distance away from the back
-    wall of its respective team's territory.
-
-    If random_init is False, agents are spawned facing the scrimmage line at 0° latitude and
-    1/4 horizontal world size distance back from the scrimmage line.
-
-    If random_init is True, agents are spawned facing the scrimmage line at 0° latitude and
-    equidistant from the scrimmage line (this distance is variable). Then, they are shifted a variable
-    distance to either the left or right (same direction for both agents) with the constraints that
-    they cannot start inside the flag_keepout zone or behind their flag.
+    ### Starting State (TODO)
 
     ### Arguments
 
@@ -1013,15 +997,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             "flag_keepout", config_dict_std["flag_keepout"]
         )
         self.max_speed = config_dict.get("max_speed", config_dict_std["max_speed"])
-        self.own_side_accel = config_dict.get(
-            "own_side_accel", config_dict_std["own_side_accel"]
-        )
-        self.opp_side_accel = config_dict.get(
-            "opp_side_accel", config_dict_std["opp_side_accel"]
-        )
-        self.wall_bounce = config_dict.get(
-            "wall_bounce", config_dict_std["wall_bounce"]
-        )
         self.tau = config_dict.get("tau", config_dict_std["tau"])
         self.sim_speedup_factor = config_dict.get("sim_speedup_factor", config_dict_std["sim_speedup_factor"])
         self.max_time = config_dict.get("max_time", config_dict_std["max_time"])
@@ -1569,7 +1544,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         """
         if self.screen is None:
             pygame.init()
-            pygame.display.set_caption("Capture the Flag")
+            pygame.display.set_caption("Capture The Flag")
             if self.render_mode:
                 pygame.display.init()
                 self.screen = pygame.display.set_mode(

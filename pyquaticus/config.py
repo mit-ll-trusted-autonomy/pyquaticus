@@ -12,15 +12,6 @@ config_dict_std = {
     "catch_radius": 10.0,  # meters
     "flag_keepout": 5.0,  # minimum distance (meters) between agent and flag centers
     "max_speed": MAX_SPEED,  # meters / s
-    "own_side_accel": (
-        1.0
-    ),  # [0, 1] percentage of max acceleration that can be used on your side of scrimmage
-    "opp_side_accel": (
-        1.0
-    ),  # [0, 1] percentage of max acceleration that can be used on opponent's side of scrimmage
-    "wall_bounce": (
-        0.5
-    ),  # [0, 1] percentage of current speed (x or y) at which an agent is repelled from a wall (vertical or horizontal)
     "tau": (
         1 / 10
     ),  # max dt (seconds) for updating the simulation
@@ -28,10 +19,6 @@ config_dict_std = {
     "max_time": 120.0,  # maximum time (seconds) per episode
     "max_score": 1,     # maximum score per episode (until a winner is declared)
     "max_screen_size": get_screen_res(),
-    "random_init": (
-        False
-    ),  # randomly initialize agents' positions for ctf mode (within fairness constraints)
-    "save_traj": False,  # save traj as pickle
     "render_fps": 30,
     "normalize": True,  # Flag for normalizing the observation space.
     "tagging_cooldown": (
