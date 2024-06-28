@@ -9,11 +9,11 @@ config_dict_std = {
     "gps_env": False, # real world game location
     "env_size": [160.0, 80.0], # meters 
     "env_bounds": "auto", # lat/lon (west, south, east, north)
-    "blue_flag_coords": [(42.3579241, -71.0881385)], #list of coordinates or "auto"
-    "red_flag_coords": [(42.3583364, -71.0868672)], #list of coordinates or "auto"
-    "flag_coord_unit": "xy", # "xy" (relative to env_size) or "ll" (lat/lon)
-    "scrimmage_line_coords": "auto",
-    "scrimmage_line_coord_unit": "xy", # "xy" (relative to env_size) or "ll" (lat/lon)
+    "blue_flag_home": (42.3579241, -71.0881385), #coordinates, list of coordinates, or "auto"
+    "red_flag_home": (42.3583364, -71.0868672), #coordinates, list of coordinates, or "auto"
+    "flag_home_unit": "xy", # "xy" (relative to env_size) or "ll" (lat/lon)
+    "scrimmage_coords": "auto",
+    "scrimmage_coord_unit": "xy", # "xy" (relative to env_size) or "ll" (lat/lon)
     "agent_radius": 2.0,  # meters
     "catch_radius": 10.0,  # meters
     "flag_keepout": 5.0,  # minimum distance (meters) between agent and flag centers
@@ -24,6 +24,7 @@ config_dict_std = {
     "sim_speedup_factor": 1, # simulation speed multiplier (integer >= 1)
     "max_time": 120.0,  # maximum time (seconds) per episode
     "max_score": 1,     # maximum score per episode (until a winner is declared)
+    "screen_frac": 0.75, # fraction of screen to use for rendering
     "max_screen_size": get_screen_res(),
     "render_fps": 30,
     "normalize": True,  # Flag for normalizing the observation space.

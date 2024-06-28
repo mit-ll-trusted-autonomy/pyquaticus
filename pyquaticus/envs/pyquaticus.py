@@ -165,7 +165,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         """Initializes the normalizer."""
         agent_obs_normalizer = ObsNormalizer(False)
         max_bearing = [180]
-        max_dist = [np.linalg.norm(self.world_size) + 10]  # add a ten meter buffer
+        max_dist = [np.linalg.norm(self.env_size) + 10]  # add a ten meter buffer
         max_dist_scrimmage = [self.scrimmage]
         min_dist = [0.0]
         max_bool, min_bool = [1.0], [0.0]
@@ -591,7 +591,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             agent_id: self.get_agent_observation_space() for agent_id in self.players
         }
 
-
         # pygame screen
         self.screen = None
         self.clock = None
@@ -755,9 +754,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     player_hit_obstacle = True
                     break
             if player_hit_obstacle is True or not (
-                (self.agent_radius <= pos_x <= self.world_size[0] - self.agent_radius)
+                (self.agent_radius <= pos_x <= self.env_size[0] - self.agent_radius)
                 and (
-                    self.agent_radius <= pos_y <= self.world_size[1] - self.agent_radius
+                    self.agent_radius <= pos_y <= self.env_size[1] - self.agent_radius
                 )
             ):
                 if player.team == Team.RED_TEAM:
@@ -976,9 +975,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             with the standard configuration value.
         """
         # set variables from config
-
-        self.world_size = config_dict.get("env_size", config_dict_std["env_size"])
-        self.pixel_size = config_dict.get("pixel_size", config_dict_std["pixel_size"])
+        self.gps_env = config_dict.get("gps_env", config_dict_std["gps_env"])
+        self.env_size = config_dict.get("env_size", config_dict_std["env_size"])
+        self.env_bounds = config_dict.get("env_bounds", config_dict_std["env_bounds"])
+        self.blue_flag_home = config_dict.get("blue_flag_home", config_dict_std["blue_flag_home"])
+        self.red_flag_home = config_dict.get("red_flag_home", config_dict_std["red_flag_home"])
+        flag_home_unit = config_dict.get("flag_home_unit", config_dict_std["flag_home_unit"])
+        self.scrimmage_coords = config_dict.get("scrimmage_coords", config_dict_std["scrimmage_coords"])
+        scrimmage_coord_unit = config_dict.get("scrimmage_coord_unit", config_dict_std["scrimmage_coord_unit"])
         self.agent_radius = config_dict.get(
             "agent_radius", config_dict_std["agent_radius"]
         )
@@ -994,6 +998,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.sim_speedup_factor = config_dict.get("sim_speedup_factor", config_dict_std["sim_speedup_factor"])
         self.max_time = config_dict.get("max_time", config_dict_std["max_time"])
         self.max_score = config_dict.get("max_score", config_dict_std["max_score"])
+        self.screen_frac = config_dict.get("screen_frac", config_dict_std["screen_frac"])
         self.max_screen_size = config_dict.get(
             "max_screen_size", config_dict_std["max_screen_size"]
         )
@@ -1027,6 +1032,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             # Suppress numpy warnings to avoid printing out extra stuff to the console
             np.seterr(all="ignore")
 
+        # Environment Geometry Construction
+        if self.gps_env:
+            #1 check for tile caching
+            #2 pull tile and cache occupancy map,  
+
+        # Obstacles
         self.obstacles = list()
         obstacle_params = config_dict.get("obstacles", config_dict_std["obstacles"])
         if obstacle_params is not None and isinstance(obstacle_params, dict):
@@ -1055,35 +1066,35 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.border_width = 4  # pixels
             self.a2a_line_width = 3 #pixels
 
-            self.arena_width = self.world_size[0] * self.pixel_size
-            self.arena_height = self.world_size[1] * self.pixel_size
+            self.arena_width = self.env_size[0] * self.pixel_size
+            self.arena_height = self.env_size[1] * self.pixel_size
 
             # check that world size (pixels) does not exceed the screen dimensions
             world_screen_err_msg = (
-                "Specified world_size {} exceeds the maximum size {} in at least one"
+                "Specified env_size {} exceeds the maximum size {} in at least one"
                 " dimension".format(
                     [
-                        round(2*self.arena_offset + self.pixel_size * self.world_size[0]),
-                        round(2*self.arena_offset + self.pixel_size * self.world_size[1])
+                        round(2*self.arena_offset + self.pixel_size * self.env_size[0]),
+                        round(2*self.arena_offset + self.pixel_size * self.env_size[1])
                     ], 
                     self.max_screen_size
                 )
             )
             assert (
-                2*self.arena_offset + self.pixel_size * self.world_size[0] <= self.max_screen_size[0]
-                and 2*self.arena_offset + self.pixel_size * self.world_size[1] <= self.max_screen_size[1]
+                2*self.arena_offset + self.pixel_size * self.env_size[0] <= self.max_screen_size[0]
+                and 2*self.arena_offset + self.pixel_size * self.env_size[1] <= self.max_screen_size[1]
             ), world_screen_err_msg
 
         # check that world dimensions (pixels) are even
         world_even_err_msg = (
-            "Specified world_size {} has at least one dimension that is not even"
-            .format(self.world_size)
+            "Specified env_size {} has at least one dimension that is not even"
+            .format(self.env_size)
         )
-        assert (self.world_size[0] * self.pixel_size) % 2 == 0 and (
-            self.world_size[1] * self.pixel_size
+        assert (self.env_size[0] * self.pixel_size) % 2 == 0 and (
+            self.env_size[1] * self.pixel_size
         ) % 2 == 0, world_even_err_msg
 
-        self.screen_size = [self.pixel_size * d for d in self.world_size]
+        self.screen_size = [self.pixel_size * d for d in self.env_size]
 
         # check that time between frames (1/render_fps) is not larger than timestep (tau)
         frame_rate_err_msg = (
@@ -1106,26 +1117,26 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # check that agents and flags properly fit within world
         agent_flag_err_msg = (
             "Specified agent_radius ({}), flag_radius ({}), and flag_keepout ({})"
-            " create impossible initialization based on world_size({})".format(
-                self.agent_radius, self.flag_radius, self.flag_keepout, self.world_size
+            " create impossible initialization based on env_size({})".format(
+                self.agent_radius, self.flag_radius, self.flag_keepout, self.env_size
             )
         )
         horizontal_fit = (
-            2 * self.agent_radius + 2 * self.flag_keepout < self.world_size[0] / 2
+            2 * self.agent_radius + 2 * self.flag_keepout < self.env_size[0] / 2
         )
-        vertical_fit = self.flag_keepout + self.agent_radius < self.world_size[1] / 2
+        vertical_fit = self.flag_keepout + self.agent_radius < self.env_size[1] / 2
         assert horizontal_fit and vertical_fit, agent_flag_err_msg
 
         # set reference variables for world boundaries
         # ll = lower left, lr = lower right
         # ul = upper left, ur = upper right
         self.boundary_ll = np.array([0.0, 0.0], dtype=np.float32)
-        self.boundary_lr = np.array([self.world_size[0], 0.0], dtype=np.float32)
-        self.boundary_ul = np.array([0.0, self.world_size[1]], dtype=np.float32)
-        self.boundary_ur = np.array(self.world_size, dtype=np.float32)
-        self.scrimmage = 0.5*self.world_size[0] #horizontal (x) location of scrimmage line (relative to world)
+        self.boundary_lr = np.array([self.env_size[0], 0.0], dtype=np.float32)
+        self.boundary_ul = np.array([0.0, self.env_size[1]], dtype=np.float32)
+        self.boundary_ur = np.array(self.env_size, dtype=np.float32)
+        self.scrimmage = 0.5*self.env_size[0] #horizontal (x) location of scrimmage line (relative to world)
         self.scrimmage_l = np.array([self.scrimmage, 0.0], dtype=np.float32)
-        self.scrimmage_u = np.array([self.scrimmage, self.world_size[1]], dtype=np.float32)
+        self.scrimmage_u = np.array([self.scrimmage, self.env_size[1]], dtype=np.float32)
 
     def get_distance_between_2_points(self, start: np.array, end: np.array) -> float:
         """
@@ -1310,10 +1321,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         flag_locations = [
             [
-                self.world_size[0] - self.world_size[0] / 8,
-                self.world_size[1] / 2,
+                self.env_size[0] - self.env_size[0] / 8,
+                self.env_size[1] / 2,
             ],  # Blue Team
-            [self.world_size[0] / 8, self.world_size[1] / 2],  # Red Team
+            [self.env_size[0] / 8, self.env_size[1] / 2],  # Red Team
         ]
 
         for flag in self.flags:
@@ -1375,8 +1386,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         flag and random offsets.
 
         If `random_init` is `False`, then agent positions are programmatically generated using the formula
-        init_x = world_size[x] / 4
-        init_y = (world_size[y] / (team_size + 1)) * ((player_id % team_size) + 1)
+        init_x = env_size[x] / 4
+        init_y = (env_size[y] / (team_size + 1)) * ((player_id % team_size) + 1)
 
         This allows players to be equidistant vertically from one another and all be in a straight line 1/4 of the way
         from the boundary.
@@ -1441,13 +1452,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 player.prev_pos = copy.deepcopy(player.pos)
             else:
                 if player.team == Team.RED_TEAM:
-                    init_x_pos = self.world_size[0] / 4
+                    init_x_pos = self.env_size[0] / 4
                     player.heading = 90
                 else:
-                    init_x_pos = self.world_size[0] - self.world_size[0] / 4
+                    init_x_pos = self.env_size[0] - self.env_size[0] / 4
                     player.heading = -90
 
-                init_y_pos = (self.world_size[1] / (self.team_size + 1)) * (
+                init_y_pos = (self.env_size[1] / (self.team_size + 1)) * (
                     (player.id % self.team_size) + 1
                 )
                 player.pos = [init_x_pos, init_y_pos]
@@ -1471,9 +1482,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             y_pos = player.pos[1]
 
             distances_to_walls[i]["left_dist"] = x_pos
-            distances_to_walls[i]["right_dist"] = self.world_size[0] - x_pos
+            distances_to_walls[i]["right_dist"] = self.env_size[0] - x_pos
             distances_to_walls[i]["bottom_dist"] = y_pos
-            distances_to_walls[i]["top_dist"] = self.world_size[1] - y_pos
+            distances_to_walls[i]["top_dist"] = self.env_size[1] - y_pos
 
         return distances_to_walls
 
