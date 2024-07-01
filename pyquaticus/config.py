@@ -14,6 +14,7 @@ config_dict_std = {
     "flag_home_unit": "xy", # "xy" (relative to env_size) or "ll" (lat/lon)
     "scrimmage_coords": "auto",
     "scrimmage_coord_unit": "xy", # "xy" (relative to env_size) or "ll" (lat/lon)
+    "water_contour_eps": 0.001, # tolerance for error between approximate and true contours dividing water and land
     "agent_radius": 2.0,  # meters
     "catch_radius": 10.0,  # meters
     "flag_keepout": 5.0,  # minimum distance (meters) between agent and flag centers

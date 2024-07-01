@@ -980,9 +980,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.env_bounds = config_dict.get("env_bounds", config_dict_std["env_bounds"])
         self.blue_flag_home = config_dict.get("blue_flag_home", config_dict_std["blue_flag_home"])
         self.red_flag_home = config_dict.get("red_flag_home", config_dict_std["red_flag_home"])
-        flag_home_unit = config_dict.get("flag_home_unit", config_dict_std["flag_home_unit"])
+        self.flag_home_unit = config_dict.get("flag_home_unit", config_dict_std["flag_home_unit"])
         self.scrimmage_coords = config_dict.get("scrimmage_coords", config_dict_std["scrimmage_coords"])
-        scrimmage_coord_unit = config_dict.get("scrimmage_coord_unit", config_dict_std["scrimmage_coord_unit"])
+        self.scrimmage_coord_unit = config_dict.get("scrimmage_coord_unit", config_dict_std["scrimmage_coord_unit"])
+        self.water_contour_eps = config_dict.get("water_contour_eps", config_dict_std["scrimmage_coord_unit"])
         self.agent_radius = config_dict.get(
             "agent_radius", config_dict_std["agent_radius"]
         )
@@ -1035,7 +1036,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # Environment Geometry Construction
         if self.gps_env:
             #1 check for tile caching
-            #2 pull tile and cache occupancy map,  
+            #2 pull tile and cache pretty image, gray image (label with lat/lon and epsilon)
+            #3 build occupancy map, contours (epsilon)
+            #4 find scrimmage line points
 
         # Obstacles
         self.obstacles = list()
