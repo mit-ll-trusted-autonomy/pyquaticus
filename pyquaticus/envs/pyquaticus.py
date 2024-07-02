@@ -24,11 +24,13 @@ import colorsys
 import copy
 import itertools
 import math
+import os
 import random
 from collections import OrderedDict, defaultdict
 from typing import Optional
 
 import numpy as np
+import pathlib
 import pygame
 from gymnasium.spaces import Discrete
 from gymnasium.utils import seeding
@@ -1034,11 +1036,18 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             np.seterr(all="ignore")
 
         # Environment Geometry Construction
-        if self.gps_env:
-            #1 check for tile caching
-            #2 pull tile and cache pretty image, gray image (label with lat/lon and epsilon)
-            #3 build occupancy map, contours (epsilon)
-            #4 find scrimmage line points
+        self._build_env_geom()
+
+        #2 build point field 
+
+        map_caching_dir = str(pathlib.Path(__file__).resolve().parents[0] / '__mapcache__')
+        if not os.path.isdir(map_caching_dir):
+            os.mkdir(map_caching_dir)
+        
+        map_cache = os.path.join(map_caching_dir, '')
+        #2 check for tile caching
+        #3 pull tile and cache pretty image, gray image (label with lat/lon and epsilon)
+        #4 build occupancy map, contours (epsilon)
 
         # Obstacles
         self.obstacles = list()
@@ -1538,6 +1547,32 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 player_dists_to_obstacles.append(dist_to_obstacle)
             dist_to_obstacles[player.id] = player_dists_to_obstacles
         self.state["dist_to_obstacles"] = dist_to_obstacles
+
+    def _build_env_geom(self):
+        if self.gps_env:
+        else:
+            if self.flag_home_unit == "ll" or self.scrimmage_coord_unit == "ll":
+                raise Exception("'ll' (Lat/Long) units should only be used when gps_env is True")
+
+            if self.env_size == self.env_bounds == "auto":
+                raise Exception("Either env_size or env_bounds must be set in config_dict (cannot both be 'auto')")
+
+            # environment size
+            if self.env_size == "auto":
+                self.env_size = [
+                    self.env_bounds[1][0] - self.env_bounds[0][0],
+                    self.env_bounds[1][1] - self.env_bounds[0][1]
+                ]
+            # environment bounds
+            if self.env_bounds == "auto":
+                self.env_bounds = [
+                    (0., 0.),
+                    (self.env_size[0], self.env_size[1])
+                ]
+            # blue flag home
+            if np.any(self.blue_flag_home) >= 
+            
+            
     
     def render(self):
         """Overridden method inherited from `Gym`."""

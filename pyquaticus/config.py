@@ -7,10 +7,10 @@ MAX_SPEED = 1.5
 
 config_dict_std = {
     "gps_env": False, # real world game location
-    "env_size": [160.0, 80.0], # meters 
-    "env_bounds": "auto", # lat/lon (west, south, east, north)
-    "blue_flag_home": (42.3579241, -71.0881385), #coordinates, list of coordinates, or "auto"
-    "red_flag_home": (42.3583364, -71.0868672), #coordinates, list of coordinates, or "auto"
+    "env_size": [160.0, 80.0], # meters or "auto"
+    "env_bounds": "auto", # meters [(xmin, ymin), (xmax, ymax)], lat/lon [(west, south), (east, north)]
+    "blue_flag_home": "auto", #coordinates, list of coordinates, or "auto"
+    "red_flag_home": "auto", #coordinates, list of coordinates, or "auto"
     "flag_home_unit": "xy", # "xy" (relative to env_size) or "ll" (lat/lon)
     "scrimmage_coords": "auto",
     "scrimmage_coord_unit": "xy", # "xy" (relative to env_size) or "ll" (lat/lon)
@@ -88,9 +88,8 @@ config_dict_std = {
 #        |              ^     |     ^              |
 #        |          PB  |     |CB   |    SB        |
 #    PPB o---------o----------o---------o----------o SSB   Row B
-ws = config_dict_std["env_size"]
-inc_x = ws[0]/8
-inc_y = ws[1]/4
+inc_x = 0.125
+inc_y = 0.25
 config_dict_std["aquaticus_field_points"] ={"PPB":[0,inc_y*4],"PB":[0, inc_y * 3], "CB":[0, inc_y*2], "SB": [0, inc_y*1], "SSB":[0, 0],
                                             "PPF":[inc_x, inc_y*4], "PF":[inc_x, inc_y*3], "CF":[inc_x, inc_y*2], "SF":[inc_x, inc_y], "SSF":[inc_x, 0],
                                             "PPH":[inc_x*2, inc_y*4], "PH":[inc_x*2, inc_y*3], "CH":[inc_x*2, inc_y*2], "SH":[inc_x*2, inc_y], "SSH":[inc_x*2, 0],

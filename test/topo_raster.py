@@ -73,7 +73,7 @@ if __name__ == "__main__":
     print()
 
     img, ext = cx.bounds2img(
-        w=COORD1[1], s=COORD1[0], e=COORD2[1], n=COORD2[0], zoom=12, source=source, ll=True,
+        w=COORD1[1], s=COORD1[0], e=COORD2[1], n=COORD2[0], zoom='auto', source=source, ll=True,
         wait=0, max_retries=2, n_connections=1, use_cache=False, zoom_adjust=None
     )
     print("Initial image size:", img[:,:,:-1].shape)
@@ -81,6 +81,7 @@ if __name__ == "__main__":
     img, ext = crop_tiles(img[:,:,:-1], ext, COORD1[1], COORD1[0], COORD2[1], COORD2[0], ll=True)
     gray_img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
     print("Final image size:", img.shape)
+    print()
 
     image = Image.fromarray(img)
     image.save("topo_test.png")
@@ -117,68 +118,128 @@ if __name__ == "__main__":
     water_binary = 255*water_mask.astype(np.uint8)
     land_binary = 255*land_mask.astype(np.uint8)
 
-    #contours (https://docs.opencv.org/2.4/modules/imgproc/doc/structural_analysis_and_shape_descriptors.html?#findcontours)
-    land_contours_old, _ = cv2.findContours(land_binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    #land contours (https://docs.opencv.org/2.4/modules/imgproc/doc/structural_analysis_and_shape_descriptors.html?#findcontours)
+    water_contours, hier = cv2.findContours(water_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    print(hier)
+    import sys
+    sys.exit()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    ##################################################################################################################################3
+    land_contours, _ = cv2.findContours(land_binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
     water_color_img = cv2.cvtColor(water_binary, cv2.COLOR_GRAY2BGR)
     land_color_img = cv2.cvtColor(land_binary, cv2.COLOR_GRAY2BGR)
 
-    water_contours_img = cv2.drawContours(copy.deepcopy(water_color_img), land_contours_old, -1, (0,255,0), 3)
-    land_contours_img = cv2.drawContours(copy.deepcopy(land_color_img), land_contours_old, -1, (0,255,0), 3)
+    water_contours_img = cv2.drawContours(copy.deepcopy(water_color_img), water_contours, -1, (0,255,0), 3)
+    land_contours_img = cv2.drawContours(copy.deepcopy(land_color_img), land_contours, -1, (0,255,0), 3)
 
-    cv2.imwrite("water_contours_old.png", water_contours_img)
+    # #remove holes inside land with water contours
+    # water_contours_img_gray = cv2.cvtColor(water_contours_img, cv2.COLOR_BGR2GRAY)
+    # land_contours_img_gray = cv2.cvtColor(land_contours_img, cv2.COLOR_BGR2GRAY)
 
-    #remove holes inside land (water) with water contours
-    land_contours_img_gray = cv2.cvtColor(land_contours_img, cv2.COLOR_BGR2GRAY)
-    water_pixel_color_gray = land_contours_img_gray[water_pixel_y, water_pixel_x]
-    gray_water_mask = land_contours_img_gray == water_pixel_color_gray
-    labeled_mask_gray, _ = label(gray_water_mask, structure=water_connectivity)
-    target_label_gray = labeled_mask_gray[water_pixel_y, water_pixel_x]
-    land_mask_new = np.logical_not(labeled_mask_gray == target_label_gray)
+    # water_pixel_color_gray = water_contours_img_gray[water_pixel_y, water_pixel_x]
+    # land_pixel_color_gray = land_contours_img_gray[water_pixel_y, water_pixel_x]
 
-    #contours 2
-    land_binary_new = 255*land_mask_new.astype(np.uint8)
+    # water_mask_gray = water_contours_img_gray == water_pixel_color_gray
+    # land_mask_gray = land_contours_img_gray == land_pixel_color_gray
 
-    land_contours_new, _ = cv2.findContours(land_binary_new, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    # labeled_water_mask, _ = label(water_mask_gray, structure=water_connectivity)
+    # labeled_land_mask, _ = label(land_mask_gray, structure=water_connectivity)
 
-    print("# land contours old:", len(land_contours_old))
-    print("# land contours new:", len(land_contours_new))
+    # target_water_label = labeled_water_mask[water_pixel_y, water_pixel_x]
+    # target_land_label = labeled_land_mask[water_pixel_y, water_pixel_x]
 
-    land_contours_img_new = cv2.drawContours(copy.deepcopy(water_color_img), land_contours_new, -1, (0,255,0), 3)
+    # water_mask_new = labeled_water_mask == target_water_label
+    # land_mask_new = np.logical_not(labeled_land_mask == target_land_label)
 
-    cv2.imwrite("water_contours_new.png", land_contours_img_new)
+    # #contours 2
+    # water_binary_new = 255*water_mask_new.astype(np.uint8)
+    # land_binary_new = 255*land_mask_new.astype(np.uint8)
 
-    #approximate contours
-    epsilon = 0.001
-    cnts_approx = []
+    # water_contours_new, water_cnt_hier = cv2.findContours(water_binary_new, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    # land_contours_new, land_cnt_hier = cv2.findContours(land_binary_new, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-    for i, cnt in enumerate(land_contours_new):
-        eps = epsilon * cv2.arcLength(cnt,True)
-        cnt_approx = cv2.approxPolyDP(cnt, eps, True)
-        cnts_approx.append(cnt_approx)
-        print(len(cnt), "->", len(cnt_approx), "vertices")
+    # print("# water contours old:", len(water_contours))
+    # print("# water contours new:", len(water_contours_new))
+    # print()
+    # print("# land contours old:", len(land_contours))
+    # print("# land contours new:", len(land_contours_new))
 
-    c = cv2.drawContours(copy.deepcopy(water_color_img), cnts_approx, -1, (0,255,0), 3)
-    cv2.imwrite("approx_water_contour.png", c)
+    water_contours_img_new = cv2.drawContours(copy.deepcopy(water_color_img), water_contours, -1, (0,255,0), 1)
+    land_contours_img_new = cv2.drawContours(copy.deepcopy(water_color_img), land_contours, -1, (0,255,0), 1)
 
-    poly_points = np.concatenate(cnts_approx[4], axis=0)
-    poly_points[:, 1] = -(poly_points[:, 1] - (c.shape[0] - 1))
-    # print(min(poly_points[:, 0]))
-    # print(max(poly_points[:, 0]))
-    # print(min(poly_points[:, 1])) 
-    # print(max(poly_points[:, 1]))
-    s_poly = shapely.Polygon(poly_points)
-    line = shapely.LineString([(500, 0), (550, 600)])
-    
-    start = timer()
-    intersec = shapely.intersection(s_poly, line)
-    end = timer()
-    int_compute_time = end - start
-    n_rays = 16
-    n_agents = 6
-    worst_case_total_rc_compute = int_compute_time * len(cnts_approx) * n_rays * n_agents
-    print("Intersection compute time:", end - start)
-    print("Worse-case ray casting compute time:", worst_case_total_rc_compute)
-    print(intersec)
+    cv2.imwrite("water_contours.png", water_contours_img_new)
+    cv2.imwrite("land_contours.png", land_contours_img_new)
+
+    # print(water_cnt_hier)
+
+    # #approximate contours
+    # epsilon = 0.001
+    # water_cnts_approx = []
+    # land_cnts_approx = []
+
+    # for i, cnt in enumerate(land_contours_new):
+    #     eps = epsilon * cv2.arcLength(cnt, True)
+    #     cnt_approx = cv2.approxPolyDP(cnt, eps, True)
+    #     # cnts_approx.append(cnt_approx)
+    #     # print(len(cnt), "->", len(cnt_approx), "vertices")
+    #     hull = cv2.convexHull(cnt_approx)
+    #     cnts_approx.append(hull)
+    #     print(len(cnt), "->", len(hull), "vertices")
+
+    # c = cv2.drawContours(copy.deepcopy(water_color_img), cnts_approx, -1, (0,255,0), 3)
+    # cv2.imwrite("approx_water_contour.png", c)
+
+    # obstacles = []
+    # for p in cnts_approx
+
+    # poly_points = np.concatenate(cnts_approx[4], axis=0)
+    # poly_points[:, 1] = -(poly_points[:, 1] - (c.shape[0] - 1))
+    # # print(min(poly_points[:, 0]))
+    # # print(max(poly_points[:, 0]))
+    # # print(min(poly_points[:, 1])) 
+    # # print(max(poly_points[:, 1]))
+    # s_poly = shapely.Polygon(poly_points)
+    # line = shapely.LineString([(500, 0), (550, 600)])
+
+    # start = timer()
+    # intersec = shapely.intersection(s_poly, line)
+    # end = timer()
+    # int_compute_time = end - start
+    # n_rays = 16
+    # n_agents = 6
+    # worst_case_total_rc_compute = int_compute_time * len(cnts_approx) * n_rays * n_agents
+    # print("Intersection compute time:", end - start)
+    # print("Worse-case ray casting compute time:", worst_case_total_rc_compute)
+    # print(intersec)
 
     # Geodesic.WGS84.Direct(lat1=34., lon1=148., azi1=90., s12=10_000.) #s12 is the distance from the first point to the second in meters
