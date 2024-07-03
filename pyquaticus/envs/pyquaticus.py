@@ -19,28 +19,27 @@
 
 # SPDX-License-Identifier: BSD-3-Clause
 
-from abc import ABC
 import colorsys
 import copy
 import itertools
 import math
-import os
-import random
-from collections import OrderedDict, defaultdict
-from typing import Optional
-
 import numpy as np
+import os
 import pathlib
 import pygame
+import random
+import warnings
+
+from abc import ABC
+from collections import defaultdict, OrderedDict
 from gymnasium.spaces import Discrete
 from gymnasium.utils import seeding
 from pettingzoo import ParallelEnv
-from pygame import SRCALPHA, draw
+from pygame import draw, SRCALPHA
 from pygame.math import Vector2
 from pygame.transform import rotozoom
-
-from pyquaticus.config import config_dict_std, ACTION_MAP
-from pyquaticus.structs import Team, RenderingPlayer, Flag, CircleObstacle, PolygonObstacle
+from pyquaticus.config import ACTION_MAP, config_dict_std
+from pyquaticus.structs import CircleObstacle, Flag, PolygonObstacle, RenderingPlayer, Team
 from pyquaticus.utils.obs_utils import ObsNormalizer
 from pyquaticus.utils.pid import PID
 from pyquaticus.utils.utils import (
@@ -55,8 +54,9 @@ from pyquaticus.utils.utils import (
     rot2d,
     vec_to_mag_heading,
 )
-from shapely import LineString, Polygon, intersection
-import warnings
+from shapely import intersection, LineString, Polygon
+from typing import Optional
+
 
 class PyQuaticusEnvBase(ParallelEnv, ABC):
     """
@@ -979,14 +979,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         """
         # set variables from config
         self.gps_env = config_dict.get("gps_env", config_dict_std["gps_env"])
-        self.env_size = config_dict.get("env_size", config_dict_std["env_size"])
         self.env_bounds = config_dict.get("env_bounds", config_dict_std["env_bounds"])
+        self.env_bounds_unit = config_dict.get("env_bounds_unit", config_dict_std["env_bounds_unit"])
         self.blue_flag_home = config_dict.get("blue_flag_home", config_dict_std["blue_flag_home"])
         self.red_flag_home = config_dict.get("red_flag_home", config_dict_std["red_flag_home"])
         self.flag_home_unit = config_dict.get("flag_home_unit", config_dict_std["flag_home_unit"])
         self.scrimmage_coords = config_dict.get("scrimmage_coords", config_dict_std["scrimmage_coords"])
-        self.scrimmage_coord_unit = config_dict.get("scrimmage_coord_unit", config_dict_std["scrimmage_coord_unit"])
-        self.water_contour_eps = config_dict.get("water_contour_eps", config_dict_std["scrimmage_coord_unit"])
+        self.scrimmage_coords_unit = config_dict.get("scrimmage_coords_unit", config_dict_std["scrimmage_coords_unit"])
+        self.water_contour_eps = config_dict.get("water_contour_eps", config_dict_std["water_contour_eps"])
         self.agent_radius = config_dict.get(
             "agent_radius", config_dict_std["agent_radius"]
         )
@@ -1550,50 +1550,174 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.state["dist_to_obstacles"] = dist_to_obstacles
 
     def _build_env_geom(self):
+        if self.env_bounds == self.blue_flag_home == self.red_flag_home == "auto":
+            raise Exception("Either env_bounds or blue AND red flag homes must be set in config_dict (cannot both be 'auto')")
+
         if self.gps_env:
         else:
-            if self.env_size == self.env_bounds == "auto":
-                raise Exception("Either env_size or env_bounds must be set in config_dict (cannot both be 'auto')")
+            ### environment bounds ###
+            if self.env_bounds_unit != "m":
+                raise Exception("Environment bounds unit must be meters ('m') when gps_env is False")
 
-            # environment size
-            if self.env_size == "auto":
-                self.env_size = [
-                    self.env_bounds[1][0] - self.env_bounds[0][0],
-                    self.env_bounds[1][1] - self.env_bounds[0][1]
-                ]
-
-            # environment bounds
             if self.env_bounds == "auto":
-                self.env_bounds = [
+                if np.any(np.sign([self.blue_flag_home, self.red_flag_home]) == -1):
+                    raise Exception("Flag coordinates must be in the positive quadrant when gps_env is False")
+
+                if np.any(np.sign([self.blue_flag_home, self.red_flag_home]) == 0):
+                    raise Exception("Flag coordinates must not lie on the axes of the positive quadrant when gps_env is False")
+
+                #environment size
+                flag_xmin = min(self.blue_flag_home[0], self.red_flag_home[0])
+                flag_ymin = min(self.blue_flag_home[1], self.red_flag_home[1])
+
+                flag_xmax = max(self.blue_flag_home[0], self.red_flag_home[0])
+                flag_ymax = max(self.blue_flag_home[1], self.red_flag_home[1])
+
+                self.env_size = np.array([
+                    flag_xmax + flag_xmin,
+                    flag_ymax + flag_ymin
+                ])
+                self.env_bounds = np.array([
                     (0., 0.),
-                    (self.env_size[0], self.env_size[1])
-                ]
+                    self.env_size
+                ])
+            else:
+                self.env_bounds = np.asarray(self.env_bounds) 
 
-            # flags home
-            if self.flag_home_unit == "ll" or self.scrimmage_coord_unit == "ll":
+                if len(self.env_bounds.shape) == 1:
+                    if np.any(self.env_bounds == 0.):
+                        raise Exception("Environment max bounds must be > 0 when gps_env is False")
+
+                    #environment size
+                    self.env_size = self.env_bounds
+                    self.env_bounds = np.array([
+                        (0., 0.),
+                        self.env_bounds
+                    ])
+                else:
+                    if np.any(np.max(self.env_bounds, axis=0) == 0.):
+                        raise Exception("Environment max bounds must be > 0 when gps_env is False")
+
+            ### flags home ###
+            #unit
+            if self.flag_home_unit == "ll" or self.scrimmage_coords_unit == "ll":
                 raise Exception("'ll' (Lat/Long) units should only be used when gps_env is True")
-            if (
-                np.any(self.blue_flag_home >= self.env_bounds[1]) or
-                np.any(self.blue_flag_home <= self.env_bounds[0])
-            ):
-                raise Exception(f"Blue flag home {self.blue_flag_home} must fall within environment bounds {self.env_bounds}")
-            if (
-                np.any(self.red_flag_home >= self.env_bounds[1]) or
-                np.any(self.red_flag_home <= self.env_bounds[0])
-            ):
-                raise Exception(f"Red flag home {self.red_flag_home} must fall within environment bounds {self.env_bounds}")
+            
+            #auto home
+            if self.blue_flag_home == self.red_flag_home == "auto":
+                self.blue_flag_home = np.array([7/8*self.env_size[0], 0.5*self.env_size[0]])
+                self.red_flag_home = np.array([1/8*self.env_size[0], 0.5*self.env_size[0]])
+            elif self.blue_flag_home == "auto" or self.red_flag_home == "auto":
+                raise Exception("Flag homes are either all 'auto', or all specified")
+            else:
+                self.blue_flag_home = np.asarray(self.blue_flag_home)
+                self.red_flag_home = np.asarray(self.red_flag_home)
 
-            # scrimmage line
-            coord1_out = False
+            #blue flag
             if (
-                np.any(self.scrimmage_coords[0] >= self.env_bounds[1]) or
-                np.any(self.scrimmage_coords[0] <= self.env_bounds[0])
+                np.any(self.blue_flag_home <= 0.) or
+                np.any(self.blue_flag_home >= self.env_size)
             ):
-                coord1_out = True
+                raise Exception(f"Blue flag home {self.blue_flag_home} must fall within (non-inclusive) environment bounds {((0., 0.), self.env_size)}")
 
-            
-            
-            
+            #red flag
+            if (
+                np.any(self.red_flag_home <= 0.) or
+                np.any(self.red_flag_home >= self.env_size)
+            ):
+                raise Exception(f"Red flag home {self.red_flag_home} must fall within (non-inclusive) environment bounds {((0., 0.), self.env_size)}")
+
+            ### scrimmage line ###
+            if self.scrimmage_coords == "auto":
+                env_diag = np.linalg.norm(self.env_size)
+                flags_vec = self.blue_flag_home - self.red_flag_home
+
+                scrim_vec1 = np.array([-flags_vec[1], flags_vec[0]])
+                scrim_vec2 = np.array([flags_vec[1], -flags_vec[0]])
+                flags_midpoint = (self.blue_flag_home + self.red_flag_home) / 2
+
+                scrim_vec1_end = flags_midpoint + env_diag * scrim_vec1 / np.linalg.norm(scrim_vec1)
+                scrim_vec2_end = flags_midpoint + env_diag * scrim_vec2 / np.linalg.norm(scrim_vec2)
+
+                scrim_line1 = LineString((flags_midpoint, scrim_vec1_end))
+                scrim_line2 = LineString((flags_midpoint, scrim_vec2_end))
+                env_bounds_polygon = Polygon(
+                    [(0., 0.), (self.env_size[0], 0.), (self.env_size[0], self.env_size[1]), (0., self.env_size[1])]
+                )
+                scrimmage_coord1 = intersection(scrim_line1, env_bounds_polygon).coords[1]
+                scrimmage_coord2 = intersection(scrim_line2, env_bounds_polygon).coords[1]
+
+                self.scrimmage_coords = np.asarray([scrimmage_coord1, scrimmage_coord2])
+            else:
+                self.scrimmage_coords = np.asarray(self.scrimmage_coords)
+
+                if np.all(self.scrimmage_coords[0] == self.scrimmage_coords[1]):
+                    raise Exception("Scrimmage line must be specified with two DIFFERENT coordinates")
+
+                #coord1 on border check
+                coord1_on_border = True
+                if not (
+                    (
+                        (0. <= self.scrimmage_coords[0][0] <= self.env_size[0]) and
+                        (self.scrimmage_coords[0][1] == 0.) or (self.scrimmage_coords[0][1] == self.env_size[1])
+                        ) or
+                    (
+                        (0. <= self.scrimmage_coords[0][1] <= self.env_size[1]) and
+                        (self.scrimmage_coords[0][0] == 0.) or (self.scrimmage_coords[0][0] == self.env_size[0])
+                        )
+                ):
+                    coord1_on_border = False
+
+                #coord2 on border check
+                coord2_on_border = True
+                if not (
+                    (
+                        (0. <= self.scrimmage_coords[0][0] <= self.env_size[0]) and
+                        (self.scrimmage_coords[0][1] == 0.) or (self.scrimmage_coords[0][1] == self.env_size[1])
+                        ) or
+                    (
+                        (0. <= self.scrimmage_coords[0][1] <= self.env_size[1]) and
+                        (self.scrimmage_coords[0][0] == 0.) or (self.scrimmage_coords[0][0] == self.env_size[0])
+                        )
+                ):
+                    coord2_on_border = False
+
+                if not (coord1_on_border and coord2_on_border):
+                    scrim_midpoint = np.mean(self.scrimmage_coords, axis=0)
+
+                    scrim_midpoint_in_bounds = self._point_in_bounds(scrim_midpoint)
+                    scrimmage_coord1_in_bounds = self._point_in_bounds(self.scrimmage_coords[0])
+                    scrimmage_coord2_in_bounds = self._point_in_bounds(self.scrimmage_coords[1])
+
+                    if scrim_midpoint_in_bounds:
+                    elif scrim_midpoint_in_bounds:
+                    elif scrim_midpoint_in_bounds:
+                    else:
+                        raise Exception(
+                            f"Specified scrimmage line coordinates {self.scrimmage_coords} create a line that does not fall within the environment bounds {((0., 0.), self.env_size)}"
+                        )
+
+                    env_diag = np.linalg.norm(self.env_size)
+                    scrim_vec1 = self.scrimmage_coords[0] - self.scrimmage_coords[1]
+                    scrim_vec2 = self.scrimmage_coords[1] - self.scrimmage_coords[0]
+                    scrim_midpoint = np.mean(self.scrimmage_coords, axis=0)
+
+                    scrim_vec1_end = scrim_midpoint + env_diag * scrim_vec1 / np.linalg.norm(scrim_vec1)
+                    scrim_vec2_end = scrim_midpoint + env_diag * scrim_vec2 / np.linalg.norm(scrim_vec2)
+
+                    scrim_line1 = LineString((flags_midpoint, scrim_vec1_end))
+                    scrim_line2 = LineString((flags_midpoint, scrim_vec2_end))
+                    env_bounds_polygon = Polygon(
+                        [(0., 0.), (self.env_size[0], 0.), (self.env_size[0], self.env_size[1]), (0., self.env_size[1])]
+                    )
+                    scrimmage_coord1 = intersection(scrim_line1, env_bounds_polygon).coords[1]
+                    scrimmage_coord2 = intersection(scrim_line2, env_bounds_polygon).coords[1]
+
+    def _point_in_bounds(self, point):
+        in_xbounds = 0. =< point[0] <= self.env_size[0]
+        in_ybounds = 0. =< point[1] <= self.env_size[1]
+
+        return in_xbounds and in_ybounds
     
     def render(self):
         """Overridden method inherited from `Gym`."""
