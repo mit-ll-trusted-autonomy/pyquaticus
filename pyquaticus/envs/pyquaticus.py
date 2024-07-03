@@ -55,6 +55,7 @@ from pyquaticus.utils.utils import (
     rot2d,
     vec_to_mag_heading,
 )
+from shapely import LineString, Polygon, intersection
 import warnings
 
 class PyQuaticusEnvBase(ParallelEnv, ABC):
@@ -1551,9 +1552,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     def _build_env_geom(self):
         if self.gps_env:
         else:
-            if self.flag_home_unit == "ll" or self.scrimmage_coord_unit == "ll":
-                raise Exception("'ll' (Lat/Long) units should only be used when gps_env is True")
-
             if self.env_size == self.env_bounds == "auto":
                 raise Exception("Either env_size or env_bounds must be set in config_dict (cannot both be 'auto')")
 
@@ -1563,14 +1561,37 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     self.env_bounds[1][0] - self.env_bounds[0][0],
                     self.env_bounds[1][1] - self.env_bounds[0][1]
                 ]
+
             # environment bounds
             if self.env_bounds == "auto":
                 self.env_bounds = [
                     (0., 0.),
                     (self.env_size[0], self.env_size[1])
                 ]
-            # blue flag home
-            if np.any(self.blue_flag_home) >= 
+
+            # flags home
+            if self.flag_home_unit == "ll" or self.scrimmage_coord_unit == "ll":
+                raise Exception("'ll' (Lat/Long) units should only be used when gps_env is True")
+            if (
+                np.any(self.blue_flag_home >= self.env_bounds[1]) or
+                np.any(self.blue_flag_home <= self.env_bounds[0])
+            ):
+                raise Exception(f"Blue flag home {self.blue_flag_home} must fall within environment bounds {self.env_bounds}")
+            if (
+                np.any(self.red_flag_home >= self.env_bounds[1]) or
+                np.any(self.red_flag_home <= self.env_bounds[0])
+            ):
+                raise Exception(f"Red flag home {self.red_flag_home} must fall within environment bounds {self.env_bounds}")
+
+            # scrimmage line
+            coord1_out = False
+            if (
+                np.any(self.scrimmage_coords[0] >= self.env_bounds[1]) or
+                np.any(self.scrimmage_coords[0] <= self.env_bounds[0])
+            ):
+                coord1_out = True
+
+            
             
             
     
