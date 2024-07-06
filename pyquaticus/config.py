@@ -8,12 +8,12 @@ MAX_SPEED = 1.5
 config_dict_std = {
     "gps_env": False, # real world game location
     "env_bounds": [160.0, 80.0], # meters [xmax, ymax], lat/lon [(west, south), (east, north)], web mercator xy [(xmin, ymin), (xmax, ymax)], or "auto"
-    "env_bounds_unit": "m" # "m", "wm_xy" (web mercator xy), "ll" (lat/lon)
-    "blue_flag_home": "auto", #coordinates, list of coordinates, or "auto"
-    "red_flag_home": "auto", #coordinates, list of coordinates, or "auto"
-    "flag_home_unit": "xy", # "xy" (meters or web mercator xy relative to environment origin) or "ll" (lat/lon)
+    "env_bounds_unit": "m", # "m", "wm_xy" (web mercator xy), "ll" (lat/lon)
+    "blue_flag_home": "auto", # coordinates, list of coordinates, or "auto"
+    "red_flag_home": "auto", # coordinates, list of coordinates, or "auto"
+    "flag_home_unit": "m", # "m" (meters relative to environment origin), "wm_xy" (web mercator xy), or "ll" (lat/lon)
     "scrimmage_coords": "auto", # [(coord1_x, coord1_y), (coord2_x, coord2_y)] or "auto"
-    "scrimmage_coords_unit": "xy", # "xy" (meters or web mercator xy relative to environment origin) or "ll" (lat/lon)
+    "scrimmage_coords_unit": "m", # "m" (meters relative to environment origin), "wm_xy" (web mercator xy), or "ll" (lat/lon)
     "water_contour_eps": 0.001, # tolerance for error between approximate and true contours dividing water and land
     "agent_radius": 2.0,  # meters
     "catch_radius": 10.0,  # meters

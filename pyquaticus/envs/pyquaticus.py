@@ -1595,8 +1595,19 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         self.env_bounds
                     ])
                 else:
-                    if np.any(np.max(self.env_bounds, axis=0) == 0.):
+                    if not np.all(self.env_bounds[0] == 0.):
+                        raise Exception("Environment min bounds must be 0 when gps_env is False")
+
+                    if np.any(self.env_bounds[1] == 0.):
                         raise Exception("Environment max bounds must be > 0 when gps_env is False")
+
+            self.env_diag = np.linalg.norm(self.env_size)
+            self.env_bounds_vertices = np.array([
+                self.env_bounds[0],
+                (self.env_bounds[1][0], self.env_bounds[0][1]),
+                self.env_bounds[1],
+                (self.env_bounds[0][0], self.env_bounds[1][1])
+            ])
 
             ### flags home ###
             #unit
@@ -1615,38 +1626,28 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             #blue flag
             if (
-                np.any(self.blue_flag_home <= 0.) or
-                np.any(self.blue_flag_home >= self.env_size)
+                np.any(self.blue_flag_home <= self.env_bounds[0]) or
+                np.any(self.blue_flag_home >= self.env_bounds[1])
             ):
-                raise Exception(f"Blue flag home {self.blue_flag_home} must fall within (non-inclusive) environment bounds {((0., 0.), self.env_size)}")
+                raise Exception(f"Blue flag home {self.blue_flag_home} must fall within (non-inclusive) environment bounds {self.env_bounds}")
 
             #red flag
             if (
-                np.any(self.red_flag_home <= 0.) or
-                np.any(self.red_flag_home >= self.env_size)
+                np.any(self.red_flag_home <= self.env_bounds[0]) or
+                np.any(self.red_flag_home >= self.env_bounds[1])
             ):
-                raise Exception(f"Red flag home {self.red_flag_home} must fall within (non-inclusive) environment bounds {((0., 0.), self.env_size)}")
+                raise Exception(f"Red flag home {self.red_flag_home} must fall within (non-inclusive) environment bounds {self.env_bounds}")
 
             ### scrimmage line ###
             if self.scrimmage_coords == "auto":
-                env_diag = np.linalg.norm(self.env_size)
                 flags_vec = self.blue_flag_home - self.red_flag_home
 
                 scrim_vec1 = np.array([-flags_vec[1], flags_vec[0]])
                 scrim_vec2 = np.array([flags_vec[1], -flags_vec[0]])
-                flags_midpoint = (self.blue_flag_home + self.red_flag_home) / 2
+                flags_midpoint = 0.5 * (self.blue_flag_home + self.red_flag_home)
 
-                scrim_vec1_end = flags_midpoint + env_diag * scrim_vec1 / np.linalg.norm(scrim_vec1)
-                scrim_vec2_end = flags_midpoint + env_diag * scrim_vec2 / np.linalg.norm(scrim_vec2)
-
-                scrim_line1 = LineString((flags_midpoint, scrim_vec1_end))
-                scrim_line2 = LineString((flags_midpoint, scrim_vec2_end))
-                env_bounds_polygon = Polygon(
-                    [(0., 0.), (self.env_size[0], 0.), (self.env_size[0], self.env_size[1]), (0., self.env_size[1])]
-                )
-                scrimmage_coord1 = intersection(scrim_line1, env_bounds_polygon).coords[1]
-                scrimmage_coord2 = intersection(scrim_line2, env_bounds_polygon).coords[1]
-
+                scrimmage_coord1 = self._get_polygon_intersection(flags_midpoint, scrim_vec1, self.env_bounds_vertices)[1]
+                scrimmage_coord2 = self._get_polygon_intersection(flags_midpoint, scrim_vec2, self.env_bounds_vertices)[1]
                 self.scrimmage_coords = np.asarray([scrimmage_coord1, scrimmage_coord2])
             else:
                 self.scrimmage_coords = np.asarray(self.scrimmage_coords)
@@ -1658,12 +1659,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 coord1_on_border = True
                 if not (
                     (
-                        (0. <= self.scrimmage_coords[0][0] <= self.env_size[0]) and
-                        (self.scrimmage_coords[0][1] == 0.) or (self.scrimmage_coords[0][1] == self.env_size[1])
+                        (self.env_bounds[0][0] <= self.scrimmage_coords[0][0] <= self.env_bounds[1][0]) and
+                        (self.scrimmage_coords[0][1] == self.env_bounds[0][1]) or (self.scrimmage_coords[0][1] == self.env_bounds[1][1])
                         ) or
                     (
-                        (0. <= self.scrimmage_coords[0][1] <= self.env_size[1]) and
-                        (self.scrimmage_coords[0][0] == 0.) or (self.scrimmage_coords[0][0] == self.env_size[0])
+                        (self.env_bounds[0][1] <= self.scrimmage_coords[0][1] <= self.env_bounds[1][1]) and
+                        (self.scrimmage_coords[0][0] == self.env_bounds[0][0]) or (self.scrimmage_coords[0][0] == self.env_bounds[1][0])
                         )
                 ):
                     coord1_on_border = False
@@ -1672,53 +1673,86 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 coord2_on_border = True
                 if not (
                     (
-                        (0. <= self.scrimmage_coords[0][0] <= self.env_size[0]) and
-                        (self.scrimmage_coords[0][1] == 0.) or (self.scrimmage_coords[0][1] == self.env_size[1])
+                        (self.env_bounds[0][0] <= self.scrimmage_coords[1][0] <= self.env_bounds[1][0]) and
+                        (self.scrimmage_coords[1][1] == self.env_bounds[0][1]) or (self.scrimmage_coords[1][1] == self.env_bounds[1][1])
                         ) or
                     (
-                        (0. <= self.scrimmage_coords[0][1] <= self.env_size[1]) and
-                        (self.scrimmage_coords[0][0] == 0.) or (self.scrimmage_coords[0][0] == self.env_size[0])
+                        (self.env_bounds[0][1] <= self.scrimmage_coords[1][1] <= self.env_bounds[1][1]) and
+                        (self.scrimmage_coords[1][0] == self.env_bounds[0][0]) or (self.scrimmage_coords[1][0] == self.env_bounds[1][0])
                         )
                 ):
                     coord2_on_border = False
 
-                if not (coord1_on_border and coord2_on_border):
-                    scrim_midpoint = np.mean(self.scrimmage_coords, axis=0)
+                if not coord1_on_border and not coord2_on_border:
+                    full_scrim_line = LineString(self.scrimmage_coords)
+                    scrim_line_env_intersection = intersection(full_scrim_line, Polygon(self.env_bounds_vertices))
 
-                    scrim_midpoint_in_bounds = self._point_in_bounds(scrim_midpoint)
-                    scrimmage_coord1_in_bounds = self._point_in_bounds(self.scrimmage_coords[0])
-                    scrimmage_coord2_in_bounds = self._point_in_bounds(self.scrimmage_coords[1])
-
-                    if scrim_midpoint_in_bounds:
-                    elif scrim_midpoint_in_bounds:
-                    elif scrim_midpoint_in_bounds:
-                    else:
+                    if (
+                        scrim_line_env_intersection.is_empty or
+                        len(scrim_line_env_intersection.coords) == 1 #only intersects a vertex
+                    ):
                         raise Exception(
-                            f"Specified scrimmage line coordinates {self.scrimmage_coords} create a line that does not fall within the environment bounds {((0., 0.), self.env_size)}"
+                            f"Specified scrimmage line coordinates {self.scrimmage_coords} create a line that does not bisect the environment of bounds {self.env_bounds}"
                         )
+                    else:
+                        no_bisection = False
+                        scrim_line_env_intersection = np.array(scrim_line_env_intersection.coords)
 
-                    env_diag = np.linalg.norm(self.env_size)
-                    scrim_vec1 = self.scrimmage_coords[0] - self.scrimmage_coords[1]
-                    scrim_vec2 = self.scrimmage_coords[1] - self.scrimmage_coords[0]
-                    scrim_midpoint = np.mean(self.scrimmage_coords, axis=0)
+                        #does not make it all the way across environment
+                        if (
+                            np.any(np.all(scrim_line_env_intersection == self.scrimmage_coords[0], axis=1)) or
+                            np.any(np.all(scrim_line_env_intersection == self.scrimmage_coords[1], axis=1))
+                        ):
+                            no_bisection = True
+                        #along left and bottom env bounds
+                        elif np.any(np.all(scrim_line_env_intersection == self.env_bounds_vertices[0], axis=1)):
+                            if (
+                                np.any(np.all(scrim_line_env_intersection == self.env_bounds_vertices[1], axis=1)) or
+                                np.any(np.all(scrim_line_env_intersection == self.env_bounds_vertices[3], axis=1))
+                            ):
+                                no_bisection = True
+                        #along right and top env bounds
+                        elif np.any(np.all(scrim_line_env_intersection == self.env_bounds_vertices[1], axis=1)):
+                            if (
+                                np.any(np.all(scrim_line_env_intersection == self.env_bounds_vertices[1], axis=1)) or
+                                np.any(np.all(scrim_line_env_intersection == self.env_bounds_vertices[3], axis=1))
+                            ):
+                                no_bisection = True
+                        #no bisection
+                        if no_bisection:
+                            raise Exception(
+                                f"Specified scrimmage line coordinates {self.scrimmage_coords} create a line that does not bisect the environment of bounds {self.env_bounds}"
+                            )
 
-                    scrim_vec1_end = scrim_midpoint + env_diag * scrim_vec1 / np.linalg.norm(scrim_vec1)
-                    scrim_vec2_end = scrim_midpoint + env_diag * scrim_vec2 / np.linalg.norm(scrim_vec2)
+    def _get_line_intersection(self, origin: np.ndarray, vec: np.ndarray, line: np.ndarray):
+        """
+        origin: a point within the environment (not on environment bounds)
+        """
+        vec_end = origin + self.env_diag * vec / np.linalg.norm(vec)
+        vec_line = LineString((origin, vec_end))
+        inter = intersection(vec_line, LineString(line))
 
-                    scrim_line1 = LineString((flags_midpoint, scrim_vec1_end))
-                    scrim_line2 = LineString((flags_midpoint, scrim_vec2_end))
-                    env_bounds_polygon = Polygon(
-                        [(0., 0.), (self.env_size[0], 0.), (self.env_size[0], self.env_size[1]), (0., self.env_size[1])]
-                    )
-                    scrimmage_coord1 = intersection(scrim_line1, env_bounds_polygon).coords[1]
-                    scrimmage_coord2 = intersection(scrim_line2, env_bounds_polygon).coords[1]
+        if inter.is_empty:
+            return None
+        else:
+            return np.asarray(inter.coords[0])
 
-    def _point_in_bounds(self, point):
-        in_xbounds = 0. =< point[0] <= self.env_size[0]
-        in_ybounds = 0. =< point[1] <= self.env_size[1]
+    def _get_polygon_intersection(self, origin: np.ndarray, vec: np.ndarray, polygon: np.ndarray):
+        """
+        origin: a point within the environment (not on environment bounds)
+        """
+        vec_end = origin + self.env_diag * vec / np.linalg.norm(vec)
+        vec_line = LineString((origin, vec_end))
+        inter = intersection(vec_line, Polygon(polygon))
 
-        return in_xbounds and in_ybounds
-    
+        if inter.is_empty:
+            return None
+        else:
+            if hasattr(inter, "coords"):
+                return np.asarray(inter.coords)
+            else:
+                return np.asarray([np.asarray(ls.coords) for ls in inter.geoms])
+
     def render(self):
         """Overridden method inherited from `Gym`."""
         return self._render()
