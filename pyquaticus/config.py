@@ -18,7 +18,7 @@ config_dict_std = {
     "agent_radius": 2.0,  # meters
     "catch_radius": 10.0,  # meters
     "flag_keepout": 5.0,  # minimum distance (meters) between agent and flag centers
-    "max_speed": MAX_SPEED,  # meters / s
+    "max_speed": 1.5,  # meters / s
     "tau": (
         1 / 10
     ),  # max dt (seconds) for updating the simulation
