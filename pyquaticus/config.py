@@ -16,7 +16,7 @@ config_dict_std = {
     "flag_homes_unit": "m", # "m" (meters relative to environment origin), "wm_xy" (web mercator xy), or "ll" (lat/lon)
     "scrimmage_coords": "auto", # [(coord1_x, coord1_y), (coord2_x, coord2_y)] or "auto"
     "scrimmage_coords_unit": "m", # "m" (meters relative to environment origin), "wm_xy" (web mercator xy), or "ll" (lat/lon)
-    "water_contour_eps": 0.001, # tolerance for error between approximate and true contours dividing water and land
+    "topo_contour_eps": 0.001, # tolerance for error between approximate and true contours dividing water and land
     "agent_radius": 2.0,  # meters
     "catch_radius": 10.0,  # meters
     "flag_keepout": 5.0,  # minimum distance (meters) between agent and flag centers

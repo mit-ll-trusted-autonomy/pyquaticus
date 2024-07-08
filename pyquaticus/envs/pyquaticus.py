@@ -985,7 +985,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         """
         ### Set Variables from Configuration Dictionary ###
         self.gps_env = config_dict.get("gps_env", config_dict_std["gps_env"])
-        self.water_contour_eps = config_dict.get("water_contour_eps", config_dict_std["water_contour_eps"])
+        self.topo_contour_eps = config_dict.get("topo_contour_eps", config_dict_std["topo_contour_eps"])
         self.agent_radius = config_dict.get(
             "agent_radius", config_dict_std["agent_radius"]
         )
@@ -1056,11 +1056,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         #topography
         if self.gps_env:
-            topo_obstacles = self._get_topo_geom()
+            land_contours, land_mask = self._get_topo_geom()
 
-        ### Aquaticus Point Field ###
+        #aquaticus point field
 
-        # Obstacles
+        #obstacles
         self.obstacles = list()
         obstacle_params = config_dict.get("obstacles", config_dict_std["obstacles"])
         if obstacle_params is not None and isinstance(obstacle_params, dict):
@@ -1080,6 +1080,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         elif obstacle_params is not None:
             raise TypeError(f"Expected obstacle_params to be None or a dict, not {type(obstacle_params)}")
 
+        ### Environment Rendering ###
         if self.render_mode:
             # Pygame Orientation Vector
             self.UP = Vector2((0.0, 1.0))
@@ -1107,17 +1108,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 2*self.arena_offset + self.pixel_size * self.env_size[0] <= self.max_screen_size[0]
                 and 2*self.arena_offset + self.pixel_size * self.env_size[1] <= self.max_screen_size[1]
             ), world_screen_err_msg
-
-        # check that world dimensions (pixels) are even
-        world_even_err_msg = (
-            "Specified env_size {} has at least one dimension that is not even"
-            .format(self.env_size)
-        )
-        assert (self.env_size[0] * self.pixel_size) % 2 == 0 and (
-            self.env_size[1] * self.pixel_size
-        ) % 2 == 0, world_even_err_msg
-
-        self.screen_size = [self.pixel_size * d for d in self.env_size]
 
         # check that time between frames (1/render_fps) is not larger than timestep (tau)
         frame_rate_err_msg = (
@@ -1991,9 +1981,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             topo_tile = map_cache["topographical_tile"]
             if self.render_mode:
-                self.render_tile = map_cache["render_tile"]
+                render_tile = map_cache["render_tile"]
             else:
-                self.render_tile = None
+                render_tile = None
         else:
             #retrieve maps from tile provider
             topo_tile_source = cx.providers.CartoDB.DarkMatterNoLabels #DO NOT CHANGE!
@@ -2009,18 +1999,83 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             )
 
             topo_img = self._crop_tiles(topo_img[:,:,:-1], topo_ext, *self.env_bounds.flatten(), ll=False)
-            self.render_tile = self._crop_tiles(render_img[:,:,:-1], topo_ext, *self.env_bounds.flatten(), ll=False)
+            render_tile = self._crop_tiles(render_img[:,:,:-1], topo_ext, *self.env_bounds.flatten(), ll=False)
 
             #cache maps
-            map_cache = {"topographical_tile": topo_img, "render_tile": self.render_tile}
+            map_cache = {"topographical_tile": topo_img, "render_tile": render_tile}
             with open(map_cache_path, 'wb') as f:
                 pickle.dump(map_cache, f)
 
+
         ### Topology Construction ###
+        #mask by water color on topo image
+        water_x, water_y  = self.flag_homes[Team.BLUE_TEAM] #assume flag is in water
+        water_pixel_x = ceil(topo_img.shape[1] * (water_x / self.env_size[0])) - 1
+        water_pixel_y = ceil(topo_img.shape[0] * (1 - water_y / self.env_size[1])) - 1
+
+        water_pixel_color = topo_img[water_pixel_y, water_pixel_x]
+        mask = np.all(topo_img == water_pixel_color, axis=-1)
+        water_connectivity = np.array(
+            [[0, 1, 0],
+             [1, 1, 1],
+             [0, 1, 0]]
+        )
+        labeled_mask, _ = label(mask, structure=water_connectivity)
+        target_label = labeled_mask[water_pixel_y, water_pixel_x]
+
+        grayscale_topo_img = cv2.cvtColor(topo_img, cv2.COLOR_RGB2GRAY)
+        water_pixel_color_gray = grayscale_topo_img[water_pixel_y, water_pixel_x]
         
+        land_mask = (labeled_mask == target_label) + (water_pixel_color_gray <= gray_img) * (gray_img <= water_pixel_color_gray + 2)
 
-        ### Occupancy Map ###
+        #water contours
+        land_mask_binary = 255*land_mask.astype(np.uint8)
+        water_contours, _ = cv2.findContours(land_mask_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        #https://docs.opencv.org/4.10.0/d4/d73/tutorial_py_contours_begin.html
+        #https://docs.opencv.org/4.x/d9/d8b/tutorial_py_contours_hierarchy.html
 
+        border_contour = max(water_contours, key=cv2.contourArea)
+        #TODO: check if this is just the environment bounds, then non-convex approximation will go to the largest island
+        border_land_mask = cv2.drawContours(np.zeros_like(land_mask_binary), [border_contour], -1, 255, -1)
+
+        #island contours
+        water_mask = np.logical_not(land_mask)
+        island_binary = 255*(border_land_mask * water_mask).astype(np.uint8)
+        island_contours, _ = cv2.findContours(island_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        #approximate outer contour (border land)
+        eps = self.topo_contour_eps * cv2.arcLength(border_contour, True)
+        border_cnt_approx = cv2.approxPolyDP(border_contour, eps, True)
+
+        border_land_mask_approx = cv2.drawContours(np.zeros_like(land_mask_binary), [border_cnt_approx], -1, 255, -1)
+        border_land_mask_approx = cv2.drawContours(border_land_mask_approx, [border_cnt_approx], -1, 0, 0)
+
+        labeled_border_land_mask_approx, _ = label(border_land_mask_approx, structure=water_connectivity)
+        target_water_label = labeled_border_land_mask_approx[water_pixel_y, water_pixel_x]
+        border_land_mask_approx = labeled_border_land_mask_approx == target_water_label
+
+        #approximate island contours
+        island_cnts_approx = []
+        for i, cnt in enumerate(island_contours):
+            eps = self.topo_contour_eps * cv2.arcLength(cnt, True)
+            cnt_approx = cv2.approxPolyDP(cnt, eps, True)
+            cvx_hull = cv2.convexHull(cnt_approx)
+            if len(cvx_hull) > 1:
+                island_cnts_approx.append(cvx_hull)
+
+        island_mask_approx = cv2.drawContours(255*np.ones_like(island_binary), island_cnts_approx, -1, 0, -1) #convex island masks
+
+        #final approximate contours and land mask
+        land_contours_approx = [border_cnt_approx, *island_cnts_approx]
+        land_mask_approx = border_land_mask_approx * island_mask_approx/255
+
+        #draw contours on render background
+        if self.render_mode:
+            render_tile_bgr = cv2.cvtColor(render_tile, cv2.COLOR_RGB2BGR) 
+            contours_img = cv2.drawContours(render_tile_bgr, land_contours_approx, -1, (0,0,0), 2)
+            self.render_background = np.transpose(contours_img, (1,0,2)) #pygame assumes images are (h, w, 3)
+
+        return land_contours_approx, land_mask_approx
 
     def _crop_tiles(self, img, ext, w, s, e, n, ll=True):
         """

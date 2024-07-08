@@ -65,8 +65,8 @@ def crop_tiles(img, ext, w, s, e, n, ll=True):
 
 
 if __name__ == "__main__":
-    # source = cx.providers.CartoDB.Voyager
     source = cx.providers.CartoDB.DarkMatterNoLabels
+    render_source = cx.providers.CartoDB.Voyager
 
     print(source.get('attribution'))
     print()
@@ -75,15 +75,24 @@ if __name__ == "__main__":
         w=COORD1[1], s=COORD1[0], e=COORD2[1], n=COORD2[0], zoom='auto', source=source, ll=True,
         wait=0, max_retries=2, n_connections=1, use_cache=False, zoom_adjust=None
     )
+    render_img, render_ext = cx.bounds2img(
+        w=COORD1[1], s=COORD1[0], e=COORD2[1], n=COORD2[0], zoom='auto', source=render_source, ll=True,
+        wait=0, max_retries=2, n_connections=1, use_cache=False, zoom_adjust=None
+    )
     print("Initial image size:", img[:,:,:-1].shape)
 
     img, ext = crop_tiles(img[:,:,:-1], ext, COORD1[1], COORD1[0], COORD2[1], COORD2[0], ll=True)
+    render_img, _ = crop_tiles(render_img[:,:,:-1], render_ext, COORD1[1], COORD1[0], COORD2[1], COORD2[0], ll=True)
     gray_img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
     print("Final image size:", img.shape)
     print()
 
-    image = Image.fromarray(img)
-    image.save("topo_test.png")
+    cv2.imwrite("topo_test.png", cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+
+    # cv2_topo_img = cv2.imread("topo_test.png")
+    # cv2_topo_img = cv2.cvtColor(cv2_topo_img, cv2.COLOR_BGR2GRAY)
+    # cv2.imshow("inspect", cv2_topo_img)
+    # cv2.waitKey(0)
 
     water = (42.3241868, -71.0223048)
     water_x, water_y  = mt.xy(water[1], water[0])
@@ -136,6 +145,10 @@ if __name__ == "__main__":
 
     border_land_mask_approx = cv2.drawContours(np.zeros_like(land_mask_binary), [border_cnt_approx], -1, 255, -1)
     border_land_mask_approx = cv2.drawContours(border_land_mask_approx, [border_cnt_approx], -1, 0, 0)
+    labeled_border_land_mask_approx, _ = label(border_land_mask_approx, structure=water_connectivity)
+    target_water_label = labeled_border_land_mask_approx[water_pixel_y, water_pixel_x]
+    border_land_mask_approx = labeled_border_land_mask_approx == target_water_label
+    border_land_mask_approx = 255*border_land_mask_approx.astype(np.uint8)
     cv2.imwrite("border_land_mask_approx.png", border_land_mask_approx)
 
     land_mask_color = cv2.cvtColor(land_mask_binary, cv2.COLOR_GRAY2BGR)
@@ -162,8 +175,13 @@ if __name__ == "__main__":
 
     #final approximate land mask
     land_mask_approx = border_land_mask_approx/255 * island_mask_approx/255
-    print(land_mask_approx.dtype)
     cv2.imwrite("land_mask_approx.png", 255*land_mask_approx)
+
+    #draw contours on render background
+    render_tile_bgr = cv2.cvtColor(render_img, cv2.COLOR_RGB2BGR)
+    land_contours_approx = [border_cnt_approx, *island_cnts_approx]
+    contours_img = cv2.drawContours(render_tile_bgr, land_contours_approx, -1, (0,0,0), 2)
+    cv2.imwrite('land_contours.png', contours_img)
 
     # obstacles = []
     # for p in cnts_approx
