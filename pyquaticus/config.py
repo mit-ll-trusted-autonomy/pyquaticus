@@ -13,14 +13,13 @@ config_dict_std = {
     "env_bounds_unit": "m", # "m", "wm_xy" (web mercator xy), "ll" (lat/lon)
     "blue_flag_home": "auto", # coordinates (lat, lon), list of coordinates, or "auto"
     "red_flag_home": "auto", # coordinates (lat, lon), list of coordinates, or "auto"
-    "flag_home_unit": "m", # "m" (meters relative to environment origin), "wm_xy" (web mercator xy), or "ll" (lat/lon)
+    "flag_homes_unit": "m", # "m" (meters relative to environment origin), "wm_xy" (web mercator xy), or "ll" (lat/lon)
     "scrimmage_coords": "auto", # [(coord1_x, coord1_y), (coord2_x, coord2_y)] or "auto"
     "scrimmage_coords_unit": "m", # "m" (meters relative to environment origin), "wm_xy" (web mercator xy), or "ll" (lat/lon)
     "water_contour_eps": 0.001, # tolerance for error between approximate and true contours dividing water and land
     "agent_radius": 2.0,  # meters
     "catch_radius": 10.0,  # meters
     "flag_keepout": 5.0,  # minimum distance (meters) between agent and flag centers
-    "max_speed": 1.5,  # meters / s
     "tau": (
         1 / 10
     ),  # max dt (seconds) for updating the simulation
@@ -35,6 +34,7 @@ config_dict_std = {
         30.0
     ),  # Cooldown on an agent (seconds) after they tag another agent, to prevent consecutive tags
     # MOOS dynamics parameters
+    "max_speed": 1.5,  # meters / s
     "speed_factor": 20.0,  # Multiplicative factor for desired_speed -> desired_thrust
     "thrust_map": np.array(  # Piecewise linear mapping from desired_thrust to speed
         [[-100, 0, 20, 40, 60, 80, 100], [-2, 0, 1, 2, 3, 5, 5]]
