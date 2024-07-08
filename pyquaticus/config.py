@@ -3,14 +3,16 @@ import numpy as np
 
 from pyquaticus.utils.utils import get_screen_res
 
-MAX_SPEED = 1.5
+EQUATORIAL_RADIUS = 6378137.0 # meters (https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html)
+POLAR_RADIUS = 6356752.0 # meters (https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html)
+MAX_SPEED = 1.5 # meters / s
 
 config_dict_std = {
     "gps_env": False, # real world game location
-    "env_bounds": [160.0, 80.0], # meters [xmax, ymax], lat/lon [(west, south), (east, north)], web mercator xy [(xmin, ymin), (xmax, ymax)], or "auto"
+    "env_bounds": [160.0, 80.0], # meters [xmax, ymax], lat/lon [(south, west), (north, east)], web mercator xy [(xmin, ymin), (xmax, ymax)], or "auto"
     "env_bounds_unit": "m", # "m", "wm_xy" (web mercator xy), "ll" (lat/lon)
-    "blue_flag_home": "auto", # coordinates, list of coordinates, or "auto"
-    "red_flag_home": "auto", # coordinates, list of coordinates, or "auto"
+    "blue_flag_home": "auto", # coordinates (lat, lon), list of coordinates, or "auto"
+    "red_flag_home": "auto", # coordinates (lat, lon), list of coordinates, or "auto"
     "flag_home_unit": "m", # "m" (meters relative to environment origin), "wm_xy" (web mercator xy), or "ll" (lat/lon)
     "scrimmage_coords": "auto", # [(coord1_x, coord1_y), (coord2_x, coord2_y)] or "auto"
     "scrimmage_coords_unit": "m", # "m" (meters relative to environment origin), "wm_xy" (web mercator xy), or "ll" (lat/lon)

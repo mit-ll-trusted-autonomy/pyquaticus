@@ -40,7 +40,7 @@ from pettingzoo import ParallelEnv
 from pygame import draw, SRCALPHA
 from pygame.math import Vector2
 from pygame.transform import rotozoom
-from pyquaticus.config import ACTION_MAP, config_dict_std
+from pyquaticus.config import ACTION_MAP, config_dict_std, EQUATORIAL_RADIUS, POLAR_RADIUS
 from pyquaticus.structs import CircleObstacle, Flag, PolygonObstacle, RenderingPlayer, Team
 from pyquaticus.utils.obs_utils import ObsNormalizer
 from pyquaticus.utils.pid import PID
@@ -1610,34 +1610,105 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         lat2=self.flag_homes[Team.RED_TEAM][0],
                         lon2=self.flag_homes[Team.RED_TEAM][1]
                     )
-                    geodict_midpoint = Geodesic.WGS84.Direct(
+                    geodict_flag_midpoint = Geodesic.WGS84.Direct(
                         lat1=self.flag_homes[Team.BLUE_TEAM][0],
                         lon1=self.flag_homes[Team.BLUE_TEAM][1],
                         azi1=geodict['azi1'],
                         s12=geodict['s12']/2
                     )
+                    flag_midpoint = (geodict_flag_midpoint['lat2'], geodict_flag_midpoint['lon2'])
 
-                    #vertical
+                    #vertical bounds
                     env_top = Geodesic.WGS84.Direct(
-                        lat1=geodict_midpoint['lat2'],
-                        lon1=geodict_midpoint['lon2'],
+                        lat1=flag_midpoint[0],
+                        lon1=flag_midpoint[1],
                         azi1=0, #degrees
                         s12=0.5*self.env_bounds[1][1]
                     )['lat2']
                     env_bottom = Geodesic.WGS84.Direct(
-                        lat1=geodict_midpoint['lat2'],
-                        lon1=geodict_midpoint['lon2'],
+                        lat1=flag_midpoint[0],
+                        lon1=flag_midpoint[1],
                         azi1=180, #degrees
                         s12=0.5*self.env_bounds[1][1]
                     )['lat2']
 
-                elif self.env_bounds_unit == "ll":
-                    mt.xy(*self.flag_homes[Team.BLUE_TEAM][-1::-1])
-                    mt.xy(*self.flag_homes[Team.BLUE_TEAM][-1::-1])
-            
-            #environment size
-            self.   
+                    #horizontal bounds
+                    flag_midpoint_geoc_lat = np.arcsin(
+                        (POLAR_RADIUS / EQUATORIAL_RADIUS) * np.tan(flag_midpoint[0])
+                    )
+                    small_circle_circum = np.pi * 2 * EQUATORIAL_RADIUS * np.cos(flag_midpoint_geoc_lat)
+                    env_left = flag_midpoint[1] - 360 * (0.5*self.env_bounds[1][0] / small_circle_circum)
+                    env_right = flag_midpoint[1] + 360 * (0.5*self.env_bounds[1][0] / small_circle_circum)
 
+                    if env_left < -180:
+                        env_left += 360
+                    if env_right > 180:
+                        env_right -= 360
+
+                    #convert bounds to web mercator xy
+                    self.env_bounds = np.array([
+                        mt.xy(env_left, env_bottom),
+                        mt.xy(env_right, env_top)
+                    ])
+                elif self.env_bounds_unit == "ll":
+                    #convert bounds to web mercator xy
+                    self.env_bounds = np.array([
+                        mt.xy(*self.env_bounds[0][-1::-1]),
+                        mt.xy(*self.env_bounds[1][-1::-1])
+                    ])
+                else: #web mercator xy
+                    left = np.min(self.env_bounds[0, :])
+                    bottom = np.min(self.env_bounds[1, :])
+                    right = np.max(self.env_bounds[0, :])
+                    top = np.max(self.env_bounds[1, :])
+                    self.env_bounds = np.array(
+                        [left, bottom],
+                        [right, top]
+                    )
+                self.env_bounds_unit = "wm_xy"
+
+            ### environment size ###
+            self.env_size = np.diff(self.env_bounds, axis=0)
+
+            ### flags home ###
+            #auto home
+            if self.flag_homes[Team.BLUE_TEAM] == self.flag_homes[Team.RED_TEAM] == "auto":
+                if self.flag_home_unit == "m":
+                    raise Exception("'m' (meters) should only be used to specify flag homes when gps_env is False")
+                self.flag_homes[Team.BLUE_TEAM] = self.env_bounds[0] + np.array([7/8*self.env_size[0], 0.5*self.env_size[0]])
+                self.flag_homes[Team.RED_TEAM] = self.env_bounds[0] + np.array([1/8*self.env_size[0], 0.5*self.env_size[0]])
+            elif self.flag_homes[Team.BLUE_TEAM] == "auto" or self.flag_homes[Team.RED_TEAM] == "auto":
+                raise Exception("Flag homes are either all 'auto', or all specified")
+            else:
+                self.flag_homes[Team.BLUE_TEAM] = np.asarray(self.flag_homes[Team.BLUE_TEAM])
+                self.flag_homes[Team.RED_TEAM] = np.asarray(self.flag_homes[Team.RED_TEAM])
+
+                if self.flag_homes_unit == "ll":
+
+
+            #unit
+            self.flag_homes_unit = "wm_xy"
+
+            #blue flag
+            if (
+                np.any(self.flag_homes[Team.BLUE_TEAM] <= self.env_bounds[0]) or
+                np.any(self.flag_homes[Team.BLUE_TEAM] >= self.env_bounds[1])
+            ):
+                raise Exception(f"Blue flag home {self.flag_homes[Team.BLUE_TEAM]} must fall within (non-inclusive) environment bounds {self.env_bounds}")
+
+            #red flag
+            if (
+                np.any(self.flag_homes[Team.RED_TEAM] <= self.env_bounds[0]) or
+                np.any(self.flag_homes[Team.RED_TEAM] >= self.env_bounds[1])
+            ):
+                raise Exception(f"Red flag home {self.flag_homes[Team.RED_TEAM]} must fall within (non-inclusive) environment bounds {self.env_bounds}")
+
+            ### scrimmage line ###
+            if self.scrimmage_coords == "auto":
+                pass
+            else:
+                if self.scrimmage_coords_unit == "m":
+                    raise Exception("'m' (meters) should only be used to specify flag homes when gps_env is False")
 
         else:
             ### environment bounds ###
@@ -1695,12 +1766,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             ])
 
             ### flags home ###
-            #unit
-            if self.flag_home_unit == "ll" or self.scrimmage_coords_unit == "ll":
-                raise Exception("'ll' (Lat/Long) units should only be used when gps_env is True")
-            
             #auto home
             if self.flag_homes[Team.BLUE_TEAM] == self.flag_homes[Team.RED_TEAM] == "auto":
+                if self.flag_home_unit == "ll" or self.flag_home_unit == "wm_xy":
+                    raise Exception("'ll' (Lat/Long) and 'wm_xy' (web mercator xy) units should only be used when gps_env is True")
                 self.flag_homes[Team.BLUE_TEAM] = np.array([7/8*self.env_size[0], 0.5*self.env_size[0]])
                 self.flag_homes[Team.RED_TEAM] = np.array([1/8*self.env_size[0], 0.5*self.env_size[0]])
             elif self.flag_homes[Team.BLUE_TEAM] == "auto" or self.flag_homes[Team.RED_TEAM] == "auto":
@@ -1735,6 +1804,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 scrimmage_coord2 = self._get_polygon_intersection(flags_midpoint, scrim_vec2, self.env_bounds_vertices)[1]
                 self.scrimmage_coords = np.asarray([scrimmage_coord1, scrimmage_coord2])
             else:
+                if self.scrimmage_coords_unit == "ll" or self.scrimmage_coords_unit == "wm_xy":
+                    raise Exception("'ll' (Lat/Long) and 'wm_xy' (web mercator xy) units should only be used when gps_env is True")
+
                 self.scrimmage_coords = np.asarray(self.scrimmage_coords)
 
                 if np.all(self.scrimmage_coords[0] == self.scrimmage_coords[1]):
