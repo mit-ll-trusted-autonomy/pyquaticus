@@ -5,7 +5,6 @@ import mercantile as mt
 import numpy as np
 import shapely
 
-from geographiclib.geodesic import Geodesic
 from math import ceil
 from PIL import Image
 from scipy.ndimage import label
@@ -86,12 +85,6 @@ if __name__ == "__main__":
     image = Image.fromarray(img)
     image.save("topo_test.png")
 
-    # cv2_topo_img = cv2.imread("topo_test.png")
-    # cv2_topo_img = cv2.cvtColor(cv2_topo_img, cv2.COLOR_BGR2GRAY)
-    # cv2.imshow("inspect", cv2_topo_img)
-    # cv2.waitKey(0)
-
-    # test distance between mercator and gps distance (3 miles)
     water = (42.3241868, -71.0223048)
     water_x, water_y  = mt.xy(water[1], water[0])
 
@@ -109,115 +102,68 @@ if __name__ == "__main__":
     )
     labeled_mask, _ = label(mask, structure=water_connectivity)
     target_label = labeled_mask[water_pixel_y, water_pixel_x]
-    water_mask = (labeled_mask == target_label) + (38 <= gray_img) * (gray_img <= 40)
-    land_mask = np.logical_not(water_mask)
+    land_mask = (labeled_mask == target_label) + (38 <= gray_img) * (gray_img <= 40)
 
-    water_image = Image.fromarray(water_mask)
-    water_image.save("water_mask.png")
+    water_image = Image.fromarray(land_mask)
+    water_image.save("land_mask.png")
 
-    water_binary = 255*water_mask.astype(np.uint8)
-    land_binary = 255*land_mask.astype(np.uint8)
+    # water contours
+    land_mask_binary = 255*land_mask.astype(np.uint8)
+    water_contours, _ = cv2.findContours(land_mask_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    #https://docs.opencv.org/4.10.0/d4/d73/tutorial_py_contours_begin.html
+    #https://docs.opencv.org/4.x/d9/d8b/tutorial_py_contours_hierarchy.html
 
-    #land contours (https://docs.opencv.org/2.4/modules/imgproc/doc/structural_analysis_and_shape_descriptors.html?#findcontours)
-    water_contours, hier = cv2.findContours(water_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    print(hier)
-    import sys
-    sys.exit()
+    border_contour = max(water_contours, key=cv2.contourArea)
+    border_land_mask = cv2.drawContours(np.zeros_like(land_mask_binary), [border_contour], -1, 255, -1)
+    cv2.imwrite("border_land_mask.png", border_land_mask)
 
+    # island contours
+    water_mask = np.logical_not(land_mask)
+    island_binary = 255*(border_land_mask * water_mask).astype(np.uint8)
+    island_contours, _ = cv2.findContours(island_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    island_mask = cv2.drawContours(255*np.ones_like(island_binary), island_contours, -1, 0, -1)
+    cv2.imwrite("island_mask.png", island_mask)
 
+    #TODO: check outter contour to see if it is just the standard borders
+    
+    epsilon = 0.001
 
+    #approximate outer contour (border land)
+    eps = epsilon * cv2.arcLength(border_contour, True)
+    border_cnt_approx = cv2.approxPolyDP(border_contour, eps, True)
+    print(len(border_contour), "->", len(border_cnt_approx), "vertices")
+    print()
 
+    border_land_mask_approx = cv2.drawContours(np.zeros_like(land_mask_binary), [border_cnt_approx], -1, 255, -1)
+    border_land_mask_approx = cv2.drawContours(border_land_mask_approx, [border_cnt_approx], -1, 0, 0)
+    cv2.imwrite("border_land_mask_approx.png", border_land_mask_approx)
 
+    land_mask_color = cv2.cvtColor(land_mask_binary, cv2.COLOR_GRAY2BGR)
+    border_contours_img = cv2.drawContours(copy.deepcopy(land_mask_color), [border_cnt_approx], -1, (0,255,0), 2)
+    cv2.imwrite("border_contours.png", border_contours_img)
 
+    #approximate island contours
+    island_cnts_approx = []
+    for i, cnt in enumerate(island_contours):
+        eps = epsilon * cv2.arcLength(cnt, True)
+        cnt_approx = cv2.approxPolyDP(cnt, eps, True)
+        cvx_hull = cv2.convexHull(cnt_approx)
+        if len(cvx_hull) > 1:
+            island_cnts_approx.append(cvx_hull)
+            print(len(cnt), "->", len(cvx_hull), "vertices")
+    print()
 
+    island_contours_img = cv2.drawContours(copy.deepcopy(land_mask_color), island_cnts_approx, -1, (0,255,0), 2)
+    cv2.imwrite("island_contours.png", island_contours_img)
 
+    #convex island masks
+    island_mask_approx = cv2.drawContours(255*np.ones_like(island_binary), island_cnts_approx, -1, 0, -1)
+    cv2.imwrite("island_mask_approx.png", island_mask_approx)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    ##################################################################################################################################3
-    land_contours, _ = cv2.findContours(land_binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-
-    water_color_img = cv2.cvtColor(water_binary, cv2.COLOR_GRAY2BGR)
-    land_color_img = cv2.cvtColor(land_binary, cv2.COLOR_GRAY2BGR)
-
-    water_contours_img = cv2.drawContours(copy.deepcopy(water_color_img), water_contours, -1, (0,255,0), 3)
-    land_contours_img = cv2.drawContours(copy.deepcopy(land_color_img), land_contours, -1, (0,255,0), 3)
-
-    # #remove holes inside land with water contours
-    # water_contours_img_gray = cv2.cvtColor(water_contours_img, cv2.COLOR_BGR2GRAY)
-    # land_contours_img_gray = cv2.cvtColor(land_contours_img, cv2.COLOR_BGR2GRAY)
-
-    # water_pixel_color_gray = water_contours_img_gray[water_pixel_y, water_pixel_x]
-    # land_pixel_color_gray = land_contours_img_gray[water_pixel_y, water_pixel_x]
-
-    # water_mask_gray = water_contours_img_gray == water_pixel_color_gray
-    # land_mask_gray = land_contours_img_gray == land_pixel_color_gray
-
-    # labeled_water_mask, _ = label(water_mask_gray, structure=water_connectivity)
-    # labeled_land_mask, _ = label(land_mask_gray, structure=water_connectivity)
-
-    # target_water_label = labeled_water_mask[water_pixel_y, water_pixel_x]
-    # target_land_label = labeled_land_mask[water_pixel_y, water_pixel_x]
-
-    # water_mask_new = labeled_water_mask == target_water_label
-    # land_mask_new = np.logical_not(labeled_land_mask == target_land_label)
-
-    # #contours 2
-    # water_binary_new = 255*water_mask_new.astype(np.uint8)
-    # land_binary_new = 255*land_mask_new.astype(np.uint8)
-
-    # water_contours_new, water_cnt_hier = cv2.findContours(water_binary_new, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    # land_contours_new, land_cnt_hier = cv2.findContours(land_binary_new, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-
-    # print("# water contours old:", len(water_contours))
-    # print("# water contours new:", len(water_contours_new))
-    # print()
-    # print("# land contours old:", len(land_contours))
-    # print("# land contours new:", len(land_contours_new))
-
-    water_contours_img_new = cv2.drawContours(copy.deepcopy(water_color_img), water_contours, -1, (0,255,0), 1)
-    land_contours_img_new = cv2.drawContours(copy.deepcopy(water_color_img), land_contours, -1, (0,255,0), 1)
-
-    cv2.imwrite("water_contours.png", water_contours_img_new)
-    cv2.imwrite("land_contours.png", land_contours_img_new)
-
-    # print(water_cnt_hier)
-
-    # #approximate contours
-    # epsilon = 0.001
-    # water_cnts_approx = []
-    # land_cnts_approx = []
-
-    # for i, cnt in enumerate(land_contours_new):
-    #     eps = epsilon * cv2.arcLength(cnt, True)
-    #     cnt_approx = cv2.approxPolyDP(cnt, eps, True)
-    #     # cnts_approx.append(cnt_approx)
-    #     # print(len(cnt), "->", len(cnt_approx), "vertices")
-    #     hull = cv2.convexHull(cnt_approx)
-    #     cnts_approx.append(hull)
-    #     print(len(cnt), "->", len(hull), "vertices")
-
-    # c = cv2.drawContours(copy.deepcopy(water_color_img), cnts_approx, -1, (0,255,0), 3)
-    # cv2.imwrite("approx_water_contour.png", c)
+    #final approximate land mask
+    land_mask_approx = border_land_mask_approx/255 * island_mask_approx/255
+    print(land_mask_approx.dtype)
+    cv2.imwrite("land_mask_approx.png", 255*land_mask_approx)
 
     # obstacles = []
     # for p in cnts_approx
@@ -241,5 +187,3 @@ if __name__ == "__main__":
     # print("Intersection compute time:", end - start)
     # print("Worse-case ray casting compute time:", worst_case_total_rc_compute)
     # print(intersec)
-
-    # Geodesic.WGS84.Direct(lat1=34., lon1=148., azi1=90., s12=10_000.) #s12 is the distance from the first point to the second in meters
