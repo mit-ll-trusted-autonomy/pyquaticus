@@ -1358,13 +1358,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if return_info:
             raise DeprecationWarning("return_info has been deprecated by PettingZoo -- https://github.com/Farama-Foundation/PettingZoo/pull/890")
 
-        flag_locations = [
-            [
-                self.env_size[0] - self.env_size[0] / 8,
-                self.env_size[1] / 2,
-            ],  # Blue Team
-            [self.env_size[0] / 8, self.env_size[1] / 2],  # Red Team
-        ]
+        flag_locations = list(self.flag_homes.values())
 
         for flag in self.flags:
             flag.home = flag_locations[int(flag.team)]
@@ -1794,6 +1788,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             #unit
             scrimmage_coords_unit = "wm_xy"
 
+            ### distances ###
+            #TODO convert agent radius, flag, radius, flag keepout, catch radius to merctor xy
+
         else:
             ### environment bounds ###
             if env_bounds_unit != "m":
@@ -1985,8 +1982,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         scrim2red = self.flag_homes[Team.RED_TEAM] - scrimmage_coords[0]
 
         self.on_sides_sign = {}
-        self.on_sides_sign[Team.BLUE_TEAM] = self._cross_product(self.scrimmage_vec, scrim2blue)
-        self.on_sides_sign[Team.RED_TEAM] = self._cross_product(self.scrimmage_vec, scrim2red)
+        self.on_sides_sign[Team.BLUE_TEAM] = np.sign(self._cross_product(self.scrimmage_vec, scrim2blue))
+        self.on_sides_sign[Team.RED_TEAM] = np.sign(self._cross_product(self.scrimmage_vec, scrim2red))
+        print(self.on_sides_sign)
 
     def _get_line_intersection(self, origin: np.ndarray, vec: np.ndarray, line: np.ndarray):
         """
@@ -2127,12 +2125,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         #draw contours on render background
         render_img_bgr = cv2.cvtColor(render_img, cv2.COLOR_RGB2BGR) 
         contours_img = cv2.drawContours(render_img_bgr, [border_cnt_approx, *island_cnts_approx], -1, (0,0,0), 2)
-        # cv2.imwrite('test.png', contours_img)
         self.background_img = cv2.cvtColor(contours_img, cv2.COLOR_BGR2RGB) #pygame is in RGB
 
         #squeeze contours
-        border_cnt = border_cnt_approx.squeeze().astype(float)
-        island_cnts = [cnt.squeeze().astype(float) for cnt in island_cnts_approx]
+        border_cnt = self._img2env_coords(border_cnt_approx.squeeze(), topo_img.shape)
+        island_cnts = np.asarray([self._img2env_coords(cnt.squeeze(), topo_img.shape) for cnt in island_cnts_approx])
 
         return border_cnt, island_cnts, land_mask_approx
 
@@ -2183,6 +2180,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         ]
 
         return cropped_img
+
+    def _img2env_coords(self, cnt, img_shape):
+        cnt_env = cnt[:, 0] / (image_shape[1] - 1)
+        cnt_env = self.env_size * (cnt / (img_shape - 1))
+        cnt_env = self.env_size 
+        cnt[:, 0] /= img_shape[] 
+        return self.env_size * (cnt / (img_shape - 1))
 
     def _generate_lines_from_contour(self, contour):
         return [LineString([coord, contour[(i+1) % len(contour)]]) for i, coord in enumerate(contour)]
