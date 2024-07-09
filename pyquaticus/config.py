@@ -27,7 +27,7 @@ config_dict_std = {
     "sim_speedup_factor": 1, # simulation speed multiplier (integer >= 1)
     "max_time": 120.0,  # maximum time (seconds) per episode
     "max_score": 1,     # maximum score per episode (until a winner is declared)
-    "screen_frac": 0.75, # fraction of screen to use for rendering
+    "screen_frac": 0.4, # fraction of screen to use for rendering
     "max_screen_size": get_screen_res(),
     "render_fps": 30,
     "normalize": True,  # Flag for normalizing the observation space.

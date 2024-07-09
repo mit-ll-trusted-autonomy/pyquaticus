@@ -42,7 +42,7 @@ from gymnasium.spaces import Discrete
 from gymnasium.utils import seeding
 from math import ceil
 from pettingzoo import ParallelEnv
-from pygame import draw, SRCALPHA
+from pygame import draw, SRCALPHA, surfarray
 from pygame.math import Vector2
 from pygame.transform import rotozoom
 from pyquaticus.config import ACTION_MAP, config_dict_std, EQUATORIAL_RADIUS, POLAR_RADIUS
@@ -176,8 +176,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         """Initializes the normalizer."""
         agent_obs_normalizer = ObsNormalizer(False)
         max_bearing = [180]
-        max_dist = [np.linalg.norm(self.env_size) + 10]  # add a ten meter buffer
-        max_dist_scrimmage = [self.scrimmage]
+        max_dist = [self.env_diag + 10]  # add a ten meter buffer
+        max_dist_scrimmage = [self.env_diag]
         min_dist = [0.0]
         max_bool, min_bool = [1.0], [0.0]
         max_speed, min_speed = [self.max_speed], [0.0]
@@ -353,7 +353,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
         # Scrimmage line
         scrimmage_line_closest_point = closest_point_on_line(
-            self.scrimmage_l, self.scrimmage_u, np_pos
+            self.scrimmage_coords[0], self.scrimmage_coords[1], np_pos
         )
         scrimmage_line_dist, scrimmage_line_bearing = mag_bearing_to(
             np_pos, scrimmage_line_closest_point, agent.heading
@@ -704,10 +704,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             pos_y = player.pos[1]
             flag_loc = self.flags[int(player.team)].home
 
-            if player.team == Team.BLUE_TEAM:
-                player.on_own_side = pos_x >= self.scrimmage
-            else:
-                player.on_own_side = pos_x <= self.scrimmage
+            player.on_own_side = self._check_on_sides(player.pos, player.team)
 
             # convert desired_speed   and  desired_heading to
             #         desired_thrust  and  desired_rudder
@@ -846,6 +843,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             player.speed = clip(new_speed, 0.0, self.max_speed)
             player.heading = angle180(new_heading)
             player.thrust = desired_thrust
+
+    def _check_on_sides(self, pos, team):
+        scrim2pos = np.asarray(pos) - self.scrimmage_coords[0]
+        cp = self._cross_product(self.scrimmage_vec, scrim2pos)
+
+        return cp == self.on_sides_sign[team] or cp == 0
 
     def _check_pickup_flags(self):
         """Updates player states if they picked up the flag."""
@@ -1032,6 +1035,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             # Suppress numpy warnings to avoid printing out extra stuff to the console
             np.seterr(all="ignore")
 
+
         ### Environment Geometry Construction ###
         #basic env features
         env_bounds = config_dict.get("env_bounds", config_dict_std["env_bounds"])
@@ -1053,19 +1057,52 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             flag_homes_unit=flag_homes_unit,
             scrimmage_coords_unit=scrimmage_coords_unit)
 
-        #topography
-        if self.gps_env:
-            land_contours, land_mask = self._get_topo_geom()
-
-        print(land_contours)
-        print(land_mask)
-        sys.exit()
         #aquaticus point field
         #TODO
 
-        #obstacles
-        self.obstacles = list()
+        #topography
+        # set reference variables for world boundaries
+        # ll = lower left, lr = lower right
+        # ul = upper left, ur = upper right
+        self.boundary_ll = np.array([0.0, 0.0], dtype=np.float32)
+        self.boundary_lr = np.array([self.env_size[0], 0.0], dtype=np.float32)
+        self.boundary_ul = np.array([0.0, self.env_size[1]], dtype=np.float32)
+        self.boundary_ur = np.array(self.env_size, dtype=np.float32)
+
+        #ray casting and obstacles
+        if self.lidar_obs:
+            self.ray_int_lines = [
+                LineString([self.boundary_ll, self.boundary_lr]),
+                LineString([self.boundary_lr, self.boundary_ur]),
+                LineString([self.boundary_ur, self.boundary_ul]),
+                LineString([self.boundary_ul, self.boundary_ll])
+            ]
         obstacle_params = config_dict.get("obstacles", config_dict_std["obstacles"])
+
+        if self.gps_env:
+            border_contour, island_contours, land_mask = self._get_topo_geom()
+
+            if border_contour is not None:
+                #ray casting
+                if self.lidar_obs:
+                    self.ray_int_lines = self._generate_lines_from_contour(border_contour)
+                #obstacles
+                if obstacle_params is None:
+                    obstacle_params = {"polygon": []}
+                obstacle_params["polygon"].append(border_contour)
+
+            if len(island_contours) > 0:
+                #ray casting
+                if self.lidar_obs:
+                    self.ray_int_lines.extend(
+                    [line for cnt in island_contours for line in self._generate_lines_from_contour(cnt)]
+                    )
+                #obstacles
+                if obstacle_params is None:
+                    obstacle_params = {"polygon": []}
+                obstacle_params["polygon"].extend(island_contours)
+
+        self.obstacles = list()
         if obstacle_params is not None and isinstance(obstacle_params, dict):
                 circle_obstacles = obstacle_params.get("circle", None)
                 if circle_obstacles is not None and isinstance(circle_obstacles, list):
@@ -1083,13 +1120,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         elif obstacle_params is not None:
             raise TypeError(f"Expected obstacle_params to be None or a dict, not {type(obstacle_params)}")
 
+
         ### Environment Rendering ###
         if self.render_mode:
             # Pygame Orientation Vector
             self.UP = Vector2((0.0, 1.0))
 
             #pixel size
-            self.pixel_size
+            self.pixel_size = (self.screen_frac * self.max_screen_size[0]) / self.env_size[0]
 
             # arena
             self.border_width = 2  # pixels
@@ -1098,22 +1136,29 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.arena_width = self.env_size[0] * self.pixel_size
             self.arena_height = self.env_size[1] * self.pixel_size
 
+            #render background
+            self.render_background = pygame.surfarray.make_surface(
+                np.transpose(self.background_img, (1,0,2)) #pygame assumes images are (h, w, 3)
+            )
+
             # check that world size (pixels) does not exceed the screen dimensions
             world_screen_err_msg = (
                 "Specified env_size {} exceeds the maximum size {} in at least one"
                 " dimension".format(
                     [
-                        round(2*self.arena_offset + self.pixel_size * self.env_size[0]),
-                        round(2*self.arena_offset + self.pixel_size * self.env_size[1])
+                        round(self.pixel_size * self.env_size[0]),
+                        round(self.pixel_size * self.env_size[1])
                     ], 
                     self.max_screen_size
                 )
             )
             assert (
-                2*self.arena_offset + self.pixel_size * self.env_size[0] <= self.max_screen_size[0]
-                and 2*self.arena_offset + self.pixel_size * self.env_size[1] <= self.max_screen_size[1]
+                self.pixel_size * self.env_size[0] <= self.max_screen_size[0] and
+                self.pixel_size * self.env_size[1] <= self.max_screen_size[1]
             ), world_screen_err_msg
 
+
+        ### config checks ###
         # check that time between frames (1/render_fps) is not larger than timestep (tau)
         frame_rate_err_msg = (
             "Specified frame rate ({}) creates time intervals between frames larger"
@@ -1131,30 +1176,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if type(self.sim_speedup_factor) != int:
             self.sim_speedup_factor = int(np.round(self.sim_speedup_factor))
             print(f"Warning: Converted sim_speedup_factor to integer: {self.sim_speedup_factor}")
-
-        # check that agents and flags properly fit within world
-        agent_flag_err_msg = (
-            "Specified agent_radius ({}), flag_radius ({}), and flag_keepout ({})"
-            " create impossible initialization based on env_size({})".format(
-                self.agent_radius, self.flag_radius, self.flag_keepout, self.env_size
-            )
-        )
-        horizontal_fit = (
-            2 * self.agent_radius + 2 * self.flag_keepout < self.env_size[0] / 2
-        )
-        vertical_fit = self.flag_keepout + self.agent_radius < self.env_size[1] / 2
-        assert horizontal_fit and vertical_fit, agent_flag_err_msg
-
-        # set reference variables for world boundaries
-        # ll = lower left, lr = lower right
-        # ul = upper left, ur = upper right
-        self.boundary_ll = np.array([0.0, 0.0], dtype=np.float32)
-        self.boundary_lr = np.array([self.env_size[0], 0.0], dtype=np.float32)
-        self.boundary_ul = np.array([0.0, self.env_size[1]], dtype=np.float32)
-        self.boundary_ur = np.array(self.env_size, dtype=np.float32)
-        self.scrimmage = 0.5*self.env_size[0] #horizontal (x) location of scrimmage line (relative to world)
-        self.scrimmage_l = np.array([self.scrimmage, 0.0], dtype=np.float32)
-        self.scrimmage_u = np.array([self.scrimmage, self.env_size[1]], dtype=np.float32)
 
     def get_distance_between_2_points(self, start: np.array, end: np.array) -> float:
         """
@@ -1427,7 +1448,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         agent_spd_hdg = []
         agent_on_sides = []
 
-        if self.random_init:
+        # if self.random_init:
+        if True:
             flags_separation = self.get_distance_between_2_points(
                 flag_locations[0], flag_locations[1]
             )
@@ -1439,7 +1461,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             player.has_flag = False
             player.on_own_side = True
             player.tagging_cooldown = self.tagging_cooldown
-            if self.random_init:
+            # if self.random_init:
+            if True:
                 max_agent_separation = flags_separation - 2 * self.flag_keepout
 
                 # starting center point between two agents
@@ -1751,6 +1774,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             flag_homes_unit = "wm_xy"
 
             ### scrimmage line ###
+            #TODO, check that flags are not on scrimamge line
             if self._is_auto_string(scrimmage_coords):
                 flags_vec = flag_homes[Team.BLUE_TEAM] - flag_homes[Team.RED_TEAM]
 
@@ -1853,6 +1877,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 raise Exception(f"Red flag home {flag_homes[Team.RED_TEAM]} must fall within (non-inclusive) environment bounds {env_bounds}")
 
             ### scrimmage line ###
+            #TODO, check that flags are not on scrimamge line
             if self._is_auto_string(scrimmage_coords):
                 flags_vec = flag_homes[Team.BLUE_TEAM] - flag_homes[Team.RED_TEAM]
 
@@ -1953,6 +1978,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         self.scrimmage_coords = scrimmage_coords
         self.scrimmage_coords_unit = scrimmage_coords_unit
+        self.scrimmage_vec = scrimmage_coords[1] - scrimmage_coords[0]
+
+        #on sides
+        scrim2blue = self.flag_homes[Team.BLUE_TEAM] - scrimmage_coords[0]
+        scrim2red = self.flag_homes[Team.RED_TEAM] - scrimmage_coords[0]
+
+        self.on_sides_sign = {}
+        self.on_sides_sign[Team.BLUE_TEAM] = self._cross_product(self.scrimmage_vec, scrim2blue)
+        self.on_sides_sign[Team.RED_TEAM] = self._cross_product(self.scrimmage_vec, scrim2red)
 
     def _get_line_intersection(self, origin: np.ndarray, vec: np.ndarray, line: np.ndarray):
         """
@@ -1988,14 +2022,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
     def _get_topo_geom(self):
         ### Environment Map Retrieval and Caching ###
-        map_caching_dir = str(pathlib.Path(__file__).resolve().parents[0] / '__mapcache__')
+        map_caching_dir = str(pathlib.Path(__file__).resolve().parents[1] / '__mapcache__')
         if not os.path.isdir(map_caching_dir):
             os.mkdir(map_caching_dir)
-        
-        lon, lat = _sm2ll(*self.env_bounds[0])
-        lat = np.round(lat, 7)
-        lon = np.round(lon, 7)
-        map_cache_path = os.path.join(map_caching_dir, f'tile@({lat},{lon}).pkl')
+
+        lon1, lat1 = np.round(_sm2ll(*self.env_bounds[0]), 7)
+        lon2, lat2 = np.round(_sm2ll(*self.env_bounds[1]), 7)
+
+        map_cache_path = os.path.join(map_caching_dir, f'tile@(({lat1},{lon1}), ({lat2},{lon2})).pkl')
 
         if os.path.exists(map_cache_path):
             #load cached environment map(s)
@@ -2003,8 +2037,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 map_cache = pickle.load(f)
 
             topo_img = map_cache["topographical_image"]
-            if self.render_mode:
-                render_img = map_cache["render_image"]
+            render_img = map_cache["render_image"]
         else:
             #retrieve maps from tile provider
             topo_tile_source = cx.providers.CartoDB.DarkMatterNoLabels #DO NOT CHANGE!
@@ -2026,7 +2059,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             map_cache = {"topographical_image": topo_img, "render_image": render_img}
             with open(map_cache_path, 'wb') as f:
                 pickle.dump(map_cache, f)
-
 
         ### Topology Construction ###
         #mask by water color on topo image
@@ -2089,19 +2121,20 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         island_mask_approx = cv2.drawContours(255*np.ones_like(island_binary), island_cnts_approx, -1, 0, -1) #convex island masks
 
-        #final approximate contours and land mask
-        land_contours_approx = [border_cnt_approx, *island_cnts_approx]
+        #final approximate land mask
         land_mask_approx = border_land_mask_approx * island_mask_approx/255
 
         #draw contours on render background
-        if self.render_mode:
-            render_img_bgr = cv2.cvtColor(render_img, cv2.COLOR_RGB2BGR) 
-            contours_img = cv2.drawContours(render_img_bgr, land_contours_approx, -1, (0,0,0), 2)
-            cv2.imwrite('test.png', contours_img)
-            contours_img = np.transpose(contours_img, (1,0,2)) #pygame assumes images are (h, w, 3)
-            self.render_background = cv2.cvtColor(contours_img, cv2.COLOR_BGR2RGB) #pygame is in RGB
+        render_img_bgr = cv2.cvtColor(render_img, cv2.COLOR_RGB2BGR) 
+        contours_img = cv2.drawContours(render_img_bgr, [border_cnt_approx, *island_cnts_approx], -1, (0,0,0), 2)
+        # cv2.imwrite('test.png', contours_img)
+        self.background_img = cv2.cvtColor(contours_img, cv2.COLOR_BGR2RGB) #pygame is in RGB
 
-        return land_contours_approx, land_mask_approx
+        #squeeze contours
+        border_cnt = border_cnt_approx.squeeze().astype(float)
+        island_cnts = [cnt.squeeze().astype(float) for cnt in island_cnts_approx]
+
+        return border_cnt, island_cnts, land_mask_approx
 
     def _crop_tiles(self, img, ext, w, s, e, n, ll=True):
         """
@@ -2151,6 +2184,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         return cropped_img
 
+    def _generate_lines_from_contour(self, contour):
+        return [LineString([coord, contour[(i+1) % len(contour)]]) for i, coord in enumerate(contour)]
+
     def render(self):
         """Overridden method inherited from `Gym`."""
         return self._render()
@@ -2166,12 +2202,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             pygame.display.set_caption("Capture The Flag")
             if self.render_mode:
                 pygame.display.init()
-                self.screen = pygame.display.set_mode(
-                    (
-                        self.arena_width + 2 * self.arena_offset,
-                        self.arena_height + 2 * self.arena_offset,
-                    )
-                )
+                self.screen = pygame.display.set_mode((self.arena_width, self.arena_height))
                 self.isopen = True
                 self.font = pygame.font.SysFont(None, int(2*self.pixel_size*self.agent_radius))
             else:
@@ -2185,74 +2216,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if self.state == {}:
             return None
 
-        # arena coordinates
-        if self.border_width % 2 == 0:
-            top_left = (
-                self.arena_offset - self.border_width / 2 - 1,
-                self.arena_offset - self.border_width / 2 - 1,
-            )
-            top_middle = (
-                self.arena_width / 2 + self.arena_offset - 1,
-                self.arena_offset - 1,
-            )
-            top_right = (
-                self.arena_width + self.arena_offset + self.border_width / 2 - 1,
-                self.arena_offset - self.border_width / 2 - 1,
-            )
-
-            bottom_left = (
-                self.arena_offset - self.border_width / 2 - 1,
-                self.arena_height + self.arena_offset + self.border_width / 2 - 1,
-            )
-            bottom_middle = (
-                self.arena_width / 2 + self.arena_offset - 1,
-                self.arena_height + self.arena_offset - 1,
-            )
-            bottom_right = (
-                self.arena_width + self.arena_offset + self.border_width / 2 - 1,
-                self.arena_height + self.arena_offset + self.border_width / 2 - 1,
-            )
-
-        elif self.border_width % 2 != 0:
-            top_left = (
-                self.arena_offset - self.border_width / 2,
-                self.arena_offset - self.border_width / 2,
-            )
-            top_middle = (self.arena_width / 2 + self.arena_offset, self.arena_offset)
-            top_right = (
-                self.arena_width + self.arena_offset + self.border_width / 2,
-                self.arena_offset - self.border_width / 2,
-            )
-
-            bottom_left = (
-                self.arena_offset - self.border_width / 2,
-                self.arena_height + self.arena_offset + self.border_width / 2,
-            )
-            bottom_middle = (
-                self.arena_width / 2 + self.arena_offset,
-                self.arena_height + self.arena_offset,
-            )
-            bottom_right = (
-                self.arena_width + self.arena_offset + self.border_width / 2,
-                self.arena_height + self.arena_offset + self.border_width / 2,
-            )
-
         # screen
-        self.screen.fill((255, 255, 255))
+        self.screen.blit(self.render_background, (0, 0))
 
         # arena border and scrimmage line
-        draw.line(self.screen, (0, 0, 0), top_left, top_right, width=self.border_width)
         draw.line(
-            self.screen, (0, 0, 0), bottom_left, bottom_right, width=self.border_width
-        )
-        draw.line(
-            self.screen, (0, 0, 0), top_left, bottom_left, width=self.border_width
-        )
-        draw.line(
-            self.screen, (0, 0, 0), top_right, bottom_right, width=self.border_width
-        )
-        draw.line(
-            self.screen, (0, 0, 0), top_middle, bottom_middle, width=self.border_width
+            self.screen, (0, 0, 0), self.world_to_screen(self.scrimmage_coords[0]), self.world_to_screen(self.scrimmage_coords[1]), width=self.border_width
         )
         #Draw Points Debugging
         if self.config_dict["render_field_points"]:
@@ -2382,12 +2351,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
     def world_to_screen(self, pos):
         screen_pos = self.pixel_size * np.asarray(pos)
-        screen_pos[0] += self.arena_offset
-        screen_pos[1] = (
-            0.5 * self.arena_height
-            - (screen_pos[1] - 0.5 * self.arena_height)
-            + self.arena_offset
-        )
+        screen_pos[1] = 0.5 * self.arena_height - (screen_pos[1] - 0.5 * self.arena_height)
 
         return screen_pos
 
@@ -2404,6 +2368,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             return a
         else:
             return b
+
+    def _cross_product(self, u, v):
+        return u[0] * v[1] - u[1] * v[0]
 
     def state_to_obs(self, agent_id, normalize=True):
         """

@@ -143,6 +143,7 @@ def main():
     config["red_flag_home"] = (41.3512143, -74.0608635)
     config["flag_homes_unit"] = "ll"
     config["sim_speedup_factor"] = 3
+    config["lidar_obs"] = True
     # config["normalize"] = False
     
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
