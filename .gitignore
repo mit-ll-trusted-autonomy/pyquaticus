@@ -9,3 +9,4 @@ ctf_gym.egg-info/
 pyquaticus.egg-info/
 _version.py
 *.mp4
+__mapcache__/

@@ -40,6 +40,7 @@ from contextily.tile import _sm2ll
 from geographiclib.geodesic import Geodesic
 from gymnasium.spaces import Discrete
 from gymnasium.utils import seeding
+from math import ceil
 from pettingzoo import ParallelEnv
 from pygame import draw, SRCALPHA
 from pygame.math import Vector2
@@ -60,6 +61,7 @@ from pyquaticus.utils.utils import (
     rot2d,
     vec_to_mag_heading,
 )
+from scipy.ndimage import label
 from shapely import intersection, LineString, Polygon
 from typing import Optional
 
@@ -985,6 +987,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         """
         ### Set Variables from Configuration Dictionary ###
         self.gps_env = config_dict.get("gps_env", config_dict_std["gps_env"])
+        self.lidar_obs = config_dict.get("lidar_obs", config_dict_std["lidar_obs"])
         self.topo_contour_eps = config_dict.get("topo_contour_eps", config_dict_std["topo_contour_eps"])
         self.agent_radius = config_dict.get(
             "agent_radius", config_dict_std["agent_radius"]
@@ -1004,10 +1007,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.max_screen_size = config_dict.get(
             "max_screen_size", config_dict_std["max_screen_size"]
         )
-        self.random_init = config_dict.get(
-            "random_init", config_dict_std["random_init"]
-        )
-        self.save_traj = config_dict.get("save_traj", config_dict_std["save_traj"])
         self.render_fps = config_dict.get("render_fps", config_dict_std["render_fps"])
         self.normalize = config_dict.get("normalize", config_dict_std["normalize"])
         self.tagging_cooldown = config_dict.get(
@@ -1058,7 +1057,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if self.gps_env:
             land_contours, land_mask = self._get_topo_geom()
 
+        print(land_contours)
+        print(land_mask)
+        sys.exit()
         #aquaticus point field
+        #TODO
 
         #obstacles
         self.obstacles = list()
@@ -1085,9 +1088,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             # Pygame Orientation Vector
             self.UP = Vector2((0.0, 1.0))
 
+            #pixel size
+            self.pixel_size
+
             # arena
-            self.arena_offset = 20  # pixels
-            self.border_width = 4  # pixels
+            self.border_width = 2  # pixels
             self.a2a_line_width = 3 #pixels
 
             self.arena_width = self.env_size[0] * self.pixel_size
@@ -1558,29 +1563,38 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         flag_homes_unit: str,
         scrimmage_coords_unit: str
     ):
-        if env_bounds == flag_homes[Team.BLUE_TEAM] == flag_homes[Team.RED_TEAM] == "auto":
+        if (
+            self._is_auto_string(env_bounds) and 
+            (self._is_auto_string(flag_homes[Team.BLUE_TEAM]) or self._is_auto_string(flag_homes[Team.RED_TEAM]))
+        ):
             raise Exception("Either env_bounds or blue AND red flag homes must be set in config_dict (cannot both be 'auto')")
 
         if self.gps_env:
             ### environment bounds ###
-            if env_bounds == "auto":
+            if self._is_auto_string(env_bounds):
                 if flag_homes_unit == "m":
                     raise Exception("Flag homes must be specified in aboslute coordinates (lat/long or web mercator xy) to auto generate environment bounds")
                 elif flag_homes_unit == "ll":
                     #convert flag poses to web mercator xy
-                    flag_homes[Team.BLUE_TEAM] = mt.xy(*flag_homes[Team.BLUE_TEAM][-1::-1])
-                    flag_homes[Team.RED_TEAM] = mt.xy(*flag_homes[Team.RED_TEAM][-1::-1])
+                    flag_home_blue = np.round(flag_homes[Team.BLUE_TEAM], 7)
+                    flag_home_blue = mt.xy(*flag_home_blue[-1::-1])
+
+                    flag_home_red = np.round(flag_homes[Team.RED_TEAM], 7)
+                    flag_home_red = mt.xy(*flag_home_red[-1::-1])
+
+                flag_home_blue = np.asarray(flag_home_blue)
+                flag_home_red = np.asarray(flag_home_red) 
                     
-                flag_vec = flag_homes[Team.BLUE_TEAM] - flag_homes[Team.RED_TEAM]
+                flag_vec = flag_home_blue - flag_home_red
                 flag_distance = np.linalg.norm(flag_vec)
                 flag_unit_vec = flag_vec / flag_distance
                 flag_perp_vec = np.array([-flag_unit_vec[1], flag_unit_vec[0]]) 
 
                 #assuming default setup drawn on web mercator, these bounds will contain it
-                border_pt1 =  flag_homes[Team.BLUE_TEAM] + (flag_distance/6) * flag_unit_vec + (flag_distance/4) * flag_perp_vec
-                border_pt2 =  flag_homes[Team.BLUE_TEAM] + (flag_distance/6) * flag_unit_vec + (flag_distance/4) * -flag_perp_vec
-                border_pt3 =  flag_homes[Team.RED_TEAM] + (flag_distance/6) * -flag_unit_vec + (flag_distance/4) * flag_perp_vec
-                border_pt4 =  flag_homes[Team.RED_TEAM] + (flag_distance/6) * -flag_unit_vec + (flag_distance/4) * -flag_perp_vec
+                border_pt1 =  flag_home_blue + (flag_distance/6) * flag_unit_vec + (flag_distance/4) * flag_perp_vec
+                border_pt2 =  flag_home_blue + (flag_distance/6) * flag_unit_vec + (flag_distance/4) * -flag_perp_vec
+                border_pt3 =  flag_home_red + (flag_distance/6) * -flag_unit_vec + (flag_distance/4) * flag_perp_vec
+                border_pt4 =  flag_home_red + (flag_distance/6) * -flag_unit_vec + (flag_distance/4) * -flag_perp_vec
                 border_points = np.array([border_pt1, border_pt2, border_pt3, border_pt4])
 
                 #environment bounds will be in web mercator xy
@@ -1656,32 +1670,33 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     ])
                 elif env_bounds_unit == "ll":
                     #convert bounds to web mercator xy
+                    env_bounds = np.round(env_bounds, 7)
                     wm_xy_bounds = np.array([
                         mt.xy(*env_bounds[0][-1::-1]),
                         mt.xy(*env_bounds[1][-1::-1])
                     ])
-                    left = np.min(wm_xy_bounds[0, :])
-                    bottom = np.min(wm_xy_bounds[1, :])
-                    right = np.max(wm_xy_bounds[0, :])
-                    top = np.max(wm_xy_bounds[1, :])
-                    env_bounds = np.array(
+                    left = np.min(wm_xy_bounds[:, 0])
+                    bottom = np.min(wm_xy_bounds[:, 1])
+                    right = np.max(wm_xy_bounds[:, 0])
+                    top = np.max(wm_xy_bounds[:, 1])
+                    env_bounds = np.array([
                         [left, bottom],
                         [right, top]
-                    )
+                    ])
                 else: #web mercator xy
-                    left = np.min(env_bounds[0, :])
-                    bottom = np.min(env_bounds[1, :])
-                    right = np.max(env_bounds[0, :])
-                    top = np.max(env_bounds[1, :])
-                    env_bounds = np.array(
+                    left = np.min(env_bounds[:, 0])
+                    bottom = np.min(env_bounds[:, 1])
+                    right = np.max(env_bounds[:, 0])
+                    top = np.max(env_bounds[:, 1])
+                    env_bounds = np.array([
                         [left, bottom],
                         [right, top]
-                    )
+                    ])
             #unit
             env_bounds_unit = "wm_xy"
 
             #environment size
-            self.env_size = np.diff(env_bounds, axis=0)
+            self.env_size = np.diff(env_bounds, axis=0)[0]
             self.env_diag = np.linalg.norm(self.env_size)
 
             #vertices
@@ -1694,22 +1709,25 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             ### flags home ###
             #auto home
-            if flag_homes[Team.BLUE_TEAM] == flag_homes[Team.RED_TEAM] == "auto":
-                if flag_homes_unit == "m":
-                    raise Exception("'m' (meters) should only be used to specify flag homes when gps_env is False")
-                flag_homes[Team.BLUE_TEAM] = np.array([7/8*self.env_size[0], 0.5*self.env_size[0]])
-                flag_homes[Team.RED_TEAM] = np.array([1/8*self.env_size[0], 0.5*self.env_size[0]])
-            elif flag_homes[Team.BLUE_TEAM] == "auto" or flag_homes[Team.RED_TEAM] == "auto":
+            if self._is_auto_string(flag_homes[Team.BLUE_TEAM]) and self._is_auto_string(flag_homes[Team.RED_TEAM]):
+                flag_homes[Team.BLUE_TEAM] = env_bounds[0] + np.array([7/8*self.env_size[0], 0.5*self.env_size[0]])
+                flag_homes[Team.RED_TEAM] = env_bounds[0] + np.array([1/8*self.env_size[0], 0.5*self.env_size[0]])
+            elif self._is_auto_string(flag_homes[Team.BLUE_TEAM]) or self._is_auto_string(flag_homes[Team.RED_TEAM]):
                 raise Exception("Flag homes should be either all 'auto', or all specified")
             else:
-                if env_bounds != "auto":
-                    flag_homes[Team.BLUE_TEAM] = np.asarray(flag_homes[Team.BLUE_TEAM])
-                    flag_homes[Team.RED_TEAM] = np.asarray(flag_homes[Team.RED_TEAM])
-                    
-                    if self.flag_homes_unit == "ll":
-                        #convert flag poses to web mercator xy
-                        flag_homes[Team.BLUE_TEAM] = mt.xy(*flag_homes[Team.BLUE_TEAM][-1::-1])
-                        flag_homes[Team.RED_TEAM] = mt.xy(*flag_homes[Team.RED_TEAM][-1::-1])
+                if flag_homes_unit == "m":
+                    raise Exception("'m' (meters) should only be used to specify flag homes when gps_env is False")
+
+                flag_homes[Team.BLUE_TEAM] = np.asarray(flag_homes[Team.BLUE_TEAM])
+                flag_homes[Team.RED_TEAM] = np.asarray(flag_homes[Team.RED_TEAM])
+                
+                if flag_homes_unit == "ll":
+                    #convert flag poses to web mercator xy
+                    flag_homes[Team.BLUE_TEAM] = np.round(flag_homes[Team.BLUE_TEAM], 7)
+                    flag_homes[Team.BLUE_TEAM] = mt.xy(*flag_homes[Team.BLUE_TEAM][-1::-1])
+
+                    flag_homes[Team.RED_TEAM] = np.round(flag_homes[Team.RED_TEAM], 7)
+                    flag_homes[Team.RED_TEAM] = mt.xy(*flag_homes[Team.RED_TEAM][-1::-1])
 
             #blue flag
             if (
@@ -1730,10 +1748,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             flag_homes[Team.RED_TEAM] -= env_bounds[0]
 
             #unit
-            self.flag_homes_unit = "wm_xy"
+            flag_homes_unit = "wm_xy"
 
             ### scrimmage line ###
-            if scrimmage_coords == "auto":
+            if self._is_auto_string(scrimmage_coords):
                 flags_vec = flag_homes[Team.BLUE_TEAM] - flag_homes[Team.RED_TEAM]
 
                 scrim_vec1 = np.array([-flags_vec[1], flags_vec[0]])
@@ -1757,7 +1775,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             if env_bounds_unit != "m":
                 raise Exception("Environment bounds unit must be meters ('m') when gps_env is False")
 
-            if env_bounds == "auto":
+            if self._is_auto_string(env_bounds):
                 if np.any(np.sign([flag_homes[Team.BLUE_TEAM], flag_homes[Team.RED_TEAM]]) == -1):
                     raise Exception("Flag coordinates must be in the positive quadrant when gps_env is False")
 
@@ -1809,12 +1827,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             ### flags home ###
             #auto home
-            if flag_homes[Team.BLUE_TEAM] == flag_homes[Team.RED_TEAM] == "auto":
+            if self._is_auto_string(flag_homes[Team.BLUE_TEAM]) and self._is_auto_string(flag_homes[Team.RED_TEAM]):
                 if flag_homes_unit == "ll" or flag_homes_unit == "wm_xy":
                     raise Exception("'ll' (Lat/Long) and 'wm_xy' (web mercator xy) units should only be used when gps_env is True")
                 flag_homes[Team.BLUE_TEAM] = np.array([7/8*self.env_size[0], 0.5*self.env_size[0]])
                 flag_homes[Team.RED_TEAM] = np.array([1/8*self.env_size[0], 0.5*self.env_size[0]])
-            elif flag_homes[Team.BLUE_TEAM] == "auto" or flag_homes[Team.RED_TEAM] == "auto":
+            elif self._is_auto_string(flag_homes[Team.BLUE_TEAM]) or self._is_auto_string(flag_homes[Team.RED_TEAM]):
                 raise Exception("Flag homes are either all 'auto', or all specified")
             else:
                 flag_homes[Team.BLUE_TEAM] = np.asarray(flag_homes[Team.BLUE_TEAM])
@@ -1835,7 +1853,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 raise Exception(f"Red flag home {flag_homes[Team.RED_TEAM]} must fall within (non-inclusive) environment bounds {env_bounds}")
 
             ### scrimmage line ###
-            if scrimmage_coords == "auto":
+            if self._is_auto_string(scrimmage_coords):
                 flags_vec = flag_homes[Team.BLUE_TEAM] - flag_homes[Team.RED_TEAM]
 
                 scrim_vec1 = np.array([-flags_vec[1], flags_vec[0]])
@@ -1963,7 +1981,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             if hasattr(inter, "coords"):
                 return np.asarray(inter.coords)
             else:
-                return np.asarray([np.asarray(ls.coords) for ls in inter.geoms])    
+                return np.asarray([np.asarray(ls.coords) for ls in inter.geoms])
+
+    def _is_auto_string(self, var):
+        return isinstance(var, str) and var == "auto"
 
     def _get_topo_geom(self):
         ### Environment Map Retrieval and Caching ###
@@ -1972,6 +1993,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             os.mkdir(map_caching_dir)
         
         lon, lat = _sm2ll(*self.env_bounds[0])
+        lat = np.round(lat, 7)
+        lon = np.round(lon, 7)
         map_cache_path = os.path.join(map_caching_dir, f'tile@({lat},{lon}).pkl')
 
         if os.path.exists(map_cache_path):
@@ -1979,30 +2002,28 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             with open(map_cache_path, 'rb') as f:
                 map_cache = pickle.load(f)
 
-            topo_tile = map_cache["topographical_tile"]
+            topo_img = map_cache["topographical_image"]
             if self.render_mode:
-                render_tile = map_cache["render_tile"]
-            else:
-                render_tile = None
+                render_img = map_cache["render_image"]
         else:
             #retrieve maps from tile provider
             topo_tile_source = cx.providers.CartoDB.DarkMatterNoLabels #DO NOT CHANGE!
             render_tile_source = cx.providers.CartoDB.Voyager #DO NOT CHANGE!
 
-            topo_img, topo_ext = cx.bounds2img(
+            topo_tile, topo_ext = cx.bounds2img(
                 *self.env_bounds.flatten(), zoom='auto', source=topo_tile_source, ll=False,
                 wait=0, max_retries=2, n_connections=1, use_cache=False, zoom_adjust=None
             )
-            render_img, render_ext = cx.bounds2img(
+            render_tile, render_ext = cx.bounds2img(
                 *self.env_bounds.flatten(), zoom='auto', source=render_tile_source, ll=False,
                 wait=0, max_retries=2, n_connections=1, use_cache=False, zoom_adjust=None
             )
 
-            topo_img = self._crop_tiles(topo_img[:,:,:-1], topo_ext, *self.env_bounds.flatten(), ll=False)
-            render_tile = self._crop_tiles(render_img[:,:,:-1], topo_ext, *self.env_bounds.flatten(), ll=False)
+            topo_img = self._crop_tiles(topo_tile[:,:,:-1], topo_ext, *self.env_bounds.flatten(), ll=False)
+            render_img = self._crop_tiles(render_tile[:,:,:-1], topo_ext, *self.env_bounds.flatten(), ll=False)
 
             #cache maps
-            map_cache = {"topographical_tile": topo_img, "render_tile": render_tile}
+            map_cache = {"topographical_image": topo_img, "render_image": render_img}
             with open(map_cache_path, 'wb') as f:
                 pickle.dump(map_cache, f)
 
@@ -2026,7 +2047,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         grayscale_topo_img = cv2.cvtColor(topo_img, cv2.COLOR_RGB2GRAY)
         water_pixel_color_gray = grayscale_topo_img[water_pixel_y, water_pixel_x]
         
-        land_mask = (labeled_mask == target_label) + (water_pixel_color_gray <= gray_img) * (gray_img <= water_pixel_color_gray + 2)
+        land_mask = (
+            (labeled_mask == target_label) +
+            (water_pixel_color_gray <= grayscale_topo_img) * (grayscale_topo_img <= water_pixel_color_gray + 2)
+        )
 
         #water contours
         land_mask_binary = 255*land_mask.astype(np.uint8)
@@ -2071,9 +2095,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         #draw contours on render background
         if self.render_mode:
-            render_tile_bgr = cv2.cvtColor(render_tile, cv2.COLOR_RGB2BGR) 
-            contours_img = cv2.drawContours(render_tile_bgr, land_contours_approx, -1, (0,0,0), 2)
-            self.render_background = np.transpose(contours_img, (1,0,2)) #pygame assumes images are (h, w, 3)
+            render_img_bgr = cv2.cvtColor(render_img, cv2.COLOR_RGB2BGR) 
+            contours_img = cv2.drawContours(render_img_bgr, land_contours_approx, -1, (0,0,0), 2)
+            cv2.imwrite('test.png', contours_img)
+            contours_img = np.transpose(contours_img, (1,0,2)) #pygame assumes images are (h, w, 3)
+            self.render_background = cv2.cvtColor(contours_img, cv2.COLOR_BGR2RGB) #pygame is in RGB
 
         return land_contours_approx, land_mask_approx
 

@@ -9,6 +9,7 @@ MAX_SPEED = 1.5 # meters / s
 
 config_dict_std = {
     "gps_env": False, # real world game location
+    "lidar_obs": False, #lidar (ray-casting model) observations
     "env_bounds": [160.0, 80.0], # meters [xmax, ymax], lat/lon [(south, west), (north, east)], web mercator xy [(xmin, ymin), (xmax, ymax)], or "auto"
     "env_bounds_unit": "m", # "m", "wm_xy" (web mercator xy), "ll" (lat/lon)
     "blue_flag_home": "auto", # coordinates (lat, lon), list of coordinates, or "auto"
