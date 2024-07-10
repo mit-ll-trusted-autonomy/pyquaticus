@@ -62,7 +62,7 @@ from pyquaticus.utils.utils import (
     vec_to_mag_heading,
 )
 from scipy.ndimage import label
-from shapely import intersection, LineString, Polygon
+from shapely import intersection, LineString, Point, Polygon
 from typing import Optional
 
 
@@ -992,14 +992,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.gps_env = config_dict.get("gps_env", config_dict_std["gps_env"])
         self.lidar_obs = config_dict.get("lidar_obs", config_dict_std["lidar_obs"])
         self.topo_contour_eps = config_dict.get("topo_contour_eps", config_dict_std["topo_contour_eps"])
-        self.agent_radius = config_dict.get(
+        agent_radius = config_dict.get(
             "agent_radius", config_dict_std["agent_radius"]
         )
-        self.flag_radius = self.agent_radius  # agent and flag radius will be the same
-        self.catch_radius = config_dict.get(
+        flag_radius = self.agent_radius  # agent and flag radius will be the same
+        catch_radius = config_dict.get(
             "catch_radius", config_dict_std["catch_radius"]
         )
-        self.flag_keepout = config_dict.get(
+        flag_keepout = config_dict.get(
             "flag_keepout", config_dict_std["flag_keepout"]
         )
         self.tau = config_dict.get("tau", config_dict_std["tau"])
@@ -1055,10 +1055,23 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             scrimmage_coords=scrimmage_coords,
             env_bounds_unit=env_bounds_unit,
             flag_homes_unit=flag_homes_unit,
-            scrimmage_coords_unit=scrimmage_coords_unit)
+            scrimmage_coords_unit=scrimmage_coords_unit,
+            agent_radius=agent_radius,
+            flag_radius=flag_radius,
+            catch_radius=catch_radius,
+            flag_keepout=flag_keepout
+        )
 
         #aquaticus point field
         #TODO
+
+        #environment corners
+        self.env_ll = np.array([0.0, 0.0], dtype=np.float32)
+        self.env_lr = np.array([self.env_size[0], 0.0], dtype=np.float32)
+        self.env_ul = np.array([0.0, self.env_size[1]], dtype=np.float32)
+        self.env_ur = np.array(self.env_size, dtype=np.float32)
+        # ll = lower left, lr = lower right
+        # ul = upper left, ur = upper right
 
         #obstacles
         obstacle_params = config_dict.get("obstacles", config_dict_std["obstacles"])
@@ -1096,30 +1109,23 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         #ray casting
         if self.lidar_obs:
-            self.ray_int_lines = [
-                LineString([self.boundary_ll, self.boundary_lr]),
-                LineString([self.boundary_lr, self.boundary_ur]),
-                LineString([self.boundary_ur, self.boundary_ul]),
-                LineString([self.boundary_ul, self.boundary_ll])
-            ]
-        if self.lidar_obs:
-            self.ray_int_lines = self._generate_lines_from_contour
-        if self.lidar_obs:
-            self.ray_int_lines.extend(
-                [line for cnt in island_contours for line in self._generate_lines_from_contour(cnt)]
+            self.ray_int_geoms = []
+            if (
+                self.gps_envs and
+                border_contour is None
+            ):
+                self.ray_int_geoms = [
+                    LineString([self.env_ll, self.env_lr]),
+                    LineString([self.env_lr, self.env_ur]),
+                    LineString([self.env_ur, self.env_ul]),
+                    LineString([self.env_ul, self.env_ll])
+                ]
+            self.ray_int_geoms.extend(
+                [geom for obstacle in self.obstacles for geom in self._generate_intersection_geoms_from_obstacles(obstacle)]
             )
 
         #occupancy map
         #TODO
-
-        # set reference variables for world boundaries
-        self.boundary_ll = np.array([0.0, 0.0], dtype=np.float32)
-        self.boundary_lr = np.array([self.env_size[0], 0.0], dtype=np.float32)
-        self.boundary_ul = np.array([0.0, self.env_size[1]], dtype=np.float32)
-        self.boundary_ur = np.array(self.env_size, dtype=np.float32)
-        # ll = lower left, lr = lower right
-        # ul = upper left, ur = upper right
-
 
         ### Environment Rendering ###
         if self.render_mode:
@@ -1579,7 +1585,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         scrimmage_coords,
         env_bounds_unit: str,
         flag_homes_unit: str,
-        scrimmage_coords_unit: str
+        scrimmage_coords_unit: str,
+        agent_radius: float,
+        flag_radius: float,
+        catch_radius: float,
+        flag_keepout: float
     ):
         if (
             self._is_auto_string(env_bounds) and 
@@ -1968,6 +1978,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 #TODO
 
         ### Set Attributes ###
+        #environment geometries
         self.env_bounds = env_bounds
         self.env_bounds_unit = env_bounds_unit
 
@@ -1977,6 +1988,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.scrimmage_coords = scrimmage_coords
         self.scrimmage_coords_unit = scrimmage_coords_unit
         self.scrimmage_vec = scrimmage_coords[1] - scrimmage_coords[0]
+
+        #agent and flag geometries
+        meters2mercator_approx
+        agent_radius: float,
+        flag_radius: float,
+        catch_radius: float,
+        flag_keepout: float
+
 
         #on sides
         scrim2blue = self.flag_homes[Team.BLUE_TEAM] - scrimmage_coords[0]
@@ -2186,8 +2205,17 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         cnt[:, 1] =  self.env_size[1] * (1 - cnt[:, 1] / (image_shape[0] - 1))
         return cnt
 
-    def _generate_lines_from_contour(self, contour):
-        return [LineString([coord, contour[(i+1) % len(contour)]]) for i, coord in enumerate(contour)]
+    def _generate_intersection_geoms_from_obstacles(self, obstacle):
+        if isinstance(obstacle, PolygonObstacle):
+            #TODO: just make these polygons maybe. It seems to be faster for shapely intersection calculations
+            vertices = obtacle.anchor_points
+            geoms = [LineString([vertex, vertices[(i+1) % len(vertices)]]) for i, vertex in enumerate(vertices)]
+        else: #CircleObstacle
+            radius = obstacle.radius 
+            center = obstacle.center_point 
+            geoms = [Point(*center).buffer(radius)]
+        
+        return geoms
 
     def render(self):
         """Overridden method inherited from `Gym`."""
