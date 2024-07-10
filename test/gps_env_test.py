@@ -142,7 +142,8 @@ def main():
     config["blue_flag_home"] = (41.3504170, -74.0614643)
     config["red_flag_home"] = (41.3512143, -74.0608635)
     config["flag_homes_unit"] = "ll"
-    config["sim_speedup_factor"] = 3
+    config["sim_speedup_factor"] = 10
+    config["max_time"] = 240
     config["lidar_obs"] = True
     # config["normalize"] = False
     

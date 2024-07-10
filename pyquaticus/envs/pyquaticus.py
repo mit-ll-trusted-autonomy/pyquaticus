@@ -455,10 +455,10 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         """
 
         all_walls = [
-            [self.boundary_ul, self.boundary_ur],
-            [self.boundary_ur, self.boundary_lr],
-            [self.boundary_lr, self.boundary_ll],
-            [self.boundary_ll, self.boundary_ul]
+            [self.env_ul, self.env_ur],
+            [self.env_ur, self.env_lr],
+            [self.env_lr, self.env_ll],
+            [self.env_ll, self.env_ul]
         ]
 
         def rotate_walls(walls, amt):
@@ -995,7 +995,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         agent_radius = config_dict.get(
             "agent_radius", config_dict_std["agent_radius"]
         )
-        flag_radius = self.agent_radius  # agent and flag radius will be the same
+        flag_radius = agent_radius  # agent and flag radius will be the same
         catch_radius = config_dict.get(
             "catch_radius", config_dict_std["catch_radius"]
         )
@@ -1111,7 +1111,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if self.lidar_obs:
             self.ray_int_geoms = []
             if (
-                self.gps_envs and
+                self.gps_env and
                 border_contour is None
             ):
                 self.ray_int_geoms = [
@@ -1799,8 +1799,26 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             #unit
             scrimmage_coords_unit = "wm_xy"
 
-            ### distances ###
-            #TODO convert agent radius, flag, radius, flag keepout, catch radius to merctor xy
+            ### agent and flag geometries ###
+            lon1, lat1 = _sm2ll(*env_bounds[0])
+            lon2, lat2 = _sm2ll(*env_bounds[1])
+            lon_diff = self._longitude_diff_west2east(lon1, lon2)
+
+            if np.abs(lat1) > np.abs(lat2):
+                lat = lat1
+            else:
+                lat = lat2
+
+            geoc_lat = np.arcsin((POLAR_RADIUS / EQUATORIAL_RADIUS) * np.tan(lat))
+            small_circle_circum = np.pi * 2 * EQUATORIAL_RADIUS * np.cos(geoc_lat)
+            
+            #use most warped (squished) horizontal border to underestimate the number of
+            #meters per mercator xy, therefore overestimate how close objects are to one another
+            self.meters_per_mercator_xy = small_circle_circum * (lon_diff/360) / self.env_size[0]
+            agent_radius /= self.meters_per_mercator_xy
+            flag_radius /= self.meters_per_mercator_xy
+            catch_radius /= self.meters_per_mercator_xy
+            flag_keepout /= self.meters_per_mercator_xy
 
         else:
             ### environment bounds ###
@@ -1989,14 +2007,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.scrimmage_coords_unit = scrimmage_coords_unit
         self.scrimmage_vec = scrimmage_coords[1] - scrimmage_coords[0]
 
-        #agent and flag geometries
-        meters2mercator_approx
-        agent_radius: float,
-        flag_radius: float,
-        catch_radius: float,
-        flag_keepout: float
-
-
         #on sides
         scrim2blue = self.flag_homes[Team.BLUE_TEAM] - scrimmage_coords[0]
         scrim2red = self.flag_homes[Team.RED_TEAM] - scrimmage_coords[0]
@@ -2004,6 +2014,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.on_sides_sign = {}
         self.on_sides_sign[Team.BLUE_TEAM] = np.sign(self._cross_product(self.scrimmage_vec, scrim2blue))
         self.on_sides_sign[Team.RED_TEAM] = np.sign(self._cross_product(self.scrimmage_vec, scrim2red))
+
+        #agent and flag geometries
+        self.agent_radius = agent_radius
+        self.flag_radius = flag_radius
+        self.catch_radius = catch_radius
+        self.flag_keepout = flag_keepout
 
     def _get_line_intersection(self, origin: np.ndarray, vec: np.ndarray, line: np.ndarray):
         """
@@ -2036,6 +2052,16 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
     def _is_auto_string(self, var):
         return isinstance(var, str) and var == "auto"
+
+    def _longitude_diff_west2east(self, lon1, lon2):
+        """Calculate the longitude difference from westing (lon1) to easting (lon2)"""
+        diff = lon2 - lon1
+    
+        # adjust for crossing the 180/-180 boundary
+        if diff < 0:
+            diff += 360
+        
+        return diff
 
     def _get_topo_geom(self):
         ### Environment Map Retrieval and Caching ###
@@ -2208,7 +2234,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     def _generate_intersection_geoms_from_obstacles(self, obstacle):
         if isinstance(obstacle, PolygonObstacle):
             #TODO: just make these polygons maybe. It seems to be faster for shapely intersection calculations
-            vertices = obtacle.anchor_points
+            vertices = obstacle.anchor_points
             geoms = [LineString([vertex, vertices[(i+1) % len(vertices)]]) for i, vertex in enumerate(vertices)]
         else: #CircleObstacle
             radius = obstacle.radius 
