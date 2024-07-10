@@ -9,7 +9,6 @@ MAX_SPEED = 1.5 # meters / s
 
 config_dict_std = {
     "gps_env": False, # real world game location
-    "lidar_obs": False, #lidar (ray-casting model) observations
     "env_bounds": [160.0, 80.0], # meters [xmax, ymax], lat/lon [(south, west), (north, east)], web mercator xy [(xmin, ymin), (xmax, ymax)], or "auto"
     "env_bounds_unit": "m", # "m", "wm_xy" (web mercator xy), "ll" (lat/lon)
     "blue_flag_home": "auto", # coordinates (lat, lon), list of coordinates, or "auto"
@@ -34,6 +33,9 @@ config_dict_std = {
     "tagging_cooldown": (
         30.0
     ),  # Cooldown on an agent (seconds) after they tag another agent, to prevent consecutive tags
+    "lidar_obs": False, #lidar (ray-casting model) observations
+    "lidar_range": np.linalg.norm([160.0, 80.0]), # float (meters) or "auto"
+    "num_lidar_rays": 16, # numbers of rays for lidar
     # MOOS dynamics parameters
     "max_speed": 1.5,  # meters / s
     "speed_factor": 20.0,  # Multiplicative factor for desired_speed -> desired_thrust
@@ -111,6 +113,21 @@ def get_std_config() -> dict:
     """Gets a copy of the standard configuration, ideal for minor modifications to the standard configuration."""
     return copy.deepcopy(config_dict_std)
 
+
+# lidar detection map
+lidar_detection_labels = [
+    "nothing",
+    "obstacle",
+    "team_flag",
+    "opponent_flag",
+    "teammate",
+    "teammate_tagged", # a teammate that is tagged
+    "teammate_flag", # a teammate with opponent's flag
+    "opponent",
+    "opponent_tagged", # an opponent that is tagged
+    "opponent_flag", # an opponent with own team's flag
+]
+LIDAR_DETECTION_CLASS_MAP = {label: i for i, label in enumerate(lidar_detection_labels)}
 
 # action space key combos
 # maps discrete action id to (speed, heading)

@@ -45,7 +45,7 @@ from pettingzoo import ParallelEnv
 from pygame import draw, SRCALPHA, surfarray
 from pygame.math import Vector2
 from pygame.transform import rotozoom
-from pyquaticus.config import ACTION_MAP, config_dict_std, EQUATORIAL_RADIUS, POLAR_RADIUS
+from pyquaticus.config import ACTION_MAP, config_dict_std, EQUATORIAL_RADIUS, LIDAR_DETECTION_CLASS_MAP, POLAR_RADIUS
 from pyquaticus.structs import CircleObstacle, Flag, PolygonObstacle, RenderingPlayer, Team
 from pyquaticus.utils.obs_utils import ObsNormalizer
 from pyquaticus.utils.pid import PID
@@ -54,12 +54,13 @@ from pyquaticus.utils.utils import (
     clip,
     closest_point_on_line,
     get_rot_angle,
+    heading_angle_conversion,
     mag_bearing_to,
     mag_heading_to_vec,
     rc_intersection,
     reflect_vector,
     rot2d,
-    vec_to_mag_heading,
+    vec_to_mag_heading
 )
 from scipy.ndimage import label
 from shapely import intersection, LineString, Point, Polygon
@@ -175,94 +176,124 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
     def _register_state_elements(self, num_on_team, num_obstacles):
         """Initializes the normalizer."""
         agent_obs_normalizer = ObsNormalizer(False)
-        max_bearing = [180]
-        max_dist = [self.env_diag + 10]  # add a ten meter buffer
-        max_dist_scrimmage = [self.env_diag]
-        min_dist = [0.0]
-        max_bool, min_bool = [1.0], [0.0]
-        max_speed, min_speed = [self.max_speed], [0.0]
-        max_score, min_score = [self.max_score], [0.0]
-        agent_obs_normalizer.register("opponent_home_bearing", max_bearing)
-        agent_obs_normalizer.register("opponent_home_distance", max_dist, min_dist)
-        agent_obs_normalizer.register("own_home_bearing", max_bearing)
-        agent_obs_normalizer.register("own_home_distance", max_dist, min_dist)
-        agent_obs_normalizer.register("wall_0_bearing", max_bearing)
-        agent_obs_normalizer.register("wall_0_distance", max_dist, min_dist)
-        agent_obs_normalizer.register("wall_1_bearing", max_bearing)
-        agent_obs_normalizer.register("wall_1_distance", max_dist, min_dist)
-        agent_obs_normalizer.register("wall_2_bearing", max_bearing)
-        agent_obs_normalizer.register("wall_2_distance", max_dist, min_dist)
-        agent_obs_normalizer.register("wall_3_bearing", max_bearing)
-        agent_obs_normalizer.register("wall_3_distance", max_dist, min_dist)
-        agent_obs_normalizer.register("scrimmage_line_bearing", max_bearing)
-        agent_obs_normalizer.register("scrimmage_line_distance", max_dist_scrimmage, min_dist)
-        agent_obs_normalizer.register("speed", max_speed, min_speed)
-        agent_obs_normalizer.register("has_flag", max_bool, min_bool)
-        agent_obs_normalizer.register("on_side", max_bool, min_bool)
-        agent_obs_normalizer.register(
-            "tagging_cooldown", [self.tagging_cooldown], [0.0]
-        )
-        agent_obs_normalizer.register("is_tagged", max_bool, min_bool)
-        agent_obs_normalizer.register("team_score", max_score, min_score)
-        agent_obs_normalizer.register("opponent_score", max_score, min_score)
+        if self.lidar_obs:
+            max_bearing = [180]
+            max_dist_scrimmage = [self.env_diag]
+            max_lidar_dist = [self.lidar_range]
+            min_dist = [0.0]
+            max_bool, min_bool = [1.0], [0.0]
+            max_speed, min_speed = [self.max_speed], [0.0]
+            max_score, min_score = [self.max_score], [0.0]
 
-        for i in range(num_on_team - 1):
-            teammate_name = f"teammate_{i}"
-            agent_obs_normalizer.register((teammate_name, "bearing"), max_bearing)
-            agent_obs_normalizer.register(
-                (teammate_name, "distance"), max_dist, min_dist
-            )
-            agent_obs_normalizer.register(
-                (teammate_name, "relative_heading"), max_bearing
-            )
-            agent_obs_normalizer.register(
-                (teammate_name, "speed"), max_speed, min_speed
-            )
-            agent_obs_normalizer.register(
-                (teammate_name, "has_flag"), max_bool, min_bool
-            )
-            agent_obs_normalizer.register(
-                (teammate_name, "on_side"), max_bool, min_bool
-            )
-            agent_obs_normalizer.register(
-                (teammate_name, "tagging_cooldown"), [self.tagging_cooldown], [0.0]
-            )
-            agent_obs_normalizer.register(
-                (teammate_name, "is_tagged"), max_bool, min_bool
-            )
+            agent_obs_normalizer.register("scrimmage_line_bearing", max_bearing)
+            agent_obs_normalizer.register("scrimmage_line_distance", max_dist_scrimmage, min_dist)
+            agent_obs_normalizer.register("speed", max_speed, min_speed)
+            agent_obs_normalizer.register("has_flag", max_bool, min_bool)
+            agent_obs_normalizer.register("team_has_flag", max_bool, min_bool)
+            agent_obs_normalizer.register("opponent_has_flag", max_bool, min_bool)
+            agent_obs_normalizer.register("on_side", max_bool, min_bool)
+            agent_obs_normalizer.register("tagging_cooldown", [self.tagging_cooldown], [0.0])
+            agent_obs_normalizer.register("is_tagged", max_bool, min_bool)
+            agent_obs_normalizer.register("team_score", max_score, min_score)
+            agent_obs_normalizer.register("opponent_score", max_score, min_score)
 
-        for i in range(num_on_team):
-            opponent_name = f"opponent_{i}"
-            agent_obs_normalizer.register((opponent_name, "bearing"), max_bearing)
+            for heading in self.lidar_ray_headings:
+                if heading.is_integer():
+                    ray_label = int(heading)
+                else:
+                    ray_label = heading
+
+                agent_obs_normalizer.register((np.rad2deg(ray_label), "lidar_distance"), max_lidar_dist)
+                agent_obs_normalizer.register((np.rad2deg(ray_label), "lidar_detection"), [len(LIDAR_DETECTION_CLASS_MAP) - 1])
+        else:
+            max_bearing = [180]
+            max_dist = [self.env_diag + 10]  # add a ten meter buffer
+            max_dist_scrimmage = [self.env_diag]
+            min_dist = [0.0]
+            max_bool, min_bool = [1.0], [0.0]
+            max_speed, min_speed = [self.max_speed], [0.0]
+            max_score, min_score = [self.max_score], [0.0]
+            agent_obs_normalizer.register("opponent_home_bearing", max_bearing)
+            agent_obs_normalizer.register("opponent_home_distance", max_dist, min_dist)
+            agent_obs_normalizer.register("own_home_bearing", max_bearing)
+            agent_obs_normalizer.register("own_home_distance", max_dist, min_dist)
+            agent_obs_normalizer.register("wall_0_bearing", max_bearing)
+            agent_obs_normalizer.register("wall_0_distance", max_dist, min_dist)
+            agent_obs_normalizer.register("wall_1_bearing", max_bearing)
+            agent_obs_normalizer.register("wall_1_distance", max_dist, min_dist)
+            agent_obs_normalizer.register("wall_2_bearing", max_bearing)
+            agent_obs_normalizer.register("wall_2_distance", max_dist, min_dist)
+            agent_obs_normalizer.register("wall_3_bearing", max_bearing)
+            agent_obs_normalizer.register("wall_3_distance", max_dist, min_dist)
+            agent_obs_normalizer.register("scrimmage_line_bearing", max_bearing)
+            agent_obs_normalizer.register("scrimmage_line_distance", max_dist_scrimmage, min_dist)
+            agent_obs_normalizer.register("speed", max_speed, min_speed)
+            agent_obs_normalizer.register("has_flag", max_bool, min_bool)
+            agent_obs_normalizer.register("on_side", max_bool, min_bool)
             agent_obs_normalizer.register(
-                (opponent_name, "distance"), max_dist, min_dist
+                "tagging_cooldown", [self.tagging_cooldown], [0.0]
             )
-            agent_obs_normalizer.register(
-                (opponent_name, "relative_heading"), max_bearing
-            )
-            agent_obs_normalizer.register(
-                (opponent_name, "speed"), max_speed, min_speed
-            )
-            agent_obs_normalizer.register(
-                (opponent_name, "has_flag"), max_bool, min_bool
-            )
-            agent_obs_normalizer.register(
-                (opponent_name, "on_side"), max_bool, min_bool
-            )
-            agent_obs_normalizer.register(
-                (opponent_name, "tagging_cooldown"), [self.tagging_cooldown], [0.0]
-            )
-            agent_obs_normalizer.register(
-                (opponent_name, "is_tagged"), max_bool, min_bool
-            )
-        
-        for i in range(num_obstacles):
-            agent_obs_normalizer.register(
-                f"obstacle_{i}_distance", max_dist, min_dist
-            )
-            agent_obs_normalizer.register(
-                f"obstacle_{i}_bearing", max_bearing
-            )
+            agent_obs_normalizer.register("is_tagged", max_bool, min_bool)
+            agent_obs_normalizer.register("team_score", max_score, min_score)
+            agent_obs_normalizer.register("opponent_score", max_score, min_score)
+
+            for i in range(num_on_team - 1):
+                teammate_name = f"teammate_{i}"
+                agent_obs_normalizer.register((teammate_name, "bearing"), max_bearing)
+                agent_obs_normalizer.register(
+                    (teammate_name, "distance"), max_dist, min_dist
+                )
+                agent_obs_normalizer.register(
+                    (teammate_name, "relative_heading"), max_bearing
+                )
+                agent_obs_normalizer.register(
+                    (teammate_name, "speed"), max_speed, min_speed
+                )
+                agent_obs_normalizer.register(
+                    (teammate_name, "has_flag"), max_bool, min_bool
+                )
+                agent_obs_normalizer.register(
+                    (teammate_name, "on_side"), max_bool, min_bool
+                )
+                agent_obs_normalizer.register(
+                    (teammate_name, "tagging_cooldown"), [self.tagging_cooldown], [0.0]
+                )
+                agent_obs_normalizer.register(
+                    (teammate_name, "is_tagged"), max_bool, min_bool
+                )
+
+            for i in range(num_on_team):
+                opponent_name = f"opponent_{i}"
+                agent_obs_normalizer.register((opponent_name, "bearing"), max_bearing)
+                agent_obs_normalizer.register(
+                    (opponent_name, "distance"), max_dist, min_dist
+                )
+                agent_obs_normalizer.register(
+                    (opponent_name, "relative_heading"), max_bearing
+                )
+                agent_obs_normalizer.register(
+                    (opponent_name, "speed"), max_speed, min_speed
+                )
+                agent_obs_normalizer.register(
+                    (opponent_name, "has_flag"), max_bool, min_bool
+                )
+                agent_obs_normalizer.register(
+                    (opponent_name, "on_side"), max_bool, min_bool
+                )
+                agent_obs_normalizer.register(
+                    (opponent_name, "tagging_cooldown"), [self.tagging_cooldown], [0.0]
+                )
+                agent_obs_normalizer.register(
+                    (opponent_name, "is_tagged"), max_bool, min_bool
+                )
+            
+            for i in range(num_obstacles):
+                agent_obs_normalizer.register(
+                    f"obstacle_{i}_distance", max_dist, min_dist
+                )
+                agent_obs_normalizer.register(
+                    f"obstacle_{i}_bearing", max_bearing
+                )
 
         self._state_elements_initialized = True
         return agent_obs_normalizer
@@ -320,94 +351,98 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
         agent = self.players[agent_id]
         obs_dict = OrderedDict()
-        own_team = agent.team
-        own_home_loc = self.flags[int(own_team)].home
-        opponent_home_loc = self.flags[not int(own_team)].home
-        other_team = Team.BLUE_TEAM if own_team == Team.RED_TEAM else Team.RED_TEAM
-        obs = OrderedDict()
-        np_pos = np.array(agent.pos, dtype=np.float32)
-        # Goal flag
-        opponent_home_dist, opponent_home_bearing = mag_bearing_to(
-            np_pos, opponent_home_loc, agent.heading
-        )
-        # Defend flag
-        own_home_dist, own_home_bearing = mag_bearing_to(
-            np_pos, own_home_loc, agent.heading
-        )
 
-        obs["opponent_home_bearing"] = opponent_home_bearing
-        obs["opponent_home_distance"] = opponent_home_dist
-        obs["own_home_bearing"] = own_home_bearing
-        obs["own_home_distance"] = own_home_dist
-
-        # Walls
-        for i, wall in enumerate(self._walls[int(own_team)]):
-            wall_closest_point = closest_point_on_line(
-                wall[0], wall[1], np_pos
-            )
-            wall_dist, wall_bearing = mag_bearing_to(
-                np_pos, wall_closest_point, agent.heading
-            )
-            obs[f"wall_{i}_bearing"] = wall_bearing
-            obs[f"wall_{i}_distance"] = wall_dist
-
-        # Scrimmage line
-        scrimmage_line_closest_point = closest_point_on_line(
-            self.scrimmage_coords[0], self.scrimmage_coords[1], np_pos
-        )
-        scrimmage_line_dist, scrimmage_line_bearing = mag_bearing_to(
-            np_pos, scrimmage_line_closest_point, agent.heading
-        )
-        obs["scrimmage_line_bearing"] = scrimmage_line_bearing
-        obs["scrimmage_line_distance"] = scrimmage_line_dist
-
-        # Own speed
-        obs["speed"] = agent.speed
-        # Own flag status
-        obs["has_flag"] = agent.has_flag
-        # On side
-        obs["on_side"] = agent.on_own_side
-        # Tagging cooldown
-        obs["tagging_cooldown"] = agent.tagging_cooldown
-        #Is tagged
-        obs["is_tagged"] = agent.is_tagged
-
-        #Team score and Opponent score
-        if agent.team == Team.BLUE_TEAM:
-            obs["team_score"] = self.game_score["blue_captures"]
-            obs["opponent_score"] = self.game_score["red_captures"]
+        if self.lidar_obs:
+            pass
         else:
-            obs["team_score"] = self.game_score["red_captures"]
-            obs["opponent_score"] = self.game_score["blue_captures"]
+            own_team = agent.team
+            own_home_loc = self.flags[int(own_team)].home
+            opponent_home_loc = self.flags[not int(own_team)].home
+            other_team = Team.BLUE_TEAM if own_team == Team.RED_TEAM else Team.RED_TEAM
+            obs = OrderedDict()
+            np_pos = np.array(agent.pos, dtype=np.float32)
+            # Goal flag
+            opponent_home_dist, opponent_home_bearing = mag_bearing_to(
+                np_pos, opponent_home_loc, agent.heading
+            )
+            # Defend flag
+            own_home_dist, own_home_bearing = mag_bearing_to(
+                np_pos, own_home_loc, agent.heading
+            )
 
-        # Relative observations to other agents
-        # teammates first
-        # TODO: consider sorting these by some metric
-        #       in an attempt to get permutation invariance
-        #       distance or maybe flag status (or some combination?)
-        #       i.e. sorted by perceived relevance
-        for team in [own_team, other_team]:
-            dif_agents = filter(lambda a: a.id != agent.id, self.agents_of_team[team])
-            for i, dif_agent in enumerate(dif_agents):
-                entry_name = f"teammate_{i}" if team == own_team else f"opponent_{i}"
+            obs["opponent_home_bearing"] = opponent_home_bearing
+            obs["opponent_home_distance"] = opponent_home_dist
+            obs["own_home_bearing"] = own_home_bearing
+            obs["own_home_distance"] = own_home_dist
 
-                dif_np_pos = np.array(dif_agent.pos, dtype=np.float32)
-                dif_agent_dist, dif_agent_bearing = mag_bearing_to(
-                    np_pos, dif_np_pos, agent.heading
+            # Walls
+            for i, wall in enumerate(self._walls[int(own_team)]):
+                wall_closest_point = closest_point_on_line(
+                    wall[0], wall[1], np_pos
                 )
-                _, hdg_to_agent = mag_bearing_to(dif_np_pos, np_pos)
-                hdg_to_agent = hdg_to_agent % 360
-                # bearing relative to the bearing to you
-                obs[(entry_name, "bearing")] = dif_agent_bearing
-                obs[(entry_name, "distance")] = dif_agent_dist
-                obs[(entry_name, "relative_heading")] = angle180(
-                    (dif_agent.heading - hdg_to_agent) % 360
+                wall_dist, wall_bearing = mag_bearing_to(
+                    np_pos, wall_closest_point, agent.heading
                 )
-                obs[(entry_name, "speed")] = dif_agent.speed
-                obs[(entry_name, "has_flag")] = dif_agent.has_flag
-                obs[(entry_name, "on_side")] = dif_agent.on_own_side
-                obs[(entry_name, "tagging_cooldown")] = dif_agent.tagging_cooldown
-                obs[(entry_name, "is_tagged")] = dif_agent.is_tagged
+                obs[f"wall_{i}_bearing"] = wall_bearing
+                obs[f"wall_{i}_distance"] = wall_dist
+
+            # Scrimmage line
+            scrimmage_line_closest_point = closest_point_on_line(
+                self.scrimmage_coords[0], self.scrimmage_coords[1], np_pos
+            )
+            scrimmage_line_dist, scrimmage_line_bearing = mag_bearing_to(
+                np_pos, scrimmage_line_closest_point, agent.heading
+            )
+            obs["scrimmage_line_bearing"] = scrimmage_line_bearing
+            obs["scrimmage_line_distance"] = scrimmage_line_dist
+
+            # Own speed
+            obs["speed"] = agent.speed
+            # Own flag status
+            obs["has_flag"] = agent.has_flag
+            # On side
+            obs["on_side"] = agent.on_own_side
+            # Tagging cooldown
+            obs["tagging_cooldown"] = agent.tagging_cooldown
+            #Is tagged
+            obs["is_tagged"] = agent.is_tagged
+
+            #Team score and Opponent score
+            if agent.team == Team.BLUE_TEAM:
+                obs["team_score"] = self.game_score["blue_captures"]
+                obs["opponent_score"] = self.game_score["red_captures"]
+            else:
+                obs["team_score"] = self.game_score["red_captures"]
+                obs["opponent_score"] = self.game_score["blue_captures"]
+
+            # Relative observations to other agents
+            # teammates first
+            # TODO: consider sorting these by some metric
+            #       in an attempt to get permutation invariance
+            #       distance or maybe flag status (or some combination?)
+            #       i.e. sorted by perceived relevance
+            for team in [own_team, other_team]:
+                dif_agents = filter(lambda a: a.id != agent.id, self.agents_of_team[team])
+                for i, dif_agent in enumerate(dif_agents):
+                    entry_name = f"teammate_{i}" if team == own_team else f"opponent_{i}"
+
+                    dif_np_pos = np.array(dif_agent.pos, dtype=np.float32)
+                    dif_agent_dist, dif_agent_bearing = mag_bearing_to(
+                        np_pos, dif_np_pos, agent.heading
+                    )
+                    _, hdg_to_agent = mag_bearing_to(dif_np_pos, np_pos)
+                    hdg_to_agent = hdg_to_agent % 360
+                    # bearing relative to the bearing to you
+                    obs[(entry_name, "bearing")] = dif_agent_bearing
+                    obs[(entry_name, "distance")] = dif_agent_dist
+                    obs[(entry_name, "relative_heading")] = angle180(
+                        (dif_agent.heading - hdg_to_agent) % 360
+                    )
+                    obs[(entry_name, "speed")] = dif_agent.speed
+                    obs[(entry_name, "has_flag")] = dif_agent.has_flag
+                    obs[(entry_name, "on_side")] = dif_agent.on_own_side
+                    obs[(entry_name, "tagging_cooldown")] = dif_agent.tagging_cooldown
+                    obs[(entry_name, "is_tagged")] = dif_agent.is_tagged
 
         obs_dict[agent.id] = obs
         if normalize:
@@ -665,10 +700,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             for _i in range(self.num_renders_per_step):
                 for _j in range(self.sim_speedup_factor):
                     self._move_agents(action_dict, 1/self.render_fps)
+                self._update_lidar()
                 self._render()
         else:
             for _ in range(self.sim_speedup_factor):
                 self._move_agents(action_dict, self.tau)
+                self._update_lidar()
 
         # agent and flag capture checks and more
         self._check_pickup_flags()
@@ -843,12 +880,19 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             player.speed = clip(new_speed, 0.0, self.max_speed)
             player.heading = angle180(new_heading)
             player.thrust = desired_thrust
+            if player.id == 0:
+                print(heading_angle_conversion(player.heading))
 
     def _check_on_sides(self, pos, team):
         scrim2pos = np.asarray(pos) - self.scrimmage_coords[0]
         cp_sign = np.sign(self._cross_product(self.scrimmage_vec, scrim2pos))
 
         return cp_sign == self.on_sides_sign[team] or cp_sign == 0
+
+    def _update_lidar(self):
+        # self.state["lidar_readings"] = np.zeros((0, self.num_lidar_rays, 2))
+        for player in self.players.values():
+            pass
 
     def _check_pickup_flags(self):
         """Updates player states if they picked up the flag."""
@@ -990,7 +1034,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         """
         ### Set Variables from Configuration Dictionary ###
         self.gps_env = config_dict.get("gps_env", config_dict_std["gps_env"])
-        self.lidar_obs = config_dict.get("lidar_obs", config_dict_std["lidar_obs"])
         self.topo_contour_eps = config_dict.get("topo_contour_eps", config_dict_std["topo_contour_eps"])
         agent_radius = config_dict.get(
             "agent_radius", config_dict_std["agent_radius"]
@@ -1017,6 +1060,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         )
         self.teleport_on_tag = config_dict.get("teleport_on_tag", config_dict_std["teleport_on_tag"])
         self.tag_on_wall_collision = config_dict.get("tag_on_wall_collision", config_dict_std["tag_on_wall_collision"])
+        self.lidar_obs = config_dict.get("lidar_obs", config_dict_std["lidar_obs"])
+        lidar_range = config_dict.get("lidar_range", config_dict_std["lidar_range"])
+        self.num_lidar_rays = config_dict.get("num_lidar_rays", config_dict_std["num_lidar_rays"])
 
         #MOOS dynamics parameters
         self.max_speed = config_dict.get("max_speed", config_dict_std["max_speed"])
@@ -1059,7 +1105,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             agent_radius=agent_radius,
             flag_radius=flag_radius,
             catch_radius=catch_radius,
-            flag_keepout=flag_keepout
+            flag_keepout=flag_keepout,
+            lidar_range=lidar_range
         )
 
         #aquaticus point field
@@ -1109,6 +1156,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         #ray casting
         if self.lidar_obs:
+            self.lidar_ray_headings = np.linspace(0, (self.num_lidar_rays - 1) * (2*np.pi) / self.num_lidar_rays, self.num_lidar_rays)
+
             self.ray_int_geoms = []
             if (
                 self.gps_env and
@@ -1398,6 +1447,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         for k in agent_ids:
             self.state["dist_to_obstacles"][k] = [(0, 0)] * len(self.obstacles)
 
+        if self.lidar_obs:
+            self.state["lidar_readings"] = np.zeros((0, self.num_lidar_rays, 2))
+
         for k in self.game_score:
             self.game_score[k] = 0
 
@@ -1589,7 +1641,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         agent_radius: float,
         flag_radius: float,
         catch_radius: float,
-        flag_keepout: float
+        flag_keepout: float,
+        lidar_range: float
     ):
         if (
             self._is_auto_string(env_bounds) and 
@@ -1686,10 +1739,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     env_left = flag_midpoint[1] - 360 * (0.5*env_bounds[1][0] / small_circle_circum)
                     env_right = flag_midpoint[1] + 360 * (0.5*env_bounds[1][0] / small_circle_circum)
 
-                    if env_left < -180:
-                        env_left += 360
-                    if env_right > 180:
-                        env_right -= 360
+                    env_left = angle180(env_left)
+                    env_right = angle180(env_right)
 
                     #convert bounds to web mercator xy
                     env_bounds = np.array([
@@ -1819,6 +1870,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             flag_radius /= self.meters_per_mercator_xy
             catch_radius /= self.meters_per_mercator_xy
             flag_keepout /= self.meters_per_mercator_xy
+            lidar_range /= self.meters_per_mercator_xy
 
         else:
             ### environment bounds ###
@@ -2016,6 +2068,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.on_sides_sign[Team.RED_TEAM] = np.sign(self._cross_product(self.scrimmage_vec, scrim2red))
 
         #agent and flag geometries
+        if self.lidar_obs:
+            self.lidar_range = lidar_range
+
         self.agent_radius = agent_radius
         self.flag_radius = flag_radius
         self.catch_radius = catch_radius
