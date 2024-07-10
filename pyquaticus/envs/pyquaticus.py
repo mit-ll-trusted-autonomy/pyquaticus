@@ -846,9 +846,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
     def _check_on_sides(self, pos, team):
         scrim2pos = np.asarray(pos) - self.scrimmage_coords[0]
-        cp = self._cross_product(self.scrimmage_vec, scrim2pos)
+        cp_sign = np.sign(self._cross_product(self.scrimmage_vec, scrim2pos))
 
-        return cp == self.on_sides_sign[team] or cp == 0
+        return cp_sign == self.on_sides_sign[team] or cp_sign == 0
 
     def _check_pickup_flags(self):
         """Updates player states if they picked up the flag."""
@@ -1060,44 +1060,18 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         #aquaticus point field
         #TODO
 
-        #topography
-        # set reference variables for world boundaries
-        # ll = lower left, lr = lower right
-        # ul = upper left, ur = upper right
-        self.boundary_ll = np.array([0.0, 0.0], dtype=np.float32)
-        self.boundary_lr = np.array([self.env_size[0], 0.0], dtype=np.float32)
-        self.boundary_ul = np.array([0.0, self.env_size[1]], dtype=np.float32)
-        self.boundary_ur = np.array(self.env_size, dtype=np.float32)
-
-        #ray casting and obstacles
-        if self.lidar_obs:
-            self.ray_int_lines = [
-                LineString([self.boundary_ll, self.boundary_lr]),
-                LineString([self.boundary_lr, self.boundary_ur]),
-                LineString([self.boundary_ur, self.boundary_ul]),
-                LineString([self.boundary_ul, self.boundary_ll])
-            ]
+        #obstacles
         obstacle_params = config_dict.get("obstacles", config_dict_std["obstacles"])
 
         if self.gps_env:
             border_contour, island_contours, land_mask = self._get_topo_geom()
 
             if border_contour is not None:
-                #ray casting
-                if self.lidar_obs:
-                    self.ray_int_lines = self._generate_lines_from_contour(border_contour)
-                #obstacles
                 if obstacle_params is None:
                     obstacle_params = {"polygon": []}
                 obstacle_params["polygon"].append(border_contour)
 
             if len(island_contours) > 0:
-                #ray casting
-                if self.lidar_obs:
-                    self.ray_int_lines.extend(
-                    [line for cnt in island_contours for line in self._generate_lines_from_contour(cnt)]
-                    )
-                #obstacles
                 if obstacle_params is None:
                     obstacle_params = {"polygon": []}
                 obstacle_params["polygon"].extend(island_contours)
@@ -1120,6 +1094,32 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         elif obstacle_params is not None:
             raise TypeError(f"Expected obstacle_params to be None or a dict, not {type(obstacle_params)}")
 
+        #ray casting
+        if self.lidar_obs:
+            self.ray_int_lines = [
+                LineString([self.boundary_ll, self.boundary_lr]),
+                LineString([self.boundary_lr, self.boundary_ur]),
+                LineString([self.boundary_ur, self.boundary_ul]),
+                LineString([self.boundary_ul, self.boundary_ll])
+            ]
+        if self.lidar_obs:
+            self.ray_int_lines = self._generate_lines_from_contour
+        if self.lidar_obs:
+            self.ray_int_lines.extend(
+                [line for cnt in island_contours for line in self._generate_lines_from_contour(cnt)]
+            )
+
+        #occupancy map
+        #TODO
+
+        # set reference variables for world boundaries
+        self.boundary_ll = np.array([0.0, 0.0], dtype=np.float32)
+        self.boundary_lr = np.array([self.env_size[0], 0.0], dtype=np.float32)
+        self.boundary_ul = np.array([0.0, self.env_size[1]], dtype=np.float32)
+        self.boundary_ur = np.array(self.env_size, dtype=np.float32)
+        # ll = lower left, lr = lower right
+        # ul = upper left, ur = upper right
+
 
         ### Environment Rendering ###
         if self.render_mode:
@@ -1140,6 +1140,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.render_background = pygame.surfarray.make_surface(
                 np.transpose(self.background_img, (1,0,2)) #pygame assumes images are (h, w, 3)
             )
+            self.render_background = pygame.transform.scale(self.render_background, (self.arena_width, self.arena_height))
 
             # check that world size (pixels) does not exceed the screen dimensions
             world_screen_err_msg = (
@@ -1984,7 +1985,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.on_sides_sign = {}
         self.on_sides_sign[Team.BLUE_TEAM] = np.sign(self._cross_product(self.scrimmage_vec, scrim2blue))
         self.on_sides_sign[Team.RED_TEAM] = np.sign(self._cross_product(self.scrimmage_vec, scrim2red))
-        print(self.on_sides_sign)
 
     def _get_line_intersection(self, origin: np.ndarray, vec: np.ndarray, line: np.ndarray):
         """
@@ -2181,12 +2181,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         return cropped_img
 
-    def _img2env_coords(self, cnt, img_shape):
-        cnt_env = cnt[:, 0] / (image_shape[1] - 1)
-        cnt_env = self.env_size * (cnt / (img_shape - 1))
-        cnt_env = self.env_size 
-        cnt[:, 0] /= img_shape[] 
-        return self.env_size * (cnt / (img_shape - 1))
+    def _img2env_coords(self, cnt, image_shape):
+        cnt[:, 0] =  self.env_size[0] * cnt[:, 0] / (image_shape[1] - 1)
+        cnt[:, 1] =  self.env_size[1] * (1 - cnt[:, 1] / (image_shape[0] - 1))
+        return cnt
 
     def _generate_lines_from_contour(self, contour):
         return [LineString([coord, contour[(i+1) % len(contour)]]) for i, coord in enumerate(contour)]
@@ -2285,13 +2283,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         obstacle.radius * self.pixel_size,
                         width=3
                     )
-                elif isinstance(obstacle, PolygonObstacle):
-                    draw.polygon(
-                            self.screen,
-                            (128, 128, 128),
-                            [self.world_to_screen(p) for p in obstacle.anchor_points],
-                            width=3,
-                        )
+                # elif isinstance(obstacle, PolygonObstacle):
+                #     draw.polygon(
+                #             self.screen,
+                #             (128, 128, 128),
+                #             [self.world_to_screen(p) for p in obstacle.anchor_points],
+                #             width=3,
+                #         )
 
             for player in teams_players:
                 # render tagging
