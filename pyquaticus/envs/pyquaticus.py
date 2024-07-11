@@ -925,6 +925,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     agent_int_id = agent_int_ids[agent_int_idx]
                 else:
                     intersections.append(None)
+                    intersection_dists.append(self.lidar_range)
+                    agent_int_id = None
 
                 #flag intersections
                 flag_intersections = []
@@ -947,8 +949,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     flag_int_distances = np.linalg.norm(flag_int_valid - ray_origin, axis=1)
                     flag_int_idx = np.argmin(flag_int_distances)
                     intersections.append(flag_int_valid[flag_int_idx])
+                    intersection_dists.append(flag_int_distances[flag_int_idx])
+                    flag_int_id = flag_int_ids[flag_int_idx]
                 else:
                     intersections.append(None)
+                    intersection_dists.append(self.lidar_range)
+                    agent_int_id = None
 
                 #obstacle intersections
                 obstacle_intersections = []
