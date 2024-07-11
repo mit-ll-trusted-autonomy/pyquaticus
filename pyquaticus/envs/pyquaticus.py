@@ -897,7 +897,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 ray_vec = np.array([np.cos(ray_heading_global), np.sin(ray_heading_global)])
                 ray_end = ray_origin + self.lidar_range * ray_vec
                 ray_line = LineString(ray_origin, ray_end)
-                intersections = []
+                intersections = np.full((3,2), -1.)
                 intersection_dists = []
 
                 #agent intersections
@@ -920,12 +920,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 if len(agent_int_valid) > 0:
                     agent_int_distances = np.linalg.norm(agent_int_valid - ray_origin, axis=1)
                     agent_int_idx = np.argmin(agent_int_distances)
-                    intersections.append(agent_int_valid[agent_int_idx])
+                    intersections[0] = agent_int_valid[agent_int_idx]
                     intersection_dists.append(agent_int_distances[agent_int_idx])
                     agent_int_id = agent_int_ids[agent_int_idx]
                 else:
-                    intersections.append(None)
-                    intersection_dists.append(self.lidar_range)
+                    intersection_dists.append(2*self.lidar_range)
                     agent_int_id = None
 
                 #flag intersections
@@ -948,12 +947,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 if len(flag_int_valid) > 0:
                     flag_int_distances = np.linalg.norm(flag_int_valid - ray_origin, axis=1)
                     flag_int_idx = np.argmin(flag_int_distances)
-                    intersections.append(flag_int_valid[flag_int_idx])
+                    intersections[1] = flag_int_valid[flag_int_idx]
                     intersection_dists.append(flag_int_distances[flag_int_idx])
                     flag_int_id = flag_int_ids[flag_int_idx]
                 else:
-                    intersections.append(None)
-                    intersection_dists.append(self.lidar_range)
+                    intersections.append(dummy_intersection)
+                    intersection_dists.append(2*self.lidar_range)
                     agent_int_id = None
 
                 #obstacle intersections
@@ -969,17 +968,21 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 if len(obstacle_int_valid) > 0:
                     obstacle_int_distances = np.linalg.norm(obstacle_int_valid - ray_origin, axis=1)
                     obstacle_int_idx = np.argmin(obstacle_int_distances)
-                    intersections.append(obstacle_int_valid[obstacle_int_idx])
+                    intersections[2] = obstacle_int_valid[obstacle_int_idx]
                     intersection_dists.append(obstacle_int_distances[obstacle_int_idx])
                 else:
-                    intersections.append(None)
-                    intersection_dists.append(self.lidar_range)
+                    intersections.append(dummy_intersection)
+                    intersection_dists.append(2*self.lidar_range)
 
                 # determine distance reading, end point, and label
-                intersections_valid = [p for p in intersections if p is not None]
-                if len(intersections_valid) > 0:
-                    ray_int_idx = np.linalg.norm(intersections_valid - ray_origin, axis=1)
-                    ray_distance = 
+                if not np.all(intersections == -1):
+                    ray_int_idx = np.argmin(ray_int_dists)
+                    if ray_int_idx == 0:
+                        pass
+                    elif ray_int_idx == 1:
+                        pass
+                    else:
+                        pass 
                 else:
                     ray_distance = self.lidar_range
                     ray_label = LIDAR_DETECTION_CLASS_MAP["nothing"]
