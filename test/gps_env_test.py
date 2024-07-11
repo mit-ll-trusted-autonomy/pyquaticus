@@ -144,6 +144,7 @@ def main():
     config["flag_homes_unit"] = "ll"
     config["sim_speedup_factor"] = 10
     config["max_time"] = 240
+    config["screen_frac"] = 0.4 
     # config["lidar_obs"] = True
     # config["normalize"] = False
     

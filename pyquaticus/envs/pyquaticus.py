@@ -700,12 +700,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             for _i in range(self.num_renders_per_step):
                 for _j in range(self.sim_speedup_factor):
                     self._move_agents(action_dict, 1/self.render_fps)
-                self._update_lidar()
+                if self.lidar_obs:
+                    self._update_lidar()
                 self._render()
         else:
             for _ in range(self.sim_speedup_factor):
                 self._move_agents(action_dict, self.tau)
-                self._update_lidar()
+                if self.lidar_obs:
+                    self._update_lidar()
 
         # agent and flag capture checks and more
         self._check_pickup_flags()
