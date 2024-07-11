@@ -961,30 +961,31 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 for geom in self.ray_int_geoms:
                     geom_int = intersection(geom, ray_line)
                     if not geom_int.is_empty:
-                        obstacle_intersections.extend(
-                            geom_int.coords
-                        )
+                        obstacle_intersections.extend(geom_int.coords)
+
                 obstacle_intersections = np.asarray(obstacle_intersections)
-                obstacle_int_valid = obstacle_intersections[
-                    ~np.all(obstacle_intersections == ray_origin, axis=1)
-                ]
+                obstacle_int_valid = obstacle_intersections[~np.all(obstacle_intersections == ray_origin, axis=1)]
+
                 if len(obstacle_int_valid) > 0:
                     obstacle_int_distances = np.linalg.norm(obstacle_int_valid - ray_origin, axis=1)
                     obstacle_int_idx = np.argmin(obstacle_int_distances)
-                    intersections.append(obstacle_int_valid[agent_int_idx])
+                    intersections.append(obstacle_int_valid[obstacle_int_idx])
+                    intersection_dists.append(obstacle_int_distances[obstacle_int_idx])
                 else:
                     intersections.append(None)
+                    intersection_dists.append(self.lidar_range)
 
                 # determine distance reading, end point, and label
                 intersections_valid = [p for p in intersections if p is not None]
                 if len(intersections_valid) > 0:
-                    ray_int_idx = np.linalg.norm(obstacle_int_valid - ray_origin, axis=1)z
+                    ray_int_idx = np.linalg.norm(intersections_valid - ray_origin, axis=1)
                     ray_distance = 
                 else:
                     ray_distance = self.lidar_range
+                    ray_label = LIDAR_DETECTION_CLASS_MAP["nothing"]
 
-
-                self.state["lidar_readings"][player.id][i] = 
+                self.state["lidar_readings"][player.id][i] = ray_distance
+                self.state["lidar_labels"][player.id][i] = ray_label
 
 
 
@@ -1545,7 +1546,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.state["dist_to_obstacles"][k] = [(0, 0)] * len(self.obstacles)
 
         if self.lidar_obs:
-            self.state["lidar_readings"] = {agent_id: np.zeros((self.num_lidar_rays, 2)) for agent_id in agent_ids}
+            self.state["lidar_readings"] = {agent_id: np.zeros(self.num_lidar_rays) for agent_id in agent_ids}
             self.state["lidar_labels"] = {agent_id: np.zeros(self.num_lidar_rays) for agent_id in agent_ids}
 
         for k in self.game_score:
