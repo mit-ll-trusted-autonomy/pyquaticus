@@ -197,14 +197,14 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             agent_obs_normalizer.register("team_score", max_score, min_score)
             agent_obs_normalizer.register("opponent_score", max_score, min_score)
 
-            for heading in self.lidar_ray_headings:
+            for heading in self.lidar_ray_headings_deg:
                 if heading.is_integer():
                     ray_label = int(heading)
                 else:
                     ray_label = heading
 
-                agent_obs_normalizer.register((np.rad2deg(ray_label), "lidar_distance"), max_lidar_dist)
-                agent_obs_normalizer.register((np.rad2deg(ray_label), "lidar_detection"), [len(LIDAR_DETECTION_CLASS_MAP) - 1])
+                agent_obs_normalizer.register((ray_label, "lidar_distance"), max_lidar_dist)
+                agent_obs_normalizer.register((ray_label, "lidar_detection"), [len(LIDAR_DETECTION_CLASS_MAP) - 1])
         else:
             max_bearing = [180]
             max_dist = [self.env_diag + 10]  # add a ten meter buffer
@@ -880,8 +880,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             player.speed = clip(new_speed, 0.0, self.max_speed)
             player.heading = angle180(new_heading)
             player.thrust = desired_thrust
-            if player.id == 0:
-                print(heading_angle_conversion(player.heading))
 
     def _check_on_sides(self, pos, team):
         scrim2pos = np.asarray(pos) - self.scrimmage_coords[0]
@@ -890,9 +888,92 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         return cp_sign == self.on_sides_sign[team] or cp_sign == 0
 
     def _update_lidar(self):
-        # self.state["lidar_readings"] = np.zeros((0, self.num_lidar_rays, 2))
         for player in self.players.values():
-            pass
+            ray_origin = np.asarray(player.pos)
+            for i, ray_heading in enumerate(self.lidar_ray_headings):
+                #determine ray vec in global reference frame
+                #(from 0 to 360 degrees starting at east and moving counterclockwise) 
+                ray_heading_global = (heading_angle_conversion(player.heading) + ray_heading) % 360
+                ray_vec = np.array([np.cos(ray_heading_global), np.sin(ray_heading_global)])
+                ray_end = ray_origin + self.lidar_range * ray_vec
+                ray_line = LineString(ray_origin, ray_end)
+                intersections = []
+
+                #agent intersections
+                agent_intersections = []
+                for other_player in self.players.values():
+                    if other_player.id != player.id:
+                        other_player_polygon = Point(*other_player.pos).buffer(self.agent_radius)
+                        other_player_int = intersection(other_player_polygon, ray_line)
+                        if not other_player_int.is_empty:
+                            agent_intersections.extend(
+                                other_player_int.coords
+                            )
+                agent_intersections = np.asarray(agent_intersections)
+                agent_int_valid = agent_intersections[
+                    ~np.all(agent_intersections == ray_origin, axis=1)
+                ]
+                if len(agent_int_valid) > 0:
+                    agent_int_distances = np.linalg.norm(agent_int_valid - ray_origin, axis=1)
+                    agent_int_idx = np.argmin(agent_int_distances)
+                    intersections.append(agent_int_valid[agent_int_idx])
+                else:
+                    intersections.append(None)
+
+                #flag intersections
+                flag_intersections = []
+                for flag in self.flags:
+                    if not self.state["flag_taken"][int(flag.team)]:
+                        flag_polygon = Point(*flag.home).buffer(self.flag_radius)
+                        flag_int = intersection(flag_polygon, ray_line)
+                        if not flag_int.is_empty:
+                            flag_intersections.extend(
+                                flag_int.coords
+                            )
+                flag_intersections = np.asarray(flag_intersections)
+                flag_int_valid = flag_intersections[
+                    ~np.all(flag_intersections == ray_origin, axis=1)
+                ]
+                if len(flag_int_valid) > 0:
+                    flag_int_distances = np.linalg.norm(flag_int_valid - ray_origin, axis=1)
+                    flag_int_idx = np.argmin(flag_int_distances)
+                    intersections.append(flag_int_valid[flag_int_idx])
+                else:
+                    intersections.append(None)
+
+                #obstacle intersections
+                obstacle_intersections = []
+                for geom in self.ray_int_geoms:
+                    geom_int = intersection(geom, ray_line)
+                    if not geom_int.is_empty:
+                        obstacle_intersections.extend(
+                            geom_int.coords
+                        )
+                obstacle_intersections = np.asarray(obstacle_intersections)
+                obstacle_int_valid = obstacle_intersections[
+                    ~np.all(obstacle_intersections == ray_origin, axis=1)
+                ]
+                if len(obstacle_int_valid) > 0:
+                    obstacle_int_distances = np.linalg.norm(obstacle_int_valid - ray_origin, axis=1)
+                    obstacle_int_idx = np.argmin(obstacle_int_distances)
+                    intersections.append(obstacle_int_valid[agent_int_idx])
+                else:
+                    intersections.append(None)
+
+                # determine distance reading, end point, and label
+                intersections_valid = [p for p in intersections if p is not None]
+                if len(intersections_valid) > 0:
+                    ray_int_idx = np.linalg.norm(obstacle_int_valid - ray_origin, axis=1)
+                    ray_distance = 
+                else:
+                    ray_distance = self.lidar_range
+
+
+                self.state["lidar_readings"][player.id][i] = 
+
+
+
+
 
     def _check_pickup_flags(self):
         """Updates player states if they picked up the flag."""
@@ -1157,6 +1238,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         #ray casting
         if self.lidar_obs:
             self.lidar_ray_headings = np.linspace(0, (self.num_lidar_rays - 1) * (2*np.pi) / self.num_lidar_rays, self.num_lidar_rays)
+            self.lidar_ray_headings_deg = np.rad2deg(np.linspace(0, (self.num_lidar_rays - 1) * (2*np.pi) / self.num_lidar_rays, self.num_lidar_rays))
 
             self.ray_int_geoms = []
             if (
@@ -1448,7 +1530,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.state["dist_to_obstacles"][k] = [(0, 0)] * len(self.obstacles)
 
         if self.lidar_obs:
-            self.state["lidar_readings"] = np.zeros((0, self.num_lidar_rays, 2))
+            self.state["lidar_readings"] = {agent_id: np.zeros((self.num_lidar_rays, 2)) for agent_id in agent_ids}
 
         for k in self.game_score:
             self.game_score[k] = 0
