@@ -979,12 +979,18 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 # determine distance reading, end point, and label
                 if not np.all(intersections == -1):
                     ray_int_idx = np.argmin(ray_int_dists)
+                    ray_distance = ray_int_dists[ray_int_idx]
+
                     if ray_int_idx == 0:
-                        pass
+                        #agent intersections
+                        if self.players[]
+                        ray_label = 
                     elif ray_int_idx == 1:
+                        #flag intersections
                         pass
                     else:
-                        pass 
+                        #obstacle intersections
+                        pass
                 else:
                     ray_distance = self.lidar_range
                     ray_label = LIDAR_DETECTION_CLASS_MAP["nothing"]
