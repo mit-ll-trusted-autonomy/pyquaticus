@@ -37,6 +37,7 @@ import warnings
 from abc import ABC
 from collections import defaultdict, OrderedDict
 from contextily.tile import _sm2ll
+from datetime import datetime
 from geographiclib.geodesic import Geodesic
 from gymnasium.spaces import Discrete
 from gymnasium.utils import seeding
@@ -573,7 +574,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         reward_config: dict = None,
         config_dict=config_dict_std,
         render_mode: Optional[str] = None,
-        render_agent_ids: Optional[bool] = False
+        render_agent_ids: Optional[bool] = False,
+        render_lidar: Optional[bool] = False
     ):
         super().__init__()
         self.config_dict = config_dict
@@ -588,6 +590,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.game_score = {'blue_captures':0, 'blue_tags':0, 'blue_grabs':0, 'red_captures':0, 'red_tags':0, 'red_grabs':0}    
         self.render_mode = render_mode
         self.render_ids = render_agent_ids
+        self.render_lidar = render_lidar
 
         # set variables from config
         self.set_config_values(self.config_dict)
@@ -814,7 +817,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             raw_speed = np.interp(
                 desired_thrust, self.thrust_map[0, :], self.thrust_map[1, :]
             )
-            new_speed = min(
+            new_speed = self._min(
                 raw_speed * 1 - ((abs(desired_rudder) / 100) * self.turn_loss),
                 self.max_speed,
             )
@@ -939,7 +942,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             for i, ray_heading in enumerate(self.lidar_ray_headings):
                 #determine ray vec in global reference frame
                 #(from 0 to 360 degrees starting at east and moving counterclockwise) 
-                ray_heading_global = (heading_angle_conversion(player.heading) + ray_heading) % 360
+                ray_heading_global = np.deg2rad((heading_angle_conversion(player.heading) + ray_heading) % 360)
                 ray_vec = np.array([np.cos(ray_heading_global), np.sin(ray_heading_global)])
                 ray_end = ray_origin + self.lidar_range * ray_vec
                 ray_line = LineString((ray_origin, ray_end))
@@ -1316,7 +1319,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         #ray casting
         if self.lidar_obs:
-            self.lidar_ray_headings = np.linspace(0, (self.num_lidar_rays - 1) * (2*np.pi) / self.num_lidar_rays, self.num_lidar_rays)
+            self.lidar_ray_headings = np.linspace(0, (self.num_lidar_rays - 1) * 360 / self.num_lidar_rays, self.num_lidar_rays)
 
             self.ray_int_geoms = []
             if (
@@ -1348,14 +1351,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.border_width = 2  # pixels
             self.a2a_line_width = 3 #pixels
 
-            self.arena_width = self.env_size[0] * self.pixel_size
-            self.arena_height = self.env_size[1] * self.pixel_size
+            self.screen_width = self.env_size[0] * self.pixel_size
+            self.screen_height = self.env_size[1] * self.pixel_size
 
             #render background
             self.render_background = pygame.surfarray.make_surface(
                 np.transpose(self.background_img, (1,0,2)) #pygame assumes images are (h, w, 3)
             )
-            self.render_background = pygame.transform.scale(self.render_background, (self.arena_width, self.arena_height))
+            self.render_background = pygame.transform.scale(self.render_background, (self.screen_width, self.screen_height))
 
             # check that world size (pixels) does not exceed the screen dimensions
             world_screen_err_msg = (
@@ -1630,7 +1633,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         reset_obs = {agent_id: self.state_to_obs(agent_id, self.normalize) for agent_id in self.players}
 
         if self.render_mode:
+            #get date and time
+            now = datetime.now()
+            dt_string = now.strftime("%m-%d-%Y_%H-%M-%S")
+            self.render_buffer = {dt_string: []}
             self._render()
+
         return reset_obs
 
     def _generate_agent_starts(self, flag_locations):
@@ -2392,7 +2400,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         #squeeze contours
         border_cnt = self._img2env_coords(border_cnt_approx.squeeze(), topo_img.shape)
-        island_cnts = np.asarray([self._img2env_coords(cnt.squeeze(), topo_img.shape) for cnt in island_cnts_approx])
+        island_cnts = [self._img2env_coords(cnt.squeeze(), topo_img.shape) for cnt in island_cnts_approx]
 
         return border_cnt, island_cnts, land_mask_approx
 
@@ -2474,14 +2482,16 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if self.screen is None:
             pygame.init()
             pygame.display.set_caption("Capture The Flag")
-            if self.render_mode:
+            if self.render_mode == "human":
                 pygame.display.init()
-                self.screen = pygame.display.set_mode((self.arena_width, self.arena_height))
+                self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
                 self.isopen = True
                 self.font = pygame.font.SysFont(None, int(2*self.pixel_size*self.agent_radius))
+            elif self.render_mode == "rgb_array":
+                self.screen = pygame.Surface((self.screen_width, self.screen_height))
             else:
                 raise Exception(
-                    "Sorry, render modes other than 'human' are not supported"
+                    f"Sorry, render modes other than f{self.metadata['render_modes']} are not supported"
                 )
 
         if self.clock is None:
@@ -2567,17 +2577,19 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 blit_pos = self.env_to_screen(player.pos)
 
                 # render lidar
-                if self.lidar_obs:
+                if self.lidar_obs and self.render_lidar:
+                    if team == Team.BLUE_TEAM:
+                        lidar_color = "blue"
+                    else:
+                        lidar_color = "red"
                     for i in range(self.num_lidar_rays):
                         draw.line(
-                                self.screen, 
-                                (128, 128, 128),
-                                blit_pos,
-                                self.env_to_screen(self.state["lidar_ends"][player.id][i]),
-                                width=1
-                            )
-
-
+                            self.screen,
+                            lidar_color,
+                            blit_pos,
+                            self.env_to_screen(self.state["lidar_ends"][player.id][i]),
+                            width=1
+                        )
                 # render tagging
                 player.render_tagging(self.tagging_cooldown)
 
@@ -2631,16 +2643,37 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                                 width=self.a2a_line_width
                             )
 
-        if self.render_mode:
+        if self.render_mode == "human":
             pygame.event.pump()
             self.clock.tick(self.render_fps)
             pygame.display.flip()
 
+        elif self.render_mode == "rgb_array":
+            self.render_buffer.append(
+                np.transpose(np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2))
+            )
+
     def env_to_screen(self, pos):
         screen_pos = self.pixel_size * np.asarray(pos)
-        screen_pos[1] = 0.5 * self.arena_height - (screen_pos[1] - 0.5 * self.arena_height)
+        screen_pos[1] = 0.5 * self.screen_height - (screen_pos[1] - 0.5 * self.screen_height)
 
         return screen_pos
+
+    def buffer_to_video(self):
+        """Convert and save current render buffer as a video"""
+        video_file_dir = str(pathlib.Path(__file__).resolve().parents[1] / 'videos')
+        if not os.path.isdir(video_file_dir):
+            os.mkdir(video_file_dir)
+
+        video_id = next(iter(self.render_buffer.keys()))
+        video_file_name = f"pyquaticus_{video_id}.mp4"
+        video_file_path = os.path.join(video_file_dir, video_file_name)
+
+        out = cv2.VideoWriter(video_file_path, cv2.VideoWriter_fourcc(*'mp4v'), self.render_fps, (self.screen_width, self.screen_height))
+        for img in self.render_buffer.values():
+            out.write(img)
+
+        out.release()
 
     def close(self):
         """Overridden method inherited from `Gym`."""
