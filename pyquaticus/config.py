@@ -37,7 +37,7 @@ config_dict_std = {
     "lidar_range": np.linalg.norm([160.0, 80.0]), # float (meters) or "auto"
     "num_lidar_rays": 16, # numbers of rays for lidar
     # MOOS dynamics parameters
-    "max_speed": 1.5,  # meters / s
+    "max_speed": MAX_SPEED,  # meters / s
     "speed_factor": 20.0,  # Multiplicative factor for desired_speed -> desired_thrust
     "thrust_map": np.array(  # Piecewise linear mapping from desired_thrust to speed
         [[-100, 0, 20, 40, 60, 80, 100], [-2, 0, 1, 2, 3, 5, 5]]
@@ -121,11 +121,11 @@ lidar_detection_labels = [
     "team_flag",
     "opponent_flag",
     "teammate",
-    "teammate_tagged", # a teammate that is tagged
-    "teammate_flag", # a teammate with opponent's flag
+    "teammate_is_tagged", # a teammate that is tagged
+    "teammate_has_flag", # a teammate with opponent's flag
     "opponent",
-    "opponent_tagged", # an opponent that is tagged
-    "opponent_flag", # an opponent with own team's flag
+    "opponent_is_tagged", # an opponent that is tagged
+    "opponent_has_flag", # an opponent with own team's flag
 ]
 LIDAR_DETECTION_CLASS_MAP = {label: i for i, label in enumerate(lidar_detection_labels)}
 

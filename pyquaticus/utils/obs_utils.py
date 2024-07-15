@@ -126,8 +126,7 @@ class ObsNormalizer:
             np.array[float32]: state where each element is normalized to [-1, 1]
         """
         if len(obs) > len(self._bounds):
-            raise ValueError(f"Got more observations than registered: "
-                             "{len(obs)} vs {len(self._bounds)}")
+            raise ValueError(f"Got more observations than registered: {len(obs)} vs {len(self._bounds)}")
         if len(obs) != len(self._bounds):
             missing_states = set(self._bounds.keys()) - set(obs)
             raise RuntimeError(

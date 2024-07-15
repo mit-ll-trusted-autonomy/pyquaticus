@@ -197,14 +197,9 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             agent_obs_normalizer.register("team_score", max_score, min_score)
             agent_obs_normalizer.register("opponent_score", max_score, min_score)
 
-            for heading in self.lidar_ray_headings_deg:
-                if heading.is_integer():
-                    ray_label = int(heading)
-                else:
-                    ray_label = heading
-
-                agent_obs_normalizer.register((ray_label, "lidar_distance"), max_lidar_dist)
-                agent_obs_normalizer.register((ray_label, "lidar_detection"), [len(LIDAR_DETECTION_CLASS_MAP) - 1])
+            for i in range(self.num_lidar_rays):
+                agent_obs_normalizer.register((i, "ray_distance"), max_lidar_dist)
+                agent_obs_normalizer.register((i, "ray_label"), [len(LIDAR_DETECTION_CLASS_MAP) - 1])
         else:
             max_bearing = [180]
             max_dist = [self.env_diag + 10]  # add a ten meter buffer
@@ -351,16 +346,54 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
         agent = self.players[agent_id]
         obs_dict = OrderedDict()
+        obs = OrderedDict()
+        own_team = agent.team
+        other_team = Team.BLUE_TEAM if own_team == Team.RED_TEAM else Team.RED_TEAM
+        np_pos = np.array(agent.pos, dtype=np.float32)
 
         if self.lidar_obs:
-            pass
+            # Scrimmage line
+            scrimmage_line_closest_point = closest_point_on_line(
+                self.scrimmage_coords[0], self.scrimmage_coords[1], np_pos
+            )
+            scrimmage_line_dist, scrimmage_line_bearing = mag_bearing_to(
+                np_pos, scrimmage_line_closest_point, agent.heading
+            )
+            obs["scrimmage_line_bearing"] = scrimmage_line_bearing
+            obs["scrimmage_line_distance"] = scrimmage_line_dist
+
+            # Own speed
+            obs["speed"] = agent.speed
+            # Own flag status
+            obs["has_flag"] = agent.has_flag
+            # Team has flag
+            obs["team_has_flag"] = self.state["flag_taken"][int(other_team)]
+            # Opposing team has flag
+            obs["opponent_has_flag"] = self.state["flag_taken"][int(own_team)]
+            # On side
+            obs["on_side"] = agent.on_own_side
+            # Tagging cooldown
+            obs["tagging_cooldown"] = agent.tagging_cooldown
+            # Is tagged
+            obs["is_tagged"] = agent.is_tagged
+
+            # Team score and Opponent score
+            if agent.team == Team.BLUE_TEAM:
+                obs["team_score"] = self.game_score["blue_captures"]
+                obs["opponent_score"] = self.game_score["red_captures"]
+            else:
+                obs["team_score"] = self.game_score["red_captures"]
+                obs["opponent_score"] = self.game_score["blue_captures"]
+
+            # Lidar
+            for i in range(self.num_lidar_rays):
+                obs[(i, "ray_distance")] = self.state["lidar_distances"][agent_id][i]
+                obs[(i, "ray_label")] = self.state["lidar_labels"][agent_id][i]
+
         else:
-            own_team = agent.team
             own_home_loc = self.flags[int(own_team)].home
-            opponent_home_loc = self.flags[not int(own_team)].home
-            other_team = Team.BLUE_TEAM if own_team == Team.RED_TEAM else Team.RED_TEAM
-            obs = OrderedDict()
-            np_pos = np.array(agent.pos, dtype=np.float32)
+            opponent_home_loc = self.flags[int(other_team)].home
+
             # Goal flag
             opponent_home_dist, opponent_home_bearing = mag_bearing_to(
                 np_pos, opponent_home_loc, agent.heading
@@ -591,7 +624,18 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.agents = [agent_id for agent_id in self.players]
         self.possible_agents = self.agents[:]
 
+        # Agent inidices of each team
         self.agents_of_team = {Team.BLUE_TEAM: b_players, Team.RED_TEAM: r_players}
+
+        # Agent to team members (ids) mapping
+        self.agent_to_team_ids = {
+            agent_id: [p.id for p in self.agents_of_team[player.team]] for agent_id, player in self.players.items()
+        }
+
+        # Agent to opponent ids mapping
+        self.agent_to_opp_ids = {
+            agent_id: [p.id for p in self.agents_of_team[Team(not player.team.value)]] for agent_id, player in self.players.items()
+        }
 
         # Setup Rewards
         self.reward_config = {} if reward_config is None else reward_config
@@ -898,9 +942,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 ray_heading_global = (heading_angle_conversion(player.heading) + ray_heading) % 360
                 ray_vec = np.array([np.cos(ray_heading_global), np.sin(ray_heading_global)])
                 ray_end = ray_origin + self.lidar_range * ray_vec
-                ray_line = LineString(ray_origin, ray_end)
+                ray_line = LineString((ray_origin, ray_end))
                 intersections = np.full((3,2), -1.)
-                intersection_dists = []
+                intersection_dists = np.full(3, 2*self.lidar_range)
 
                 #agent intersections
                 agent_intersections = []
@@ -915,19 +959,18 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
                 agent_intersections = np.asarray(agent_intersections)
                 agent_int_ids = np.asarray(agent_int_ids)
+                agent_int_id = None
                 
-                agent_int_valid = agent_intersections[~np.all(agent_intersections == ray_origin, axis=1)]
-                agent_int_ids = agent_int_ids[~np.all(agent_intersections == ray_origin, axis=1)]
+                if len(agent_intersections) > 0:
+                    agent_int_valid = agent_intersections[~np.all(agent_intersections == ray_origin, axis=1)]
+                    agent_int_ids = agent_int_ids[~np.all(agent_intersections == ray_origin, axis=1)]
 
-                if len(agent_int_valid) > 0:
-                    agent_int_distances = np.linalg.norm(agent_int_valid - ray_origin, axis=1)
-                    agent_int_idx = np.argmin(agent_int_distances)
-                    intersections[0] = agent_int_valid[agent_int_idx]
-                    intersection_dists.append(agent_int_distances[agent_int_idx])
-                    agent_int_id = agent_int_ids[agent_int_idx]
-                else:
-                    intersection_dists.append(2*self.lidar_range)
-                    agent_int_id = None
+                    if len(agent_int_valid) > 0:
+                        agent_int_distances = np.linalg.norm(agent_int_valid - ray_origin, axis=1)
+                        agent_int_idx = np.argmin(agent_int_distances)
+                        intersections[0] = agent_int_valid[agent_int_idx]
+                        intersection_dists[0] = agent_int_distances[agent_int_idx]
+                        agent_int_id = agent_int_ids[agent_int_idx]
 
                 #flag intersections
                 flag_intersections = []
@@ -938,24 +981,22 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         flag_int = intersection(flag_polygon, ray_line)
                         if not flag_int.is_empty:
                             flag_intersections.extend(flag_int.coords)
-                            flag_int_ids.extend(np.full(len(flag_int.coords), int(flag.team)))
+                            flag_int_ids.extend(np.full(len(flag_int.coords), flag.team))
 
                 flag_intersections = np.asarray(flag_intersections)
                 flag_int_ids = np.asarray(flag_int_ids)
+                flag_int_id = None
 
-                flag_int_valid = flag_intersections[~np.all(flag_intersections == ray_origin, axis=1)]
-                flag_int_ids = flag_int_ids[~np.all(flag_intersections == ray_origin, axis=1)]
+                if len(flag_intersections) > 0:
+                    flag_int_valid = flag_intersections[~np.all(flag_intersections == ray_origin, axis=1)]
+                    flag_int_ids = flag_int_ids[~np.all(flag_intersections == ray_origin, axis=1)]
 
-                if len(flag_int_valid) > 0:
-                    flag_int_distances = np.linalg.norm(flag_int_valid - ray_origin, axis=1)
-                    flag_int_idx = np.argmin(flag_int_distances)
-                    intersections[1] = flag_int_valid[flag_int_idx]
-                    intersection_dists.append(flag_int_distances[flag_int_idx])
-                    flag_int_id = flag_int_ids[flag_int_idx]
-                else:
-                    intersections.append(dummy_intersection)
-                    intersection_dists.append(2*self.lidar_range)
-                    agent_int_id = None
+                    if len(flag_int_valid) > 0:
+                        flag_int_distances = np.linalg.norm(flag_int_valid - ray_origin, axis=1)
+                        flag_int_idx = np.argmin(flag_int_distances)
+                        intersections[1] = flag_int_valid[flag_int_idx]
+                        intersection_dists[1] = flag_int_distances[flag_int_idx]
+                        flag_int_id = flag_int_ids[flag_int_idx]
 
                 #obstacle intersections
                 obstacle_intersections = []
@@ -965,42 +1006,53 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         obstacle_intersections.extend(geom_int.coords)
 
                 obstacle_intersections = np.asarray(obstacle_intersections)
-                obstacle_int_valid = obstacle_intersections[~np.all(obstacle_intersections == ray_origin, axis=1)]
 
-                if len(obstacle_int_valid) > 0:
-                    obstacle_int_distances = np.linalg.norm(obstacle_int_valid - ray_origin, axis=1)
-                    obstacle_int_idx = np.argmin(obstacle_int_distances)
-                    intersections[2] = obstacle_int_valid[obstacle_int_idx]
-                    intersection_dists.append(obstacle_int_distances[obstacle_int_idx])
-                else:
-                    intersections.append(dummy_intersection)
-                    intersection_dists.append(2*self.lidar_range)
+                if len(obstacle_intersections) > 0:
+                    obstacle_int_valid = obstacle_intersections[~np.all(obstacle_intersections == ray_origin, axis=1)]
+
+                    if len(obstacle_int_valid) > 0:
+                        obstacle_int_distances = np.linalg.norm(obstacle_int_valid - ray_origin, axis=1)
+                        obstacle_int_idx = np.argmin(obstacle_int_distances)
+                        intersections[2] = obstacle_int_valid[obstacle_int_idx]
+                        intersection_dists[2] = obstacle_int_distances[obstacle_int_idx]
 
                 # determine distance reading, end point, and label
                 if not np.all(intersections == -1):
-                    ray_int_idx = np.argmin(ray_int_dists)
-                    ray_distance = ray_int_dists[ray_int_idx]
+                    ray_int_idx = np.argmin(intersection_dists)
+                    ray_distance = intersection_dists[ray_int_idx]
+                    ray_end = intersections[ray_int_idx]
 
                     if ray_int_idx == 0:
                         #agent intersections
-                        if self.players[]
-                        ray_label = 
+                        if agent_int_id in self.agent_to_team_ids[player.id]:
+                            if self.players[agent_int_id].is_tagged:
+                                ray_label = LIDAR_DETECTION_CLASS_MAP["teammate_is_tagged"]
+                            elif self.players[agent_int_id].has_flag:
+                                ray_label = LIDAR_DETECTION_CLASS_MAP["teammate_has_flag"]
+                            else:
+                                ray_label = LIDAR_DETECTION_CLASS_MAP["teammate"]
+                        else:
+                            if self.players[agent_int_id].is_tagged:
+                                ray_label = LIDAR_DETECTION_CLASS_MAP["opponent_is_tagged"]
+                            elif self.players[agent_int_id].has_flag:
+                                ray_label = LIDAR_DETECTION_CLASS_MAP["opponent_has_flag"]
+                            else:
+                                ray_label = LIDAR_DETECTION_CLASS_MAP["opponent"]
+
                     elif ray_int_idx == 1:
-                        #flag intersections
-                        pass
+                        if player.team == flag_int_id:
+                            ray_label = LIDAR_DETECTION_CLASS_MAP["team_flag"]
+                        else:
+                            ray_label = LIDAR_DETECTION_CLASS_MAP["opponent_flag"]
                     else:
-                        #obstacle intersections
-                        pass
+                        ray_label = LIDAR_DETECTION_CLASS_MAP["obstacle"]
                 else:
                     ray_distance = self.lidar_range
                     ray_label = LIDAR_DETECTION_CLASS_MAP["nothing"]
 
-                self.state["lidar_readings"][player.id][i] = ray_distance
+                self.state["lidar_distances"][player.id][i] = ray_distance
                 self.state["lidar_labels"][player.id][i] = ray_label
-
-
-
-
+                self.state["lidar_ends"][player.id][i] = ray_end
 
     def _check_pickup_flags(self):
         """Updates player states if they picked up the flag."""
@@ -1265,7 +1317,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         #ray casting
         if self.lidar_obs:
             self.lidar_ray_headings = np.linspace(0, (self.num_lidar_rays - 1) * (2*np.pi) / self.num_lidar_rays, self.num_lidar_rays)
-            self.lidar_ray_headings_deg = np.rad2deg(np.linspace(0, (self.num_lidar_rays - 1) * (2*np.pi) / self.num_lidar_rays, self.num_lidar_rays))
 
             self.ray_int_geoms = []
             if (
@@ -1557,8 +1608,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.state["dist_to_obstacles"][k] = [(0, 0)] * len(self.obstacles)
 
         if self.lidar_obs:
-            self.state["lidar_readings"] = {agent_id: np.zeros(self.num_lidar_rays) for agent_id in agent_ids}
+            self.state["lidar_distances"] = {agent_id: np.zeros(self.num_lidar_rays) for agent_id in agent_ids}
             self.state["lidar_labels"] = {agent_id: np.zeros(self.num_lidar_rays) for agent_id in agent_ids}
+            self.state["lidar_ends"] = {agent_id: np.zeros((self.num_lidar_rays, 2)) for agent_id in agent_ids}
+            self._update_lidar()
 
         for k in self.game_score:
             self.game_score[k] = 0
@@ -2442,12 +2495,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # arena border and scrimmage line
         draw.line(
-            self.screen, (0, 0, 0), self.world_to_screen(self.scrimmage_coords[0]), self.world_to_screen(self.scrimmage_coords[1]), width=self.border_width
+            self.screen, (0, 0, 0), self.env_to_screen(self.scrimmage_coords[0]), self.env_to_screen(self.scrimmage_coords[1]), width=self.border_width
         )
         #Draw Points Debugging
         if self.config_dict["render_field_points"]:
             for v in self.config_dict["aquaticus_field_points"]:
-                draw.circle(self.screen, (128,0,128), self.world_to_screen(self.config_dict["aquaticus_field_points"][v]), 5,)
+                draw.circle(self.screen, (128,0,128), self.env_to_screen(self.config_dict["aquaticus_field_points"][v]), 5,)
 
         agent_id_blit_poses = {}
 
@@ -2457,7 +2510,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             color = "blue" if team == Team.BLUE_TEAM else "red"
 
             # Draw team home region
-            home_center_screen = self.world_to_screen(self.flags[int(team)].home)
+            home_center_screen = self.env_to_screen(self.flags[int(team)].home)
             draw.circle(
                     self.screen,
                     (0, 0, 0),
@@ -2468,7 +2521,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             if not self.state["flag_taken"][int(team)]:
                 # Flag is not captured, draw normally.
-                flag_pos_screen = self.world_to_screen(flag.pos)
+                flag_pos_screen = self.env_to_screen(flag.pos)
                 draw.circle(
                     self.screen,
                     color,
@@ -2484,7 +2537,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 )
             else:
                 # Flag is captured so draw a different shape
-                flag_pos_screen = self.world_to_screen(flag.pos)
+                flag_pos_screen = self.env_to_screen(flag.pos)
                 draw.circle(
                     self.screen,
                     color,
@@ -2498,7 +2551,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     draw.circle(
                         self.screen,
                         (128, 128, 128),
-                        self.world_to_screen(obstacle.center_point),
+                        self.env_to_screen(obstacle.center_point),
                         obstacle.radius * self.pixel_size,
                         width=3
                     )
@@ -2506,11 +2559,25 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 #     draw.polygon(
                 #             self.screen,
                 #             (128, 128, 128),
-                #             [self.world_to_screen(p) for p in obstacle.anchor_points],
+                #             [self.env_to_screen(p) for p in obstacle.anchor_points],
                 #             width=3,
                 #         )
 
             for player in teams_players:
+                blit_pos = self.env_to_screen(player.pos)
+
+                # render lidar
+                if self.lidar_obs:
+                    for i in range(self.num_lidar_rays):
+                        draw.line(
+                                self.screen, 
+                                (128, 128, 128),
+                                blit_pos,
+                                self.env_to_screen(self.state["lidar_ends"][player.id][i]),
+                                width=1
+                            )
+
+
                 # render tagging
                 player.render_tagging(self.tagging_cooldown)
 
@@ -2519,7 +2586,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 ref_angle = -orientation.angle_to(self.UP)
 
                 # transform position to pygame coordinates
-                blit_pos = self.world_to_screen(player.pos)
                 rotated_surface = rotozoom(player.pygame_agent, ref_angle, 1.0)
                 rotated_surface_size = np.array(rotated_surface.get_size())
                 rotated_blit_pos = blit_pos - 0.5*rotated_surface_size
@@ -2560,8 +2626,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                             draw.line(
                                 self.screen, 
                                 line_color,
-                                self.world_to_screen(blue_player_pos),
-                                self.world_to_screen(red_player_pos),
+                                self.env_to_screen(blue_player_pos),
+                                self.env_to_screen(red_player_pos),
                                 width=self.a2a_line_width
                             )
 
@@ -2570,7 +2636,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.clock.tick(self.render_fps)
             pygame.display.flip()
 
-    def world_to_screen(self, pos):
+    def env_to_screen(self, pos):
         screen_pos = self.pixel_size * np.asarray(pos)
         screen_pos[1] = 0.5 * self.arena_height - (screen_pos[1] - 0.5 * self.arena_height)
 
@@ -2607,10 +2673,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             A dictionary containing the agents observation
         """
         orig_obs = super().state_to_obs(agent_id, normalize=False)
-        # Obstacle Distance/Bearing
-        for i, obstacle in enumerate(self.state["dist_to_obstacles"][agent_id]):
-            orig_obs[f"obstacle_{i}_distance"] = obstacle[0]
-            orig_obs[f"obstacle_{i}_bearing"] = obstacle[1]
+        
+        if not self.lidar_obs:
+            # Obstacle Distance/Bearing
+            for i, obstacle in enumerate(self.state["dist_to_obstacles"][agent_id]):
+                orig_obs[f"obstacle_{i}_distance"] = obstacle[0]
+                orig_obs[f"obstacle_{i}_bearing"] = obstacle[1]
 
         if normalize:
             orig_obs = self.agent_obs_normalizer.normalized(orig_obs)
