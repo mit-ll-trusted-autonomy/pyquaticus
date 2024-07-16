@@ -146,8 +146,9 @@ def main():
     config["max_time"] = 240
     config["screen_frac"] = 0.3 
     config["lidar_obs"] = True
-    config["num_lidar_rays"] = 16
-    config["lidar_range"] = 80
+    config["num_lidar_rays"] = 150
+    config["lidar_range"] = 40
+    # config["render_fps"] = 10
     # config["normalize"] = False
     
     #PyQuaticusEnv is a Parallel Petting Zoo Environment

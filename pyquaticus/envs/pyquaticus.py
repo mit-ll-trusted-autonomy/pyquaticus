@@ -575,7 +575,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         config_dict=config_dict_std,
         render_mode: Optional[str] = None,
         render_agent_ids: Optional[bool] = False,
-        render_lidar: Optional[bool] = False
+        render_lidar: Optional[bool] = False,
+        record_render: Optional[bool] = False
     ):
         super().__init__()
         self.config_dict = config_dict
@@ -591,6 +592,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.render_mode = render_mode
         self.render_ids = render_agent_ids
         self.render_lidar = render_lidar
+        self.record_render = record_render
+        self.render_buffer = []
 
         # set variables from config
         self.set_config_values(self.config_dict)
@@ -1351,8 +1354,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.border_width = 2  # pixels
             self.a2a_line_width = 3 #pixels
 
-            self.screen_width = self.env_size[0] * self.pixel_size
-            self.screen_height = self.env_size[1] * self.pixel_size
+            self.screen_width = round(self.env_size[0] * self.pixel_size)
+            self.screen_height = round(self.env_size[1] * self.pixel_size)
 
             #render background
             self.render_background = pygame.surfarray.make_surface(
@@ -1633,10 +1636,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         reset_obs = {agent_id: self.state_to_obs(agent_id, self.normalize) for agent_id in self.players}
 
         if self.render_mode:
-            #get date and time
-            now = datetime.now()
-            dt_string = now.strftime("%m-%d-%Y_%H-%M-%S")
-            self.render_buffer = {dt_string: []}
+            if self.record_render:
+                self.buffer_to_video()
+                self.render_buffer = []
+
             self._render()
 
         return reset_obs
@@ -2459,7 +2462,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
     def _generate_intersection_geoms_from_obstacles(self, obstacle):
         if isinstance(obstacle, PolygonObstacle):
-            #TODO: just make these polygons maybe. It seems to be faster for shapely intersection calculations
             vertices = obstacle.anchor_points
             geoms = [LineString([vertex, vertices[(i+1) % len(vertices)]]) for i, vertex in enumerate(vertices)]
         else: #CircleObstacle
@@ -2648,7 +2650,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.clock.tick(self.render_fps)
             pygame.display.flip()
 
-        elif self.render_mode == "rgb_array":
+        if self.record_render:
             self.render_buffer.append(
                 np.transpose(np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2))
             )
@@ -2661,19 +2663,25 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
     def buffer_to_video(self):
         """Convert and save current render buffer as a video"""
-        video_file_dir = str(pathlib.Path(__file__).resolve().parents[1] / 'videos')
-        if not os.path.isdir(video_file_dir):
-            os.mkdir(video_file_dir)
+        if len(self.render_buffer) > 0:
+            video_file_dir = str(pathlib.Path(__file__).resolve().parents[1] / 'videos')
+            if not os.path.isdir(video_file_dir):
+                os.mkdir(video_file_dir)
 
-        video_id = next(iter(self.render_buffer.keys()))
-        video_file_name = f"pyquaticus_{video_id}.mp4"
-        video_file_path = os.path.join(video_file_dir, video_file_name)
+            now = datetime.now() #get date and time
+            video_id = now.strftime("%m-%d-%Y_%H-%M-%S")
 
-        out = cv2.VideoWriter(video_file_path, cv2.VideoWriter_fourcc(*'mp4v'), self.render_fps, (self.screen_width, self.screen_height))
-        for img in self.render_buffer.values():
-            out.write(img)
+            video_file_name = f"pyquaticus_{video_id}.avi"
+            video_file_path = os.path.join(video_file_dir, video_file_name)
 
-        out.release()
+            out = cv2.VideoWriter(video_file_path, cv2.VideoWriter_fourcc('I','4','2','0'), self.render_fps, (self.screen_width, self.screen_height))
+            for img in self.render_buffer:
+                out.write(cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+
+            out.release()
+        else:
+            print("Attempted to save video but render_buffer is empty!")
+            print()
 
     def close(self):
         """Overridden method inherited from `Gym`."""

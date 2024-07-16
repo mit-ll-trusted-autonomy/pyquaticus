@@ -35,7 +35,7 @@ config_dict_std = {
     ),  # Cooldown on an agent (seconds) after they tag another agent, to prevent consecutive tags
     "lidar_obs": False, #lidar (ray-casting model) observations
     "lidar_range": np.linalg.norm([160.0, 80.0]), # float (meters) or "auto"
-    "num_lidar_rays": 16, # numbers of rays for lidar
+    "num_lidar_rays": 32, # numbers of rays for lidar
     # MOOS dynamics parameters
     "max_speed": MAX_SPEED,  # meters / s
     "speed_factor": 20.0,  # Multiplicative factor for desired_speed -> desired_thrust

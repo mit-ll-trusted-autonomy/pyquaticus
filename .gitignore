@@ -10,3 +10,4 @@ pyquaticus.egg-info/
 _version.py
 *.mp4
 __mapcache__/
+videos/
