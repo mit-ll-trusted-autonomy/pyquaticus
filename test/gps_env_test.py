@@ -143,9 +143,9 @@ def main():
     config["red_flag_home"] = (41.3512143, -74.0608635)
     config["flag_homes_unit"] = "ll"
     config["sim_speedup_factor"] = 10
-    config["max_time"] = 240
+    config["max_time"] = 750
     config["screen_frac"] = 0.3 
-    config["lidar_obs"] = True
+    # config["lidar_obs"] = True
     config["num_lidar_rays"] = 150
     config["lidar_range"] = 40
     # config["render_fps"] = 10
@@ -153,7 +153,7 @@ def main():
     
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
     try:
-        env = pyquaticus_v0.PyQuaticusEnv(render_mode='human', render_lidar=True, team_size=1, config_dict=config)
+        env = pyquaticus_v0.PyQuaticusEnv(render_mode='human', render_lidar=False, render_agent_trajs=True, team_size=2, config_dict=config)
     except Warning as err:
         ...
     red_policy = args.red_policy

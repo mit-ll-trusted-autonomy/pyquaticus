@@ -46,7 +46,14 @@ from pettingzoo import ParallelEnv
 from pygame import draw, SRCALPHA, surfarray
 from pygame.math import Vector2
 from pygame.transform import rotozoom
-from pyquaticus.config import ACTION_MAP, config_dict_std, EQUATORIAL_RADIUS, LIDAR_DETECTION_CLASS_MAP, POLAR_RADIUS
+from pyquaticus.config import (
+    ACTION_MAP,
+    config_dict_std,
+    EQUATORIAL_RADIUS,
+    LIDAR_DETECTION_CLASS_MAP,
+    MAX_SPEED,
+    POLAR_RADIUS
+)
 from pyquaticus.structs import CircleObstacle, Flag, PolygonObstacle, RenderingPlayer, Team
 from pyquaticus.utils.obs_utils import ObsNormalizer
 from pyquaticus.utils.pid import PID
@@ -55,6 +62,7 @@ from pyquaticus.utils.utils import (
     clip,
     closest_point_on_line,
     get_rot_angle,
+    get_screen_res,
     heading_angle_conversion,
     mag_bearing_to,
     mag_heading_to_vec,
@@ -65,7 +73,7 @@ from pyquaticus.utils.utils import (
 )
 from scipy.ndimage import label
 from shapely import intersection, LineString, Point, Polygon
-from typing import Optional
+from typing import Optional, Union
 
 
 class PyQuaticusEnvBase(ParallelEnv, ABC):
@@ -183,7 +191,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             max_lidar_dist = [self.lidar_range]
             min_dist = [0.0]
             max_bool, min_bool = [1.0], [0.0]
-            max_speed, min_speed = [self.max_speed], [0.0]
+            max_speed, min_speed = [MAX_SPEED], [0.0]
             max_score, min_score = [self.max_score], [0.0]
 
             agent_obs_normalizer.register("scrimmage_line_bearing", max_bearing)
@@ -207,7 +215,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             max_dist_scrimmage = [self.env_diag]
             min_dist = [0.0]
             max_bool, min_bool = [1.0], [0.0]
-            max_speed, min_speed = [self.max_speed], [0.0]
+            max_speed, min_speed = [MAX_SPEED], [0.0]
             max_score, min_score = [self.max_score], [0.0]
             agent_obs_normalizer.register("opponent_home_bearing", max_bearing)
             agent_obs_normalizer.register("opponent_home_distance", max_dist, min_dist)
@@ -573,10 +581,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         team_size: int = 1,
         reward_config: dict = None,
         config_dict=config_dict_std,
-        render_mode: Optional[str] = None,
-        render_agent_ids: Optional[bool] = False,
-        render_lidar: Optional[bool] = False,
-        record_render: Optional[bool] = False
+        render_mode: Optional[str] = None
     ):
         super().__init__()
         self.config_dict = config_dict
@@ -591,6 +596,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.game_score = {'blue_captures':0, 'blue_tags':0, 'blue_grabs':0, 'red_captures':0, 'red_tags':0, 'red_grabs':0}    
         self.render_mode = render_mode
         self.render_ids = render_agent_ids
+        self.render_trajs = render_agent_trajs
         self.render_lidar = render_lidar
         self.record_render = record_render
         self.render_buffer = []
@@ -872,7 +878,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 if self.teleport_on_tag:
                     player.reset()
                 else:
-                    if self.tag_on_wall_collision:
+                    if self.tag_on_collision:
                         self.state["agent_tagged"][player.id] = 1
                         player.is_tagged = True
                     player.rotate(copy.deepcopy(player.prev_pos))
@@ -1199,38 +1205,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             with the standard configuration value.
         """
         ### Set Variables from Configuration Dictionary ###
+        # Geometry parameters
         self.gps_env = config_dict.get("gps_env", config_dict_std["gps_env"])
         self.topo_contour_eps = config_dict.get("topo_contour_eps", config_dict_std["topo_contour_eps"])
-        agent_radius = config_dict.get(
-            "agent_radius", config_dict_std["agent_radius"]
-        )
-        flag_radius = agent_radius  # agent and flag radius will be the same
-        catch_radius = config_dict.get(
-            "catch_radius", config_dict_std["catch_radius"]
-        )
-        flag_keepout = config_dict.get(
-            "flag_keepout", config_dict_std["flag_keepout"]
-        )
-        self.tau = config_dict.get("tau", config_dict_std["tau"])
-        self.sim_speedup_factor = config_dict.get("sim_speedup_factor", config_dict_std["sim_speedup_factor"])
-        self.max_time = config_dict.get("max_time", config_dict_std["max_time"])
-        self.max_score = config_dict.get("max_score", config_dict_std["max_score"])
         self.screen_frac = config_dict.get("screen_frac", config_dict_std["screen_frac"])
-        self.max_screen_size = config_dict.get(
-            "max_screen_size", config_dict_std["max_screen_size"]
-        )
         self.render_fps = config_dict.get("render_fps", config_dict_std["render_fps"])
-        self.normalize = config_dict.get("normalize", config_dict_std["normalize"])
-        self.tagging_cooldown = config_dict.get(
-            "tagging_cooldown", config_dict_std["tagging_cooldown"]
-        )
-        self.teleport_on_tag = config_dict.get("teleport_on_tag", config_dict_std["teleport_on_tag"])
-        self.tag_on_wall_collision = config_dict.get("tag_on_wall_collision", config_dict_std["tag_on_wall_collision"])
-        self.lidar_obs = config_dict.get("lidar_obs", config_dict_std["lidar_obs"])
-        lidar_range = config_dict.get("lidar_range", config_dict_std["lidar_range"])
-        self.num_lidar_rays = config_dict.get("num_lidar_rays", config_dict_std["num_lidar_rays"])
 
-        #MOOS dynamics parameters
+        # MOOS dynamics parameters
         self.max_speed = config_dict.get("max_speed", config_dict_std["max_speed"])
         self.speed_factor = config_dict.get("speed_factor", config_dict_std["speed_factor"])
         self.thrust_map = config_dict.get("thrust_map", config_dict_std["thrust_map"])
@@ -1241,15 +1222,33 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.max_acc = config_dict.get("max_acc", config_dict_std["max_acc"])
         self.max_dec = config_dict.get("max_dec", config_dict_std["max_dec"])
 
-        if config_dict.get(
-            "suppress_numpy_warnings", config_dict_std["suppress_numpy_warnings"]
-        ):
+        # Simulation parameters
+        self.tau = config_dict.get("tau", config_dict_std["tau"])
+        self.sim_speedup_factor = config_dict.get("sim_speedup_factor", config_dict_std["sim_speedup_factor"])
+
+        # Game parameters
+        self.max_score = config_dict.get("max_score", config_dict_std["max_score"])
+        self.max_time = config_dict.get("max_time", config_dict_std["max_time"])
+        self.tagging_cooldown = config_dict.get("tagging_cooldown", config_dict_std["tagging_cooldown"])
+        self.teleport_on_tag = config_dict.get("teleport_on_tag", config_dict_std["teleport_on_tag"])
+        self.tag_on_collision = config_dict.get("tag_on_collision", config_dict_std["tag_on_collision"])
+
+        # Observation parameters
+        self.normalize = config_dict.get("normalize", config_dict_std["normalize"])
+        self.lidar_obs = config_dict.get("lidar_obs", config_dict_std["lidar_obs"])
+        self.num_lidar_rays = config_dict.get("num_lidar_rays", config_dict_std["num_lidar_rays"])
+
+        # Rendering parameters
+        #TODO
+
+        # Miscellaneous parameters
+        if config_dict.get("suppress_numpy_warnings", config_dict_std["suppress_numpy_warnings"]):
             # Suppress numpy warnings to avoid printing out extra stuff to the console
             np.seterr(all="ignore")
 
 
         ### Environment Geometry Construction ###
-        #basic env features
+        # Basic environment features
         env_bounds = config_dict.get("env_bounds", config_dict_std["env_bounds"])
         env_bounds_unit = config_dict.get("env_bounds_unit", config_dict_std["env_bounds_unit"])
 
@@ -1260,6 +1259,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         scrimmage_coords = config_dict.get("scrimmage_coords", config_dict_std["scrimmage_coords"])
         scrimmage_coords_unit = config_dict.get("scrimmage_coords_unit", config_dict_std["scrimmage_coords_unit"])
+
+        agent_radius = config_dict.get("agent_radius", config_dict_std["agent_radius"])
+        flag_radius = config_dict.get("flag_radius", config_dict_std["flag_radius"])
+        flag_keepout = config_dict.get("flag_keepout", config_dict_std["flag_keepout"])
+        catch_radius = config_dict.get("catch_radius", config_dict_std["catch_radius"])
+        lidar_range = config_dict.get("lidar_range", config_dict_std["lidar_range"])
         
         self._build_env_geom(
             env_bounds=env_bounds,
@@ -1270,15 +1275,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             scrimmage_coords_unit=scrimmage_coords_unit,
             agent_radius=agent_radius,
             flag_radius=flag_radius,
-            catch_radius=catch_radius,
             flag_keepout=flag_keepout,
+            catch_radius=catch_radius,
             lidar_range=lidar_range
         )
 
-        #aquaticus point field
+        # Aquaticus point field
         #TODO
 
-        #environment corners
+        # Environment corners
         self.env_ll = np.array([0.0, 0.0], dtype=np.float32)
         self.env_lr = np.array([self.env_size[0], 0.0], dtype=np.float32)
         self.env_ul = np.array([0.0, self.env_size[1]], dtype=np.float32)
@@ -1286,7 +1291,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # ll = lower left, lr = lower right
         # ul = upper left, ur = upper right
 
-        #obstacles
+        # Obstacles
         obstacle_params = config_dict.get("obstacles", config_dict_std["obstacles"])
 
         if self.gps_env:
@@ -1320,7 +1325,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         elif obstacle_params is not None:
             raise TypeError(f"Expected obstacle_params to be None or a dict, not {type(obstacle_params)}")
 
-        #ray casting
+        # Ray casting
         if self.lidar_obs:
             self.lidar_ray_headings = np.linspace(0, (self.num_lidar_rays - 1) * 360 / self.num_lidar_rays, self.num_lidar_rays)
 
@@ -1339,25 +1344,25 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 [geom for obstacle in self.obstacles for geom in self._generate_intersection_geoms_from_obstacles(obstacle)]
             )
 
-        #occupancy map
+        # Occupancy map
         #TODO
 
         ### Environment Rendering ###
         if self.render_mode:
-            # Pygame Orientation Vector
-            self.UP = Vector2((0.0, 1.0))
+            # pygame Orientation Vector
+            self.PYGAME_UP = Vector2((0.0, 1.0))
 
-            #pixel size
-            self.pixel_size = (self.screen_frac * self.max_screen_size[0]) / self.env_size[0]
-
-            # arena
+            # pixel sizes
+            max_screen_size = get_screen_res()
+            self.pixel_size = (self.screen_frac * max_screen_size[0]) / self.env_size[0]
             self.border_width = 2  # pixels
             self.a2a_line_width = 3 #pixels
 
+            # pygame screen size
             self.screen_width = round(self.env_size[0] * self.pixel_size)
             self.screen_height = round(self.env_size[1] * self.pixel_size)
 
-            #render background
+            # render background
             self.render_background = pygame.surfarray.make_surface(
                 np.transpose(self.background_img, (1,0,2)) #pygame assumes images are (h, w, 3)
             )
@@ -1371,17 +1376,16 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         round(self.pixel_size * self.env_size[0]),
                         round(self.pixel_size * self.env_size[1])
                     ], 
-                    self.max_screen_size
+                    max_screen_size
                 )
             )
             assert (
-                self.pixel_size * self.env_size[0] <= self.max_screen_size[0] and
-                self.pixel_size * self.env_size[1] <= self.max_screen_size[1]
+                self.pixel_size * self.env_size[0] <= max_screen_size[0] and
+                self.pixel_size * self.env_size[1] <= max_screen_size[1]
             ), world_screen_err_msg
 
-
         ### config checks ###
-        # check that time between frames (1/render_fps) is not larger than timestep (tau)
+        # Check that time between frames (1/render_fps) is not larger than timestep (tau)
         frame_rate_err_msg = (
             "Specified frame rate ({}) creates time intervals between frames larger"
             " than specified timestep ({})".format(self.render_fps, self.tau)
@@ -1390,7 +1394,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         self.num_renders_per_step = int(self.render_fps * self.tau)
 
-        # check that time warp is a integer >= 1 and only active if rendering is on
+        # Check that time warp is an integer >= 1
         if self.sim_speedup_factor < 1:
             print("Warning: sim_speedup_factor must be an integer >= 1! Defaulting to 1.")
             self.sim_speedup_factor = 1
@@ -1639,6 +1643,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             if self.record_render:
                 self.buffer_to_video()
                 self.render_buffer = []
+            if self.render_trajs:
+                self.traj_render_buffer = {agent_id: [] for agent_id in self.players}
 
             self._render()
 
@@ -1814,8 +1820,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         scrimmage_coords_unit: str,
         agent_radius: float,
         flag_radius: float,
-        catch_radius: float,
         flag_keepout: float,
+        catch_radius: float,
         lidar_range: float
     ):
         if (
@@ -2577,27 +2583,39 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             for player in teams_players:
                 blit_pos = self.env_to_screen(player.pos)
+                if team == Team.BLUE_TEAM:
+                    agent_color = "blue"
+                else:
+                    agent_color = "red"
+
+                #render trajectory
+                if self.render_trajs:
+                    for i, (prev_agent_surf, prev_blit_pos) in enumerate(self.traj_render_buffer[player.id]):
+                        # draw.circle(
+                        #     self.screen,
+                        #     agent_color,
+                        #     point,
+                        #     1,
+                        #     width=0
+                        # )
+                        self.screen.blit(prev_agent_surf, prev_blit_pos)
 
                 # render lidar
                 if self.lidar_obs and self.render_lidar:
-                    if team == Team.BLUE_TEAM:
-                        lidar_color = "blue"
-                    else:
-                        lidar_color = "red"
                     for i in range(self.num_lidar_rays):
                         draw.line(
                             self.screen,
-                            lidar_color,
+                            agent_color,
                             blit_pos,
                             self.env_to_screen(self.state["lidar_ends"][player.id][i]),
-                            width=1
+                            width=2
                         )
                 # render tagging
                 player.render_tagging(self.tagging_cooldown)
 
                 # heading
                 orientation = Vector2(list(mag_heading_to_vec(1.0, player.heading)))
-                ref_angle = -orientation.angle_to(self.UP)
+                ref_angle = -orientation.angle_to(self.PYGAME_UP)
 
                 # transform position to pygame coordinates
                 rotated_surface = rotozoom(player.pygame_agent, ref_angle, 1.0)
@@ -2606,6 +2624,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
                 # blit agent onto screen
                 self.screen.blit(rotated_surface, rotated_blit_pos)
+                if self.render_trajs:
+                    self.traj_render_buffer[player.id].append((rotated_surface, rotated_blit_pos))
 
                 #blit agent number onto agent
                 agent_id_blit_poses[player.id] = (
