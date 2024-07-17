@@ -584,76 +584,59 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         render_mode: Optional[str] = None
     ):
         super().__init__()
+        self.team_size = team_size
+        self.num_blue = team_size
+        self.num_red = team_size
+        self.reward_config = {} if reward_config is None else reward_config
         self.config_dict = config_dict
-
-        #Game score used to determine winner of game for MCTF competition
-        #blue_captures: Represents the number of times the blue team has grabbed reds flag and brought it back to their side
-        #blue_tags: The number of times the blue team successfully tagged an opponent
-        #blue_grabs: The number of times the blue team grabbed the opponents flag
-        #red_captures: Represents the number of times the blue team has grabbed reds flag and brought it back to their side
-        #red_tags: The number of times the blue team successfully tagged an opponent
-        #red_grabs: The number of times the blue team grabbed the opponents flag
-        self.game_score = {'blue_captures':0, 'blue_tags':0, 'blue_grabs':0, 'red_captures':0, 'red_tags':0, 'red_grabs':0}    
         self.render_mode = render_mode
-        self.render_ids = render_agent_ids
-        self.render_trajs = render_agent_trajs
-        self.render_lidar = render_lidar
-        self.record_render = record_render
-        self.render_buffer = []
 
-        # set variables from config
-        self.set_config_values(self.config_dict)
+        self.reset_count = 0
+        self.current_time = 0
+        self.learning_iteration = 0
 
         self.state = {}
         self.dones = {}
-        self.reset_count = 0
-
-        self.learning_iteration = 0
+        self.game_score = {'blue_captures':0, 'blue_tags':0, 'blue_grabs':0, 'red_captures':0, 'red_tags':0, 'red_grabs':0}
+        #blue_captures: number of times the blue team has grabbed (picked up) red's flag and brought it back to the blue side
+        #blue_tags: number of times the blue team successfully tagged an opponent
+        #blue_grabs: number of times the blue team grabbed (picked up) the opponents flag
+        #red_captures: number of times the red team has grabbed blue's flag and brought it back to the red side
+        #red_tags: number of times the blue team successfully tagged an opponent
+        #red_grabs: number of times the blue team grabbed (picked up) the opponents flag
 
         self.seed()
 
-        self.current_time = 0
-
-        self.num_blue = team_size
-        self.num_red = team_size
-
-        self.players = {} # a dictionary mapping player ids (or names) to player objects
-        b_players = []
-        r_players = []
-        self.team_size = team_size
+        # Set variables from config
+        self.set_config_values(config_dict)
 
         # Create players, use IDs from [0, (2 * team size) - 1] so their IDs can also be used as indices.
-        for i in range(0, self.team_size):
+        b_players = []
+        r_players = []
+
+        for i in range(0, self.num_blue):
             b_players.append(
-                RenderingPlayer(i, Team.BLUE_TEAM, (self.agent_radius * self.pixel_size), self.config_dict, render_mode)
+                RenderingPlayer(i, Team.BLUE_TEAM, (self.agent_radius * self.pixel_size), render_mode)
             )
-        for i in range(self.team_size, 2 * self.team_size):
+        for i in range(self.num_blue, self.num_blue + self.num_red):
             r_players.append(
-                RenderingPlayer(i, Team.RED_TEAM, (self.agent_radius * self.pixel_size), self.config_dict, render_mode)
+                RenderingPlayer(i, Team.RED_TEAM, (self.agent_radius * self.pixel_size), render_mode)
             )
-        self.players = {player.id:player for player in itertools.chain(b_players, r_players)}
 
+        self.players = {player.id: player for player in itertools.chain(b_players, r_players)} #maps player ids (or names) to player objects
         self.agents = [agent_id for agent_id in self.players]
-        self.possible_agents = self.agents[:]
 
-        # Agent inidices of each team
+        # Agents (player objects) of each team
         self.agents_of_team = {Team.BLUE_TEAM: b_players, Team.RED_TEAM: r_players}
 
-        # Agent to team members (ids) mapping
+        # Mappings from agent ids to team member ids and opponent ids
         self.agent_to_team_ids = {
             agent_id: [p.id for p in self.agents_of_team[player.team]] for agent_id, player in self.players.items()
         }
-
-        # Agent to opponent ids mapping
         self.agent_to_opp_ids = {
             agent_id: [p.id for p in self.agents_of_team[Team(not player.team.value)]] for agent_id, player in self.players.items()
         }
 
-        # Setup Rewards
-        self.reward_config = {} if reward_config is None else reward_config
-        for a in self.players:
-            if a not in self.reward_config:
-                self.reward_config[a] = None
         # Create a PID controller for each agent
         if self.render_mode:
             dt = 1/self.render_fps
@@ -667,36 +650,34 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 "heading": PID(dt=dt, kp=0.35, ki=0.0, kd=0.07, integral_max=0.07),
             }
 
-        self.params = {agent_id: {} for agent_id in self.players}
-        self.prev_params = {agent_id: {} for agent_id in self.players}
         # Create the list of flags that are indexed by self.flags[int(player.team)]
-
         self.flags = []
         for team in Team:
             self.flags.append(Flag(team))
 
-        # Set tagging cooldown
-        for player in self.players.values():
-            player.tagging_cooldown = self.tagging_cooldown
-
-
-        assert len(self.agents_of_team[Team.BLUE_TEAM]) == len(
-            self.agents_of_team[Team.RED_TEAM]
-        )
-        num_on_team = len(self.agents_of_team[Team.BLUE_TEAM])
-        self.agent_obs_normalizer = self._register_state_elements(num_on_team, len(self.obstacles))
-
+        # Setup action and observation spaces
         self.action_spaces = {
             agent_id: self.get_agent_action_space() for agent_id in self.players
         }
         self.observation_spaces = {
             agent_id: self.get_agent_observation_space() for agent_id in self.players
         }
+        self.agent_obs_normalizer = self._register_state_elements(team_size, len(self.obstacles))
 
-        # pygame screen
+        # Setup rewards and params
+        for a in self.players:
+            if a not in self.reward_config:
+                self.reward_config[a] = None
+
+        self.params = {agent_id: {} for agent_id in self.players}
+        self.prev_params = {agent_id: {} for agent_id in self.players}
+
+        # Pygame
         self.screen = None
         self.clock = None
         self.isopen = False
+        self.render_buffer = []
+        self.traj_render_buffer = {}
 
     def seed(self, seed=None):
         """
@@ -1208,8 +1189,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # Geometry parameters
         self.gps_env = config_dict.get("gps_env", config_dict_std["gps_env"])
         self.topo_contour_eps = config_dict.get("topo_contour_eps", config_dict_std["topo_contour_eps"])
-        self.screen_frac = config_dict.get("screen_frac", config_dict_std["screen_frac"])
-        self.render_fps = config_dict.get("render_fps", config_dict_std["render_fps"])
 
         # MOOS dynamics parameters
         self.max_speed = config_dict.get("max_speed", config_dict_std["max_speed"])
@@ -1239,7 +1218,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.num_lidar_rays = config_dict.get("num_lidar_rays", config_dict_std["num_lidar_rays"])
 
         # Rendering parameters
-        #TODO
+        self.render_fps = config_dict.get("render_fps", config_dict_std["render_fps"])
+        self.screen_frac = config_dict.get("screen_frac", config_dict_std["screen_frac"])
+        self.render_ids = config_dict.get("render_agent_ids", config_dict_std["render_agent_ids"])
+        self.render_trajs = config_dict.get("render_trajs", config_dict_std["render_trajs"])
+        self.render_traj_freq = config_dict.get("render_traj_freq", config_dict_std["render_traj_freq"])
+        self.render_lidar = config_dict.get("render_lidar", config_dict_std["render_lidar"])
+        self.render_field_points = config_dict.get("render_field_points", config_dict_std["render_field_points"])
+        self.record_render = config_dict.get("record_render", config_dict_std["record_render"])
 
         # Miscellaneous parameters
         if config_dict.get("suppress_numpy_warnings", config_dict_std["suppress_numpy_warnings"]):
@@ -1349,18 +1335,17 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         ### Environment Rendering ###
         if self.render_mode:
-            # pygame Orientation Vector
+            # pygame orientation vector
             self.PYGAME_UP = Vector2((0.0, 1.0))
 
             # pixel sizes
             max_screen_size = get_screen_res()
             self.pixel_size = (self.screen_frac * max_screen_size[0]) / self.env_size[0]
-            self.border_width = 2  # pixels
-            self.a2a_line_width = 3 #pixels
-
-            # pygame screen size
             self.screen_width = round(self.env_size[0] * self.pixel_size)
             self.screen_height = round(self.env_size[1] * self.pixel_size)
+            
+            self.border_width = 2  # pixels
+            self.a2a_line_width = 3 #pixels
 
             # render background
             self.render_background = pygame.surfarray.make_surface(
@@ -1372,10 +1357,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             world_screen_err_msg = (
                 "Specified env_size {} exceeds the maximum size {} in at least one"
                 " dimension".format(
-                    [
-                        round(self.pixel_size * self.env_size[0]),
-                        round(self.pixel_size * self.env_size[1])
-                    ], 
+                    [round(self.pixel_size * self.env_size[0]), round(self.pixel_size * self.env_size[1])], 
                     max_screen_size
                 )
             )
@@ -1384,24 +1366,23 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.pixel_size * self.env_size[1] <= max_screen_size[1]
             ), world_screen_err_msg
 
-        ### config checks ###
-        # Check that time between frames (1/render_fps) is not larger than timestep (tau)
-        frame_rate_err_msg = (
-            "Specified frame rate ({}) creates time intervals between frames larger"
-            " than specified timestep ({})".format(self.render_fps, self.tau)
-        )
-        assert 1 / self.render_fps <= self.tau, frame_rate_err_msg
+            # check that time between frames (1/render_fps) is not larger than timestep (tau)
+            frame_rate_err_msg = (
+                "Specified frame rate ({}) creates time intervals between frames larger"
+                " than specified timestep ({})".format(self.render_fps, self.tau)
+            )
+            assert 1 / self.render_fps <= self.tau, frame_rate_err_msg
 
-        self.num_renders_per_step = int(self.render_fps * self.tau)
+            self.num_renders_per_step = int(self.render_fps * self.tau)
 
-        # Check that time warp is an integer >= 1
-        if self.sim_speedup_factor < 1:
-            print("Warning: sim_speedup_factor must be an integer >= 1! Defaulting to 1.")
-            self.sim_speedup_factor = 1
+            # check that time warp is an integer >= 1
+            if self.sim_speedup_factor < 1:
+                print("Warning: sim_speedup_factor must be an integer >= 1! Defaulting to 1.")
+                self.sim_speedup_factor = 1
 
-        if type(self.sim_speedup_factor) != int:
-            self.sim_speedup_factor = int(np.round(self.sim_speedup_factor))
-            print(f"Warning: Converted sim_speedup_factor to integer: {self.sim_speedup_factor}")
+            if type(self.sim_speedup_factor) != int:
+                self.sim_speedup_factor = int(np.round(self.sim_speedup_factor))
+                print(f"Warning: Converted sim_speedup_factor to integer: {self.sim_speedup_factor}")
 
     def get_distance_between_2_points(self, start: np.array, end: np.array) -> float:
         """
@@ -1418,12 +1399,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     def _set_dones(self):
         """Check all of the end game conditions."""
         # Check if all flags of one team are captured
-        if self.game_score["red_captures"] >= self.max_score:
+        if self.game_score["red_captures"] == self.max_score:
             self.dones["red"] = True
             self.dones["__all__"] = True
             self.message = "Red Wins! Blue Loses"
 
-        elif self.game_score["blue_captures"] >= self.max_score:
+        elif self.game_score["blue_captures"] == self.max_score:
             self.dones["blue"] = True
             self.dones["__all__"] = True
             self.message = "Blue Wins! Red Loses"
@@ -1641,8 +1622,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         if self.render_mode:
             if self.record_render:
-                self.buffer_to_video()
-                self.render_buffer = []
+                if len(self.render_buffer) > 0:
+                    self.buffer_to_video()
+                    self.render_buffer = []
             if self.render_trajs:
                 self.traj_render_buffer = {agent_id: [] for agent_id in self.players}
 
@@ -2516,7 +2498,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.screen, (0, 0, 0), self.env_to_screen(self.scrimmage_coords[0]), self.env_to_screen(self.scrimmage_coords[1]), width=self.border_width
         )
         #Draw Points Debugging
-        if self.config_dict["render_field_points"]:
+        if self.render_field_points:
             for v in self.config_dict["aquaticus_field_points"]:
                 draw.circle(self.screen, (128,0,128), self.env_to_screen(self.config_dict["aquaticus_field_points"][v]), 5,)
 

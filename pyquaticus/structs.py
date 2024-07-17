@@ -82,13 +82,11 @@ class RenderingPlayer(Player):
         is_tagged: True iff this player is currently tagged
         #### new fields
         r: Agent radius
-        config_dict: the configuration dictionary
         home: This agent's home location upon a reset
         pygame_agent: The pygame object that is drawn on screen.
     """
 
     r: float
-    config_dict: dict
     render_mode: str
     home: list[float] = field(init=False, default_factory=list)
 

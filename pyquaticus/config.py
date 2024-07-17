@@ -27,9 +27,9 @@ config_dict_std = {
 
     #notes: obstacles are specified via dictionary. Keys are the obstacle type ("circle" or "polygon"). 
     #values are the parameters for the obstacle. 
-    #note: For circles, it should be a list of tuples: (radius, (center_x, center_y)) all in meters
-    #note: For polygons, it should be a list of tuples: ((x1, y1), (x2, y2), (x3, y3), ..., (xn, yn)) all in meters
-    #note for polygons, there is an implied edge between (xn, yn) and (x1, y1), to complete the polygon.
+    #note: for circles, it should be a list of tuples: (radius, (center_x, center_y)) all in meters
+    #note: for polygons, it should be a list of tuples: ((x1, y1), (x2, y2), (x3, y3), ..., (xn, yn)) all in meters
+    #note: for polygons, there is an implied edge between (xn, yn) and (x1, y1), to complete the polygon.
 
     # MOOS dynamics parameters
     "max_speed": MAX_SPEED, # meters / s
