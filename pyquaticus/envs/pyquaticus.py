@@ -659,10 +659,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.action_spaces = {
             agent_id: self.get_agent_action_space() for agent_id in self.players
         }
+
+        self.agent_obs_normalizer = self._register_state_elements(team_size, len(self.obstacles))
         self.observation_spaces = {
             agent_id: self.get_agent_observation_space() for agent_id in self.players
         }
-        self.agent_obs_normalizer = self._register_state_elements(team_size, len(self.obstacles))
 
         # Setup rewards and params
         for a in self.players:

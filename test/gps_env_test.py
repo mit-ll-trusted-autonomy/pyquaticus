@@ -145,15 +145,18 @@ def main():
     config["sim_speedup_factor"] = 10
     config["max_time"] = 750
     config["screen_frac"] = 0.3 
-    # config["lidar_obs"] = True
+    config["lidar_obs"] = True
     config["num_lidar_rays"] = 150
     config["lidar_range"] = 40
+    config["render_lidar"] = True
+    config["render_trajs"] = True
+    # config["record_render"] = True
     # config["render_fps"] = 10
     # config["normalize"] = False
     
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
     try:
-        env = pyquaticus_v0.PyQuaticusEnv(render_mode='human', render_lidar=False, render_agent_trajs=True, team_size=2, config_dict=config)
+        env = pyquaticus_v0.PyQuaticusEnv(team_size=2, render_mode='human', config_dict=config)
     except Warning as err:
         ...
     red_policy = args.red_policy
