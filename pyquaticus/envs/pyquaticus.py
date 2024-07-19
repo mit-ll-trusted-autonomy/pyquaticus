@@ -1222,10 +1222,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.render_fps = config_dict.get("render_fps", config_dict_std["render_fps"])
         self.screen_frac = config_dict.get("screen_frac", config_dict_std["screen_frac"])
         self.render_ids = config_dict.get("render_agent_ids", config_dict_std["render_agent_ids"])
+        self.render_field_points = config_dict.get("render_field_points", config_dict_std["render_field_points"])
         self.render_trajs = config_dict.get("render_trajs", config_dict_std["render_trajs"])
         self.render_traj_freq = config_dict.get("render_traj_freq", config_dict_std["render_traj_freq"])
+        
+        self.render_traj_cutoff = config_dict.get("render_traj_cutoff", config_dict_std["render_traj_cutoff"])
+        if self.render_traj_cutoff is None:
+            self.render_traj_cutoff = -1
+
         self.render_lidar = config_dict.get("render_lidar", config_dict_std["render_lidar"])
-        self.render_field_points = config_dict.get("render_field_points", config_dict_std["render_field_points"])
         self.record_render = config_dict.get("record_render", config_dict_std["record_render"])
 
         # Miscellaneous parameters
@@ -1349,10 +1354,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.a2a_line_width = 3 #pixels
 
             # render background
-            self.render_background = pygame.surfarray.make_surface(
-                np.transpose(self.background_img, (1,0,2)) #pygame assumes images are (h, w, 3)
-            )
-            self.render_background = pygame.transform.scale(self.render_background, (self.screen_width, self.screen_height))
+            if self.gps_env:
+                pygame_background_img = pygame.surfarray.make_surface(
+                    np.transpose(self.background_img, (1,0,2)) #pygame assumes images are (h, w, 3)
+                )
+                self.pygame_background_img = pygame.transform.scale(pygame_background_img, (self.screen_width, self.screen_height))
 
             # check that world size (pixels) does not exceed the screen dimensions
             world_screen_err_msg = (
@@ -1816,18 +1822,17 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if self.gps_env:
             ### environment bounds ###
             if self._is_auto_string(env_bounds):
+                flag_home_blue = np.asarray(flag_homes[Team.BLUE_TEAM])
+                flag_home_red = np.asarray(flag_homes[Team.RED_TEAM]) 
+
                 if flag_homes_unit == "m":
-                    raise Exception("Flag homes must be specified in aboslute coordinates (lat/long or web mercator xy) to auto generate environment bounds")
+                    raise Exception(
+                        "Flag homes must be specified in aboslute coordinates (lat/long or web mercator xy) to auto-generate gps environment bounds"
+                    )
                 elif flag_homes_unit == "ll":
                     #convert flag poses to web mercator xy
-                    flag_home_blue = np.round(flag_homes[Team.BLUE_TEAM], 7)
-                    flag_home_blue = mt.xy(*flag_home_blue[-1::-1])
-
-                    flag_home_red = np.round(flag_homes[Team.RED_TEAM], 7)
-                    flag_home_red = mt.xy(*flag_home_red[-1::-1])
-
-                flag_home_blue = np.asarray(flag_home_blue)
-                flag_home_red = np.asarray(flag_home_red) 
+                    flag_home_blue = np.asarray(mt.xy(*flag_home_blue[-1::-1]))
+                    flag_home_red = np.asarray(mt.xy(*flag_home_red[-1::-1]))
                     
                 flag_vec = flag_home_blue - flag_home_red
                 flag_distance = np.linalg.norm(flag_vec)
@@ -1851,6 +1856,16 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 env_bounds = np.asarray(env_bounds)
 
                 if env_bounds_unit == "m":
+                    #check for exceptions
+                    if (
+                        self._is_auto_string(flag_homes[Team.BLUE_TEAM]) or
+                        self._is_auto_string(flag_homes[Team.RED_TEAM]) or
+                        flag_homes_unit == "m"
+                    ):
+                        raise Exception(
+                            "Flag locations must be specified in aboslute coordinates (lat/long or web mercator xy) \
+when gps environment bounds are specified in meters")
+
                     if len(env_bounds.shape) == 1:
                         if np.any(env_bounds == 0.):
                             raise Exception("Environment max bounds must be > 0 when specified in meters")
@@ -1866,17 +1881,22 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         if np.any(env_bounds[1] == 0.):
                             raise Exception("Environment max bounds must be > 0 when specified in meters")
 
+                    #get flag midpoint
+                    if flag_homes_unit == "wm_xy":
+                        flag_home_blue = np.flip(_sm2ll(*flag_homes[Team.BLUE_TEAM]))
+                        flag_home_red = np.flip(_sm2ll(*flag_homes[Team.RED_TEAM]))
+
                     geodict_flags = Geodesic.WGS84.Inverse(
-                        lat1=flag_homes[Team.BLUE_TEAM][0],
-                        lon1=flag_homes[Team.BLUE_TEAM][1],
-                        lat2=flag_homes[Team.RED_TEAM][0],
-                        lon2=flag_homes[Team.RED_TEAM][1]
+                        lat1=flag_home_blue[0],
+                        lon1=flag_home_blue[1],
+                        lat2=flag_home_red[0],
+                        lon2=flag_home_red[1]
                     )
                     geodict_flag_midpoint = Geodesic.WGS84.Direct(
-                        lat1=flag_homes[Team.BLUE_TEAM][0],
-                        lon1=flag_homes[Team.BLUE_TEAM][1],
-                        azi1=geodict['azi1'],
-                        s12=geodict['s12']/2
+                        lat1=flag_home_blue[0],
+                        lon1=flag_home_blue[1],
+                        azi1=geodict_flags['azi1'],
+                        s12=geodict_flags['s12']/2
                     )
                     flag_midpoint = (geodict_flag_midpoint['lat2'], geodict_flag_midpoint['lon2'])
 
@@ -1912,7 +1932,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     ])
                 elif env_bounds_unit == "ll":
                     #convert bounds to web mercator xy
-                    env_bounds = np.round(env_bounds, 7)
                     wm_xy_bounds = np.array([
                         mt.xy(*env_bounds[0][-1::-1]),
                         mt.xy(*env_bounds[1][-1::-1])
@@ -1965,10 +1984,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 
                 if flag_homes_unit == "ll":
                     #convert flag poses to web mercator xy
-                    flag_homes[Team.BLUE_TEAM] = np.round(flag_homes[Team.BLUE_TEAM], 7)
                     flag_homes[Team.BLUE_TEAM] = mt.xy(*flag_homes[Team.BLUE_TEAM][-1::-1])
-
-                    flag_homes[Team.RED_TEAM] = np.round(flag_homes[Team.RED_TEAM], 7)
                     flag_homes[Team.RED_TEAM] = mt.xy(*flag_homes[Team.RED_TEAM][-1::-1])
 
             #blue flag
@@ -2298,7 +2314,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 map_cache = pickle.load(f)
 
             topo_img = map_cache["topographical_image"]
-            render_img = map_cache["render_image"]
+            self.background_img = map_cache["render_image"]
         else:
             #retrieve maps from tile provider
             topo_tile_source = cx.providers.CartoDB.DarkMatterNoLabels #DO NOT CHANGE!
@@ -2314,10 +2330,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             )
 
             topo_img = self._crop_tiles(topo_tile[:,:,:-1], topo_ext, *self.env_bounds.flatten(), ll=False)
-            render_img = self._crop_tiles(render_tile[:,:,:-1], topo_ext, *self.env_bounds.flatten(), ll=False)
+            self.background_img = self._crop_tiles(render_tile[:,:,:-1], topo_ext, *self.env_bounds.flatten(), ll=False)
 
             #cache maps
-            map_cache = {"topographical_image": topo_img, "render_image": render_img}
+            map_cache = {"topographical_image": topo_img, "render_image": self.background_img}
             with open(map_cache_path, 'wb') as f:
                 pickle.dump(map_cache, f)
 
@@ -2385,11 +2401,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         #final approximate land mask
         land_mask_approx = border_land_mask_approx * island_mask_approx/255
 
-        #draw contours on render background
-        render_img_bgr = cv2.cvtColor(render_img, cv2.COLOR_RGB2BGR) 
-        contours_img = cv2.drawContours(render_img_bgr, [border_cnt_approx, *island_cnts_approx], -1, (0,0,0), 2)
-        self.background_img = cv2.cvtColor(contours_img, cv2.COLOR_BGR2RGB) #pygame is in RGB
-
         #squeeze contours
         border_cnt = self._img2env_coords(border_cnt_approx.squeeze(), topo_img.shape)
         island_cnts = [self._img2env_coords(cnt.squeeze(), topo_img.shape) for cnt in island_cnts_approx]
@@ -2445,8 +2456,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         return cropped_img
 
     def _img2env_coords(self, cnt, image_shape):
+        #TODO: contour as type float64 to not lose precision
         cnt[:, 0] =  self.env_size[0] * cnt[:, 0] / (image_shape[1] - 1)
         cnt[:, 1] =  self.env_size[1] * (1 - cnt[:, 1] / (image_shape[0] - 1))
+
         return cnt
 
     def _generate_intersection_geoms_from_obstacles(self, obstacle):
@@ -2491,8 +2504,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if self.state == {}:
             return None
 
-        # screen
-        self.screen.blit(self.render_background, (0, 0))
+        # Background
+        if self.gps_env:
+            self.screen.blit(self.pygame_background_img, (0, 0))
+        else:
+            self.screen.fill((255, 255, 255))
 
         # arena border and scrimmage line
         draw.line(
@@ -2501,7 +2517,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         #Draw Points Debugging
         if self.render_field_points:
             for v in self.config_dict["aquaticus_field_points"]:
-                draw.circle(self.screen, (128,0,128), self.env_to_screen(self.config_dict["aquaticus_field_points"][v]), 5,)
+                draw.circle(self.screen, (128, 0, 128), self.env_to_screen(self.config_dict["aquaticus_field_points"][v]), 5,)
 
         agent_id_blit_poses = {}
 
@@ -2556,13 +2572,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         obstacle.radius * self.pixel_size,
                         width=3
                     )
-                # elif isinstance(obstacle, PolygonObstacle):
-                #     draw.polygon(
-                #             self.screen,
-                #             (128, 128, 128),
-                #             [self.env_to_screen(p) for p in obstacle.anchor_points],
-                #             width=3,
-                #         )
+                elif isinstance(obstacle, PolygonObstacle):
+                    draw.polygon(
+                            self.screen,
+                            (128, 128, 128),
+                            [self.env_to_screen(p) for p in obstacle.anchor_points],
+                            width=2,
+                        )
 
             for player in teams_players:
                 blit_pos = self.env_to_screen(player.pos)

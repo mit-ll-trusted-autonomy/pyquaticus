@@ -45,7 +45,7 @@ config_dict_std = {
     "max_dec":      1, # meters / s**2
 
     # Simulation parameters
-    "tau":              0.1, # max dt (seconds) for updating the simulation
+    "tau":              0.1, # dt (seconds) for updating the simulation (length of 1 timestep)
     "sim_speedup_factor": 1, # simulation speed multiplier similar to time warp in MOOS (integer >= 1)
 
     # Game parameters
@@ -65,10 +65,11 @@ config_dict_std = {
     "render_fps":             30, # target number of frames per second
     "screen_frac":          0.75, # fraction of max possible pygame screen size to use for rendering
     "render_agent_ids":    False, # option to render agent id's on agents
-    "render_trajs":         None, # "traj" (dashed trajectory line), "agent" (agents in prev positions), "history" (history obs rendered)
-    "render_traj_freq":        1, # seconds in between trajectory time points to render 
-    "render_lidar":        False, # option to render lidar rays
     "render_field_points": False, # option to see the Aquaticus field points in the environment
+    "render_trajs":         None, # "traj" (dashed trajectory line), "agent" (agents in prev positions), "history" (history obs rendered)
+    "render_traj_freq":        1, # timesteps
+    "render_traj_cutoff":   None, # max length (timesteps) of the traj to render, or None for no limit
+    "render_lidar":        False, # option to render lidar rays
     "record_render":       False, # option to save video of render frames
 
     # Miscellaneous parameters
