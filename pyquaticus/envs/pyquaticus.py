@@ -591,8 +591,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.config_dict = config_dict
         self.render_mode = render_mode
 
-        self.current_time = 0
         self.reset_count = 0
+        self.current_time = 0
         self.learning_iteration = 0
 
         self.state = {}
@@ -737,18 +737,17 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             for _i in range(self.num_renders_per_step):
                 for _j in range(self.sim_speedup_factor):
                     self._move_agents(action_dict, 1/self.render_fps)
-                self.current_time += self.sim_speedup_factor * self.tau
                 if self.lidar_obs:
                     self._update_lidar()
                 self._render()
         else:
             for _ in range(self.sim_speedup_factor):
                 self._move_agents(action_dict, self.tau)
-                self.current_time += self.tau
                 if self.lidar_obs:
                     self._update_lidar()
 
         # set the time
+        self.current_time += self.sim_speedup_factor * self.tau
         self.state["current_time"] = self.current_time
 
         # agent and flag capture checks and more
@@ -1640,7 +1639,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     self.buffer_to_video()
                     self.render_buffer = []
             if self.render_trajs:
-                self.traj_render_buffer = {agent_id: [] for agent_id in self.players}
+                self.traj_render_buffer = {agent_id: [] for agent_id in self.players} #TODO: change list to dict with entries for agent rendering and dot traj
 
             self._render()
 
@@ -2538,11 +2537,11 @@ when gps environment bounds are specified in meters")
                 )
             elif isinstance(obstacle, PolygonObstacle):
                 draw.polygon(
-                    self.screen,
-                    (0, 0, 0),
-                    [self.env_to_screen(p) for p in obstacle.anchor_points],
-                    width=self.boundary_width,
-                )
+                        self.screen,
+                        (0, 0, 0),
+                        [self.env_to_screen(p) for p in obstacle.anchor_points],
+                        width=self.boundary_width,
+                    )
         
         # Aquaticus field points
         if self.render_field_points:
@@ -2594,15 +2593,15 @@ when gps environment bounds are specified in meters")
 
                 #trajectory
                 if self.render_trajs:
-                    for i, (prev_agent_surf, prev_blit_pos) in enumerate(self.traj_render_buffer[player.id]):
-                        # draw.circle(
-                        #     self.screen,
-                        #     color,
-                        #     point,
-                        #     1,
-                        #     width=0
-                        # )
-                        self.screen.blit(prev_agent_surf, prev_blit_pos)
+                    for i, (prev_blit_pos, prev_rot_blit_pos, prev_agent_surf) in enumerate(self.traj_render_buffer[player.id]):
+                        draw.circle(
+                            self.screen,
+                            color,
+                            prev_blit_pos,
+                            1,
+                            width=0
+                        )
+                        # self.screen.blit(prev_agent_surf, prev_blit_pos)
 
                 #lidar
                 if self.lidar_obs and self.render_lidar:
@@ -2677,11 +2676,13 @@ when gps environment bounds are specified in meters")
                                 width=self.a2a_line_width
                             )
 
+        # Render
         if self.render_mode == "human":
             pygame.event.pump()
             self.clock.tick(self.render_fps)
             pygame.display.flip()
 
+        # Record
         if self.record_render:
             self.render_buffer.append(
                 np.transpose(np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2))
