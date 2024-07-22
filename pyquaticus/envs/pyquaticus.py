@@ -591,8 +591,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.config_dict = config_dict
         self.render_mode = render_mode
 
-        self.reset_count = 0
         self.current_time = 0
+        self.reset_count = 0
         self.learning_iteration = 0
 
         self.state = {}
@@ -717,9 +717,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if self.state is None:
             raise Exception("Call reset before using step method.")
 
-        # set the time
-        self.current_time += self.sim_speedup_factor * self.tau
-        self.state["current_time"] = self.current_time
         if not set(raw_action_dict.keys()) <= set(self.players):
             raise ValueError(
                 "Keys of action dict should be player ids but got"
@@ -740,14 +737,19 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             for _i in range(self.num_renders_per_step):
                 for _j in range(self.sim_speedup_factor):
                     self._move_agents(action_dict, 1/self.render_fps)
+                self.current_time += self.sim_speedup_factor * self.tau
                 if self.lidar_obs:
                     self._update_lidar()
                 self._render()
         else:
             for _ in range(self.sim_speedup_factor):
                 self._move_agents(action_dict, self.tau)
+                self.current_time += self.tau
                 if self.lidar_obs:
                     self._update_lidar()
+
+        # set the time
+        self.state["current_time"] = self.current_time
 
         # agent and flag capture checks and more
         self._check_pickup_flags()
@@ -2536,11 +2538,11 @@ when gps environment bounds are specified in meters")
                 )
             elif isinstance(obstacle, PolygonObstacle):
                 draw.polygon(
-                        self.screen,
-                        (0, 0, 0),
-                        [self.env_to_screen(p) for p in obstacle.anchor_points],
-                        width=self.boundary_width,
-                    )
+                    self.screen,
+                    (0, 0, 0),
+                    [self.env_to_screen(p) for p in obstacle.anchor_points],
+                    width=self.boundary_width,
+                )
         
         # Aquaticus field points
         if self.render_field_points:
