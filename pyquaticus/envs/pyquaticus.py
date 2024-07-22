@@ -614,13 +614,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         b_players = []
         r_players = []
 
+        render_lidar = self.lidar_obs and self.render_lidar #affects how agent is drawn
+
         for i in range(0, self.num_blue):
             b_players.append(
-                RenderingPlayer(i, Team.BLUE_TEAM, (self.agent_radius * self.pixel_size), render_mode)
+                RenderingPlayer(i, Team.BLUE_TEAM, (self.agent_radius * self.pixel_size), render_mode, render_lidar)
             )
         for i in range(self.num_blue, self.num_blue + self.num_red):
             r_players.append(
-                RenderingPlayer(i, Team.RED_TEAM, (self.agent_radius * self.pixel_size), render_mode)
+                RenderingPlayer(i, Team.RED_TEAM, (self.agent_radius * self.pixel_size), render_mode, render_lidar)
             )
 
         self.players = {player.id: player for player in itertools.chain(b_players, r_players)} #maps player ids (or names) to player objects
@@ -935,6 +937,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 #(from 0 to 360 degrees starting at east and moving counterclockwise) 
                 ray_heading_global = np.deg2rad((heading_angle_conversion(player.heading) + ray_heading) % 360)
                 ray_vec = np.array([np.cos(ray_heading_global), np.sin(ray_heading_global)])
+                self.state["lidar_starts"][player.id][i] = ray_origin + self.agent_radius * ray_vec
                 ray_end = ray_origin + self.lidar_range * ray_vec
                 ray_line = LineString((ray_origin, ray_end))
                 intersections = np.full((3,2), -1.)
@@ -1225,7 +1228,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.render_field_points = config_dict.get("render_field_points", config_dict_std["render_field_points"])
         self.render_trajs = config_dict.get("render_trajs", config_dict_std["render_trajs"])
         self.render_traj_freq = config_dict.get("render_traj_freq", config_dict_std["render_traj_freq"])
-        
+
         self.render_traj_cutoff = config_dict.get("render_traj_cutoff", config_dict_std["render_traj_cutoff"])
         if self.render_traj_cutoff is None:
             self.render_traj_cutoff = -1
@@ -1350,7 +1353,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.screen_width = round(self.env_size[0] * self.pixel_size)
             self.screen_height = round(self.env_size[1] * self.pixel_size)
             
-            self.border_width = 2  # pixels
+            self.boundary_width = 2  # pixels
             self.a2a_line_width = 3 #pixels
 
             # render background
@@ -1359,6 +1362,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     np.transpose(self.background_img, (1,0,2)) #pygame assumes images are (h, w, 3)
                 )
                 self.pygame_background_img = pygame.transform.scale(pygame_background_img, (self.screen_width, self.screen_height))
+                
 
             # check that world size (pixels) does not exceed the screen dimensions
             world_screen_err_msg = (
@@ -1608,6 +1612,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if self.lidar_obs:
             self.state["lidar_distances"] = {agent_id: np.zeros(self.num_lidar_rays) for agent_id in agent_ids}
             self.state["lidar_labels"] = {agent_id: np.zeros(self.num_lidar_rays) for agent_id in agent_ids}
+            self.state["lidar_starts"] = {agent_id: np.zeros((self.num_lidar_rays, 2)) for agent_id in agent_ids}
             self.state["lidar_ends"] = {agent_id: np.zeros((self.num_lidar_rays, 2)) for agent_id in agent_ids}
             self._update_lidar()
 
@@ -2456,7 +2461,7 @@ when gps environment bounds are specified in meters")
         return cropped_img
 
     def _img2env_coords(self, cnt, image_shape):
-        #TODO: contour as type float64 to not lose precision
+        cnt = cnt.astype(float) #convert contour array to float64 so as not to lose precision
         cnt[:, 0] =  self.env_size[0] * cnt[:, 0] / (image_shape[1] - 1)
         cnt[:, 1] =  self.env_size[1] * (1 - cnt[:, 1] / (image_shape[0] - 1))
 
@@ -2490,7 +2495,7 @@ when gps environment bounds are specified in meters")
                 pygame.display.init()
                 self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
                 self.isopen = True
-                self.font = pygame.font.SysFont(None, int(2*self.pixel_size*self.agent_radius))
+                self.agent_id_font = pygame.font.SysFont(None, int(2*self.pixel_size*self.agent_radius))
             elif self.render_mode == "rgb_array":
                 self.screen = pygame.Surface((self.screen_width, self.screen_height))
             else:
@@ -2510,140 +2515,146 @@ when gps environment bounds are specified in meters")
         else:
             self.screen.fill((255, 255, 255))
 
-        # arena border and scrimmage line
+        # Scrimmage line
         draw.line(
-            self.screen, (0, 0, 0), self.env_to_screen(self.scrimmage_coords[0]), self.env_to_screen(self.scrimmage_coords[1]), width=self.border_width
+            self.screen,
+            (128, 128, 128),
+            self.env_to_screen(self.scrimmage_coords[0]),
+            self.env_to_screen(self.scrimmage_coords[1]),
+            width=self.boundary_width
         )
-        #Draw Points Debugging
+
+        # Obstacles
+        for obstacle in self.obstacles:
+            if isinstance(obstacle, CircleObstacle):
+                draw.circle(
+                    self.screen,
+                    (0, 0, 0),
+                    self.env_to_screen(obstacle.center_point),
+                    radius=obstacle.radius * self.pixel_size,
+                    width=self.boundary_width
+                )
+            elif isinstance(obstacle, PolygonObstacle):
+                draw.polygon(
+                        self.screen,
+                        (0, 0, 0),
+                        [self.env_to_screen(p) for p in obstacle.anchor_points],
+                        width=self.boundary_width,
+                    )
+        
+        # Aquaticus field points
         if self.render_field_points:
             for v in self.config_dict["aquaticus_field_points"]:
-                draw.circle(self.screen, (128, 0, 128), self.env_to_screen(self.config_dict["aquaticus_field_points"][v]), 5,)
+                draw.circle(
+                    self.screen,
+                    (128, 0, 128),
+                    self.env_to_screen(self.config_dict["aquaticus_field_points"][v]),
+                    radius=5
+                )
 
-        agent_id_blit_poses = {}
-
+        # Flags and players
         for team in Team:
             flag = self.flags[int(team)]
             teams_players = self.agents_of_team[team]
             color = "blue" if team == Team.BLUE_TEAM else "red"
+            opp_color = "red" if team == Team.BLUE_TEAM else "blue"
 
-            # Draw team home region
+            # team home region
             home_center_screen = self.env_to_screen(self.flags[int(team)].home)
             draw.circle(
                     self.screen,
-                    (0, 0, 0),
+                    (128, 128, 128),
                     home_center_screen,
-                    self.catch_radius * self.pixel_size,
-                    width=round(self.pixel_size / 10),
+                    radius=self.catch_radius * self.pixel_size,
+                    width=self.boundary_width,
                 )
 
+            # team flag (not picked up)
             if not self.state["flag_taken"][int(team)]:
-                # Flag is not captured, draw normally.
                 flag_pos_screen = self.env_to_screen(flag.pos)
                 draw.circle(
                     self.screen,
                     color,
                     flag_pos_screen,
-                    self.flag_radius * self.pixel_size,
+                    radius=self.flag_radius * self.pixel_size,
                 )
                 draw.circle(
                     self.screen,
                     color,
                     flag_pos_screen,
-                    (self.flag_keepout - self.agent_radius) * self.pixel_size,
-                    width=round(self.pixel_size / 10),
-                )
-            else:
-                # Flag is captured so draw a different shape
-                flag_pos_screen = self.env_to_screen(flag.pos)
-                draw.circle(
-                    self.screen,
-                    color,
-                    flag_pos_screen,
-                    0.55*(self.pixel_size * self.agent_radius)
+                    radius=(self.flag_keepout - self.agent_radius) * self.pixel_size,
+                    width=self.boundary_width,
                 )
 
-            # Draw obstacles:
-            for obstacle in self.obstacles:
-                if isinstance(obstacle, CircleObstacle):
-                    draw.circle(
-                        self.screen,
-                        (128, 128, 128),
-                        self.env_to_screen(obstacle.center_point),
-                        obstacle.radius * self.pixel_size,
-                        width=3
-                    )
-                elif isinstance(obstacle, PolygonObstacle):
-                    draw.polygon(
-                            self.screen,
-                            (128, 128, 128),
-                            [self.env_to_screen(p) for p in obstacle.anchor_points],
-                            width=2,
-                        )
-
+            # players
             for player in teams_players:
                 blit_pos = self.env_to_screen(player.pos)
-                if team == Team.BLUE_TEAM:
-                    agent_color = "blue"
-                else:
-                    agent_color = "red"
 
-                #render trajectory
+                #trajectory
                 if self.render_trajs:
                     for i, (prev_agent_surf, prev_blit_pos) in enumerate(self.traj_render_buffer[player.id]):
                         # draw.circle(
                         #     self.screen,
-                        #     agent_color,
+                        #     color,
                         #     point,
                         #     1,
                         #     width=0
                         # )
                         self.screen.blit(prev_agent_surf, prev_blit_pos)
 
-                # render lidar
+                #lidar
                 if self.lidar_obs and self.render_lidar:
                     for i in range(self.num_lidar_rays):
                         draw.line(
                             self.screen,
-                            agent_color,
-                            blit_pos,
+                            color,
+                            self.env_to_screen(self.state["lidar_starts"][player.id][i]),
                             self.env_to_screen(self.state["lidar_ends"][player.id][i]),
                             width=2
                         )
-                # render tagging
+                #tagging
                 player.render_tagging(self.tagging_cooldown)
 
-                # heading
+                #heading
                 orientation = Vector2(list(mag_heading_to_vec(1.0, player.heading)))
                 ref_angle = -orientation.angle_to(self.PYGAME_UP)
 
-                # transform position to pygame coordinates
+                #transform position to pygame coordinates
                 rotated_surface = rotozoom(player.pygame_agent, ref_angle, 1.0)
                 rotated_surface_size = np.array(rotated_surface.get_size())
                 rotated_blit_pos = blit_pos - 0.5*rotated_surface_size
 
-                # blit agent onto screen
+                #flag pickup
+                if player.has_flag:
+                    draw.circle(
+                        rotated_surface,
+                        opp_color,
+                        0.5*rotated_surface_size,
+                        radius=0.55*(self.pixel_size * self.agent_radius)
+                    )
+
+                #agent id
+                if self.render_ids:
+                    agent_id_blit_pos = (
+                        0.5*rotated_surface_size[0] - 0.35 * self.pixel_size * self.agent_radius,
+                        0.5*rotated_surface_size[1] - 0.6 * self.pixel_size * self.agent_radius
+                    )
+                    if self.gps_env:
+                        font_color = "white"
+                    else:
+                        font_color = "white" if team == Team.BLUE_TEAM else "black"
+
+                    player_number_label = self.agent_id_font.render(str(player.id), True, font_color)
+                    rotated_surface.blit(player_number_label, agent_id_blit_pos)
+
+                #blit agent onto screen
                 self.screen.blit(rotated_surface, rotated_blit_pos)
+
+                #save agent surface for trajectory rendering
                 if self.render_trajs:
-                    self.traj_render_buffer[player.id].append((rotated_surface, rotated_blit_pos))
+                    self.traj_render_buffer[player.id].append((blit_pos, rotated_blit_pos, rotated_surface))
 
-                #blit agent number onto agent
-                agent_id_blit_poses[player.id] = (
-                    blit_pos[0] - 0.35*self.pixel_size*self.agent_radius,
-                    blit_pos[1] - 0.6*self.pixel_size*self.agent_radius
-                )
-
-        # render agent ids
-        if self.render_ids:
-            for team in Team:
-                teams_players = self.agents_of_team[team]
-                font_color = "white" if team == Team.BLUE_TEAM else "black"
-                for player in teams_players:
-                    player_number_label = self.font.render(str(player.id), True, font_color)
-                    self.screen.blit(player_number_label, agent_id_blit_poses[player.id])
-
-        # visually indicate distances between players of both teams 
-        assert len(self.agents_of_team) == 2, "If number of teams > 2, update code that draws distance indicator lines"
-
+        # Agent-to-agent distances 
         for blue_player in self.agents_of_team[Team.BLUE_TEAM]:
             if not blue_player.is_tagged or (blue_player.is_tagged and blue_player.on_own_side):
                 for red_player in self.agents_of_team[Team.RED_TEAM]:

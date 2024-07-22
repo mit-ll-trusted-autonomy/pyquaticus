@@ -66,7 +66,7 @@ config_dict_std = {
     "screen_frac":          0.75, # fraction of max possible pygame screen size to use for rendering
     "render_agent_ids":    False, # option to render agent id's on agents
     "render_field_points": False, # option to see the Aquaticus field points in the environment
-    "render_trajs":         None, # "traj" (dashed trajectory line), "agent" (agents in prev positions), "history" (history obs rendered)
+    "render_trajs":         None, # "traj" (dashed trajectory line), "agent" (agents in prev positions), "traj_agent", "history" (history obs rendered), or None
     "render_traj_freq":        1, # timesteps
     "render_traj_cutoff":   None, # max length (timesteps) of the traj to render, or None for no limit
     "render_lidar":        False, # option to render lidar rays

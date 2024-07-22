@@ -148,8 +148,9 @@ def main():
     config["lidar_obs"] = True
     config["num_lidar_rays"] = 150
     config["lidar_range"] = 40
+    config["render_agent_ids"] = True
     config["render_lidar"] = True
-    config["render_trajs"] = True
+    # config["render_trajs"] = True
     # config["record_render"] = True
     # config["render_fps"] = 10
     # config["normalize"] = False
