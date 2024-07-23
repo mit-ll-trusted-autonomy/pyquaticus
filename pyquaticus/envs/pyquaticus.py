@@ -937,7 +937,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 #(from 0 to 360 degrees starting at east and moving counterclockwise) 
                 ray_heading_global = np.deg2rad((heading_angle_conversion(player.heading) + ray_heading) % 360)
                 ray_vec = np.array([np.cos(ray_heading_global), np.sin(ray_heading_global)])
-                self.state["lidar_starts"][player.id][i] = ray_origin + self.agent_radius * ray_vec
                 ray_end = ray_origin + self.lidar_range * ray_vec
                 ray_line = LineString((ray_origin, ray_end))
                 intersections = np.full((3,2), -1.)
@@ -1608,7 +1607,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if self.lidar_obs:
             self.state["lidar_distances"] = {agent_id: np.zeros(self.num_lidar_rays) for agent_id in agent_ids}
             self.state["lidar_labels"] = {agent_id: np.zeros(self.num_lidar_rays) for agent_id in agent_ids}
-            self.state["lidar_starts"] = {agent_id: np.zeros((self.num_lidar_rays, 2)) for agent_id in agent_ids}
             self.state["lidar_ends"] = {agent_id: np.zeros((self.num_lidar_rays, 2)) for agent_id in agent_ids}
             self._update_lidar()
 
@@ -2611,11 +2609,14 @@ when gps environment bounds are specified in meters")
 
                 #lidar
                 if self.lidar_obs and self.render_lidar:
+                    ray_headings_global = np.deg2rad((heading_angle_conversion(player.heading) + self.lidar_ray_headings) % 360)
+                    ray_vecs = np.array([np.cos(ray_headings_global), np.sin(ray_headings_global)]).T
+                    lidar_starts = player.pos + self.agent_radius * ray_vecs
                     for i in range(self.num_lidar_rays):
                         draw.line(
                             self.screen,
                             color,
-                            self.env_to_screen(self.state["lidar_starts"][player.id][i]),
+                            self.env_to_screen(lidar_starts[i]),
                             self.env_to_screen(self.state["lidar_ends"][player.id][i]),
                             width=2
                         )
