@@ -1228,7 +1228,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.screen_frac = config_dict.get("screen_frac", config_dict_std["screen_frac"])
         self.render_ids = config_dict.get("render_agent_ids", config_dict_std["render_agent_ids"])
         self.render_field_points = config_dict.get("render_field_points", config_dict_std["render_field_points"])
-        self.render_trajs = config_dict.get("render_trajs", config_dict_std["render_trajs"])
+        self.render_traj_mode = config_dict.get("render_traj_mode", config_dict_std["render_traj_mode"])
         self.render_traj_freq = config_dict.get("render_traj_freq", config_dict_std["render_traj_freq"])
 
         self.render_traj_cutoff = config_dict.get("render_traj_cutoff", config_dict_std["render_traj_cutoff"])
@@ -1641,7 +1641,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 if len(self.render_buffer) > 0:
                     self.buffer_to_video()
                     self.render_buffer = []
-            if self.render_trajs:
+            if self.render_traj_mode:
                 self.traj_render_buffer = {agent_id: {'traj': [], 'agent': []} for agent_id in self.players}
 
             self._render()
@@ -2596,7 +2596,7 @@ when gps environment bounds are specified in meters")
                 blit_pos = self.env_to_screen(player.pos)
 
                 #trajectory
-                if self.render_trajs:
+                if self.render_traj_mode:
                     for i, (prev_blit_pos, prev_rot_blit_pos, prev_agent_surf) in enumerate(self.traj_render_buffer[player.id]):
                         draw.circle(
                             self.screen,
@@ -2656,19 +2656,37 @@ when gps environment bounds are specified in meters")
                 self.screen.blit(rotated_surface, rotated_blit_pos)
 
                 #save agent surface for trajectory rendering
-                if self.render_trajs:
-                    if self.render_trajs == "traj":
-                        self.traj_render_buffer[player.id]['traj'].append(blit_pos)
-                    elif self.render_trajs == "agent":
-                        self.traj_render_buffer[player.id]['agent'].append((rotated_blit_pos, rotated_surface))
-                    elif self.render_trajs == "traj_agent":
-                        self.traj_render_buffer[player.id]['traj'].append(blit_pos)
-                        self.traj_render_buffer[player.id]['agent'].append((rotated_blit_pos, rotated_surface))
-                    elif self.render_trajs == "history":
+                if self.render_traj_mode:
+                    #add traj/ agent render data
+                    if self.render_traj_mode.startswith("traj"):
+                        self.traj_render_buffer[player.id]['traj'].insert(0, blit_pos)
+ 
+                    if (
+                        self.render_traj_mode.endswith("agent") and
+                        self.render_ctr % self.num_renders_per_step == 0
+                    ):
+                        self.traj_render_buffer[player.id]['agent'].insert(0, (rotated_blit_pos, rotated_surface))
+
+                    elif self.render_traj_mode.endswith("history"):
+                        raise NotImplementedError()
+
+                    #truncate traj
+                    self.traj_render_buffer[player.id]['traj'] = self.traj_render_buffer[player.id]['traj'][:self.render_traj_cutoff]
+                        
+                         == "traj":
+                        self.traj_render_buffer[player.id]['traj'].insert(0, blit_pos)
+                    elif self.render_traj_mode == "agent":
+                        self.traj_render_buffer[player.id]['agent'].insert(0, (rotated_blit_pos, rotated_surface))
+                    elif self.render_traj_mode == "history":
+                        raise NotImplementedError()
+                    elif self.render_traj_mode == "traj_agent":
+                        self.traj_render_buffer[player.id]['traj'].insert(0, blit_pos)
+                        self.traj_render_buffer[player.id]['agent'].insert(0, (rotated_blit_pos, rotated_surface))
+                    elif self.render_traj_mode == "traj_history":
                         raise NotImplementedError()
                         # self.num_renders_per_step
 
-                    self.traj_render_buffer[player.id].append((blit_pos, rotated_blit_pos, rotated_surface))
+                    
 
         # Agent-to-agent distances 
         for blue_player in self.agents_of_team[Team.BLUE_TEAM]:
