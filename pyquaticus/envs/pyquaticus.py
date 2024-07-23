@@ -1299,19 +1299,19 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         self.obstacles = list()
         if obstacle_params is not None and isinstance(obstacle_params, dict):
-                circle_obstacles = obstacle_params.get("circle", None)
-                if circle_obstacles is not None and isinstance(circle_obstacles, list):
-                    for param in circle_obstacles:
-                        self.obstacles.append(CircleObstacle(param[0], (param[1][0], param[1][1])))
-                elif circle_obstacles is not None:
-                    raise TypeError(f"Expected circle obstacle parameters to be a list of tuples, not {type(circle_obstacles)}")
-                poly_obstacle = obstacle_params.get("polygon", None)
-                if poly_obstacle is not None and isinstance(poly_obstacle, list):
-                    for param in poly_obstacle:
-                        converted_param = [(p[0], p[1]) for p in param]
-                        self.obstacles.append(PolygonObstacle(converted_param))
-                elif poly_obstacle is not None:
-                    raise TypeError(f"Expected polygon obstacle parameters to be a list of tuples, not {type(poly_obstacle)}")
+            circle_obstacles = obstacle_params.get("circle", None)
+            if circle_obstacles is not None and isinstance(circle_obstacles, list):
+                for param in circle_obstacles:
+                    self.obstacles.append(CircleObstacle(param[0], (param[1][0], param[1][1])))
+            elif circle_obstacles is not None:
+                raise TypeError(f"Expected circle obstacle parameters to be a list of tuples, not {type(circle_obstacles)}")
+            poly_obstacle = obstacle_params.get("polygon", None)
+            if poly_obstacle is not None and isinstance(poly_obstacle, list):
+                for param in poly_obstacle:
+                    converted_param = [(p[0], p[1]) for p in param]
+                    self.obstacles.append(PolygonObstacle(converted_param))
+            elif poly_obstacle is not None:
+                raise TypeError(f"Expected polygon obstacle parameters to be a list of tuples, not {type(poly_obstacle)}")
         elif obstacle_params is not None:
             raise TypeError(f"Expected obstacle_params to be None or a dict, not {type(obstacle_params)}")
 
@@ -1319,7 +1319,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if self.lidar_obs:
             self.lidar_ray_headings = np.linspace(0, (self.num_lidar_rays - 1) * 360 / self.num_lidar_rays, self.num_lidar_rays)
 
-            self.ray_int_geoms = []
+            self.ray_int_lines = []
             if (
                 self.gps_env and
                 border_contour is None
