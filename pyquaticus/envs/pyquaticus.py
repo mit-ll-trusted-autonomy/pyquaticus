@@ -679,6 +679,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.screen = None
         self.clock = None
         self.isopen = False
+        self.render_ctr = 0
         self.render_buffer = []
         self.traj_render_buffer = {}
 
@@ -1634,14 +1635,17 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         reset_obs = {agent_id: self.state_to_obs(agent_id, self.normalize) for agent_id in self.players}
 
         if self.render_mode:
+            self.render_ctr = 0
+
             if self.record_render:
                 if len(self.render_buffer) > 0:
                     self.buffer_to_video()
                     self.render_buffer = []
             if self.render_trajs:
-                self.traj_render_buffer = {agent_id: [] for agent_id in self.players} #TODO: change list to dict with entries for agent rendering and dot traj
+                self.traj_render_buffer = {agent_id: {'traj': [], 'agent': []} for agent_id in self.players}
 
             self._render()
+            self.render_ctr = 0
 
         return reset_obs
 
@@ -2653,6 +2657,17 @@ when gps environment bounds are specified in meters")
 
                 #save agent surface for trajectory rendering
                 if self.render_trajs:
+                    if self.render_trajs == "traj":
+                        self.traj_render_buffer[player.id]['traj'].append(blit_pos)
+                    elif self.render_trajs == "agent":
+                        self.traj_render_buffer[player.id]['agent'].append((rotated_blit_pos, rotated_surface))
+                    elif self.render_trajs == "traj_agent":
+                        self.traj_render_buffer[player.id]['traj'].append(blit_pos)
+                        self.traj_render_buffer[player.id]['agent'].append((rotated_blit_pos, rotated_surface))
+                    elif self.render_trajs == "history":
+                        raise NotImplementedError()
+                        # self.num_renders_per_step
+
                     self.traj_render_buffer[player.id].append((blit_pos, rotated_blit_pos, rotated_surface))
 
         # Agent-to-agent distances 
@@ -2681,12 +2696,15 @@ when gps environment bounds are specified in meters")
             pygame.event.pump()
             self.clock.tick(self.render_fps)
             pygame.display.flip()
-
+        
         # Record
         if self.record_render:
             self.render_buffer.append(
                 np.transpose(np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2))
             )
+
+        # Update counter
+        self.render_ctr += 1
 
     def env_to_screen(self, pos):
         screen_pos = self.pixel_size * np.asarray(pos)

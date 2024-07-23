@@ -66,11 +66,19 @@ config_dict_std = {
     "screen_frac":          0.75, # fraction of max possible pygame screen size to use for rendering
     "render_agent_ids":    False, # option to render agent id's on agents
     "render_field_points": False, # option to see the Aquaticus field points in the environment
-    "render_trajs":         None, # "traj" (dashed trajectory line), "agent" (agents in prev positions), "traj_agent", "history" (history obs rendered), or None
-    "render_traj_freq":        1, # timesteps
+    "render_traj_mode":     None, # "traj", "agent", "history", "traj_agent", "traj_history", or None
+    "render_traj_freq":        1, # timesteps (for "traj_agent" mode only)
     "render_traj_cutoff":   None, # max length (timesteps) of the traj to render, or None for no limit
     "render_lidar":        False, # option to render lidar rays
     "record_render":       False, # option to save video of render frames
+
+    #render_traj_mode has multiple options and combinations:
+    #'traj': dashed line for agent trajectories
+    #'agent': previous agent states
+    #'history': history observations rendered
+    #'traj_agent': combines 'traj' and 'agent'
+    #'traj_history': combines 'traj' and 'history'
+    #note: render_traj_freq applies only to agent rendering (not trajectory lines)
 
     # Miscellaneous parameters
     "suppress_numpy_warnings": True, # option to stop numpy from printing warnings to the console
