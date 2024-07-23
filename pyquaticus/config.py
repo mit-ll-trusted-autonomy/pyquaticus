@@ -45,7 +45,7 @@ config_dict_std = {
     "max_dec":      1, # meters / s**2
 
     # Simulation parameters
-    "tau":              0.1, # dt (seconds) for updating the simulation (length of 1 timestep)
+    "tau":              0.1, # dt (seconds) for updating the simulation
     "sim_speedup_factor": 1, # simulation speed multiplier similar to time warp in MOOS (integer >= 1)
 
     # Game parameters
@@ -67,7 +67,7 @@ config_dict_std = {
     "render_agent_ids":    False, # option to render agent id's on agents
     "render_field_points": False, # option to see the Aquaticus field points in the environment
     "render_traj_mode":     None, # "traj", "agent", "history", "traj_agent", "traj_history", or None
-    "render_traj_freq":        1, # timesteps (for "traj_agent" mode only)
+    "render_traj_freq":        1, # timesteps
     "render_traj_cutoff":   None, # max length (timesteps) of the traj to render, or None for no limit
     "render_lidar":        False, # option to render lidar rays
     "record_render":       False, # option to save video of render frames

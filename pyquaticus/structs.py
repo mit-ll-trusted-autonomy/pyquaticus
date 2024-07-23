@@ -88,7 +88,6 @@ class RenderingPlayer(Player):
 
     r: float
     render_mode: str
-    render_lidar: bool
     home: list[float] = field(init=False, default_factory=list)
 
     def __post_init__(self):
@@ -112,14 +111,13 @@ class RenderingPlayer(Player):
             # Adjust color based on which team
             if self.team == Team.BLUE_TEAM:
                 draw.circle(self.pygame_agent, (0, 0, 255, 50), (self.r, self.r), self.r)
-                if not self.render_lidar:
-                    draw.circle(
-                        self.pygame_agent,
-                        (0, 0, 255),
-                        (self.r, self.r),
-                        self.r,
-                        width=1
-                    )
+                draw.circle(
+                    self.pygame_agent,
+                    (0, 0, 255),
+                    (self.r, self.r),
+                    self.r,
+                    width=1
+                )
                 draw.polygon(
                     self.pygame_agent,
                     (0, 0, 255),
@@ -132,14 +130,13 @@ class RenderingPlayer(Player):
                 )
             else:
                 draw.circle(self.pygame_agent, (255, 0, 0, 50), (self.r, self.r), self.r)
-                if not self.render_lidar:
-                    draw.circle(
-                        self.pygame_agent,
-                        (255, 0, 0),
-                        (self.r, self.r),
-                        self.r,
-                        width=1
-                    )
+                draw.circle(
+                    self.pygame_agent,
+                    (255, 0, 0),
+                    (self.r, self.r),
+                    self.r,
+                    width=1
+                )
                 draw.polygon(
                     self.pygame_agent,
                     (255, 0, 0),

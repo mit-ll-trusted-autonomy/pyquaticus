@@ -41,7 +41,7 @@ from datetime import datetime
 from geographiclib.geodesic import Geodesic
 from gymnasium.spaces import Discrete
 from gymnasium.utils import seeding
-from math import ceil
+from math import ceil, floor
 from pettingzoo import ParallelEnv
 from pygame import draw, SRCALPHA, surfarray
 from pygame.math import Vector2
@@ -614,15 +614,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         b_players = []
         r_players = []
 
-        render_lidar = self.lidar_obs and self.render_lidar #affects how agent is drawn
-
         for i in range(0, self.num_blue):
             b_players.append(
-                RenderingPlayer(i, Team.BLUE_TEAM, (self.agent_radius * self.pixel_size), render_mode, render_lidar)
+                RenderingPlayer(i, Team.BLUE_TEAM, (self.agent_radius * self.pixel_size), render_mode)
             )
         for i in range(self.num_blue, self.num_blue + self.num_red):
             r_players.append(
-                RenderingPlayer(i, Team.RED_TEAM, (self.agent_radius * self.pixel_size), render_mode, render_lidar)
+                RenderingPlayer(i, Team.RED_TEAM, (self.agent_radius * self.pixel_size), render_mode)
             )
 
         self.players = {player.id: player for player in itertools.chain(b_players, r_players)} #maps player ids (or names) to player objects
@@ -1230,11 +1228,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.render_field_points = config_dict.get("render_field_points", config_dict_std["render_field_points"])
         self.render_traj_mode = config_dict.get("render_traj_mode", config_dict_std["render_traj_mode"])
         self.render_traj_freq = config_dict.get("render_traj_freq", config_dict_std["render_traj_freq"])
-
         self.render_traj_cutoff = config_dict.get("render_traj_cutoff", config_dict_std["render_traj_cutoff"])
-        if self.render_traj_cutoff is None:
-            self.render_traj_cutoff = -1
-
         self.render_lidar = config_dict.get("render_lidar", config_dict_std["render_lidar"])
         self.record_render = config_dict.get("record_render", config_dict_std["record_render"])
 
@@ -2597,15 +2591,23 @@ when gps environment bounds are specified in meters")
 
                 #trajectory
                 if self.render_traj_mode:
-                    for i, (prev_blit_pos, prev_rot_blit_pos, prev_agent_surf) in enumerate(self.traj_render_buffer[player.id]):
-                        draw.circle(
-                            self.screen,
-                            color,
-                            prev_blit_pos,
-                            1,
-                            width=0
-                        )
-                        # self.screen.blit(prev_agent_surf, prev_blit_pos)
+                    #traj
+                    if self.render_traj_mode.startswith("traj"):
+                        for prev_blit_pos in reversed(self.traj_render_buffer[player.id]['traj']):
+                            draw.circle(
+                                self.screen,
+                                color,
+                                prev_blit_pos,
+                                radius=2,
+                                width=0
+                            )
+                    #agent 
+                    if self.render_traj_mode.endswith("agent"):
+                        for prev_rot_blit_pos, prev_agent_surf in reversed(self.traj_render_buffer[player.id]['agent']):
+                            self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
+                    #history
+                    elif self.render_traj_mode.endswith("history"):
+                        raise NotImplementedError()
 
                 #lidar
                 if self.lidar_obs and self.render_lidar:
@@ -2656,14 +2658,17 @@ when gps environment bounds are specified in meters")
                 self.screen.blit(rotated_surface, rotated_blit_pos)
 
                 #save agent surface for trajectory rendering
-                if self.render_traj_mode:
+                if (
+                    self.render_traj_mode and
+                    self.render_ctr % self.num_renders_per_step == 0
+                ):
                     #add traj/ agent render data
                     if self.render_traj_mode.startswith("traj"):
                         self.traj_render_buffer[player.id]['traj'].insert(0, blit_pos)
  
                     if (
                         self.render_traj_mode.endswith("agent") and
-                        self.render_ctr % self.num_renders_per_step == 0
+                        (self.render_ctr / self.num_renders_per_step) % self.render_traj_freq == 0
                     ):
                         self.traj_render_buffer[player.id]['agent'].insert(0, (rotated_blit_pos, rotated_surface))
 
@@ -2671,22 +2676,22 @@ when gps environment bounds are specified in meters")
                         raise NotImplementedError()
 
                     #truncate traj
-                    self.traj_render_buffer[player.id]['traj'] = self.traj_render_buffer[player.id]['traj'][:self.render_traj_cutoff]
-                        
-                         == "traj":
-                        self.traj_render_buffer[player.id]['traj'].insert(0, blit_pos)
-                    elif self.render_traj_mode == "agent":
-                        self.traj_render_buffer[player.id]['agent'].insert(0, (rotated_blit_pos, rotated_surface))
-                    elif self.render_traj_mode == "history":
-                        raise NotImplementedError()
-                    elif self.render_traj_mode == "traj_agent":
-                        self.traj_render_buffer[player.id]['traj'].insert(0, blit_pos)
-                        self.traj_render_buffer[player.id]['agent'].insert(0, (rotated_blit_pos, rotated_surface))
-                    elif self.render_traj_mode == "traj_history":
-                        raise NotImplementedError()
-                        # self.num_renders_per_step
-
-                    
+                    if self.render_traj_cutoff is not None:
+                        agent_render_cutoff = (
+                            floor(self.render_traj_cutoff / self.render_traj_freq) +
+                            (
+                                (
+                                    (self.render_ctr / self.num_renders_per_step) % self.render_traj_freq +
+                                    self.render_traj_freq * floor(self.render_traj_cutoff / self.render_traj_freq)
+                                ) <= self.render_traj_cutoff
+                            )
+                        )
+                        self.traj_render_buffer[player.id]['traj'] = self.traj_render_buffer[player.id]['traj'][
+                            : self.render_traj_cutoff
+                        ]
+                        self.traj_render_buffer[player.id]['agent'] = self.traj_render_buffer[player.id]['agent'][
+                            : agent_render_cutoff
+                        ]
 
         # Agent-to-agent distances 
         for blue_player in self.agents_of_team[Team.BLUE_TEAM]:
