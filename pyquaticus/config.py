@@ -136,7 +136,7 @@ config_dict_std["aquaticus_field_points"] = {
 
 
 ### Lidar Detection Label Map ###
-lidar_detection_labels = [
+lidar_detection_classes = [
     "nothing",
     "obstacle",
     "team_flag",
@@ -148,7 +148,7 @@ lidar_detection_labels = [
     "opponent_is_tagged", # an opponent that is tagged
     "opponent_has_flag", # an opponent with own team's flag
 ]
-LIDAR_DETECTION_CLASS_MAP = {label: i for i, label in enumerate(lidar_detection_labels)}
+LIDAR_DETECTION_CLASS_MAP = {class_name: i for i, class_name in enumerate(lidar_detection_classes)}
 
 
 ### Action Map ###

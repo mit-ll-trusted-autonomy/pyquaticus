@@ -655,6 +655,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         for team in Team:
             self.flags.append(Flag(team))
 
+        # Obstacles and Lidar
+        self.set_geom_config(config_dict)
+
         # Setup action and observation spaces
         self.action_spaces = {
             agent_id: self.get_agent_action_space() for agent_id in self.players
@@ -680,6 +683,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.render_ctr = 0
         self.render_buffer = []
         self.traj_render_buffer = {}
+        self.set_render_config()
 
     def seed(self, seed=None):
         """
@@ -930,6 +934,60 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         return cp_sign == self.on_sides_sign[team] or cp_sign == 0
 
     def _update_lidar(self):
+        for player in self.players.values():
+            # Rays
+            ray_origin = np.asarray(player.pos)
+
+            #determine ray vec in global reference frame
+            #(from 0 to 360 degrees starting at east and moving counterclockwise)
+            ray_headings_global = np.deg2rad((heading_angle_conversion(player.heading) + self.lidar_ray_headings) % 360)
+            ray_vecs = np.array([np.cos(ray_headings_global), np.sin(ray_headings_global)]).T
+            #TODO: add ray starts
+            ray_ends = ray_origin + self.lidar_range * ray_vecs
+
+
+            # Ray intersection segments
+            ray_int_segments = np.copy(self.ray_int_segments)
+
+            #translate non-static ray intersection geometries (agents)
+            for agent_id, player in self.players.items():
+                agent_seg_inds = self.ray_int_label_to_seg_inds[agent_id]
+                ray_int_segments[agent_seg_inds] += player.pos
+
+            # Reshape segments to easily compute intersections
+            segments1 = segments1.reshape(-1, 1, 4)
+            segments2 = segments2.reshape(1, -1, 4)
+
+            # Extract coordinates
+            x1, y1, x2, y2 = segments1[..., 0], segments1[..., 1], segments1[..., 2], segments1[..., 3]
+            x3, y3, x4, y4 = segments2[..., 0], segments2[..., 1], segments2[..., 2], segments2[..., 3]
+            
+            # Parametric equations of the lines
+            denom = (x1 - x2)*(y3 - y4) - (y1 - y2)*(x3 - x4)
+            
+            # Calculate intersections
+            intersect_x = ((x1*y2 - y1*x2)*(x3 - x4) - (x1 - x2)*(x3*y4 - y3*x4)) / denom
+            intersect_y = ((x1*y2 - y1*x2)*(y3 - y4) - (y1 - y2)*(x3*y4 - y3*x4)) / denom
+            
+            # Mask invalid intersections (parallel lines or out-of-bounds)
+            mask = (denom != 0) & \
+                (intersect_x >= np.minimum(x1, x2)) & (intersect_x <= np.maximum(x1, x2)) & \
+                (intersect_y >= np.minimum(y1, y2)) & (intersect_y <= np.maximum(y1, y2)) & \
+                (intersect_x >= np.minimum(x3, x4)) & (intersect_x <= np.maximum(x3, x4)) & \
+                (intersect_y >= np.minimum(y3, y4)) & (intersect_y <= np.maximum(y3, y4))
+
+            intersect_x = np.where(mask, intersect_x, -1) #some large negative number
+            intersect_y = np.where(mask, intersect_y, -1) #some large negative number
+
+            intersections = np.stack((intersect_x.flatten(), intersect_y.flatten()), axis=-1).reshape(intersect_x.shape + (2,))
+            
+            return intersections
+
+        #####################################################
+        #####################################################
+
+
+
         for player in self.players.values():
             ray_origin = np.asarray(player.pos)
             for i, ray_heading in enumerate(self.lidar_ray_headings):
@@ -1281,6 +1339,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # ll = lower left, lr = lower right
         # ul = upper left, ur = upper right
 
+    def set_geom_config(config_dict):
         # Obstacles
         obstacle_params = config_dict.get("obstacles", config_dict_std["obstacles"])
 
@@ -1319,34 +1378,77 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if self.lidar_obs:
             self.lidar_ray_headings = np.linspace(0, (self.num_lidar_rays - 1) * 360 / self.num_lidar_rays, self.num_lidar_rays)
 
-            self.ray_int_segments = []
-            self.ray_int_seg_classes = []
-            self.ray_int_seg_class_map = {}
+            ray_int_label_names = ["nothing", "obstacle"]
+            ray_int_label_names.extend([f"flag{i}" for i, _ in enumerate(self.flags)])
+            ray_int_label_names.extend(self.agents)
+            self.ray_int_label_map = {label_name: i for i, label_name in enumerate(ray_int_label_names)}
 
+            ray_int_segments = []
+            ray_int_seg_labels = []
+            self.ray_int_label_to_seg_inds = {label: [] for label in ray_int_label_names}
+
+            #boundary
             if self.gps_env:
                 if border_contour is None:
-                    self.ray_int_segments = [
+                    ray_int_segments.extend([
                         [*self.env_ll, *self.env_lr],
                         [*self.env_lr, *self.env_ur],
                         [*self.env_ur, *self.env_ul],
                         [*self.env_ul, *self.env_ll]
-                    ]
-                    self.ray_int_seg_classes.extend(1[])
+                    ])
+                    ray_int_seg_labels.extend(4 * [self.ray_int_label_map["obstacle"]])
+                    self.ray_int_label_to_seg_inds["obstacle"].extend(np.arange(4))
             else:
-                self.ray_int_lines = [
+                ray_int_segments.extend([
                     [*self.env_ll, *self.env_lr],
                     [*self.env_lr, *self.env_ur],
                     [*self.env_ur, *self.env_ul],
                     [*self.env_ul, *self.env_ll]
-                ]
+                ])
+                ray_int_seg_labels.extend(4 * [self.ray_int_label_map["obstacle"]])
+                self.ray_int_label_to_seg_inds["obstacle"].extend(np.arange(4))
 
-            self.ray_int_geoms.extend(
-                [geom for obstacle in self.obstacles for geom in self._generate_intersection_geoms_from_obstacles(obstacle)]
+            #obstacles
+            obstacle_segments = [segment for obstacle in self.obstacles for segment in self._generate_segments_from_obstacles(obstacle)]
+            ray_int_seg_labels.extend(
+                len(obstacle_segments) * [self.ray_int_label_map["obstacle"]]
             )
+            self.ray_int_label_to_seg_inds["obstacle"].extend(
+                np.arange(len(ray_int_segments), len(ray_int_segments) + len(obstacle_segments))
+            )
+            ray_int_segments.extend(obstacle_segments)
+
+            #flags
+            for i, flag in enumerate(self.flags):
+                vertices = list(Point(0., 0.).buffer(self.flag_radius, quad_segs=2).exterior.coords)[:-1] #approximate circle with an octagon
+                segments = [[*vertex, *vertices[(i+1) % len(vertices)]] for i, vertex in enumerate(vertices)]
+                ray_int_seg_labels.extend(
+                    len(segments) * [self.ray_int_label_map[f"flag{i}"]]
+                )
+                self.ray_int_label_to_seg_inds[f"flag{i}"].extend(
+                    np.arange(len(ray_int_segments), len(ray_int_segments) + len(segments))
+                )
+                ray_int_segments.extend(segments)
+
+            #agents
+            for agent_id in self.agents:
+                vertices = list(Point(0., 0.).buffer(self.agent_radius, quad_segs=2).exterior.coords)[:-1] #approximate circle with an octagon
+                segments = [[*vertex, *vertices[(i+1) % len(vertices)]] for i, vertex in enumerate(vertices)]
+                ray_int_seg_labels.extend(
+                    len(segments) * [self.ray_int_label_map[agent_id]]
+                )
+                self.ray_int_label_to_seg_inds[agent_id].extend(
+                    np.arange(len(ray_int_segments), len(ray_int_segments) + len(segments))
+                )
+                ray_int_segments.extend(segments)
+
+            self.ray_int_segments = np.asarray(ray_int_segments)
+            self.ray_int_seg_labels = np.asarray(ray_int_seg_labels)
 
         # Occupancy map
         #TODO
 
+    def set_render_config(self):
         ### Environment Rendering ###
         if self.render_mode:
             # pygame orientation vector
@@ -1615,9 +1717,16 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.state["dist_to_obstacles"][k] = [(0, 0)] * len(self.obstacles)
 
         if self.lidar_obs:
+            #reset lidar readings
             self.state["lidar_distances"] = {agent_id: np.zeros(self.num_lidar_rays) for agent_id in agent_ids}
             self.state["lidar_labels"] = {agent_id: np.zeros(self.num_lidar_rays) for agent_id in agent_ids}
             self.state["lidar_ends"] = {agent_id: np.zeros((self.num_lidar_rays, 2)) for agent_id in agent_ids}
+
+            #translate ray flag geometries
+            for i, flag in enumerate(self.flags):
+                flag_seg_inds = self.ray_int_label_to_seg_inds[f"flag{i}"]
+                self.ray_int_segments[flag_seg_inds] += flag.home
+
             self._update_lidar()
 
         for k in self.game_score:
@@ -2474,16 +2583,17 @@ when gps environment bounds are specified in meters")
 
         return cnt
 
-    def _generate_intersection_geoms_from_obstacles(self, obstacle):
+    def _generate_segments_from_obstacles(self, obstacle):
         if isinstance(obstacle, PolygonObstacle):
             vertices = obstacle.anchor_points
-            geoms = [LineString([vertex, vertices[(i+1) % len(vertices)]]) for i, vertex in enumerate(vertices)]
         else: #CircleObstacle
             radius = obstacle.radius 
-            center = obstacle.center_point 
-            geoms = [Point(*center).buffer(radius)]
+            center = obstacle.center_point
+            vertices = list(Point(*center).buffer(radius, quad_segs=2).exterior.coords)[:-1] #approximate circle with an octagon
+
+        segments = [[*vertex, *vertices[(i+1) % len(vertices)]] for i, vertex in enumerate(vertices)]
         
-        return geoms
+        return segments
 
     def render(self):
         """Overridden method inherited from `Gym`."""
