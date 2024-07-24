@@ -1319,17 +1319,27 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if self.lidar_obs:
             self.lidar_ray_headings = np.linspace(0, (self.num_lidar_rays - 1) * 360 / self.num_lidar_rays, self.num_lidar_rays)
 
-            self.ray_int_lines = []
-            if (
-                self.gps_env and
-                border_contour is None
-            ):
-                self.ray_int_geoms = [
-                    LineString([self.env_ll, self.env_lr]),
-                    LineString([self.env_lr, self.env_ur]),
-                    LineString([self.env_ur, self.env_ul]),
-                    LineString([self.env_ul, self.env_ll])
+            self.ray_int_segments = []
+            self.ray_int_seg_classes = []
+            self.ray_int_seg_class_map = {}
+
+            if self.gps_env:
+                if border_contour is None:
+                    self.ray_int_segments = [
+                        [*self.env_ll, *self.env_lr],
+                        [*self.env_lr, *self.env_ur],
+                        [*self.env_ur, *self.env_ul],
+                        [*self.env_ul, *self.env_ll]
+                    ]
+                    self.ray_int_seg_classes.extend(1[])
+            else:
+                self.ray_int_lines = [
+                    [*self.env_ll, *self.env_lr],
+                    [*self.env_lr, *self.env_ur],
+                    [*self.env_ur, *self.env_ul],
+                    [*self.env_ul, *self.env_ll]
                 ]
+
             self.ray_int_geoms.extend(
                 [geom for obstacle in self.obstacles for geom in self._generate_intersection_geoms_from_obstacles(obstacle)]
             )
