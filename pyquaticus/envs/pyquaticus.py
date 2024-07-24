@@ -211,7 +211,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                 agent_obs_normalizer.register((i, "ray_label"), [len(LIDAR_DETECTION_CLASS_MAP) - 1])
         else:
             max_bearing = [180]
-            max_dist = [self.env_diag + 10]  # add a ten meter buffer
+            max_dist = [self.env_diag + 10]  # add a ten meter buffer #TODO: convert to web_mercator if gps_env
             max_dist_scrimmage = [self.env_diag]
             min_dist = [0.0]
             max_bool, min_bool = [1.0], [0.0]
@@ -934,50 +934,46 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         return cp_sign == self.on_sides_sign[team] or cp_sign == 0
 
     def _update_lidar(self):
-        for player in self.players.values():
-            # Rays
-            ray_origin = np.asarray(player.pos)
+        ### Ray intersection segments ###
+        ray_int_segments = np.copy(self.ray_int_segments)
 
-            #determine ray vec in global reference frame
-            #(from 0 to 360 degrees starting at east and moving counterclockwise)
+        #translate non-static ray intersection geometries (agents)
+        for agent_id, player in self.players.items():
+            agent_seg_inds = self.ray_int_label_to_seg_inds[agent_id]
+            ray_int_segments[agent_seg_inds] += player.pos
+
+        ray_int_segments = ray_int_segments.reshape(1, -1, 4)
+
+        for player in self.players.values():
+            # Agent rays
+            ray_origin = np.asarray(player.pos)
             ray_headings_global = np.deg2rad((heading_angle_conversion(player.heading) + self.lidar_ray_headings) % 360)
             ray_vecs = np.array([np.cos(ray_headings_global), np.sin(ray_headings_global)]).T
-            #TODO: add ray starts
+            #TODO: add ray starts for lidar rendering
             ray_ends = ray_origin + self.lidar_range * ray_vecs
+            ray_origin = np.full(ray_ends.shape, ray_origin)
+            ray_segments = np.hstack((ray_origin, ray_ends))
+            ray_segments = ray_segments.reshape(-1, 1, 4)
 
-
-            # Ray intersection segments
-            ray_int_segments = np.copy(self.ray_int_segments)
-
-            #translate non-static ray intersection geometries (agents)
-            for agent_id, player in self.players.items():
-                agent_seg_inds = self.ray_int_label_to_seg_inds[agent_id]
-                ray_int_segments[agent_seg_inds] += player.pos
-
-            # Reshape segments to easily compute intersections
-            segments1 = segments1.reshape(-1, 1, 4)
-            segments2 = segments2.reshape(1, -1, 4)
-
-            # Extract coordinates
+            ### Compute intersections ###
             x1, y1, x2, y2 = segments1[..., 0], segments1[..., 1], segments1[..., 2], segments1[..., 3]
             x3, y3, x4, y4 = segments2[..., 0], segments2[..., 1], segments2[..., 2], segments2[..., 3]
             
-            # Parametric equations of the lines
             denom = (x1 - x2)*(y3 - y4) - (y1 - y2)*(x3 - x4)
-            
-            # Calculate intersections
             intersect_x = ((x1*y2 - y1*x2)*(x3 - x4) - (x1 - x2)*(x3*y4 - y3*x4)) / denom
             intersect_y = ((x1*y2 - y1*x2)*(y3 - y4) - (y1 - y2)*(x3*y4 - y3*x4)) / denom
             
-            # Mask invalid intersections (parallel lines or out-of-bounds)
+            #mask invalid intersections (parallel lines or out-of-bounds)
             mask = (denom != 0) & \
                 (intersect_x >= np.minimum(x1, x2)) & (intersect_x <= np.maximum(x1, x2)) & \
                 (intersect_y >= np.minimum(y1, y2)) & (intersect_y <= np.maximum(y1, y2)) & \
                 (intersect_x >= np.minimum(x3, x4)) & (intersect_x <= np.maximum(x3, x4)) & \
                 (intersect_y >= np.minimum(y3, y4)) & (intersect_y <= np.maximum(y3, y4))
 
-            intersect_x = np.where(mask, intersect_x, -1) #some large negative number
-            intersect_y = np.where(mask, intersect_y, -1) #some large negative number
+            intersect_x = np.where(mask, intersect_x, -self.env_diag) #some large negative number
+            intersect_y = np.where(mask, intersect_y, -self.env_diag) #some large negative number
+
+            #TODO: mask out intersections with self, and picked up flags
 
             intersections = np.stack((intersect_x.flatten(), intersect_y.flatten()), axis=-1).reshape(intersect_x.shape + (2,))
             
