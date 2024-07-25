@@ -683,7 +683,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.render_ctr = 0
         self.render_buffer = []
         self.traj_render_buffer = {}
-        self.set_render_config()
 
     def seed(self, seed=None):
         """
@@ -934,175 +933,76 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         return cp_sign == self.on_sides_sign[team] or cp_sign == 0
 
     def _update_lidar(self):
-        ### Ray intersection segments ###
         ray_int_segments = np.copy(self.ray_int_segments)
 
-        #translate non-static ray intersection geometries (agents)
+        # Valid flag intersection segments mask
+        flag_int_seg_mask = np.ones(len(self.ray_int_seg_labels), dtype=bool)
+        for i, _ in enumerate(self.flags):
+            flag_seg_inds = self.ray_int_label_to_seg_inds[f"flag{i}"]
+            flag_int_seg_mask[flag_seg_inds] = np.logical_not(self.state["flag_taken"][i])
+
+        # Translate non-static ray intersection geometries (agents)
         for agent_id, player in self.players.items():
             agent_seg_inds = self.ray_int_label_to_seg_inds[agent_id]
-            ray_int_segments[agent_seg_inds] += player.pos
+            ray_int_segments[agent_seg_inds] += np.tile(player.pos, 2)
 
         ray_int_segments = ray_int_segments.reshape(1, -1, 4)
 
+        # Agent rays
         for player in self.players.values():
-            # Agent rays
             ray_origin = np.asarray(player.pos)
             ray_headings_global = np.deg2rad((heading_angle_conversion(player.heading) + self.lidar_ray_headings) % 360)
             ray_vecs = np.array([np.cos(ray_headings_global), np.sin(ray_headings_global)]).T
             #TODO: add ray starts for lidar rendering
             ray_ends = ray_origin + self.lidar_range * ray_vecs
-            ray_origin = np.full(ray_ends.shape, ray_origin)
-            ray_segments = np.hstack((ray_origin, ray_ends))
+            ray_segments = np.hstack(
+                (np.full(ray_ends.shape, ray_origin), ray_ends)
+            )
             ray_segments = ray_segments.reshape(-1, 1, 4)
 
-            ### Compute intersections ###
-            x1, y1, x2, y2 = segments1[..., 0], segments1[..., 1], segments1[..., 2], segments1[..., 3]
-            x3, y3, x4, y4 = segments2[..., 0], segments2[..., 1], segments2[..., 2], segments2[..., 3]
+            #compute ray intersections
+            x1, y1, x2, y2 = ray_segments[..., 0], ray_segments[..., 1], ray_segments[..., 2], ray_segments[..., 3]
+            x3, y3, x4, y4 = ray_int_segments[..., 0], ray_int_segments[..., 1], ray_int_segments[..., 2], ray_int_segments[..., 3]
             
             denom = (x1 - x2)*(y3 - y4) - (y1 - y2)*(x3 - x4)
             intersect_x = ((x1*y2 - y1*x2)*(x3 - x4) - (x1 - x2)*(x3*y4 - y3*x4)) / denom
             intersect_y = ((x1*y2 - y1*x2)*(y3 - y4) - (y1 - y2)*(x3*y4 - y3*x4)) / denom
             
-            #mask invalid intersections (parallel lines or out-of-bounds)
+            #mask invalid intersections (parallel lines, outside of segment bounds, picked up flags, own agent segments)
+            agent_int_seg_mask = np.ones(len(self.ray_int_seg_labels), dtype=bool)
+            agent_seg_inds = self.ray_int_label_to_seg_inds[player.id]
+            agent_int_seg_mask[agent_seg_inds] = False
+
             mask = (denom != 0) & \
                 (intersect_x >= np.minimum(x1, x2)) & (intersect_x <= np.maximum(x1, x2)) & \
                 (intersect_y >= np.minimum(y1, y2)) & (intersect_y <= np.maximum(y1, y2)) & \
                 (intersect_x >= np.minimum(x3, x4)) & (intersect_x <= np.maximum(x3, x4)) & \
-                (intersect_y >= np.minimum(y3, y4)) & (intersect_y <= np.maximum(y3, y4))
+                (intersect_y >= np.minimum(y3, y4)) & (intersect_y <= np.maximum(y3, y4)) & \
+                flag_int_seg_mask & agent_int_seg_mask
 
-            intersect_x = np.where(mask, intersect_x, -self.env_diag) #some large negative number
-            intersect_y = np.where(mask, intersect_y, -self.env_diag) #some large negative number
-
-            #TODO: mask out intersections with self, and picked up flags
-
+            intersect_x = np.where(mask, intersect_x, -self.env_diag) #a coordinate out of bounds and far away
+            intersect_y = np.where(mask, intersect_y, -self.env_diag) #a coordinate out of bounds and far away
             intersections = np.stack((intersect_x.flatten(), intersect_y.flatten()), axis=-1).reshape(intersect_x.shape + (2,))
+
+            #determine lidar ray readings
+            intersection_dists = np.linalg.norm(intersections - ray_origin, axis=-1)
+            ray_int_inds = np.argmin(intersection_dists, axis=-1)
+
+            ray_int_labels = self.ray_int_seg_labels[ray_int_inds]
+            ray_intersections = intersections[np.arange(intersections.shape[0]), ray_int_inds]
+            ray_int_dists = intersection_dists[np.arange(intersection_dists.shape[0]), ray_int_inds]
+
+            #correct lidar ray readings for which nothing was detected
+            invalid_ray_ints = np.where(np.all(np.logical_not(mask), axis=-1))[0]
             
-            return intersections
+            ray_int_labels[invalid_ray_ints] = self.ray_int_label_map["nothing"]
+            ray_intersections[invalid_ray_ints] = ray_ends[invalid_ray_ints]
+            ray_int_dists[invalid_ray_ints] = self.lidar_range
 
-        #####################################################
-        #####################################################
-
-
-
-        for player in self.players.values():
-            ray_origin = np.asarray(player.pos)
-            for i, ray_heading in enumerate(self.lidar_ray_headings):
-                #determine ray vec in global reference frame
-                #(from 0 to 360 degrees starting at east and moving counterclockwise) 
-                ray_heading_global = np.deg2rad((heading_angle_conversion(player.heading) + ray_heading) % 360)
-                ray_vec = np.array([np.cos(ray_heading_global), np.sin(ray_heading_global)])
-                ray_end = ray_origin + self.lidar_range * ray_vec
-                ray_line = LineString((ray_origin, ray_end))
-                intersections = np.full((3,2), -1.)
-                intersection_dists = np.full(3, 2*self.lidar_range)
-
-                #agent intersections
-                agent_intersections = []
-                agent_int_ids = []
-                for other_player in self.players.values():
-                    if other_player.id != player.id:
-                        other_player_polygon = Point(*other_player.pos).buffer(self.agent_radius)
-                        other_player_int = intersection(other_player_polygon, ray_line)
-                        if not other_player_int.is_empty:
-                            agent_intersections.extend(other_player_int.coords)
-                            agent_int_ids.extend(np.full(len(other_player_int.coords), other_player.id))
-
-                agent_intersections = np.asarray(agent_intersections)
-                agent_int_ids = np.asarray(agent_int_ids)
-                agent_int_id = None
-                
-                if len(agent_intersections) > 0:
-                    agent_int_valid = agent_intersections[~np.all(agent_intersections == ray_origin, axis=1)]
-                    agent_int_ids = agent_int_ids[~np.all(agent_intersections == ray_origin, axis=1)]
-
-                    if len(agent_int_valid) > 0:
-                        agent_int_distances = np.linalg.norm(agent_int_valid - ray_origin, axis=1)
-                        agent_int_idx = np.argmin(agent_int_distances)
-                        intersections[0] = agent_int_valid[agent_int_idx]
-                        intersection_dists[0] = agent_int_distances[agent_int_idx]
-                        agent_int_id = agent_int_ids[agent_int_idx]
-
-                #flag intersections
-                flag_intersections = []
-                flag_int_ids = []
-                for flag in self.flags:
-                    if not self.state["flag_taken"][int(flag.team)]:
-                        flag_polygon = Point(*flag.home).buffer(self.flag_radius)
-                        flag_int = intersection(flag_polygon, ray_line)
-                        if not flag_int.is_empty:
-                            flag_intersections.extend(flag_int.coords)
-                            flag_int_ids.extend(np.full(len(flag_int.coords), flag.team))
-
-                flag_intersections = np.asarray(flag_intersections)
-                flag_int_ids = np.asarray(flag_int_ids)
-                flag_int_id = None
-
-                if len(flag_intersections) > 0:
-                    flag_int_valid = flag_intersections[~np.all(flag_intersections == ray_origin, axis=1)]
-                    flag_int_ids = flag_int_ids[~np.all(flag_intersections == ray_origin, axis=1)]
-
-                    if len(flag_int_valid) > 0:
-                        flag_int_distances = np.linalg.norm(flag_int_valid - ray_origin, axis=1)
-                        flag_int_idx = np.argmin(flag_int_distances)
-                        intersections[1] = flag_int_valid[flag_int_idx]
-                        intersection_dists[1] = flag_int_distances[flag_int_idx]
-                        flag_int_id = flag_int_ids[flag_int_idx]
-
-                #obstacle intersections
-                obstacle_intersections = []
-                for geom in self.ray_int_geoms:
-                    geom_int = intersection(geom, ray_line)
-                    if not geom_int.is_empty:
-                        obstacle_intersections.extend(geom_int.coords)
-
-                obstacle_intersections = np.asarray(obstacle_intersections)
-
-                if len(obstacle_intersections) > 0:
-                    obstacle_int_valid = obstacle_intersections[~np.all(obstacle_intersections == ray_origin, axis=1)]
-
-                    if len(obstacle_int_valid) > 0:
-                        obstacle_int_distances = np.linalg.norm(obstacle_int_valid - ray_origin, axis=1)
-                        obstacle_int_idx = np.argmin(obstacle_int_distances)
-                        intersections[2] = obstacle_int_valid[obstacle_int_idx]
-                        intersection_dists[2] = obstacle_int_distances[obstacle_int_idx]
-
-                # determine distance reading, end point, and label
-                if not np.all(intersections == -1):
-                    ray_int_idx = np.argmin(intersection_dists)
-                    ray_distance = intersection_dists[ray_int_idx]
-                    ray_end = intersections[ray_int_idx]
-
-                    if ray_int_idx == 0:
-                        #agent intersections
-                        if agent_int_id in self.agent_to_team_ids[player.id]:
-                            if self.players[agent_int_id].is_tagged:
-                                ray_label = LIDAR_DETECTION_CLASS_MAP["teammate_is_tagged"]
-                            elif self.players[agent_int_id].has_flag:
-                                ray_label = LIDAR_DETECTION_CLASS_MAP["teammate_has_flag"]
-                            else:
-                                ray_label = LIDAR_DETECTION_CLASS_MAP["teammate"]
-                        else:
-                            if self.players[agent_int_id].is_tagged:
-                                ray_label = LIDAR_DETECTION_CLASS_MAP["opponent_is_tagged"]
-                            elif self.players[agent_int_id].has_flag:
-                                ray_label = LIDAR_DETECTION_CLASS_MAP["opponent_has_flag"]
-                            else:
-                                ray_label = LIDAR_DETECTION_CLASS_MAP["opponent"]
-
-                    elif ray_int_idx == 1:
-                        if player.team == flag_int_id:
-                            ray_label = LIDAR_DETECTION_CLASS_MAP["team_flag"]
-                        else:
-                            ray_label = LIDAR_DETECTION_CLASS_MAP["opponent_flag"]
-                    else:
-                        ray_label = LIDAR_DETECTION_CLASS_MAP["obstacle"]
-                else:
-                    ray_distance = self.lidar_range
-                    ray_label = LIDAR_DETECTION_CLASS_MAP["nothing"]
-
-                self.state["lidar_distances"][player.id][i] = ray_distance
-                self.state["lidar_labels"][player.id][i] = ray_label
-                self.state["lidar_ends"][player.id][i] = ray_end
+            #save lidar readings
+            self.state["lidar_labels"][player.id] = ray_int_labels
+            self.state["lidar_ends"][player.id] = ray_intersections
+            self.state["lidar_distances"][player.id] = ray_int_dists
 
     def _check_pickup_flags(self):
         """Updates player states if they picked up the flag."""
@@ -1335,7 +1235,52 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # ll = lower left, lr = lower right
         # ul = upper left, ur = upper right
 
-    def set_geom_config(config_dict):
+        ### Environment Rendering ###
+        if self.render_mode:
+            # pygame orientation vector
+            self.PYGAME_UP = Vector2((0.0, 1.0))
+
+            # pixel sizes
+            max_screen_size = get_screen_res()
+            self.pixel_size = (self.screen_frac * max_screen_size[0]) / self.env_size[0]
+            self.screen_width = round(self.env_size[0] * self.pixel_size)
+            self.screen_height = round(self.env_size[1] * self.pixel_size)
+            
+            self.boundary_width = 2  # pixels
+            self.a2a_line_width = 3 #pixels
+
+            # check that world size (pixels) does not exceed the screen dimensions
+            world_screen_err_msg = (
+                "Specified env_size {} exceeds the maximum size {} in at least one"
+                " dimension".format(
+                    [round(self.pixel_size * self.env_size[0]), round(self.pixel_size * self.env_size[1])], 
+                    max_screen_size
+                )
+            )
+            assert (
+                self.pixel_size * self.env_size[0] <= max_screen_size[0] and
+                self.pixel_size * self.env_size[1] <= max_screen_size[1]
+            ), world_screen_err_msg
+
+            # check that time between frames (1/render_fps) is not larger than timestep (tau)
+            frame_rate_err_msg = (
+                "Specified frame rate ({}) creates time intervals between frames larger"
+                " than specified timestep ({})".format(self.render_fps, self.tau)
+            )
+            assert 1 / self.render_fps <= self.tau, frame_rate_err_msg
+
+            self.num_renders_per_step = int(self.render_fps * self.tau)
+
+            # check that time warp is an integer >= 1
+            if self.sim_speedup_factor < 1:
+                print("Warning: sim_speedup_factor must be an integer >= 1! Defaulting to 1.")
+                self.sim_speedup_factor = 1
+
+            if type(self.sim_speedup_factor) != int:
+                self.sim_speedup_factor = int(np.round(self.sim_speedup_factor))
+                print(f"Warning: Converted sim_speedup_factor to integer: {self.sim_speedup_factor}")
+
+    def set_geom_config(self, config_dict):
         # Obstacles
         obstacle_params = config_dict.get("obstacles", config_dict_std["obstacles"])
 
@@ -1415,7 +1360,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             ray_int_segments.extend(obstacle_segments)
 
             #flags
-            for i, flag in enumerate(self.flags):
+            for i, _ in enumerate(self.flags):
                 vertices = list(Point(0., 0.).buffer(self.flag_radius, quad_segs=2).exterior.coords)[:-1] #approximate circle with an octagon
                 segments = [[*vertex, *vertices[(i+1) % len(vertices)]] for i, vertex in enumerate(vertices)]
                 ray_int_seg_labels.extend(
@@ -1443,60 +1388,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Occupancy map
         #TODO
-
-    def set_render_config(self):
-        ### Environment Rendering ###
-        if self.render_mode:
-            # pygame orientation vector
-            self.PYGAME_UP = Vector2((0.0, 1.0))
-
-            # pixel sizes
-            max_screen_size = get_screen_res()
-            self.pixel_size = (self.screen_frac * max_screen_size[0]) / self.env_size[0]
-            self.screen_width = round(self.env_size[0] * self.pixel_size)
-            self.screen_height = round(self.env_size[1] * self.pixel_size)
-            
-            self.boundary_width = 2  # pixels
-            self.a2a_line_width = 3 #pixels
-
-            # render background
-            if self.gps_env:
-                pygame_background_img = pygame.surfarray.make_surface(
-                    np.transpose(self.background_img, (1,0,2)) #pygame assumes images are (h, w, 3)
-                )
-                self.pygame_background_img = pygame.transform.scale(pygame_background_img, (self.screen_width, self.screen_height))
-                
-
-            # check that world size (pixels) does not exceed the screen dimensions
-            world_screen_err_msg = (
-                "Specified env_size {} exceeds the maximum size {} in at least one"
-                " dimension".format(
-                    [round(self.pixel_size * self.env_size[0]), round(self.pixel_size * self.env_size[1])], 
-                    max_screen_size
-                )
-            )
-            assert (
-                self.pixel_size * self.env_size[0] <= max_screen_size[0] and
-                self.pixel_size * self.env_size[1] <= max_screen_size[1]
-            ), world_screen_err_msg
-
-            # check that time between frames (1/render_fps) is not larger than timestep (tau)
-            frame_rate_err_msg = (
-                "Specified frame rate ({}) creates time intervals between frames larger"
-                " than specified timestep ({})".format(self.render_fps, self.tau)
-            )
-            assert 1 / self.render_fps <= self.tau, frame_rate_err_msg
-
-            self.num_renders_per_step = int(self.render_fps * self.tau)
-
-            # check that time warp is an integer >= 1
-            if self.sim_speedup_factor < 1:
-                print("Warning: sim_speedup_factor must be an integer >= 1! Defaulting to 1.")
-                self.sim_speedup_factor = 1
-
-            if type(self.sim_speedup_factor) != int:
-                self.sim_speedup_factor = int(np.round(self.sim_speedup_factor))
-                print(f"Warning: Converted sim_speedup_factor to integer: {self.sim_speedup_factor}")
 
     def get_distance_between_2_points(self, start: np.array, end: np.array) -> float:
         """
@@ -1714,14 +1605,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         if self.lidar_obs:
             #reset lidar readings
-            self.state["lidar_distances"] = {agent_id: np.zeros(self.num_lidar_rays) for agent_id in agent_ids}
             self.state["lidar_labels"] = {agent_id: np.zeros(self.num_lidar_rays) for agent_id in agent_ids}
             self.state["lidar_ends"] = {agent_id: np.zeros((self.num_lidar_rays, 2)) for agent_id in agent_ids}
+            self.state["lidar_distances"] = {agent_id: np.zeros(self.num_lidar_rays) for agent_id in agent_ids}
 
             #translate ray flag geometries
             for i, flag in enumerate(self.flags):
                 flag_seg_inds = self.ray_int_label_to_seg_inds[f"flag{i}"]
-                self.ray_int_segments[flag_seg_inds] += flag.home
+                self.ray_int_segments[flag_seg_inds] += np.tile(flag.home, 2)
 
             self._update_lidar()
 
@@ -2602,6 +2493,7 @@ when gps environment bounds are specified in meters")
         Draws all players/flags/etc on the pygame screen.
         """
         if self.screen is None:
+            #create screen
             pygame.init()
             pygame.display.set_caption("Capture The Flag")
             if self.render_mode == "human":
@@ -2615,6 +2507,12 @@ when gps environment bounds are specified in meters")
                 raise Exception(
                     f"Sorry, render modes other than f{self.metadata['render_modes']} are not supported"
                 )
+            #render background
+            if self.gps_env:
+                pygame_background_img = pygame.surfarray.make_surface(
+                    np.transpose(self.background_img, (1,0,2)) #pygame assumes images are (h, w, 3)
+                )
+                self.pygame_background_img = pygame.transform.scale(pygame_background_img, (self.screen_width, self.screen_height))
 
         if self.clock is None:
             self.clock = pygame.time.Clock()

@@ -41,6 +41,8 @@ def line_segment_intersections(segments1, segments2):
     intersect_y = np.where(mask, intersect_y, -1) #some large negative number
 
     intersections = np.stack((intersect_x.flatten(), intersect_y.flatten()), axis=-1).reshape(intersect_x.shape + (2,))
+
+    print(mask)
     
     return intersections
 
@@ -51,6 +53,8 @@ segments2 = np.array([[2, 0, 0, 2], [5, 0, 0, 5]])
 intersections = line_segment_intersections(segments1, segments2)
 print()
 print("Intersections:", intersections)
+print()
+print(np.linalg.norm(intersections, axis=-1))
 
 
 
