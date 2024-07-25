@@ -188,7 +188,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         if self.lidar_obs:
             max_bearing = [180]
             max_dist_scrimmage = [self.env_diag]
-            max_lidar_dist = [self.lidar_range]
+            max_lidar_dist = self.num_lidar_rays * [self.lidar_range]
             min_dist = [0.0]
             max_bool, min_bool = [1.0], [0.0]
             max_speed, min_speed = [MAX_SPEED], [0.0]
@@ -205,10 +205,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             agent_obs_normalizer.register("is_tagged", max_bool, min_bool)
             agent_obs_normalizer.register("team_score", max_score, min_score)
             agent_obs_normalizer.register("opponent_score", max_score, min_score)
-
-            for i in range(self.num_lidar_rays):
-                agent_obs_normalizer.register((i, "ray_distance"), max_lidar_dist)
-                agent_obs_normalizer.register((i, "ray_label"), [len(LIDAR_DETECTION_CLASS_MAP) - 1])
+            agent_obs_normalizer.register("ray_distances", max_lidar_dist)
+            agent_obs_normalizer.register("ray_labels", self.num_lidar_rays * [len(LIDAR_DETECTION_CLASS_MAP) - 1])
         else:
             max_bearing = [180]
             max_dist = [self.env_diag + 10]  # add a ten meter buffer #TODO: convert to web_mercator if gps_env
@@ -395,9 +393,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                 obs["opponent_score"] = self.game_score["blue_captures"]
 
             # Lidar
-            for i in range(self.num_lidar_rays):
-                obs[(i, "ray_distance")] = self.state["lidar_distances"][agent_id][i]
-                obs[(i, "ray_label")] = self.state["lidar_labels"][agent_id][i]
+            obs["ray_distances"] = self.state["lidar_distances"][agent_id]
+            obs["ray_labels"] = self.state["lidar_labels"][agent_id]
 
         else:
             own_home_loc = self.flags[int(own_team)].home
@@ -941,7 +938,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             flag_seg_inds = self.ray_int_label_to_seg_inds[f"flag{i}"]
             flag_int_seg_mask[flag_seg_inds] = np.logical_not(self.state["flag_taken"][i])
 
-        # Translate non-static ray intersection geometries (agents)
+        # Translate non-static ray intersection geometries (flags and agents)
+        for i, flag in enumerate(self.flags):
+            flag_seg_inds = self.ray_int_label_to_seg_inds[f"flag{i}"]
+            ray_int_segments[flag_seg_inds] += np.tile(flag.home, 2)
+
         for agent_id, player in self.players.items():
             agent_seg_inds = self.ray_int_label_to_seg_inds[agent_id]
             ray_int_segments[agent_seg_inds] += np.tile(player.pos, 2)
@@ -1608,12 +1609,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.state["lidar_labels"] = {agent_id: np.zeros(self.num_lidar_rays) for agent_id in agent_ids}
             self.state["lidar_ends"] = {agent_id: np.zeros((self.num_lidar_rays, 2)) for agent_id in agent_ids}
             self.state["lidar_distances"] = {agent_id: np.zeros(self.num_lidar_rays) for agent_id in agent_ids}
-
-            #translate ray flag geometries
-            for i, flag in enumerate(self.flags):
-                flag_seg_inds = self.ray_int_label_to_seg_inds[f"flag{i}"]
-                self.ray_int_segments[flag_seg_inds] += np.tile(flag.home, 2)
-
             self._update_lidar()
 
         for k in self.game_score:
