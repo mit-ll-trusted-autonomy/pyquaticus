@@ -1185,6 +1185,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.render_traj_cutoff = config_dict.get("render_traj_cutoff", config_dict_std["render_traj_cutoff"])
         self.render_lidar = config_dict.get("render_lidar", config_dict_std["render_lidar"])
         self.record_render = config_dict.get("record_render", config_dict_std["record_render"])
+        self.recording_codec = config_dict.get("recording_codec", config_dict_std["recording_codec"])
 
         # Miscellaneous parameters
         if config_dict.get("suppress_numpy_warnings", config_dict_std["suppress_numpy_warnings"]):
@@ -2755,10 +2756,18 @@ when gps environment bounds are specified in meters")
             now = datetime.now() #get date and time
             video_id = now.strftime("%m-%d-%Y_%H-%M-%S")
 
-            video_file_name = f"pyquaticus_{video_id}.avi"
+            if self.recording_codec == "mp4":
+                video_file_name = f"pyquaticus_{video_id}.mp4"
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            elif self.recording_codec == "avi":
+                video_file_name = f"pyquaticus_{video_id}.avi"
+                fourcc = cv2.VideoWriter_fourcc('I','4','2','0')
+            else:
+                raise NotImplementedError()
+
             video_file_path = os.path.join(video_file_dir, video_file_name)
 
-            out = cv2.VideoWriter(video_file_path, cv2.VideoWriter_fourcc('M','J','P','G'), self.render_fps, (self.screen_width, self.screen_height))
+            out = cv2.VideoWriter(video_file_path, fourcc, self.render_fps, (self.screen_width, self.screen_height))
             for img in self.render_buffer:
                 out.write(cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
 

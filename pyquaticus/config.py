@@ -71,6 +71,7 @@ config_dict_std = {
     "render_traj_cutoff":   None, # max length (timesteps) of the traj to render, or None for no limit
     "render_lidar":        False, # option to render lidar rays
     "record_render":       False, # option to save video of render frames
+    "recording_codec":     "mp4", # mp4, avi
 
     #render_traj_mode has multiple options and combinations:
     #'traj': dashed line for agent trajectories
