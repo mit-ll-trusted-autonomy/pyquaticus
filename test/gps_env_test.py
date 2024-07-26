@@ -139,13 +139,13 @@ def main():
     config = copy.deepcopy(pyquaticus.config.config_dict_std)
     config["gps_env"] = True
     config["env_bounds"] = "auto"
-    config["blue_flag_home"] = (42.352229714597705, -70.99992567997114) #(41.3504170, -74.0614643)
-    config["red_flag_home"] = (42.32710627259394, -70.96739585043458) #(41.3512143, -74.0608635)
+    config["blue_flag_home"] = (41.3504170, -74.0614643)#(42.352229714597705, -70.99992567997114) #(41.3504170, -74.0614643)
+    config["red_flag_home"] = (41.3512143, -74.0608635)#(42.32710627259394, -70.96739585043458) #(41.3512143, -74.0608635)
     config["flag_homes_unit"] = "ll"
     config["sim_speedup_factor"] = 10
-    config["max_time"] = 200
+    config["max_time"] = 700
     config["screen_frac"] = 0.4 
-    # config["lidar_obs"] = True
+    config["lidar_obs"] = True
     config["num_lidar_rays"] = 150
     config["lidar_range"] = 40
     config["render_agent_ids"] = True
