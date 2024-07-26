@@ -1919,10 +1919,10 @@ when gps environment bounds are specified in meters")
                     )['lat2']
 
                     #horizontal bounds
-                    flag_midpoint_geoc_lat = np.arcsin(
+                    geoc_lat = np.arctan(
                         (POLAR_RADIUS / EQUATORIAL_RADIUS) * np.tan(flag_midpoint[0])
                     )
-                    small_circle_circum = np.pi * 2 * EQUATORIAL_RADIUS * np.cos(flag_midpoint_geoc_lat)
+                    small_circle_circum = np.pi * 2 * EQUATORIAL_RADIUS * np.cos(geoc_lat)
                     env_left = flag_midpoint[1] - 360 * (0.5*env_bounds[1][0] / small_circle_circum)
                     env_right = flag_midpoint[1] + 360 * (0.5*env_bounds[1][0] / small_circle_circum)
 
@@ -2043,7 +2043,7 @@ when gps environment bounds are specified in meters")
             else:
                 lat = lat2
 
-            geoc_lat = np.arcsin((POLAR_RADIUS / EQUATORIAL_RADIUS) * np.tan(lat))
+            geoc_lat = np.arctan((POLAR_RADIUS / EQUATORIAL_RADIUS) * np.tan(lat))
             small_circle_circum = np.pi * 2 * EQUATORIAL_RADIUS * np.cos(geoc_lat)
             
             #use most warped (squished) horizontal border to underestimate the number of
