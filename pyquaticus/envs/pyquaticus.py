@@ -2655,7 +2655,7 @@ when gps environment bounds are specified in meters")
                     agent_id_blit_pos = (
                         0.5*rotated_surface_size[0] - 0.35 * self.pixel_size * self.agent_radius,
                         0.5*rotated_surface_size[1] - 0.6 * self.pixel_size * self.agent_radius
-                    )
+                    ) #TODO: adjust this based on a rect of the number and maybe agent too?
                     if self.gps_env:
                         font_color = "white"
                     else:
@@ -2758,7 +2758,7 @@ when gps environment bounds are specified in meters")
             video_file_name = f"pyquaticus_{video_id}.avi"
             video_file_path = os.path.join(video_file_dir, video_file_name)
 
-            out = cv2.VideoWriter(video_file_path, cv2.VideoWriter_fourcc('I','4','2','0'), self.render_fps, (self.screen_width, self.screen_height))
+            out = cv2.VideoWriter(video_file_path, cv2.VideoWriter_fourcc('M','J','P','G'), self.render_fps, (self.screen_width, self.screen_height))
             for img in self.render_buffer:
                 out.write(cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
 

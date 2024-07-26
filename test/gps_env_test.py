@@ -142,18 +142,18 @@ def main():
     config["blue_flag_home"] = (41.3504170, -74.0614643)
     config["red_flag_home"] = (41.3512143, -74.0608635)
     config["flag_homes_unit"] = "ll"
-    config["sim_speedup_factor"] = 1
+    config["sim_speedup_factor"] = 10
     config["max_time"] = 200
-    config["screen_frac"] = 0.3 
+    config["screen_frac"] = 0.4 
     config["lidar_obs"] = True
     config["num_lidar_rays"] = 150
     config["lidar_range"] = 40
     config["render_agent_ids"] = True
     config["render_lidar"] = True
-    config["render_traj_mode"] = "traj_agent"
+    # config["render_traj_mode"] = "traj_agent"
     config["render_traj_freq"] = 10
     config["render_traj_cutoff"] = 55
-    # config["record_render"] = True
+    config["record_render"] = True
     # config["render_fps"] = 10
     # config["normalize"] = False
     
