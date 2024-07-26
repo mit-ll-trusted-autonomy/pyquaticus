@@ -144,7 +144,7 @@ def main():
     config["flag_homes_unit"] = "ll"
     config["sim_speedup_factor"] = 10
     config["max_time"] = 700
-    config["screen_frac"] = 0.4 
+    config["screen_frac"] = 0.3 
     config["lidar_obs"] = True
     config["num_lidar_rays"] = 150
     config["lidar_range"] = 40
@@ -153,7 +153,8 @@ def main():
     # config["render_traj_mode"] = "traj_agent"
     config["render_traj_freq"] = 10
     config["render_traj_cutoff"] = 55
-    # config["record_render"] = True
+    config["record_render"] = True
+    config["recording_format"] = "mp4"
     # config["render_fps"] = 10
     # config["normalize"] = False
     

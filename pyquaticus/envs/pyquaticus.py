@@ -1185,7 +1185,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.render_traj_cutoff = config_dict.get("render_traj_cutoff", config_dict_std["render_traj_cutoff"])
         self.render_lidar = config_dict.get("render_lidar", config_dict_std["render_lidar"])
         self.record_render = config_dict.get("record_render", config_dict_std["record_render"])
-        self.recording_codec = config_dict.get("recording_codec", config_dict_std["recording_codec"])
+        self.recording_format = config_dict.get("recording_format", config_dict_std["recording_format"])
 
         # Miscellaneous parameters
         if config_dict.get("suppress_numpy_warnings", config_dict_std["suppress_numpy_warnings"]):
@@ -1632,6 +1632,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.render_ctr = 0
 
             if self.record_render:
+                #TODO change this to step function
                 if len(self.render_buffer) > 0:
                     self.buffer_to_video()
                     self.render_buffer = []
@@ -2756,12 +2757,12 @@ when gps environment bounds are specified in meters")
             now = datetime.now() #get date and time
             video_id = now.strftime("%m-%d-%Y_%H-%M-%S")
 
-            if self.recording_codec == "mp4":
+            if self.recording_format == "mp4":
                 video_file_name = f"pyquaticus_{video_id}.mp4"
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            elif self.recording_codec == "avi":
+            elif self.recording_format == "avi":
                 video_file_name = f"pyquaticus_{video_id}.avi"
-                fourcc = cv2.VideoWriter_fourcc('I','4','2','0')
+                fourcc = cv2.VideoWriter_fourcc('X','V','I','D')
             else:
                 raise NotImplementedError()
 
@@ -2778,6 +2779,7 @@ when gps environment bounds are specified in meters")
 
     def close(self):
         """Overridden method inherited from `Gym`."""
+        #TODO: save video if have not already on early exiting
         if self.screen is not None:
             pygame.display.quit()
             pygame.quit()
