@@ -931,6 +931,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
     def _update_lidar(self):
         ray_int_segments = np.copy(self.ray_int_segments)
+        print(ray_int_segments)
 
         # Valid flag intersection segments mask
         flag_int_seg_mask = np.ones(len(self.ray_int_seg_labels), dtype=bool)
@@ -954,7 +955,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             ray_origin = np.asarray(player.pos)
             ray_headings_global = np.deg2rad((heading_angle_conversion(player.heading) + self.lidar_ray_headings) % 360)
             ray_vecs = np.array([np.cos(ray_headings_global), np.sin(ray_headings_global)]).T
-            #TODO: add ray starts for lidar rendering
             ray_ends = ray_origin + self.lidar_range * ray_vecs
             ray_segments = np.hstack(
                 (np.full(ray_ends.shape, ray_origin), ray_ends)
@@ -968,6 +968,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             denom = (x1 - x2)*(y3 - y4) - (y1 - y2)*(x3 - x4)
             intersect_x = ((x1*y2 - y1*x2)*(x3 - x4) - (x1 - x2)*(x3*y4 - y3*x4)) / denom
             intersect_y = ((x1*y2 - y1*x2)*(y3 - y4) - (y1 - y2)*(x3*y4 - y3*x4)) / denom
+
+            if player.id == 0:
+                print(intersect_x.shape)
+                print(intersect_x[0][4], intersect_y[0][4])
             
             #mask invalid intersections (parallel lines, outside of segment bounds, picked up flags, own agent segments)
             agent_int_seg_mask = np.ones(len(self.ray_int_seg_labels), dtype=bool)
@@ -995,12 +999,16 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             #correct lidar ray readings for which nothing was detected
             invalid_ray_ints = np.where(np.all(np.logical_not(mask), axis=-1))[0]
+            # if player.id == 0:
+                # print(invalid_ray_ints)
             
             ray_int_labels[invalid_ray_ints] = self.ray_int_label_map["nothing"]
             ray_intersections[invalid_ray_ints] = ray_ends[invalid_ray_ints]
             ray_int_dists[invalid_ray_ints] = self.lidar_range
 
             #save lidar readings
+            # if player.id == 0:
+                # print(ray_int_labels[0])
             self.state["lidar_labels"][player.id] = ray_int_labels
             self.state["lidar_ends"][player.id] = ray_intersections
             self.state["lidar_distances"][player.id] = ray_int_dists
@@ -1242,14 +1250,28 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             # pygame orientation vector
             self.PYGAME_UP = Vector2((0.0, 1.0))
 
-            # pixel sizes
-            max_screen_size = get_screen_res()
+            # arena buffer fraction
+            self.arena_buffer_frac = 1/20
+
+            # pygame screen size
+            max_screen_width, max_screen_height = get_screen_res()
+            arena_aspect_ratio = self.env_size[0] / self.env_size[1]
+            width_based_height = max_screen_width / arena_aspect_ratio
+
+            if width_based_height <= screen_height:
+                image_width = screen_width
+            else:
+                height_based_width = screen_height * aspect_ratio_value
+                image_width = int(height_based_width)
+
             self.pixel_size = (self.screen_frac * max_screen_size[0]) / self.env_size[0]
             self.screen_width = round(self.env_size[0] * self.pixel_size)
             self.screen_height = round(self.env_size[1] * self.pixel_size)
-            
-            self.boundary_width = 2  # pixels
+ 
+            # environemnt element sizes in pixels
+            self.boundary_width = 2  #pixels
             self.a2a_line_width = 3 #pixels
+            self.arena_render_offset = None #TODO pixels
 
             # check that world size (pixels) does not exceed the screen dimensions
             world_screen_err_msg = (
@@ -1386,6 +1408,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 ray_int_segments.extend(segments)
 
             self.ray_int_segments = np.asarray(ray_int_segments)
+            print(self.env_size)
+            print(self.ray_int_segments[:6])
             self.ray_int_seg_labels = np.asarray(ray_int_seg_labels)
 
         # Occupancy map
@@ -2325,17 +2349,19 @@ when gps environment bounds are specified in meters")
             topo_tile_source = cx.providers.CartoDB.DarkMatterNoLabels #DO NOT CHANGE!
             render_tile_source = cx.providers.CartoDB.Voyager #DO NOT CHANGE!
 
+            render_tile_bounds = self.env_bounds + self.arena_buffer_frac * np.asarray([[-self.env_diag], [self.env_diag]])
+
             topo_tile, topo_ext = cx.bounds2img(
                 *self.env_bounds.flatten(), zoom='auto', source=topo_tile_source, ll=False,
                 wait=0, max_retries=2, n_connections=1, use_cache=False, zoom_adjust=None
             )
             render_tile, render_ext = cx.bounds2img(
-                *self.env_bounds.flatten(), zoom='auto', source=render_tile_source, ll=False,
+                *render_tile_bounds.flatten(), zoom='auto', source=render_tile_source, ll=False,
                 wait=0, max_retries=2, n_connections=1, use_cache=False, zoom_adjust=None
             )
 
             topo_img = self._crop_tiles(topo_tile[:,:,:-1], topo_ext, *self.env_bounds.flatten(), ll=False)
-            self.background_img = self._crop_tiles(render_tile[:,:,:-1], topo_ext, *self.env_bounds.flatten(), ll=False)
+            self.background_img = self._crop_tiles(render_tile[:,:,:-1], render_ext, *render_tile_bounds.flatten(), ll=False)
 
             #cache maps
             map_cache = {"topographical_image": topo_img, "render_image": self.background_img}
