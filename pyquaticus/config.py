@@ -4,7 +4,7 @@ import numpy as np
 
 ### Constants ###
 EQUATORIAL_RADIUS = 6378137.0 # meters (https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html)
-LINE_INTERSECT_TOL = 1e-10
+LINE_INTERSECT_TOL = 1e-9
 POLAR_RADIUS = 6356752.0 # meters (https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html)
 MAX_SPEED = 3.5 # meters / s
 
