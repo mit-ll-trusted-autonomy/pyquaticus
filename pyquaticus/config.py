@@ -4,6 +4,7 @@ import numpy as np
 
 ### Constants ###
 EQUATORIAL_RADIUS = 6378137.0 # meters (https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html)
+LINE_INTERSECT_TOL = 1e-10
 POLAR_RADIUS = 6356752.0 # meters (https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html)
 MAX_SPEED = 3.5 # meters / s
 
@@ -59,11 +60,11 @@ config_dict_std = {
     "normalize":    True, # flag for normalizing the observation space.
     "lidar_obs":   False, # option to use lidar (ray casting model) observations
     "lidar_range":  40.0, # meters
-    "num_lidar_rays": 32, # number of rays for lidar
+    "num_lidar_rays": 64, # number of rays for lidar
     
     # Rendering parameters
     "render_fps":             30, # target number of frames per second
-    "screen_frac":          0.75, # fraction of max possible pygame screen size to use for rendering
+    "screen_frac":          0.90, # fraction of max possible pygame screen size to use for rendering
     "render_agent_ids":    False, # option to render agent id's on agents
     "render_field_points": False, # option to see the Aquaticus field points in the environment
     "render_traj_mode":     None, # "traj", "agent", "history", "traj_agent", "traj_history", or None

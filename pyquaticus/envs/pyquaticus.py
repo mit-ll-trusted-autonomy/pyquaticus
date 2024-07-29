@@ -50,6 +50,7 @@ from pyquaticus.config import (
     ACTION_MAP,
     config_dict_std,
     EQUATORIAL_RADIUS,
+    LINE_INTERSECT_TOL, 
     LIDAR_DETECTION_CLASS_MAP,
     MAX_SPEED,
     POLAR_RADIUS
@@ -931,7 +932,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
     def _update_lidar(self):
         ray_int_segments = np.copy(self.ray_int_segments)
-        print(ray_int_segments)
 
         # Valid flag intersection segments mask
         flag_int_seg_mask = np.ones(len(self.ray_int_seg_labels), dtype=bool)
@@ -968,10 +968,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             denom = (x1 - x2)*(y3 - y4) - (y1 - y2)*(x3 - x4)
             intersect_x = ((x1*y2 - y1*x2)*(x3 - x4) - (x1 - x2)*(x3*y4 - y3*x4)) / denom
             intersect_y = ((x1*y2 - y1*x2)*(y3 - y4) - (y1 - y2)*(x3*y4 - y3*x4)) / denom
-
-            if player.id == 0:
-                print(intersect_x.shape)
-                print(intersect_x[0][4], intersect_y[0][4])
             
             #mask invalid intersections (parallel lines, outside of segment bounds, picked up flags, own agent segments)
             agent_int_seg_mask = np.ones(len(self.ray_int_seg_labels), dtype=bool)
@@ -979,10 +975,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             agent_int_seg_mask[agent_seg_inds] = False
 
             mask = (denom != 0) & \
-                (intersect_x >= np.minimum(x1, x2)) & (intersect_x <= np.maximum(x1, x2)) & \
-                (intersect_y >= np.minimum(y1, y2)) & (intersect_y <= np.maximum(y1, y2)) & \
-                (intersect_x >= np.minimum(x3, x4)) & (intersect_x <= np.maximum(x3, x4)) & \
-                (intersect_y >= np.minimum(y3, y4)) & (intersect_y <= np.maximum(y3, y4)) & \
+                (intersect_x >= np.minimum(x1, x2) - LINE_INTERSECT_TOL) & (intersect_x <= np.maximum(x1, x2) + LINE_INTERSECT_TOL) & \
+                (intersect_y >= np.minimum(y1, y2) - LINE_INTERSECT_TOL) & (intersect_y <= np.maximum(y1, y2) + LINE_INTERSECT_TOL) & \
+                (intersect_x >= np.minimum(x3, x4) - LINE_INTERSECT_TOL) & (intersect_x <= np.maximum(x3, x4) + LINE_INTERSECT_TOL) & \
+                (intersect_y >= np.minimum(y3, y4) - LINE_INTERSECT_TOL) & (intersect_y <= np.maximum(y3, y4) + LINE_INTERSECT_TOL) & \
                 flag_int_seg_mask & agent_int_seg_mask
 
             intersect_x = np.where(mask, intersect_x, -self.env_diag) #a coordinate out of bounds and far away
@@ -999,16 +995,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             #correct lidar ray readings for which nothing was detected
             invalid_ray_ints = np.where(np.all(np.logical_not(mask), axis=-1))[0]
-            # if player.id == 0:
-                # print(invalid_ray_ints)
-            
             ray_int_labels[invalid_ray_ints] = self.ray_int_label_map["nothing"]
             ray_intersections[invalid_ray_ints] = ray_ends[invalid_ray_ints]
             ray_int_dists[invalid_ray_ints] = self.lidar_range
 
             #save lidar readings
-            # if player.id == 0:
-                # print(ray_int_labels[0])
             self.state["lidar_labels"][player.id] = ray_int_labels
             self.state["lidar_ends"][player.id] = ray_intersections
             self.state["lidar_distances"][player.id] = ray_int_dists
@@ -1250,28 +1241,33 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             # pygame orientation vector
             self.PYGAME_UP = Vector2((0.0, 1.0))
 
-            # arena buffer fraction
-            self.arena_buffer_frac = 1/20
-
             # pygame screen size
-            max_screen_width, max_screen_height = get_screen_res()
-            arena_aspect_ratio = self.env_size[0] / self.env_size[1]
-            width_based_height = max_screen_width / arena_aspect_ratio
+            self.arena_buffer_frac = 1/20
+            arena_buffer = self.arena_buffer_frac * self.env_diag
 
-            if width_based_height <= screen_height:
-                image_width = screen_width
+            max_screen_size = get_screen_res()
+            arena_aspect_ratio = (self.env_size[0] + 2*arena_buffer) / (self.env_size[1] + 2*arena_buffer)
+            width_based_height = max_screen_size[0] / arena_aspect_ratio
+
+            if width_based_height <= max_screen_size[1]:
+                max_pygame_screen_width = max_screen_size[0]
             else:
-                height_based_width = screen_height * aspect_ratio_value
-                image_width = int(height_based_width)
+                height_based_width = max_screen_size[1] * arena_aspect_ratio
+                max_pygame_screen_width = int(height_based_width)
 
-            self.pixel_size = (self.screen_frac * max_screen_size[0]) / self.env_size[0]
-            self.screen_width = round(self.env_size[0] * self.pixel_size)
-            self.screen_height = round(self.env_size[1] * self.pixel_size)
- 
+            self.pixel_size = (self.screen_frac * max_pygame_screen_width) / (self.env_size[0] + 2*arena_buffer)
+            self.screen_width = round(
+                (self.env_size[0] + 2*arena_buffer) * self.pixel_size
+            )
+            self.screen_height = round(
+                (self.env_size[1] + 2*arena_buffer) * self.pixel_size
+            )
+
             # environemnt element sizes in pixels
+            self.arena_width, self.arena_height = self.pixel_size * self.env_size
+            self.arena_buffer = self.pixel_size * arena_buffer
             self.boundary_width = 2  #pixels
             self.a2a_line_width = 3 #pixels
-            self.arena_render_offset = None #TODO pixels
 
             # check that world size (pixels) does not exceed the screen dimensions
             world_screen_err_msg = (
@@ -1408,8 +1404,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 ray_int_segments.extend(segments)
 
             self.ray_int_segments = np.asarray(ray_int_segments)
-            print(self.env_size)
-            print(self.ray_int_segments[:6])
             self.ray_int_seg_labels = np.asarray(ray_int_seg_labels)
 
         # Occupancy map
@@ -2769,7 +2763,8 @@ when gps environment bounds are specified in meters")
 
     def env_to_screen(self, pos):
         screen_pos = self.pixel_size * np.asarray(pos)
-        screen_pos[1] = 0.5 * self.screen_height - (screen_pos[1] - 0.5 * self.screen_height)
+        screen_pos[0] += self.arena_buffer
+        screen_pos[1] = self.arena_height - screen_pos[1] + self.arena_buffer
 
         return screen_pos
 
