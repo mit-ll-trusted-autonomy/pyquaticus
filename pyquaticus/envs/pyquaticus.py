@@ -626,6 +626,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Agents (player objects) of each team
         self.agents_of_team = {Team.BLUE_TEAM: b_players, Team.RED_TEAM: r_players}
+        self.agent_ids_of_team = {
+            self.team_color : [player.id for player in self.base_env.agents_of_team[self.team_color]], 
+            self.opponent_color : [player.id for player in self.base_env.agents_of_team[self.opponent_color]]
+        }
 
         # Mappings from agent ids to team member ids and opponent ids
         self.agent_to_team_ids = {
@@ -1370,7 +1374,30 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             ray_int_label_names = ["nothing", "obstacle"]
             ray_int_label_names.extend([f"flag{i}" for i, _ in enumerate(self.flags)])
             ray_int_label_names.extend(self.agents)
-            self.ray_int_label_map = {label_name: i for i, label_name in enumerate(ray_int_label_names)}
+            self.ray_int_label_map = OrderedDict({label_name: i for i, label_name in enumerate(ray_int_label_names)})
+            
+            self.obj_ray_detection_states = {team: [] for team in Team}
+            for team in Team:
+                for label_name in self.ray_int_label_map:
+                    if label_name == "nothing":
+                        detection_class = LIDAR_DETECTION_CLASS_MAP["nothing"]
+                    elif label_name == "obstacle":
+                        detection_class = LIDAR_DETECTION_CLASS_MAP["obstacle"]
+                    elif label_name.startswith("flag"):
+                        flag_idx = label_name[4:]
+                        if team == self.flags[flag_idx]:
+                            detection_class = LIDAR_DETECTION_CLASS_MAP["team_flag"]
+                        else:
+                            detection_class = LIDAR_DETECTION_CLASS_MAP["opponent_flag"]
+                    elif label_name in self.agents:
+                        if label_name in self.agent_ids_of_team[team]:
+                            detection_class = LIDAR_DETECTION_CLASS_MAP["teammate"]
+                        else:
+                            detection_class = LIDAR_DETECTION_CLASS_MAP["opponent"]
+                    else:
+                        raise Exception("Unknown lidar detection class.")
+
+                    self.obj_ray_detection_states[team].append(detection_class)
 
             ray_int_segments = []
             ray_int_seg_labels = []
@@ -2807,7 +2834,7 @@ when gps environment bounds are specified in meters")
                 video_file_name = f"pyquaticus_{video_id}.avi"
                 fourcc = cv2.VideoWriter_fourcc('X','V','I','D')
             else:
-                raise NotImplementedError()
+                raise NotImplementedError(f"Saving video as .{self.recording_format} file is not supported.")
 
             video_file_path = os.path.join(video_file_dir, video_file_name)
 
