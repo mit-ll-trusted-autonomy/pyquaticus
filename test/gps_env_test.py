@@ -143,10 +143,12 @@ def main():
     config["red_flag_home"] = (41.3512143, -74.0608635)
     # config["blue_flag_home"] = (42.352229714597705, -70.99992567997114)
     # config["red_flag_home"] = (42.32710627259394, -70.96739585043458)
+    # config["blue_flag_home"] = (41.346438772724014, -74.06513704774754)
+    # config["red_flag_home"] = (41.351528984663766, -74.06065239404523)
     config["flag_homes_unit"] = "ll"
-    config["sim_speedup_factor"] = 10
+    config["sim_speedup_factor"] = 5
     config["max_time"] = 700
-    # config["screen_frac"] = 0.75 
+    # config["screen_frac"] = 0.9 
     config["lidar_obs"] = True
     config["num_lidar_rays"] = 150
     config["lidar_range"] = 40

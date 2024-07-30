@@ -1269,17 +1269,24 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.boundary_width = 2  #pixels
             self.a2a_line_width = 3 #pixels
 
+            # miscellaneous
+            self.num_renders_per_step = int(self.render_fps * self.tau)
+            self.render_boundary_rect = True #standard rectangular boundary
+
             # check that world size (pixels) does not exceed the screen dimensions
             world_screen_err_msg = (
-                "Specified env_size {} exceeds the maximum size {} in at least one"
+                "Specified env_size with arena_buffer ({} pixels) exceeds the maximum size {} in at least one"
                 " dimension".format(
-                    [round(self.pixel_size * self.env_size[0]), round(self.pixel_size * self.env_size[1])], 
+                    [
+                        round(2*self.arena_buffer + self.pixel_size * self.env_size[0]),
+                        round(2*self.arena_buffer + self.pixel_size * self.env_size[1])
+                    ], 
                     max_screen_size
                 )
             )
             assert (
-                self.pixel_size * self.env_size[0] <= max_screen_size[0] and
-                self.pixel_size * self.env_size[1] <= max_screen_size[1]
+                2*self.arena_buffer + self.pixel_size * self.env_size[0] <= max_screen_size[0] and
+                2*self.arena_buffer + self.pixel_size * self.env_size[1] <= max_screen_size[1]
             ), world_screen_err_msg
 
             # check that time between frames (1/render_fps) is not larger than timestep (tau)
@@ -1288,8 +1295,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 " than specified timestep ({})".format(self.render_fps, self.tau)
             )
             assert 1 / self.render_fps <= self.tau, frame_rate_err_msg
-
-            self.num_renders_per_step = int(self.render_fps * self.tau)
 
             # check that time warp is an integer >= 1
             if self.sim_speedup_factor < 1:
@@ -1311,6 +1316,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 if obstacle_params is None:
                     obstacle_params = {"polygon": []}
                 obstacle_params["polygon"].append(border_contour)
+                self.render_boundary_rect = False
 
             if len(island_contours) > 0:
                 if obstacle_params is None:
@@ -1334,6 +1340,28 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 raise TypeError(f"Expected polygon obstacle parameters to be a list of tuples, not {type(poly_obstacle)}")
         elif obstacle_params is not None:
             raise TypeError(f"Expected obstacle_params to be None or a dict, not {type(obstacle_params)}")
+
+        # Adjust scrimmage line
+        scrim_seg = LineString(self.scrimmage_coords)
+        scrim_int_segs = [(p, param[(i+1) % len(param)]) for param in poly_obstacle for i, p in enumerate(param)]
+        if border_contour is None:
+            scrim_int_segs.extend([
+                [self.env_ll, self.env_lr],
+                [self.env_lr, self.env_ur],
+                [self.env_ur, self.env_ul],
+                [self.env_ul, self.env_ll]
+            ])
+
+        scrim_ints = []
+        for seg in scrim_int_segs:
+            seg_int = intersection(scrim_seg, LineString(seg))
+            if not seg_int.is_empty:
+                scrim_ints.append(seg_int.coords[0])
+
+        scrim_ints = np.asarray(scrim_ints)
+        scrim_int_dists = np.linalg.norm(scrim_ints.reshape(-1, 1, 2) - scrim_ints, axis=-1)
+        scrim_end_inds = np.unravel_index(np.argmax(scrim_int_dists), scrim_int_dists.shape)
+        self.scrimmage_coords = scrim_ints[scrim_end_inds, :]
 
         # Ray casting
         if self.lidar_obs:
@@ -1862,11 +1890,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 flag_unit_vec = flag_vec / flag_distance
                 flag_perp_vec = np.array([-flag_unit_vec[1], flag_unit_vec[0]]) 
 
-                #assuming default setup drawn on web mercator, these bounds will contain it
-                border_pt1 =  flag_home_blue + (flag_distance/6) * flag_unit_vec + (flag_distance/4) * flag_perp_vec
-                border_pt2 =  flag_home_blue + (flag_distance/6) * flag_unit_vec + (flag_distance/4) * -flag_perp_vec
-                border_pt3 =  flag_home_red + (flag_distance/6) * -flag_unit_vec + (flag_distance/4) * flag_perp_vec
-                border_pt4 =  flag_home_red + (flag_distance/6) * -flag_unit_vec + (flag_distance/4) * -flag_perp_vec
+                #assuming default aquaticus field size ratio drawn on web mercator, these bounds will contain it
+                border_pt1 =  flag_home_blue + (flag_distance/6) * flag_unit_vec + (flag_distance/3) * flag_perp_vec
+                border_pt2 =  flag_home_blue + (flag_distance/6) * flag_unit_vec + (flag_distance/3) * -flag_perp_vec
+                border_pt3 =  flag_home_red + (flag_distance/6) * -flag_unit_vec + (flag_distance/3) * flag_perp_vec
+                border_pt4 =  flag_home_red + (flag_distance/6) * -flag_unit_vec + (flag_distance/3) * -flag_perp_vec
                 border_points = np.array([border_pt1, border_pt2, border_pt3, border_pt4])
 
                 #environment bounds will be in web mercator xy
@@ -1890,19 +1918,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 when gps environment bounds are specified in meters")
 
                     if len(env_bounds.shape) == 1:
-                        if np.any(env_bounds == 0.):
-                            raise Exception("Environment max bounds must be > 0 when specified in meters")
-
                         env_bounds = np.array([
                             (0., 0.),
                             env_bounds
                         ])
-                    else:
-                        if not np.all(env_bounds[0] == 0.):
-                            raise Exception("Environment min bounds must be 0 when specified in meters")
-
-                        if np.any(env_bounds[1] == 0.):
-                            raise Exception("Environment max bounds must be > 0 when specified in meters")
+                    if np.any(env_bounds[1] == 0.):
+                        raise Exception("Environment max bounds must be > 0 when specified in meters")
 
                     #get flag midpoint
                     if flag_homes_unit == "wm_xy":
@@ -2004,7 +2025,7 @@ when gps environment bounds are specified in meters")
 
                 flag_homes[Team.BLUE_TEAM] = np.asarray(flag_homes[Team.BLUE_TEAM])
                 flag_homes[Team.RED_TEAM] = np.asarray(flag_homes[Team.RED_TEAM])
-                
+
                 if flag_homes_unit == "ll":
                     #convert flag poses to web mercator xy
                     flag_homes[Team.BLUE_TEAM] = mt.xy(*flag_homes[Team.BLUE_TEAM][-1::-1])
@@ -2032,7 +2053,6 @@ when gps environment bounds are specified in meters")
             flag_homes_unit = "wm_xy"
 
             ### scrimmage line ###
-            #TODO, check that flags are not on scrimamge line
             if self._is_auto_string(scrimmage_coords):
                 flags_vec = flag_homes[Team.BLUE_TEAM] - flag_homes[Team.RED_TEAM]
 
@@ -2051,6 +2071,8 @@ when gps environment bounds are specified in meters")
 
             #unit
             scrimmage_coords_unit = "wm_xy"
+
+            #TODO, check that flags do not fall on scrimamge line
 
             ### agent and flag geometries ###
             lon1, lat1 = _sm2ll(*env_bounds[0])
