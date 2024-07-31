@@ -71,7 +71,7 @@ if __name__ == '__main__':
     config["blue_flag_home"] = (42.352229714597705, -70.99992567997114)
     config["red_flag_home"] = (42.32710627259394, -70.96739585043458)
     config["flag_homes_unit"] = "ll"
-    config["sim_speedup_factor"] = 10
+    config["sim_speedup_factor"] = 4
     config["max_time"] = 700
     # config["screen_frac"] = 0.75 
     config["lidar_obs"] = True

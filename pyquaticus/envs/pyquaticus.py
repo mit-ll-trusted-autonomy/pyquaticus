@@ -395,7 +395,9 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
             # Lidar
             obs["ray_distances"] = self.state["lidar_distances"][agent_id]
-            obs["ray_labels"] = self.state["lidar_labels"][agent_id]
+            obs["ray_labels"] = self.obj_ray_detection_states[own_team][self.state["lidar_labels"][agent_id]]
+            if agent_id == 0:
+                print(obs["ray_labels"])
 
         else:
             own_home_loc = self.flags[int(own_team)].home
@@ -626,10 +628,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Agents (player objects) of each team
         self.agents_of_team = {Team.BLUE_TEAM: b_players, Team.RED_TEAM: r_players}
-        self.agent_ids_of_team = {
-            self.team_color : [player.id for player in self.base_env.agents_of_team[self.team_color]], 
-            self.opponent_color : [player.id for player in self.base_env.agents_of_team[self.opponent_color]]
-        }
+        self.agent_ids_of_team = {team: [player.id for player in self.agents_of_team[team]] for team in Team}
 
         # Mappings from agent ids to team member ids and opponent ids
         self.agent_to_team_ids = {
@@ -747,8 +746,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         else:
             for _ in range(self.sim_speedup_factor):
                 self._move_agents(action_dict, self.tau)
-                if self.lidar_obs:
-                    self._update_lidar()
+            if self.lidar_obs:
+                self._update_lidar()
 
         # set the time
         self.current_time += self.sim_speedup_factor * self.tau
@@ -763,8 +762,23 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self._set_dones()
         self._get_dist_to_obstacles()
 
+        if self.lidar_obs:
+            for team in self.agents_of_team:
+                for agent_id, player in self.players.items():
+                    if player.team == team:
+                        detection_class_name = "teammate"
+                    else:
+                        detection_class_name = "opponent"
+                    if player.is_tagged:
+                        detection_class_name += "_is_tagged"
+                    elif player.has_flag:
+                        detection_class_name += "_has_flag"
+ 
+                    self.obj_ray_detection_states[team][self.ray_int_label_map[f"agent{agent_id}"]] = LIDAR_DETECTION_CLASS_MAP[detection_class_name]
+
         if self.message and self.render_mode:
             print(self.message)
+
         rewards = {agent_id: self.compute_rewards(agent_id) for agent_id in self.players}
         obs = {agent_id: self.state_to_obs(agent_id, self.normalize) for agent_id in raw_action_dict}
         info = {}
@@ -949,7 +963,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             ray_int_segments[flag_seg_inds] += np.tile(flag.home, 2)
 
         for agent_id, player in self.players.items():
-            agent_seg_inds = self.ray_int_label_to_seg_inds[agent_id]
+            agent_seg_inds = self.ray_int_label_to_seg_inds[f"agent{agent_id}"]
             ray_int_segments[agent_seg_inds] += np.tile(player.pos, 2)
 
         ray_int_segments = ray_int_segments.reshape(1, -1, 4)
@@ -975,7 +989,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             
             #mask invalid intersections (parallel lines, outside of segment bounds, picked up flags, own agent segments)
             agent_int_seg_mask = np.ones(len(self.ray_int_seg_labels), dtype=bool)
-            agent_seg_inds = self.ray_int_label_to_seg_inds[player.id]
+            agent_seg_inds = self.ray_int_label_to_seg_inds[f"agent{player.id}"]
             agent_int_seg_mask[agent_seg_inds] = False
 
             mask = (denom != 0) & \
@@ -1373,24 +1387,25 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             ray_int_label_names = ["nothing", "obstacle"]
             ray_int_label_names.extend([f"flag{i}" for i, _ in enumerate(self.flags)])
-            ray_int_label_names.extend(self.agents)
+            ray_int_label_names.extend([f"agent{agent_id}" for agent_id in self.agents])
             self.ray_int_label_map = OrderedDict({label_name: i for i, label_name in enumerate(ray_int_label_names)})
             
-            self.obj_ray_detection_states = {team: [] for team in Team}
-            for team in Team:
+            self.obj_ray_detection_states = {team: [] for team in self.agents_of_team}
+            for team in self.agents_of_team:
                 for label_name in self.ray_int_label_map:
                     if label_name == "nothing":
                         detection_class = LIDAR_DETECTION_CLASS_MAP["nothing"]
                     elif label_name == "obstacle":
                         detection_class = LIDAR_DETECTION_CLASS_MAP["obstacle"]
                     elif label_name.startswith("flag"):
-                        flag_idx = label_name[4:]
+                        flag_idx = int(label_name[4:])
                         if team == self.flags[flag_idx]:
                             detection_class = LIDAR_DETECTION_CLASS_MAP["team_flag"]
                         else:
                             detection_class = LIDAR_DETECTION_CLASS_MAP["opponent_flag"]
-                    elif label_name in self.agents:
-                        if label_name in self.agent_ids_of_team[team]:
+                    elif label_name.startswith("agent"):
+                        agent_id = label_name[5:]
+                        if agent_id in self.agent_ids_of_team[team]:
                             detection_class = LIDAR_DETECTION_CLASS_MAP["teammate"]
                         else:
                             detection_class = LIDAR_DETECTION_CLASS_MAP["opponent"]
@@ -1398,6 +1413,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         raise Exception("Unknown lidar detection class.")
 
                     self.obj_ray_detection_states[team].append(detection_class)
+                self.obj_ray_detection_states[team] = np.asarray(self.obj_ray_detection_states[team]) 
 
             ray_int_segments = []
             ray_int_seg_labels = []
@@ -1451,9 +1467,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 vertices = list(Point(0., 0.).buffer(self.agent_radius, quad_segs=2).exterior.coords)[:-1] #approximate circle with an octagon
                 segments = [[*vertex, *vertices[(i+1) % len(vertices)]] for i, vertex in enumerate(vertices)]
                 ray_int_seg_labels.extend(
-                    len(segments) * [self.ray_int_label_map[agent_id]]
+                    len(segments) * [self.ray_int_label_map[f"agent{agent_id}"]]
                 )
-                self.ray_int_label_to_seg_inds[agent_id].extend(
+                self.ray_int_label_to_seg_inds[f"agent{agent_id}"].extend(
                     np.arange(len(ray_int_segments), len(ray_int_segments) + len(segments))
                 )
                 ray_int_segments.extend(segments)
@@ -1684,6 +1700,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.state["lidar_ends"] = {agent_id: np.zeros((self.num_lidar_rays, 2)) for agent_id in agent_ids}
             self.state["lidar_distances"] = {agent_id: np.zeros(self.num_lidar_rays) for agent_id in agent_ids}
             self._update_lidar()
+
+            for team in self.agents_of_team:
+                for label_name, label_idx in self.ray_int_label_map.items():
+                    if label_name in self.agents:
+                        #reset agent lidar detection states
+                        if label_name in self.agent_ids_of_team[team]:
+                            self.obj_ray_detection_states[team][label_idx] = LIDAR_DETECTION_CLASS_MAP["teammate"]
+                        else:
+                            self.obj_ray_detection_states[team][label_idx] = LIDAR_DETECTION_CLASS_MAP["opponent"]
 
         for k in self.game_score:
             self.game_score[k] = 0
