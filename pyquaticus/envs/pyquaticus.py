@@ -941,6 +941,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             player.heading = angle180(new_heading)
             player.thrust = desired_thrust
 
+            self.state["agent_position"] = player.prev_pos
+            self.state["prev_agent_position"] = player.pos
+            self.state["agent_spd_hdg"] = [player.speed, player.heading]
+
     def _check_on_sides(self, pos, team):
         scrim2pos = np.asarray(pos) - self.scrimmage_coords[0]
         cp_sign = np.sign(self._cross_product(self.scrimmage_vec, scrim2pos))
@@ -1676,10 +1680,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             "agent_position": agent_positions,
             "prev_agent_position": copy.deepcopy(agent_positions),
             "agent_spd_hdg": agent_spd_hdg,
-            "agent_has_flag": np.zeros(self.num_agents),
-            "agent_on_sides": agent_on_sides,
+            "agent_has_flag": np.zeros(self.num_agents), #TODO: update during game
+            "agent_on_sides": agent_on_sides, #TODO: update during game
             "flag_home": copy.deepcopy(flag_locations),
-            "flag_locations": flag_locations,
+            "flag_locations": flag_locations, #TODO: update during game
             "flag_taken": np.zeros(2),
             "current_time": 0.0,
             "agent_captures": [
@@ -2489,7 +2493,7 @@ when gps environment bounds are specified in meters")
         island_cnts_approx = []
         for i, cnt in enumerate(island_contours):
             eps = self.topo_contour_eps * cv2.arcLength(cnt, True)
-            cnt_approx = cv2.approxPolyDP(cnt, eps, True)
+            cnt_approx = cv2.approxPolyDP(cnt, 10*eps, True)
             cvx_hull = cv2.convexHull(cnt_approx)
             if len(cvx_hull) > 1:
                 island_cnts_approx.append(cvx_hull)
