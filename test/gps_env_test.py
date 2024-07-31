@@ -146,11 +146,11 @@ def main():
     # config["blue_flag_home"] = (41.346438772724014, -74.06513704774754)
     # config["red_flag_home"] = (41.351528984663766, -74.06065239404523)
     config["flag_homes_unit"] = "ll"
-    config["sim_speedup_factor"] = 5
+    config["sim_speedup_factor"] = 10
     config["max_time"] = 700
     # config["screen_frac"] = 0.9 
     config["lidar_obs"] = True
-    config["num_lidar_rays"] = 4
+    config["num_lidar_rays"] = 100
     config["lidar_range"] = 40
     config["render_agent_ids"] = True
     config["render_lidar"] = True

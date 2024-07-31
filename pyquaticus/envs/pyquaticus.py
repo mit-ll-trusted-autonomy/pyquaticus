@@ -50,7 +50,8 @@ from pyquaticus.config import (
     ACTION_MAP,
     config_dict_std,
     EQUATORIAL_RADIUS,
-    LINE_INTERSECT_TOL, 
+    LINE_INTERSECT_TOL,
+    lidar_detection_classes,
     LIDAR_DETECTION_CLASS_MAP,
     MAX_SPEED,
     POLAR_RADIUS
@@ -396,8 +397,6 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             # Lidar
             obs["ray_distances"] = self.state["lidar_distances"][agent_id]
             obs["ray_labels"] = self.obj_ray_detection_states[own_team][self.state["lidar_labels"][agent_id]]
-            if agent_id == 0:
-                print(obs["ray_labels"])
 
         else:
             own_home_loc = self.flags[int(own_team)].home
@@ -1399,7 +1398,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         detection_class = LIDAR_DETECTION_CLASS_MAP["obstacle"]
                     elif label_name.startswith("flag"):
                         flag_idx = int(label_name[4:])
-                        if team == self.flags[flag_idx]:
+                        if team == self.flags[flag_idx].team:
                             detection_class = LIDAR_DETECTION_CLASS_MAP["team_flag"]
                         else:
                             detection_class = LIDAR_DETECTION_CLASS_MAP["opponent_flag"]
