@@ -24,6 +24,7 @@ config_dict_std = {
     "flag_radius":           2.0, # meters
     "flag_keepout":          5.0, # minimum distance (meters) between agent and flag centers
     "catch_radius":         10.0, # distance (meters) for tagging and flag pickup
+    "n_circle_segments":       8, # default is to approximate circles as an octagon 
     "obstacles":            None, # optional dictionary of obstacles in the enviornment
 
     #notes: obstacles are specified via dictionary. Keys are the obstacle type ("circle" or "polygon"). 

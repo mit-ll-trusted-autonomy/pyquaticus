@@ -150,7 +150,7 @@ def main():
     config["max_time"] = 10_000
     # config["screen_frac"] = 0.9 
     config["lidar_obs"] = True
-    config["num_lidar_rays"] = 100
+    config["num_lidar_rays"] = 4
     config["lidar_range"] = 40
     config["render_agent_ids"] = True
     config["render_lidar"] = True

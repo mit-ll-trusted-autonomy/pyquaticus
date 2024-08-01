@@ -773,7 +773,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     elif player.has_flag:
                         detection_class_name += "_has_flag"
  
-                    self.obj_ray_detection_states[team][self.ray_int_label_map[f"agent{agent_id}"]] = LIDAR_DETECTION_CLASS_MAP[detection_class_name]
+                    self.obj_ray_detection_states[team][self.ray_int_label_map[f"agent_{agent_id}"]] = LIDAR_DETECTION_CLASS_MAP[detection_class_name]
 
         if self.message and self.render_mode:
             print(self.message)
@@ -796,7 +796,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
     def _move_agents(self, action_dict, dt):
         """Moves agents in the space according to the specified speed/heading in `action_dict`."""
-        for player in self.players.values():
+        for i, player in enumerate(self.players.values()):
             pos_x = player.pos[0]
             pos_y = player.pos[1]
             flag_loc = self.flags[int(player.team)].home
@@ -941,9 +941,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             player.heading = angle180(new_heading)
             player.thrust = desired_thrust
 
-            self.state["agent_position"] = player.prev_pos
-            self.state["prev_agent_position"] = player.pos
-            self.state["agent_spd_hdg"] = [player.speed, player.heading]
+            self.state["agent_position"][i] = player.prev_pos
+            self.state["prev_agent_position"][i] = player.pos
+            self.state["agent_spd_hdg"][i] = [player.speed, player.heading]
 
     def _check_on_sides(self, pos, team):
         scrim2pos = np.asarray(pos) - self.scrimmage_coords[0]
@@ -956,74 +956,77 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Valid flag intersection segments mask
         flag_int_seg_mask = np.ones(len(self.ray_int_seg_labels), dtype=bool)
-        for i, _ in enumerate(self.flags):
-            flag_seg_inds = self.ray_int_label_to_seg_inds[f"flag{i}"]
-            flag_int_seg_mask[flag_seg_inds] = np.logical_not(self.state["flag_taken"][i])
+        flag_seg_inds = self.seg_label_type_to_inds["flag"]
+        flag_int_seg_mask[flag_seg_inds] = np.repeat(np.logical_not(self.state["flag_taken"]), self.n_circle_segments)
 
         # Translate non-static ray intersection geometries (flags and agents)
-        for i, flag in enumerate(self.flags):
-            flag_seg_inds = self.ray_int_label_to_seg_inds[f"flag{i}"]
-            ray_int_segments[flag_seg_inds] += np.tile(flag.home, 2)
-
-        for agent_id, player in self.players.items():
-            agent_seg_inds = self.ray_int_label_to_seg_inds[f"agent{agent_id}"]
-            ray_int_segments[agent_seg_inds] += np.tile(player.pos, 2)
-
+        ray_int_segments[flag_seg_inds] += np.repeat(
+            np.tile(self.state["flag_home"], 2),
+            self.n_circle_segments,
+            axis=0
+        )
+        agent_seg_inds = self.seg_label_type_to_inds["agent"]
+        ray_int_segments[agent_seg_inds] += np.repeat(
+            np.tile(self.state["agent_position"], 2),
+            self.n_circle_segments,
+            axis=0
+        )
         ray_int_segments = ray_int_segments.reshape(1, -1, 4)
 
         # Agent rays
-        for player in self.players.values():
-            ray_origin = np.asarray(player.pos)
-            ray_headings_global = np.deg2rad((heading_angle_conversion(player.heading) + self.lidar_ray_headings) % 360)
-            ray_vecs = np.array([np.cos(ray_headings_global), np.sin(ray_headings_global)]).T
-            ray_ends = ray_origin + self.lidar_range * ray_vecs
-            ray_segments = np.hstack(
-                (np.full(ray_ends.shape, ray_origin), ray_ends)
-            )
-            ray_segments = ray_segments.reshape(-1, 1, 4)
+        ray_origins = np.expand_dims(self.state["agent_position"], axis=1)
+        ray_headings_global = np.deg2rad((heading_angle_conversion(self.state["agent_spd_hdg"][:, 1]).reshape(-1, 1) + self.lidar_ray_headings) % 360)
+        ray_vecs = np.array([np.cos(ray_headings_global), np.sin(ray_headings_global)]).transpose(1, 2, 0)
+        ray_ends = ray_origins + self.lidar_range * ray_vecs
+        ray_segments = np.concatenate(
+            (np.full(ray_ends.shape, ray_origins), ray_ends),
+            axis=-1
+        )
+        ray_segments = ray_segments.reshape(self.num_agents, -1, 1, 4)
 
-            #compute ray intersections
-            x1, y1, x2, y2 = ray_segments[..., 0], ray_segments[..., 1], ray_segments[..., 2], ray_segments[..., 3]
-            x3, y3, x4, y4 = ray_int_segments[..., 0], ray_int_segments[..., 1], ray_int_segments[..., 2], ray_int_segments[..., 3]
-            
-            denom = (x1 - x2)*(y3 - y4) - (y1 - y2)*(x3 - x4)
-            intersect_x = ((x1*y2 - y1*x2)*(x3 - x4) - (x1 - x2)*(x3*y4 - y3*x4)) / denom
-            intersect_y = ((x1*y2 - y1*x2)*(y3 - y4) - (y1 - y2)*(x3*y4 - y3*x4)) / denom
-            
-            #mask invalid intersections (parallel lines, outside of segment bounds, picked up flags, own agent segments)
-            agent_int_seg_mask = np.ones(len(self.ray_int_seg_labels), dtype=bool)
-            agent_seg_inds = self.ray_int_label_to_seg_inds[f"agent{player.id}"]
-            agent_int_seg_mask[agent_seg_inds] = False
+        #compute ray intersections
+        x1, y1, x2, y2 = ray_segments[..., 0], ray_segments[..., 1], ray_segments[..., 2], ray_segments[..., 3]
+        x3, y3, x4, y4 = ray_int_segments[..., 0], ray_int_segments[..., 1], ray_int_segments[..., 2], ray_int_segments[..., 3]
+        
+        denom = (x1 - x2)*(y3 - y4) - (y1 - y2)*(x3 - x4)
+        intersect_x = ((x1*y2 - y1*x2)*(x3 - x4) - (x1 - x2)*(x3*y4 - y3*x4)) / denom
+        intersect_y = ((x1*y2 - y1*x2)*(y3 - y4) - (y1 - y2)*(x3*y4 - y3*x4)) / denom
+        
+        #mask invalid intersections (parallel lines, outside of segment bounds, picked up flags, own agent segments)
+        agent_int_seg_mask = np.ones((self.num_agents, len(self.ray_int_seg_labels)), dtype=bool)
+        agent_seg_inds = self.seg_label_type_to_inds["agent"]
+        agent_int_seg_mask[agent_seg_inds] = False
 
-            mask = (denom != 0) & \
-                (intersect_x >= np.minimum(x1, x2) - LINE_INTERSECT_TOL) & (intersect_x <= np.maximum(x1, x2) + LINE_INTERSECT_TOL) & \
-                (intersect_y >= np.minimum(y1, y2) - LINE_INTERSECT_TOL) & (intersect_y <= np.maximum(y1, y2) + LINE_INTERSECT_TOL) & \
-                (intersect_x >= np.minimum(x3, x4) - LINE_INTERSECT_TOL) & (intersect_x <= np.maximum(x3, x4) + LINE_INTERSECT_TOL) & \
-                (intersect_y >= np.minimum(y3, y4) - LINE_INTERSECT_TOL) & (intersect_y <= np.maximum(y3, y4) + LINE_INTERSECT_TOL) & \
-                flag_int_seg_mask & agent_int_seg_mask
+        mask = (denom != 0) & \
+            (intersect_x >= np.minimum(x1, x2) - LINE_INTERSECT_TOL) & (intersect_x <= np.maximum(x1, x2) + LINE_INTERSECT_TOL) & \
+            (intersect_y >= np.minimum(y1, y2) - LINE_INTERSECT_TOL) & (intersect_y <= np.maximum(y1, y2) + LINE_INTERSECT_TOL) & \
+            (intersect_x >= np.minimum(x3, x4) - LINE_INTERSECT_TOL) & (intersect_x <= np.maximum(x3, x4) + LINE_INTERSECT_TOL) & \
+            (intersect_y >= np.minimum(y3, y4) - LINE_INTERSECT_TOL) & (intersect_y <= np.maximum(y3, y4) + LINE_INTERSECT_TOL) & \
+            flag_int_seg_mask & agent_int_seg_mask
 
-            intersect_x = np.where(mask, intersect_x, -self.env_diag) #a coordinate out of bounds and far away
-            intersect_y = np.where(mask, intersect_y, -self.env_diag) #a coordinate out of bounds and far away
-            intersections = np.stack((intersect_x.flatten(), intersect_y.flatten()), axis=-1).reshape(intersect_x.shape + (2,))
+        intersect_x = np.where(mask, intersect_x, -self.env_diag) #a coordinate out of bounds and far away
+        intersect_y = np.where(mask, intersect_y, -self.env_diag) #a coordinate out of bounds and far away
+        intersections = np.stack((intersect_x.flatten(), intersect_y.flatten()), axis=-1).reshape(intersect_x.shape + (2,))
 
-            #determine lidar ray readings
-            intersection_dists = np.linalg.norm(intersections - ray_origin, axis=-1)
-            ray_int_inds = np.argmin(intersection_dists, axis=-1)
+        #determine lidar ray readings
+        intersection_dists = np.linalg.norm(intersections - ray_origins, axis=-1)
+        ray_int_inds = np.argmin(intersection_dists, axis=-1)
 
-            ray_int_labels = self.ray_int_seg_labels[ray_int_inds]
-            ray_intersections = intersections[np.arange(intersections.shape[0]), ray_int_inds]
-            ray_int_dists = intersection_dists[np.arange(intersection_dists.shape[0]), ray_int_inds]
+        ray_int_labels = self.ray_int_seg_labels[ray_int_inds]
+        ray_intersections = intersections[np.arange(intersections.shape[0]), ray_int_inds]
+        ray_int_dists = intersection_dists[np.arange(intersection_dists.shape[0]), ray_int_inds]
 
-            #correct lidar ray readings for which nothing was detected
-            invalid_ray_ints = np.where(np.all(np.logical_not(mask), axis=-1))[0]
-            ray_int_labels[invalid_ray_ints] = self.ray_int_label_map["nothing"]
-            ray_intersections[invalid_ray_ints] = ray_ends[invalid_ray_ints]
-            ray_int_dists[invalid_ray_ints] = self.lidar_range
+        #correct lidar ray readings for which nothing was detected
+        invalid_ray_ints = np.where(np.all(np.logical_not(mask), axis=-1))[0]
+        ray_int_labels[invalid_ray_ints] = self.ray_int_label_map["nothing"]
+        ray_intersections[invalid_ray_ints] = ray_ends[invalid_ray_ints]
+        ray_int_dists[invalid_ray_ints] = self.lidar_range
 
-            #save lidar readings
-            self.state["lidar_labels"][player.id] = ray_int_labels
-            self.state["lidar_ends"][player.id] = ray_intersections
-            self.state["lidar_distances"][player.id] = ray_int_dists
+        #save lidar readings
+        for i, agent_id in enumerate(self.players):
+            self.state["lidar_labels"][agent_id] = ray_int_labels
+            self.state["lidar_ends"][agent_id] = ray_intersections
+            self.state["lidar_distances"][agent_id] = ray_int_dists
 
     def _check_pickup_flags(self):
         """Updates player states if they picked up the flag."""
@@ -1327,6 +1330,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 print(f"Warning: Converted sim_speedup_factor to integer: {self.sim_speedup_factor}")
 
     def set_geom_config(self, config_dict):
+        self.n_circle_segments = config_dict.get("n_circle_segments", config_dict_std["n_circle_segments"])
+        n_quad_segs = round(self.n_circle_segments/4)
+
         # Obstacles
         obstacle_params = config_dict.get("obstacles", config_dict_std["obstacles"])
 
@@ -1389,8 +1395,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.lidar_ray_headings = np.linspace(0, (self.num_lidar_rays - 1) * 360 / self.num_lidar_rays, self.num_lidar_rays)
 
             ray_int_label_names = ["nothing", "obstacle"]
-            ray_int_label_names.extend([f"flag{i}" for i, _ in enumerate(self.flags)])
-            ray_int_label_names.extend([f"agent{agent_id}" for agent_id in self.agents])
+            ray_int_label_names.extend([f"flag_{i}" for i, _ in enumerate(self.flags)])
+            ray_int_label_names.extend([f"agent_{agent_id}" for agent_id in self.agents])
             self.ray_int_label_map = OrderedDict({label_name: i for i, label_name in enumerate(ray_int_label_names)})
             
             self.obj_ray_detection_states = {team: [] for team in self.agents_of_team}
@@ -1401,13 +1407,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     elif label_name == "obstacle":
                         detection_class = LIDAR_DETECTION_CLASS_MAP["obstacle"]
                     elif label_name.startswith("flag"):
-                        flag_idx = int(label_name[4:])
+                        flag_idx = int(label_name[5:])
                         if team == self.flags[flag_idx].team:
                             detection_class = LIDAR_DETECTION_CLASS_MAP["team_flag"]
                         else:
                             detection_class = LIDAR_DETECTION_CLASS_MAP["opponent_flag"]
                     elif label_name.startswith("agent"):
-                        agent_id = label_name[5:]
+                        agent_id = int(label_name[6:])
                         if agent_id in self.agent_ids_of_team[team]:
                             detection_class = LIDAR_DETECTION_CLASS_MAP["teammate"]
                         else:
@@ -1420,7 +1426,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             ray_int_segments = []
             ray_int_seg_labels = []
-            self.ray_int_label_to_seg_inds = {label: [] for label in ray_int_label_names}
+            self.seg_label_type_to_inds = {
+                (label[: label.find("_")] if label[-1].isnumeric() else label): [] for label in ray_int_label_names
+            }
 
             #boundary
             if self.gps_env:
@@ -1432,7 +1440,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         [*self.env_ul, *self.env_ll]
                     ])
                     ray_int_seg_labels.extend(4 * [self.ray_int_label_map["obstacle"]])
-                    self.ray_int_label_to_seg_inds["obstacle"].extend(np.arange(4))
+                    self.seg_label_type_to_inds["obstacle"].extend(np.arange(4))
             else:
                 ray_int_segments.extend([
                     [*self.env_ll, *self.env_lr],
@@ -1441,41 +1449,48 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     [*self.env_ul, *self.env_ll]
                 ])
                 ray_int_seg_labels.extend(4 * [self.ray_int_label_map["obstacle"]])
-                self.ray_int_label_to_seg_inds["obstacle"].extend(np.arange(4))
+                self.seg_label_type_to_inds["obstacle"].extend(np.arange(4))
 
             #obstacles
-            obstacle_segments = [segment for obstacle in self.obstacles for segment in self._generate_segments_from_obstacles(obstacle)]
+            obstacle_segments = [segment for obstacle in self.obstacles for segment in self._generate_segments_from_obstacles(obstacle, n_quad_segs)]
             ray_int_seg_labels.extend(
                 len(obstacle_segments) * [self.ray_int_label_map["obstacle"]]
             )
-            self.ray_int_label_to_seg_inds["obstacle"].extend(
+            self.seg_label_type_to_inds["obstacle"].extend(
                 np.arange(len(ray_int_segments), len(ray_int_segments) + len(obstacle_segments))
             )
             ray_int_segments.extend(obstacle_segments)
 
             #flags
             for i, _ in enumerate(self.flags):
-                vertices = list(Point(0., 0.).buffer(self.flag_radius, quad_segs=2).exterior.coords)[:-1] #approximate circle with an octagon
+                vertices = list(Point(0., 0.).buffer(self.flag_radius, quad_segs=n_quad_segs).exterior.coords)[:-1] #approximate circle with an octagon
                 segments = [[*vertex, *vertices[(i+1) % len(vertices)]] for i, vertex in enumerate(vertices)]
                 ray_int_seg_labels.extend(
-                    len(segments) * [self.ray_int_label_map[f"flag{i}"]]
+                    len(segments) * [self.ray_int_label_map[f"flag_{i}"]]
                 )
-                self.ray_int_label_to_seg_inds[f"flag{i}"].extend(
+                self.seg_label_type_to_inds["flag"].extend(
                     np.arange(len(ray_int_segments), len(ray_int_segments) + len(segments))
                 )
                 ray_int_segments.extend(segments)
 
             #agents
             for agent_id in self.agents:
-                vertices = list(Point(0., 0.).buffer(self.agent_radius, quad_segs=2).exterior.coords)[:-1] #approximate circle with an octagon
+                vertices = list(Point(0., 0.).buffer(self.agent_radius, quad_segs=n_quad_segs).exterior.coords)[:-1] #approximate circle with an octagon
                 segments = [[*vertex, *vertices[(i+1) % len(vertices)]] for i, vertex in enumerate(vertices)]
                 ray_int_seg_labels.extend(
-                    len(segments) * [self.ray_int_label_map[f"agent{agent_id}"]]
+                    len(segments) * [self.ray_int_label_map[f"agent_{agent_id}"]]
                 )
-                self.ray_int_label_to_seg_inds[f"agent{agent_id}"].extend(
+                self.seg_label_type_to_inds["agent"].extend(
                     np.arange(len(ray_int_segments), len(ray_int_segments) + len(segments))
                 )
                 ray_int_segments.extend(segments)
+
+            #agent ray self intersection mask
+            #TODO: peter
+            self.agent_int_seg_mask = np.ones((self.num_agents, len(self.ray_int_seg_labels)), dtype=bool)
+            agent_seg_inds = self.seg_label_type_to_inds["agent"]
+            agent_int_seg_mask[agent_seg_inds] = False
+
 
             self.ray_int_segments = np.asarray(ray_int_segments)
             self.ray_int_seg_labels = np.asarray(ray_int_seg_labels)
@@ -1664,7 +1679,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if return_info:
             raise DeprecationWarning("return_info has been deprecated by PettingZoo -- https://github.com/Farama-Foundation/PettingZoo/pull/890")
 
-        flag_locations = list(self.flag_homes.values())
+        flag_locations = np.asarray(list(self.flag_homes.values()))
 
         for flag in self.flags:
             flag.home = flag_locations[int(flag.team)]
@@ -1672,9 +1687,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         self.dones = self._reset_dones()
 
-        agent_positions, agent_spd_hdg, agent_on_sides = self._generate_agent_starts(
-            np.array(flag_locations)
-        )
+        agent_positions, agent_spd_hdg, agent_on_sides = self._generate_agent_starts(flag_locations)
 
         self.state = {
             "agent_position": agent_positions,
@@ -1684,7 +1697,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             "agent_on_sides": agent_on_sides, #TODO: update during game
             "flag_home": copy.deepcopy(flag_locations),
             "flag_locations": flag_locations, #TODO: update during game
-            "flag_taken": np.zeros(2),
+            "flag_taken": np.zeros(len(self.flags)),
             "current_time": 0.0,
             "agent_captures": [
                 None
@@ -1706,9 +1719,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             for team in self.agents_of_team:
                 for label_name, label_idx in self.ray_int_label_map.items():
-                    if label_name in self.agents:
+                    if label_name.startswith("agent"):
                         #reset agent lidar detection states
-                        if label_name in self.agent_ids_of_team[team]:
+                        if int(label_name[6:]) in self.agent_ids_of_team[team]:
                             self.obj_ray_detection_states[team][label_idx] = LIDAR_DETECTION_CLASS_MAP["teammate"]
                         else:
                             self.obj_ray_detection_states[team][label_idx] = LIDAR_DETECTION_CLASS_MAP["opponent"]
@@ -1837,7 +1850,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             agent_spd_hdg.append([player.speed, player.heading])
             agent_on_sides.append(True)
 
-        return agent_locations, agent_spd_hdg, agent_on_sides
+        return np.asarray(agent_locations), np.asarray(agent_spd_hdg), np.asarray(agent_on_sides)
 
     def _get_dists_to_boundary(self):
         """
@@ -2564,13 +2577,13 @@ when gps environment bounds are specified in meters")
 
         return cnt
 
-    def _generate_segments_from_obstacles(self, obstacle):
+    def _generate_segments_from_obstacles(self, obstacle, n_quad_segs):
         if isinstance(obstacle, PolygonObstacle):
             vertices = obstacle.anchor_points
         else: #CircleObstacle
             radius = obstacle.radius 
             center = obstacle.center_point
-            vertices = list(Point(*center).buffer(radius, quad_segs=2).exterior.coords)[:-1] #approximate circle with an octagon
+            vertices = list(Point(*center).buffer(radius, quad_segs=n_quad_segs).exterior.coords)[:-1] #approximate circle with an octagon
 
         segments = [[*vertex, *vertices[(i+1) % len(vertices)]] for i, vertex in enumerate(vertices)]
         
