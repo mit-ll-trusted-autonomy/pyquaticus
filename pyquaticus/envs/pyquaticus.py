@@ -1000,18 +1000,17 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             (intersect_y >= np.minimum(y3, y4) - LINE_INTERSECT_TOL) & (intersect_y <= np.maximum(y3, y4) + LINE_INTERSECT_TOL) & \
             flag_int_seg_mask & self.agent_int_seg_mask
 
-        print(mask)
-        # print(flag_int_seg_mask)
-        # print(self.agent_int_seg_mask)
-        import sys
-        sys.exit()
-
         intersect_x = np.where(mask, intersect_x, -self.env_diag) #a coordinate out of bounds and far away
         intersect_y = np.where(mask, intersect_y, -self.env_diag) #a coordinate out of bounds and far away
         intersections = np.stack((intersect_x.flatten(), intersect_y.flatten()), axis=-1).reshape(intersect_x.shape + (2,))
+        print(intersections.shape)
 
         #determine lidar ray readings
+        ray_origins = np.expand_dims(ray_origins, axis=1)
         intersection_dists = np.linalg.norm(intersections - ray_origins, axis=-1)
+        print(intersection_dists)
+        import sys
+        sys.exit()
         ray_int_inds = np.argmin(intersection_dists, axis=-1)
 
         ray_int_labels = self.ray_int_seg_labels[ray_int_inds]
@@ -1491,12 +1490,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.ray_int_seg_labels = np.asarray(ray_int_seg_labels)
 
             #agent ray self intersection mask
-            self.agent_int_seg_mask = np.ones((self.num_agents, len(self.ray_int_seg_labels)), dtype=bool)
+            agent_int_seg_mask = np.ones((self.num_agents, len(self.ray_int_seg_labels)), dtype=bool)
             agent_seg_inds = self.seg_label_type_to_inds["agent"]
 
             for i in range(self.num_agents):
                 seg_inds_start = i * self.n_circle_segments 
-                self.agent_int_seg_mask[i, agent_seg_inds[seg_inds_start: seg_inds_start + self.n_circle_segments]] = False
+                agent_int_seg_mask[i, agent_seg_inds[seg_inds_start: seg_inds_start + self.n_circle_segments]] = False
+
+            self.agent_int_seg_mask = np.expand_dims(agent_int_seg_mask, axis=1)
 
         # Occupancy map
         #TODO
