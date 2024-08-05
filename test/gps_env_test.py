@@ -164,7 +164,7 @@ def main():
     
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
     try:
-        env = pyquaticus_v0.PyQuaticusEnv(team_size=10, render_mode='human', config_dict=config)
+        env = pyquaticus_v0.PyQuaticusEnv(team_size=1, render_mode='human', config_dict=config)
     except Warning as err:
         ...
     red_policy = args.red_policy

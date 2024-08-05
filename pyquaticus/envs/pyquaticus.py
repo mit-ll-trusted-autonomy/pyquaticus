@@ -854,6 +854,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             # to the next agent.
             player_hit_obstacle = False
             for obstacle in self.obstacles:
+                #TODO: vectorize
                 collision = obstacle.detect_collision((pos_x, pos_y), radius = self.agent_radius)
                 if collision is True:
                     player_hit_obstacle = True
@@ -1496,8 +1497,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.agent_int_seg_mask = np.expand_dims(agent_int_seg_mask, axis=1)
 
         # Occupancy map
-        if self.gps_env:
-            self._generate_valid_start_poses(land_mask)
+        #TODO:
+        # if self.gps_env:
+        #     self._generate_valid_start_poses(land_mask)
 
     def get_distance_between_2_points(self, start: np.array, end: np.array) -> float:
         """
@@ -1790,32 +1792,35 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         agent_spd_hdg = []
         agent_on_sides = []
 
-        if self.gps_env:
+        if False:
+            valid_start_pos_inds = [i for i in range(len(self.valid_start_poses))]
             for player in self.players.values():
+                #location
+                valid_pos = False
+                while not valid_pos:
+                    start_pos_idx = np.random.choice(valid_start_pos_inds)
+                    valid_start_pos_inds.remove(start_pos_idx)
+                    
+                    player.pos = self.valid_start_poses[start_pos_idx]
+                    valid_pos = self._check_valid_pos(player.pos, agent_locations, flag_locations)
+
+                #heading
+                player.heading = 360 * np.random.rand() - 180
+
+                #other
                 player.is_tagged = False
                 player.thrust = 0.0
                 player.speed = 0.0
                 player.has_flag = False
-                player.on_own_side = True
+                player.on_own_side = self._check_on_sides(player.pos, player.team)
                 player.tagging_cooldown = self.tagging_cooldown
-                    if player.team == Team.RED_TEAM:
-                        init_x_pos = self.env_size[0] / 4
-                        player.heading = 90
-                    else:
-                        init_x_pos = self.env_size[0] - self.env_size[0] / 4
-                        player.heading = -90
-
-                    init_y_pos = (self.env_size[1] / (self.team_size + 1)) * (
-                        (player.id % self.team_size) + 1
-                    )
-                    player.pos = [init_x_pos, init_y_pos]
-                    player.prev_pos = copy.deepcopy(player.pos)
                 player.home = copy.deepcopy(player.pos)
+                player.prev_pos = copy.deepcopy(player.pos)
+
+                #add to lists                
                 agent_locations.append(player.pos)
                 agent_spd_hdg.append([player.speed, player.heading])
-                agent_on_sides.append(True)
-            self.valid_start_poses
-
+                agent_on_sides.append(player.on_own_side)
         else:
             # if self.random_init:
             if True:
@@ -1880,6 +1885,21 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         return np.asarray(agent_locations), np.asarray(agent_spd_hdg), np.asarray(agent_on_sides)
 
+    def _check_valid_pos(self, new_pos, agent_locations, flag_locations):
+        agent_positions = np.array(agent_locations)
+        flag_positions = np.array(flag_locations)
+
+        if len(agent_positions) > 0:
+            ag_distance = np.linalg.norm(agent_positions - new_pos, axis=1)
+            if np.any(ag_distance <= self.catch_radius):
+                return False
+
+        flag_distance = np.linalg.norm(flag_positions - new_pos, axis=1)
+        if np.any(flag_distance <= self.catch_radius):
+            return False
+
+        return True
+
     def _get_dists_to_boundary(self):
         """
         Returns a list of numbers of length self.num_agents
@@ -1941,6 +1961,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             player_pos = player.pos
             player_dists_to_obstacles = list()
             for obstacle in self.obstacles:
+                #TODO: vectorize
                 dist_to_obstacle = obstacle.distance_from(player_pos, radius = self.agent_radius, heading=player.heading)
                 player_dists_to_obstacles.append(dist_to_obstacle)
             dist_to_obstacles[player.id] = player_dists_to_obstacles
@@ -2633,14 +2654,18 @@ when gps environment bounds are specified in meters")
         # Create a list of valid positions
         valid_positions = []
         valid_team_positions = []
-        for water_xy in water_coords_env:
-            land_distances = np.linalg.norm(water_xy - land_coords_env)
-            in_bounds = (
-                self.agent_radius < water_xy[0] < self.env_size[0] - self.agent_radius and
-                self.agent_radius < water_xy[1] < self.env_size[1] - self.agent_radius
-            )
-            if in_bounds and np.all(land_distances > self.agent_radius):
-                valid_positions.append(water_xy)
+            
+        land_distances = np.min(
+            np.linalg.norm(np.expand_dims(water_coords_env, axis=1) - land_coords_env, axis=-1),
+            axis=-1
+        )
+        valid_water_coords_mask = (land_distances > self.agent_radius) & \
+            (self.agent_radius < water_coords_env[:, 0] < self.env_size[0] - self.agent_radius) & \
+            (self.agent_radius < water_coords_env[:, 1] < self.env_size[1] - self.agent_radius)
+
+        print(valid_water_coords_mask.shape)
+        import sys
+        sys.exit()
 
         self.valid_start_poses = np.asarray(valid_positions)
 
