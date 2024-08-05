@@ -1003,31 +1003,27 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         intersect_x = np.where(mask, intersect_x, -self.env_diag) #a coordinate out of bounds and far away
         intersect_y = np.where(mask, intersect_y, -self.env_diag) #a coordinate out of bounds and far away
         intersections = np.stack((intersect_x.flatten(), intersect_y.flatten()), axis=-1).reshape(intersect_x.shape + (2,))
-        print(intersections.shape)
 
         #determine lidar ray readings
         ray_origins = np.expand_dims(ray_origins, axis=1)
         intersection_dists = np.linalg.norm(intersections - ray_origins, axis=-1)
-        print(intersection_dists)
-        import sys
-        sys.exit()
         ray_int_inds = np.argmin(intersection_dists, axis=-1)
 
         ray_int_labels = self.ray_int_seg_labels[ray_int_inds]
-        ray_intersections = intersections[np.arange(intersections.shape[0]), ray_int_inds]
-        ray_int_dists = intersection_dists[np.arange(intersection_dists.shape[0]), ray_int_inds]
+        ray_intersections = intersections[np.arange(self.num_agents).reshape(-1,1), np.arange(self.num_lidar_rays), ray_int_inds]
+        ray_int_dists = intersection_dists[np.arange(self.num_agents).reshape(-1,1), np.arange(self.num_lidar_rays), ray_int_inds]
 
         #correct lidar ray readings for which nothing was detected
-        invalid_ray_ints = np.where(np.all(np.logical_not(mask), axis=-1))[0]
+        invalid_ray_ints = np.where(np.all(np.logical_not(mask), axis=-1))
         ray_int_labels[invalid_ray_ints] = self.ray_int_label_map["nothing"]
         ray_intersections[invalid_ray_ints] = ray_ends[invalid_ray_ints]
         ray_int_dists[invalid_ray_ints] = self.lidar_range
 
         #save lidar readings
         for i, agent_id in enumerate(self.players):
-            self.state["lidar_labels"][agent_id] = ray_int_labels
-            self.state["lidar_ends"][agent_id] = ray_intersections
-            self.state["lidar_distances"][agent_id] = ray_int_dists
+            self.state["lidar_labels"][agent_id] = ray_int_labels[i]
+            self.state["lidar_ends"][agent_id] = ray_intersections[i]
+            self.state["lidar_distances"][agent_id] = ray_int_dists[i]
 
     def _check_pickup_flags(self):
         """Updates player states if they picked up the flag."""
@@ -1500,7 +1496,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.agent_int_seg_mask = np.expand_dims(agent_int_seg_mask, axis=1)
 
         # Occupancy map
-        #TODO
+        if self.gps_env:
+            self._generate_valid_start_poses(land_mask)
 
     def get_distance_between_2_points(self, start: np.array, end: np.array) -> float:
         """
@@ -1793,66 +1790,93 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         agent_spd_hdg = []
         agent_on_sides = []
 
-        # if self.random_init:
-        if True:
-            flags_separation = self.get_distance_between_2_points(
-                flag_locations[0], flag_locations[1]
-            )
+        if self.gps_env:
+            for player in self.players.values():
+                player.is_tagged = False
+                player.thrust = 0.0
+                player.speed = 0.0
+                player.has_flag = False
+                player.on_own_side = True
+                player.tagging_cooldown = self.tagging_cooldown
+                    if player.team == Team.RED_TEAM:
+                        init_x_pos = self.env_size[0] / 4
+                        player.heading = 90
+                    else:
+                        init_x_pos = self.env_size[0] - self.env_size[0] / 4
+                        player.heading = -90
 
-        for player in self.players.values():
-            player.is_tagged = False
-            player.thrust = 0.0
-            player.speed = 0.0
-            player.has_flag = False
-            player.on_own_side = True
-            player.tagging_cooldown = self.tagging_cooldown
+                    init_y_pos = (self.env_size[1] / (self.team_size + 1)) * (
+                        (player.id % self.team_size) + 1
+                    )
+                    player.pos = [init_x_pos, init_y_pos]
+                    player.prev_pos = copy.deepcopy(player.pos)
+                player.home = copy.deepcopy(player.pos)
+                agent_locations.append(player.pos)
+                agent_spd_hdg.append([player.speed, player.heading])
+                agent_on_sides.append(True)
+            self.valid_start_poses
+
+        else:
             # if self.random_init:
             if True:
-                max_agent_separation = flags_separation - 2 * self.flag_keepout
-
-                # starting center point between two agents
-                agent_shift = np.random.choice((-1.0, 1.0)) * np.random.uniform(
-                    0, 0.5 * (0.5 * max_agent_separation + r) - r
+                flags_separation = self.get_distance_between_2_points(
+                    flag_locations[0], flag_locations[1]
                 )
 
-                # adjust agent max and min separation ranges based on shifted center point
-                max_agent_separation = 2 * (
-                    max_agent_separation / 2 - np.abs(agent_shift)
-                )
-                min_agent_separation = max(4 * r, 2 * (np.abs(agent_shift) + r))
+            for player in self.players.values():
+                player.is_tagged = False
+                player.thrust = 0.0
+                player.speed = 0.0
+                player.has_flag = False
+                player.on_own_side = True
+                player.tagging_cooldown = self.tagging_cooldown
+                # if self.random_init:
+                if True:
+                    max_agent_separation = flags_separation - 2 * self.flag_keepout
 
-                # initial agent separation
-                np.random.uniform(
-                    min_agent_separation, max_agent_separation
-                )
-                player.orientation = (
-                    flag_locations[int(not int(player.team))]
-                    - flag_locations[int(player.team)]
-                ) / flags_separation
-                player.pos = flag_locations[int(player.team)] + player.orientation * (
-                    flags_separation / 2
-                )
+                    # starting center point between two agents
+                    agent_shift = np.random.choice((-1.0, 1.0)) * np.random.uniform(
+                        0, 0.5 * (0.5 * max_agent_separation + r) - r
+                    )
 
-                agent_shift = agent_shift * player.orientation
-                player.pos += agent_shift
-                player.prev_pos = copy.deepcopy(player.pos)
-            else:
-                if player.team == Team.RED_TEAM:
-                    init_x_pos = self.env_size[0] / 4
-                    player.heading = 90
+                    # adjust agent max and min separation ranges based on shifted center point
+                    max_agent_separation = 2 * (
+                        max_agent_separation / 2 - np.abs(agent_shift)
+                    )
+                    min_agent_separation = max(4 * r, 2 * (np.abs(agent_shift) + r))
+
+                    # initial agent separation
+                    np.random.uniform(
+                        min_agent_separation, max_agent_separation
+                    )
+                    player.orientation = (
+                        flag_locations[int(not int(player.team))]
+                        - flag_locations[int(player.team)]
+                    ) / flags_separation
+                    player.pos = flag_locations[int(player.team)] + player.orientation * (
+                        flags_separation / 2
+                    )
+
+                    agent_shift = agent_shift * player.orientation
+                    player.pos += agent_shift
+                    player.prev_pos = copy.deepcopy(player.pos)
                 else:
-                    init_x_pos = self.env_size[0] - self.env_size[0] / 4
-                    player.heading = -90
+                    if player.team == Team.RED_TEAM:
+                        init_x_pos = self.env_size[0] / 4
+                        player.heading = 90
+                    else:
+                        init_x_pos = self.env_size[0] - self.env_size[0] / 4
+                        player.heading = -90
 
-                init_y_pos = (self.env_size[1] / (self.team_size + 1)) * (
-                    (player.id % self.team_size) + 1
-                )
-                player.pos = [init_x_pos, init_y_pos]
-                player.prev_pos = copy.deepcopy(player.pos)
-            player.home = copy.deepcopy(player.pos)
-            agent_locations.append(player.pos)
-            agent_spd_hdg.append([player.speed, player.heading])
-            agent_on_sides.append(True)
+                    init_y_pos = (self.env_size[1] / (self.team_size + 1)) * (
+                        (player.id % self.team_size) + 1
+                    )
+                    player.pos = [init_x_pos, init_y_pos]
+                    player.prev_pos = copy.deepcopy(player.pos)
+                player.home = copy.deepcopy(player.pos)
+                agent_locations.append(player.pos)
+                agent_spd_hdg.append([player.speed, player.heading])
+                agent_on_sides.append(True)
 
         return np.asarray(agent_locations), np.asarray(agent_spd_hdg), np.asarray(agent_on_sides)
 
@@ -2592,6 +2616,33 @@ when gps environment bounds are specified in meters")
         segments = [[*vertex, *vertices[(i+1) % len(vertices)]] for i, vertex in enumerate(vertices)]
         
         return segments
+
+    def _generate_valid_start_poses(self, land_mask):
+        # Conversion factor from mask pixels to environment coordinates
+        x_scale = self.env_size[0] / land_mask.shape[1]
+        y_scale = self.env_size[1] / land_mask.shape[0]
+
+        # Get coordinates of land and water pixels
+        water_coords = np.flip(np.column_stack(np.where(land_mask)), axis=-1)
+        land_coords = np.flip(np.column_stack(np.where(np.logical_not(land_mask))), axis=-1)
+
+        # Convert coordinates to environment units
+        water_coords_env = (water_coords + 0.5) * [x_scale, y_scale]
+        land_coords_env = (land_coords + 0.5) * [x_scale, y_scale]
+
+        # Create a list of valid positions
+        valid_positions = []
+        valid_team_positions = []
+        for water_xy in water_coords_env:
+            land_distances = np.linalg.norm(water_xy - land_coords_env)
+            in_bounds = (
+                self.agent_radius < water_xy[0] < self.env_size[0] - self.agent_radius and
+                self.agent_radius < water_xy[1] < self.env_size[1] - self.agent_radius
+            )
+            if in_bounds and np.all(land_distances > self.agent_radius):
+                valid_positions.append(water_xy)
+
+        self.valid_start_poses = np.asarray(valid_positions)
 
     def render(self):
         """Overridden method inherited from `Gym`."""
