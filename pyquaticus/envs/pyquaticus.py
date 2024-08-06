@@ -759,7 +759,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if not self.teleport_on_tag:
             self._check_untag()
         self._set_dones()
-        self._get_dist_to_obstacles()
+        if not self.lidar_obs:
+            self._get_dist_to_obstacles()
 
         if self.lidar_obs:
             for team in self.agents_of_team:
@@ -852,14 +853,38 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             # If the player hits a boundary, return them to their original starting position and skip
             # to the next agent.
+            agent_pos = np.asarray([pos_x, pos_y])
             player_hit_obstacle = False
-            for obstacle in self.obstacles:
-                #TODO: vectorize
-                collision = obstacle.detect_collision((pos_x, pos_y), radius = self.agent_radius)
-                if collision is True:
-                    player_hit_obstacle = True
-                    break
-            if player_hit_obstacle is True or not (
+            
+            for obstacle_type, geoms in self.obstacle_geoms.items():
+                if obstacle_type == "circle":
+                    dists = np.linalg.norm(agent_pos - geoms[:, 1:]) - geoms[:, 0]
+                    player_hit_obstacle = np.any(dists <= self.agent_radius) 
+                    if player_hit_obstacle:
+                        break
+                else: #polygon obstacle
+                    #determine closest points on all obtacle line segments
+                    v_AB = np.diff(geoms, axis=-2)
+                    v_AP = agent_pos - geoms[:, :1, :] #take only first point of segment (but preserve num dimensions)
+                    v_AB_AP = np.sum(v_AP * v_AB, axis=-1) #dot product
+
+                    mag_AB = np.linalg.norm(v_AB, axis=-1)
+                    unit_AB = v_AB.squeeze(axis=-2) / mag_AB
+
+                    v_AB_AP = np.sum(v_AP * v_AB, axis=-1) #dot product
+                    proj_mag = v_AB_AP / mag_AB
+                    
+                    closest_points = geoms[:, 0, :] + proj_mag * unit_AB
+                    closest_points = np.where(proj_mag <= 0., geoms[:, 0, :], closest_points)
+                    closest_points = np.where(proj_mag >= mag_AB, geoms[:, 1, :], closest_points)
+
+                    #calculate distances to obstacles
+                    dists = np.linalg.norm(agent_pos - closest_points, axis=-1)
+                    player_hit_obstacle = np.any(dists <= self.agent_radius)
+                    if player_hit_obstacle:
+                        break
+
+            if player_hit_obstacle or not (
                 (self.agent_radius <= pos_x <= self.env_size[0] - self.agent_radius)
                 and (
                     self.agent_radius <= pos_y <= self.env_size[1] - self.agent_radius
@@ -1349,18 +1374,27 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 obstacle_params["polygon"].extend(island_contours)
 
         self.obstacles = list()
+        self.obstacle_geoms = dict() #arrays with geometric info for obstacles to be used for vectorized calculations
         if obstacle_params is not None and isinstance(obstacle_params, dict):
             circle_obstacles = obstacle_params.get("circle", None)
             if circle_obstacles is not None and isinstance(circle_obstacles, list):
+                self.obstacle_geoms["circle"] = []
                 for param in circle_obstacles:
                     self.obstacles.append(CircleObstacle(param[0], (param[1][0], param[1][1])))
+                    self.obstacle_geoms["circle"].append([param[0], param[1][0], param[1][1]])
+                self.obstacle_geoms["circle"] = np.asarray(self.obstacle_geoms["circle"])
             elif circle_obstacles is not None:
                 raise TypeError(f"Expected circle obstacle parameters to be a list of tuples, not {type(circle_obstacles)}")
             poly_obstacle = obstacle_params.get("polygon", None)
             if poly_obstacle is not None and isinstance(poly_obstacle, list):
+                self.obstacle_geoms["polygon"] = []
                 for param in poly_obstacle:
                     converted_param = [(p[0], p[1]) for p in param]
                     self.obstacles.append(PolygonObstacle(converted_param))
+                    self.obstacle_geoms["polygon"].extend(
+                        [(p, param[(i+1) % len(param)]) for i, p in enumerate(param)]
+                    )
+                self.obstacle_geoms["polygon"] = np.asarray(self.obstacle_geoms["polygon"])
             elif poly_obstacle is not None:
                 raise TypeError(f"Expected polygon obstacle parameters to be a list of tuples, not {type(poly_obstacle)}")
         elif obstacle_params is not None:
@@ -1707,18 +1741,21 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             ] * self.num_agents,  # whether this agent tagged something
             "agent_tagged": [0] * self.num_agents,  # if this agent was tagged
             "agent_oob": [0] * self.num_agents,  # if this agent went out of bounds
-            "dist_to_obstacles": dict()
+            "dist_to_obstacles": dict(),
+            "lidar_labels": dict(),
+            "lidar_ends": dict(),
+            "lidar_distances": dict()
         }
+        
         agent_ids = list(self.players.keys())
-        for k in agent_ids:
-            self.state["dist_to_obstacles"][k] = [(0, 0)] * len(self.obstacles)
 
         if self.lidar_obs:
             #reset lidar readings
-            self.state["lidar_labels"] = {agent_id: np.zeros(self.num_lidar_rays) for agent_id in agent_ids}
-            self.state["lidar_ends"] = {agent_id: np.zeros((self.num_lidar_rays, 2)) for agent_id in agent_ids}
-            self.state["lidar_distances"] = {agent_id: np.zeros(self.num_lidar_rays) for agent_id in agent_ids}
-            self._update_lidar()
+            for agent_id in agent_ids:
+                self.state["lidar_labels"][agent_id] = np.zeros(self.num_lidar_rays)
+                self.state["lidar_ends"][agent_id] = np.zeros((self.num_lidar_rays, 2))
+                self.state["lidar_distances"][agent_id] = np.zeros(self.num_lidar_rays)
+                self._update_lidar()
 
             for team in self.agents_of_team:
                 for label_name, label_idx in self.ray_int_label_map.items():
@@ -1728,6 +1765,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                             self.obj_ray_detection_states[team][label_idx] = LIDAR_DETECTION_CLASS_MAP["teammate"]
                         else:
                             self.obj_ray_detection_states[team][label_idx] = LIDAR_DETECTION_CLASS_MAP["opponent"]
+        else:
+            for agent_id in agent_ids:
+                self.state["dist_to_obstacles"][agent_id] = [(0, 0)] * len(self.obstacles)
 
         for k in self.game_score:
             self.game_score[k] = 0
