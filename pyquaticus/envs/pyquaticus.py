@@ -1512,8 +1512,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Occupancy map
         #TODO:
-        # if self.gps_env:
-        #     self._generate_valid_start_poses(land_mask)
+        if self.gps_env:
+            self._generate_valid_start_poses(land_mask)
 
     def get_distance_between_2_points(self, start: np.array, end: np.array) -> float:
         """
@@ -2669,19 +2669,16 @@ when gps environment bounds are specified in meters")
 
         # Convert coordinates to environment units
         water_coords_env = (water_coords + 0.5) * [x_scale, y_scale]
-        land_coords_env = (land_coords + 0.5) * [x_scale, y_scale]
 
         # Create a list of valid positions
         valid_positions = []
         valid_team_positions = []
-            
-        land_distances = np.min(
-            np.linalg.norm(np.expand_dims(water_coords_env, axis=1) - land_coords_env, axis=-1),
-            axis=-1
+
+        poses_in_collision = detect_collision(
+            water_coords_env,
+            self.agent_radius,
+            self.obstacle_geoms
         )
-        valid_water_coords_mask = (land_distances > self.agent_radius) & \
-            (self.agent_radius < water_coords_env[:, 0] < self.env_size[0] - self.agent_radius) & \
-            (self.agent_radius < water_coords_env[:, 1] < self.env_size[1] - self.agent_radius)
 
         print(valid_water_coords_mask.shape)
         import sys
@@ -2734,7 +2731,7 @@ when gps environment bounds are specified in meters")
             self.screen.fill((255, 255, 255))
 
         # Boundary
-        #TODO: draw boundary for default mode (non gps env) or if gps env has no outer obstacles
+        #TODO: draw boundary for default mode (non gps env) or if gps env has no outer obstacles (self.render_boundary_rect)
 
         # Scrimmage line
         draw.line(

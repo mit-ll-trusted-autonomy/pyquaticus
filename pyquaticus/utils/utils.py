@@ -333,22 +333,26 @@ def global_point(point_name, team):
     return point
 
 def detect_collision(
-    agent_pos: np.ndarray,
+    poses: np.ndarray,
     agent_radius: float,
     obstacle_geoms: dict,
     padding:float = 1e-4
 ):
+    poses = np.expand_dims(poses.reshape(-1, 2), axis=1)
+
     collision = False
     for obstacle_type, geoms in obstacle_geoms.items():
         if obstacle_type == "circle":
-            dists = np.linalg.norm(agent_pos - geoms[:, 1:]) - geoms[:, 0]
-            collision = np.any(dists <= agent_radius) 
+            # np.expand_dims(poses, 1)  - np.expand_dims(circle_geoms[:, 1:], 0)
+            dists = np.linalg.norm(poses - geoms[:, 1:]) - geoms[:, 0]
+            collision = np.any(dists <= agent_radius, axis=-1) 
             if collision:
                 break
         else: #polygon obstacle
             #determine closest points on all obtacle line segments
             v_AB = np.diff(geoms, axis=-2)
-            v_AP = agent_pos - geoms[:, :1, :] #take only first point of segment (but preserve num dimensions)
+            # np.expand_dims(poses,1) - geoms[:, :1].reshape(1, 6, 2)
+            v_AP = poses - geoms[:, :1] #take only first point of segment (but preserve num dimensions)
             v_AB_AP = np.sum(v_AP * v_AB, axis=-1) #dot product
 
             mag_AB = np.linalg.norm(v_AB, axis=-1)
@@ -358,14 +362,16 @@ def detect_collision(
             proj_mag = v_AB_AP / mag_AB
             
             closest_points = geoms[:, 0, :] + proj_mag * unit_AB
-            closest_points = np.where(proj_mag <= 0., geoms[:, 0, :], closest_points)
-            closest_points = np.where(proj_mag >= mag_AB, geoms[:, 1, :], closest_points)
+            closest_points = np.where(proj_mag <= 0., geoms[:, 0], closest_points)
+            closest_points = np.where(proj_mag >= mag_AB, geoms[:, 1], closest_points)
 
             #calculate distances to obstacles
-            dists = np.linalg.norm(agent_pos - closest_points, axis=-1)
+            dists = np.linalg.norm(poses - closest_points, axis=-1)
             collision = np.any(dists <= agent_radius + padding)
             if collision:
                 break
+    
+    if collision.shape[0] == 1:
+        collision = collision.item()
 
     return collision
-
