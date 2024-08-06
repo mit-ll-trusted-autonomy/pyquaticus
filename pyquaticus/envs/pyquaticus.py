@@ -212,7 +212,10 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             agent_obs_normalizer.register("ray_labels", self.num_lidar_rays * [len(LIDAR_DETECTION_CLASS_MAP) - 1])
         else:
             max_bearing = [180]
-            max_dist = [self.env_diag + 10]  # add a ten meter buffer #TODO: convert to web_mercator if gps_env
+            if self.gps_env:
+                max_dist = [self.env_diag + 10/self.meters_per_mercator_xy]  # add a ten meter buffer
+            else:
+                max_dist = [self.env_diag + 10]  # add a ten meter buffer
             max_dist_scrimmage = [self.env_diag]
             min_dist = [0.0]
             max_bool, min_bool = [1.0], [0.0]
@@ -506,6 +509,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
     def get_agent_action_space(self):
         """Overridden method inherited from `Gym`."""
+        #TODO: convert to mercator xy if necessary and define action map in here according to an imported utility function
         return Discrete(len(ACTION_MAP))
 
     def _determine_team_wall_orient(self):
@@ -1171,7 +1175,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.topo_contour_eps = config_dict.get("topo_contour_eps", config_dict_std["topo_contour_eps"])
 
         # MOOS dynamics parameters
-        self.max_speed = config_dict.get("max_speed", config_dict_std["max_speed"])
+        self.max_speed = config_dict.get("max_speed", config_dict_std["max_speed"]) #TODO convert to web mercator xy
         self.speed_factor = config_dict.get("speed_factor", config_dict_std["speed_factor"])
         self.thrust_map = config_dict.get("thrust_map", config_dict_std["thrust_map"])
         self.max_thrust = config_dict.get("max_thrust", config_dict_std["max_thrust"])
@@ -2728,6 +2732,9 @@ when gps environment bounds are specified in meters")
             self.screen.blit(self.pygame_background_img, (0, 0))
         else:
             self.screen.fill((255, 255, 255))
+
+        # Boundary
+        #TODO: draw boundary for default mode (non gps env) or if gps env has no outer obstacles
 
         # Scrimmage line
         draw.line(
