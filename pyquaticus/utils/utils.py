@@ -39,7 +39,6 @@ def rot2d(vector: np.ndarray, theta) -> np.ndarray:
 
     return np.dot(rot, vector)
 
-
 def rc_intersection(
     ray: np.ndarray, circle_center: np.ndarray, circle_radius
 ) -> np.ndarray:
@@ -124,7 +123,6 @@ def rc_intersection(
 
     return exit_wound
 
-
 def reflect_vector(
     point: np.ndarray, vector: np.ndarray, circle_center: np.ndarray
 ) -> np.ndarray:
@@ -174,7 +172,6 @@ def reflect_vector(
 
     return reflection
 
-
 def get_rot_angle(tail: np.ndarray, tip: np.ndarray):
     """
     This function returns the rotation angle (in radians)
@@ -199,7 +196,6 @@ def get_rot_angle(tail: np.ndarray, tip: np.ndarray):
 
     return theta
 
-
 def get_screen_res():
     """Returns the screen resolution as [Width, Height]."""
     pygame.init()
@@ -207,7 +203,6 @@ def get_screen_res():
     res = [screen_info.current_w, screen_info.current_h]
     pygame.quit()
     return res
-
 
 def line_intersection(line1, line2):
     xdiff = (line1[0][0] - line1[1][0], line2[0][0] - line2[1][0])
@@ -224,7 +219,6 @@ def line_intersection(line1, line2):
     x = det(d, xdiff) / div
     y = det(d, ydiff) / div
     return np.array([x, y])
-
 
 def closest_point_on_line(A, B, P):
     """
@@ -251,7 +245,6 @@ def closest_point_on_line(A, B, P):
     else:
         return [A[0] + (unit_AB[0] * proj_dist), A[1] + (unit_AB[1] * proj_dist)]
 
-
 def vector_to(A, B, unit=False):
     """
     Returns a vector from A to B
@@ -269,7 +262,6 @@ def vector_to(A, B, unit=False):
 
     return vec
 
-
 def heading_angle_conversion(deg):
     """
     Converts a world-frame angle to a heading and vice-versa
@@ -281,13 +273,11 @@ def heading_angle_conversion(deg):
     """
     return (90 - deg) % 360
 
-
 def vec_to_mag_heading(vec):
     """Converts a vector to a magnitude and heading (deg)."""
     mag = np.linalg.norm(vec)
     angle = math.degrees(math.atan2(vec[1], vec[0]))
     return mag, angle180(heading_angle_conversion(angle))
-
 
 def mag_heading_to_vec(mag, bearing):
     """Converts a magnitude and heading (deg) to a vector."""
@@ -295,7 +285,6 @@ def mag_heading_to_vec(mag, bearing):
     x = mag * math.cos(angle)
     y = mag * math.sin(angle)
     return np.array([x, y], dtype=np.float32)
-
 
 def mag_bearing_to(A, B, relative_hdg=None):
     """
@@ -315,14 +304,12 @@ def mag_bearing_to(A, B, relative_hdg=None):
         hdg = (hdg - relative_hdg) % 360
     return mag, angle180(hdg)
 
-
 def angle180(deg):
     while deg > 180:
         deg -= 360
     while deg < -180:
         deg += 360
     return deg
-
 
 def clip(val, minimum, maximum):
     if val > maximum:
@@ -331,6 +318,7 @@ def clip(val, minimum, maximum):
         return minimum
     else:
         return val
+
 def global_point(point_name, team):
     point = point_name
     if team == Team.BLUE_TEAM:
@@ -343,3 +331,41 @@ def global_point(point_name, team):
         elif point_name not in ['SC', 'CC', 'PC']:
             point = point_name[:-1]
     return point
+
+def detect_collision(
+    agent_pos: np.ndarray,
+    agent_radius: float,
+    obstacle_geoms: dict,
+    padding:float = 1e-4
+):
+    collision = False
+    for obstacle_type, geoms in obstacle_geoms.items():
+        if obstacle_type == "circle":
+            dists = np.linalg.norm(agent_pos - geoms[:, 1:]) - geoms[:, 0]
+            collision = np.any(dists <= agent_radius) 
+            if collision:
+                break
+        else: #polygon obstacle
+            #determine closest points on all obtacle line segments
+            v_AB = np.diff(geoms, axis=-2)
+            v_AP = agent_pos - geoms[:, :1, :] #take only first point of segment (but preserve num dimensions)
+            v_AB_AP = np.sum(v_AP * v_AB, axis=-1) #dot product
+
+            mag_AB = np.linalg.norm(v_AB, axis=-1)
+            unit_AB = v_AB.squeeze(axis=-2) / mag_AB
+
+            v_AB_AP = np.sum(v_AP * v_AB, axis=-1) #dot product
+            proj_mag = v_AB_AP / mag_AB
+            
+            closest_points = geoms[:, 0, :] + proj_mag * unit_AB
+            closest_points = np.where(proj_mag <= 0., geoms[:, 0, :], closest_points)
+            closest_points = np.where(proj_mag >= mag_AB, geoms[:, 1, :], closest_points)
+
+            #calculate distances to obstacles
+            dists = np.linalg.norm(agent_pos - closest_points, axis=-1)
+            collision = np.any(dists <= agent_radius + padding)
+            if collision:
+                break
+
+    return collision
+

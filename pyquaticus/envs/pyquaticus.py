@@ -63,6 +63,7 @@ from pyquaticus.utils.utils import (
     angle180,
     clip,
     closest_point_on_line,
+    detect_collision,
     get_rot_angle,
     get_screen_res,
     heading_angle_conversion,
@@ -853,36 +854,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             # If the player hits a boundary, return them to their original starting position and skip
             # to the next agent.
-            agent_pos = np.asarray([pos_x, pos_y])
-            player_hit_obstacle = False
-            
-            for obstacle_type, geoms in self.obstacle_geoms.items():
-                if obstacle_type == "circle":
-                    dists = np.linalg.norm(agent_pos - geoms[:, 1:]) - geoms[:, 0]
-                    player_hit_obstacle = np.any(dists <= self.agent_radius) 
-                    if player_hit_obstacle:
-                        break
-                else: #polygon obstacle
-                    #determine closest points on all obtacle line segments
-                    v_AB = np.diff(geoms, axis=-2)
-                    v_AP = agent_pos - geoms[:, :1, :] #take only first point of segment (but preserve num dimensions)
-                    v_AB_AP = np.sum(v_AP * v_AB, axis=-1) #dot product
-
-                    mag_AB = np.linalg.norm(v_AB, axis=-1)
-                    unit_AB = v_AB.squeeze(axis=-2) / mag_AB
-
-                    v_AB_AP = np.sum(v_AP * v_AB, axis=-1) #dot product
-                    proj_mag = v_AB_AP / mag_AB
-                    
-                    closest_points = geoms[:, 0, :] + proj_mag * unit_AB
-                    closest_points = np.where(proj_mag <= 0., geoms[:, 0, :], closest_points)
-                    closest_points = np.where(proj_mag >= mag_AB, geoms[:, 1, :], closest_points)
-
-                    #calculate distances to obstacles
-                    dists = np.linalg.norm(agent_pos - closest_points, axis=-1)
-                    player_hit_obstacle = np.any(dists <= self.agent_radius)
-                    if player_hit_obstacle:
-                        break
+            player_hit_obstacle = detect_collision(
+                np.asarray([pos_x, pos_y]),
+                self.agent_radius,
+                self.obstacle_geoms
+            )
 
             if player_hit_obstacle or not (
                 (self.agent_radius <= pos_x <= self.env_size[0] - self.agent_radius)
@@ -1229,7 +1205,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.render_traj_mode = config_dict.get("render_traj_mode", config_dict_std["render_traj_mode"])
         self.render_traj_freq = config_dict.get("render_traj_freq", config_dict_std["render_traj_freq"])
         self.render_traj_cutoff = config_dict.get("render_traj_cutoff", config_dict_std["render_traj_cutoff"])
-        self.render_lidar = config_dict.get("render_lidar", config_dict_std["render_lidar"])
+        self.render_lidar_mode = config_dict.get("render_lidar_mode", config_dict_std["render_lidar_mode"])
         self.record_render = config_dict.get("record_render", config_dict_std["record_render"])
         self.recording_format = config_dict.get("recording_format", config_dict_std["recording_format"])
 
@@ -2781,7 +2757,7 @@ when gps environment bounds are specified in meters")
                     )
         
         # Aquaticus field points
-        if self.render_field_points:
+        if self.render_field_points and not self.gps_env:
             for v in self.config_dict["aquaticus_field_points"]:
                 draw.circle(
                     self.screen,
@@ -2849,18 +2825,25 @@ when gps environment bounds are specified in meters")
                         raise NotImplementedError()
 
                 #lidar
-                if self.lidar_obs and self.render_lidar:
+                if self.lidar_obs and self.render_lidar_mode:
                     ray_headings_global = np.deg2rad((heading_angle_conversion(player.heading) + self.lidar_ray_headings) % 360)
                     ray_vecs = np.array([np.cos(ray_headings_global), np.sin(ray_headings_global)]).T
                     lidar_starts = player.pos + self.agent_radius * ray_vecs
                     for i in range(self.num_lidar_rays):
-                        draw.line(
-                            self.screen,
-                            color,
-                            self.env_to_screen(lidar_starts[i]),
-                            self.env_to_screen(self.state["lidar_ends"][player.id][i]),
-                            width=2
-                        )
+                        if (
+                            self.render_lidar_mode == "full" or
+                            (
+                                self.render_lidar_mode == "detection" and
+                                self.state["lidar_labels"][player.id][i] != self.ray_int_label_map["nothing"]
+                                )
+                        ):
+                            draw.line(
+                                self.screen,
+                                color,
+                                self.env_to_screen(lidar_starts[i]),
+                                self.env_to_screen(self.state["lidar_ends"][player.id][i]),
+                                width=2
+                            )
                 #tagging
                 player.render_tagging(self.tagging_cooldown)
 

@@ -71,7 +71,7 @@ config_dict_std = {
     "render_traj_mode":     None, # "traj", "agent", "history", "traj_agent", "traj_history", or None
     "render_traj_freq":        1, # timesteps
     "render_traj_cutoff":   None, # max length (timesteps) of the traj to render, or None for no limit
-    "render_lidar":        False, # option to render lidar rays
+    "render_lidar_mode":    None, # "full" (all rays), "detection" (only rays that detect something), or None
     "record_render":       False, # option to save video of render frames
     "recording_format":     "mp4", # mp4, avi
 
