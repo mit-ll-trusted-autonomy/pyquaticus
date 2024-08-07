@@ -2680,9 +2680,9 @@ when gps environment bounds are specified in meters")
             self.obstacle_geoms
         )
 
-        print(valid_water_coords_mask.shape)
-        import sys
-        sys.exit()
+        print(poses_in_collision.shape)
+        # import sys
+        # sys.exit()
 
         self.valid_start_poses = np.asarray(valid_positions)
 
