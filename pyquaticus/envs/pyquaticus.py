@@ -2663,28 +2663,18 @@ when gps environment bounds are specified in meters")
         x_scale = self.env_size[0] / land_mask.shape[1]
         y_scale = self.env_size[1] / land_mask.shape[0]
 
-        # Get coordinates of land and water pixels
+        # Get coordinates of water pixels in environment units
         water_coords = np.flip(np.column_stack(np.where(land_mask)), axis=-1)
-        land_coords = np.flip(np.column_stack(np.where(np.logical_not(land_mask))), axis=-1)
-
-        # Convert coordinates to environment units
         water_coords_env = (water_coords + 0.5) * [x_scale, y_scale]
 
         # Create a list of valid positions
-        valid_positions = []
-        valid_team_positions = []
-
         poses_in_collision = detect_collision(
             water_coords_env,
             self.agent_radius,
             self.obstacle_geoms
         )
-
-        print(poses_in_collision.shape)
-        # import sys
-        # sys.exit()
-
-        self.valid_start_poses = np.asarray(valid_positions)
+        self.valid_start_poses = water_coords_env[np.where(poses_in_collision)[0]]
+        #TODO: valid_team_positions (based on the on sides)
 
     def render(self):
         """Overridden method inherited from `Gym`."""
