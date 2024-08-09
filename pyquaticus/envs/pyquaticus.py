@@ -2214,6 +2214,15 @@ when gps environment bounds are specified in meters")
             ### agent and flag geometries ###
             lon1, lat1 = _sm2ll(*env_bounds[0])
             lon2, lat2 = _sm2ll(*env_bounds[1])
+            print("coord1:", (lat1, lon1))
+            print("coord2:", (lat1, lon2))
+            geodict_test = Geodesic.WGS84.Inverse(
+                lat1=lat1,
+                lon1=lon1,
+                lat2=lat1,
+                lon2=lon2
+            )['s12']
+            print(geodict_test)
             lon_diff = self._longitude_diff_west2east(lon1, lon2)
 
             if np.abs(lat1) > np.abs(lat2):
@@ -2221,12 +2230,26 @@ when gps environment bounds are specified in meters")
             else:
                 lat = lat2
 
-            geoc_lat = np.arctan((POLAR_RADIUS / EQUATORIAL_RADIUS) * np.tan(lat))
+            geoc_lat = np.arctan((POLAR_RADIUS / EQUATORIAL_RADIUS)**2 * np.tan(lat))
             small_circle_circum = np.pi * 2 * EQUATORIAL_RADIUS * np.cos(geoc_lat)
             
+            #########################################
+            small_circle_circum2 = np.pi * 2 * np.sqrt(
+                ((EQUATORIAL_RADIUS**2 * np.cos(lat))**2 + (POLAR_RADIUS**2 * np.sin(lat))**2) /
+                ((EQUATORIAL_RADIUS * np.cos(lat))**2 + (POLAR_RADIUS * np.sin(lat))**2)
+            ) * np.cos(geoc_lat)
+            #########################################
+            print(small_circle_circum)
+            print(small_circle_circum2)
+
             #use most warped (squished) horizontal border to underestimate the number of
             #meters per mercator xy, therefore overestimate how close objects are to one another
             self.meters_per_mercator_xy = small_circle_circum * (lon_diff/360) / self.env_size[0]
+            print('testttttt', small_circle_circum * (lon_diff/360))
+            print(small_circle_circum2 * (lon_diff/360))
+            import sys
+            sys.exit()
+            print(self.meters_per_mercator_xy)
             agent_radius /= self.meters_per_mercator_xy
             flag_radius /= self.meters_per_mercator_xy
             catch_radius /= self.meters_per_mercator_xy
@@ -2497,10 +2520,12 @@ when gps environment bounds are specified in meters")
 
             topo_img = map_cache["topographical_image"]
             self.background_img = map_cache["render_image"]
+            self.background_img_attribution = map_cache["attribution"]
         else:
             #retrieve maps from tile provider
             topo_tile_source = cx.providers.CartoDB.DarkMatterNoLabels #DO NOT CHANGE!
             render_tile_source = cx.providers.CartoDB.Voyager #DO NOT CHANGE!
+            self.background_img_attribution = render_tile_source.get('attribution')
 
             render_tile_bounds = self.env_bounds + self.arena_buffer_frac * np.asarray([[-self.env_diag], [self.env_diag]])
 
@@ -2517,7 +2542,11 @@ when gps environment bounds are specified in meters")
             self.background_img = self._crop_tiles(render_tile[:,:,:-1], render_ext, *render_tile_bounds.flatten(), ll=False)
 
             #cache maps
-            map_cache = {"topographical_image": topo_img, "render_image": self.background_img}
+            map_cache = {
+                "topographical_image": topo_img,
+                "render_image": self.background_img,
+                "attribution": self.background_img_attribution
+            }
             with open(map_cache_path, 'wb') as f:
                 pickle.dump(map_cache, f)
 
@@ -2544,7 +2573,17 @@ when gps environment bounds are specified in meters")
             (labeled_mask == target_label) +
             (water_pixel_color_gray <= grayscale_topo_img) * (grayscale_topo_img <= water_pixel_color_gray + 2)
         )
+        land_mask_binary = 255*land_mask.astype(np.uint8)
+        cv2.imwrite("peter_old.png", land_mask_binary)
+        water_contours, _ = cv2.findContours(land_mask_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        print(ceil(2*self.agent_radius*self.pixel_size))
+        print(self.agent_radius)
+        land_mask_new = cv2.drawContours(land_mask_binary, water_contours, -1, 0, ceil(2*self.agent_radius*self.pixel_size))
+        cv2.imwrite("peter_new.png", land_mask_new)
+        import sys
+        sys.exit()
 
+        ###################################################################################################################
         #water contours
         land_mask_binary = 255*land_mask.astype(np.uint8)
         water_contours, _ = cv2.findContours(land_mask_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -2575,8 +2614,7 @@ when gps environment bounds are specified in meters")
         island_cnts_approx = []
         for i, cnt in enumerate(island_contours):
             if cnt.shape[0] != 1:
-                arc_length = cv2.arcLength(cnt, True)
-                eps = self.topo_contour_eps * arc_length
+                eps = self.topo_contour_eps * cv2.arcLength(cnt, True)
                 cnt_approx = cv2.approxPolyDP(cnt, eps, True) #TODO
                 cvx_hull = cv2.convexHull(cnt_approx)
                 island_cnts_approx.append(cvx_hull)
