@@ -1812,7 +1812,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         agent_spd_hdg = []
         agent_on_sides = []
 
-        if False:
+        if True:
             valid_start_pos_inds = [i for i in range(len(self.valid_start_poses))]
             for player in self.players.values():
                 #location
@@ -2574,10 +2574,11 @@ when gps environment bounds are specified in meters")
         #approximate island contours
         island_cnts_approx = []
         for i, cnt in enumerate(island_contours):
-            eps = self.topo_contour_eps * cv2.arcLength(cnt, True)
-            cnt_approx = cv2.approxPolyDP(cnt, 10*eps, True)
-            cvx_hull = cv2.convexHull(cnt_approx)
-            if len(cvx_hull) > 1:
+            if cnt.shape[0] != 1:
+                arc_length = cv2.arcLength(cnt, True)
+                eps = self.topo_contour_eps * arc_length
+                cnt_approx = cv2.approxPolyDP(cnt, eps, True) #TODO
+                cvx_hull = cv2.convexHull(cnt_approx)
                 island_cnts_approx.append(cvx_hull)
 
         island_mask_approx = cv2.drawContours(255*np.ones_like(island_binary), island_cnts_approx, -1, 0, -1) #convex island masks
@@ -2665,6 +2666,7 @@ when gps environment bounds are specified in meters")
 
         # Get coordinates of water pixels in environment units
         water_coords = np.flip(np.column_stack(np.where(land_mask)), axis=-1)
+        water_coords[:, 1] = land_mask.shape[0] - water_coords[:, 1] #adjust y-coords to go from bottom to top
         water_coords_env = (water_coords + 0.5) * [x_scale, y_scale]
 
         # Create a list of valid positions
@@ -2673,8 +2675,9 @@ when gps environment bounds are specified in meters")
             self.agent_radius,
             self.obstacle_geoms
         )
-        self.valid_start_poses = water_coords_env[np.where(poses_in_collision)[0]]
+        self.valid_start_poses = water_coords_env[np.where(np.logical_not(poses_in_collision))[0]]
         #TODO: valid_team_positions (based on the on sides)
+        #TODO: remove start poses that happen to be trapped (maybe do this by using contours with buffer pixel size rounded up based on agent radius)
 
     def render(self):
         """Overridden method inherited from `Gym`."""
