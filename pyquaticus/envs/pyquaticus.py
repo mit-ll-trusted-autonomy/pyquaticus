@@ -2097,7 +2097,7 @@ when gps environment bounds are specified in meters")
 
                     #horizontal bounds
                     geoc_lat = np.arctan(
-                        (POLAR_RADIUS / EQUATORIAL_RADIUS) * np.tan(flag_midpoint[0])
+                        (POLAR_RADIUS / EQUATORIAL_RADIUS)**2 * np.tan(flag_midpoint[0])
                     )
                     small_circle_circum = np.pi * 2 * EQUATORIAL_RADIUS * np.cos(geoc_lat)
                     env_left = flag_midpoint[1] - 360 * (0.5*env_bounds[1][0] / small_circle_circum)
