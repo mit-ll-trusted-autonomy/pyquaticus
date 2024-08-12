@@ -2559,7 +2559,7 @@ when gps environment bounds are specified in meters")
         for i, cnt in enumerate(island_contours):
             if cnt.shape[0] != 1:
                 eps = self.topo_contour_eps * cv2.arcLength(cnt, True)
-                cnt_approx = cv2.approxPolyDP(cnt, eps, True) #TODO
+                cnt_approx = cv2.approxPolyDP(cnt, eps, True)
                 cvx_hull = cv2.convexHull(cnt_approx)
                 island_cnts_approx.append(cvx_hull)
 
