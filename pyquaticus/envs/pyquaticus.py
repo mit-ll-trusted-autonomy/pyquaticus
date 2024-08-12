@@ -180,7 +180,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         return processed_action_dict
 
     def _discrete_action_to_speed_relheading(self, action):
-        return ACTION_MAP[action]
+        return self.action_map[action]
 
     def _relheading_to_global_heading(self, player_heading, relheading):
         return angle180((player_heading + relheading) % 360)
@@ -510,7 +510,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
     def get_agent_action_space(self):
         """Overridden method inherited from `Gym`."""
         #TODO: convert to mercator xy if necessary and define action map in here according to an imported utility function
-        return Discrete(len(ACTION_MAP))
+        return Discrete(len(self.action_map))
 
     def _determine_team_wall_orient(self):
         """
@@ -664,6 +664,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.set_geom_config(config_dict)
 
         # Setup action and observation spaces
+        self.action_map = [[self.max_speed * spd, hdg] for (spd, hdg) in ACTION_MAP]
         self.action_spaces = {
             agent_id: self.get_agent_action_space() for agent_id in self.players
         }
@@ -1175,7 +1176,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.topo_contour_eps = config_dict.get("topo_contour_eps", config_dict_std["topo_contour_eps"])
 
         # MOOS dynamics parameters
-        self.max_speed = config_dict.get("max_speed", config_dict_std["max_speed"]) #TODO convert to web mercator xy
         self.speed_factor = config_dict.get("speed_factor", config_dict_std["speed_factor"])
         self.thrust_map = config_dict.get("thrust_map", config_dict_std["thrust_map"])
         self.max_thrust = config_dict.get("max_thrust", config_dict_std["max_thrust"])
@@ -1236,6 +1236,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         flag_radius = config_dict.get("flag_radius", config_dict_std["flag_radius"])
         flag_keepout = config_dict.get("flag_keepout", config_dict_std["flag_keepout"])
         catch_radius = config_dict.get("catch_radius", config_dict_std["catch_radius"])
+        max_speed = config_dict.get("max_speed", config_dict_std["max_speed"])
         lidar_range = config_dict.get("lidar_range", config_dict_std["lidar_range"])
         
         self._build_env_geom(
@@ -1249,6 +1250,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             flag_radius=flag_radius,
             flag_keepout=flag_keepout,
             catch_radius=catch_radius,
+            max_speed=max_speed,
             lidar_range=lidar_range
         )
 
@@ -2001,6 +2003,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         flag_radius: float,
         flag_keepout: float,
         catch_radius: float,
+        max_speed: float, 
         lidar_range: float
     ):
         if (
@@ -2233,6 +2236,7 @@ when gps environment bounds are specified in meters")
             flag_radius /= self.meters_per_mercator_xy
             catch_radius /= self.meters_per_mercator_xy
             flag_keepout /= self.meters_per_mercator_xy
+            max_speed /= self.meters_per_mercator_xy
             lidar_range /= self.meters_per_mercator_xy
 
         else:
@@ -2438,6 +2442,7 @@ when gps environment bounds are specified in meters")
         self.flag_radius = flag_radius
         self.catch_radius = catch_radius
         self.flag_keepout = flag_keepout
+        self.max_speed = max_speed
 
     def _get_line_intersection(self, origin: np.ndarray, vec: np.ndarray, line: np.ndarray):
         """
