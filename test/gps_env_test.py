@@ -159,8 +159,8 @@ def main():
     config["render_agent_ids"] = True
     config["render_lidar_mode"] = "detection"
     # config["render_traj_mode"] = "traj_agent"
-    config["render_traj_freq"] = 10
-    config["render_traj_cutoff"] = 55
+    config["render_traj_freq"] = 50
+    config["render_traj_cutoff"] = 100
     # config["record_render"] = True
     config["recording_format"] = "mp4"
     # config["render_fps"] = 10

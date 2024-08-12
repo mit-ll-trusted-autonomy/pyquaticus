@@ -2822,7 +2822,7 @@ when gps environment bounds are specified in meters")
                                 self.screen,
                                 color,
                                 prev_blit_pos,
-                                radius=2,
+                                radius=1,
                                 width=0
                             )
                     #agent 
