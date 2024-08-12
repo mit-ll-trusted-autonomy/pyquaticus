@@ -202,7 +202,7 @@ class RenderingPlayer(Player):
             start_angle = np.pi/2 + percent_cooldown * 2*np.pi
             end_angle = 5*np.pi/2
 
-            draw.arc(self.pygame_agent, (0, 0, 0), self.pygame_agent_rect, start_angle, end_angle, 5)
+            draw.arc(self.pygame_agent, (0, 0, 0), self.pygame_agent_rect, start_angle, end_angle, round(self.r/4))
 
 
 @dataclass

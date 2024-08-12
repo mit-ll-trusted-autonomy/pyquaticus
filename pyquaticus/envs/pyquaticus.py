@@ -509,7 +509,6 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
     def get_agent_action_space(self):
         """Overridden method inherited from `Gym`."""
-        #TODO: convert to mercator xy if necessary and define action map in here according to an imported utility function
         return Discrete(len(self.action_map))
 
     def _determine_team_wall_orient(self):
@@ -536,10 +535,10 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         """
 
         all_walls = [
-            [self.env_ul, self.env_ur],
-            [self.env_ur, self.env_lr],
-            [self.env_lr, self.env_ll],
-            [self.env_ll, self.env_ul]
+            [self.env_ul.astype(np.float32), self.env_ur.astype(np.float32)],
+            [self.env_ur.astype(np.float32), self.env_lr.astype(np.float32)],
+            [self.env_lr.astype(np.float32), self.env_ll.astype(np.float32)],
+            [self.env_ll.astype(np.float32), self.env_ul.astype(np.float32)]
         ]
 
         def rotate_walls(walls, amt):
@@ -792,10 +791,16 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         terminated = False
         truncated = False
         if self.dones["__all__"]:
+            #rendering
+            if self.record_render:
+                self.buffer_to_video()
+
+            #dones
             if self.dones["blue"] or self.dones["red"]:
                 terminated = True
             else:
                 truncated = True
+
         terminated = {agent: terminated for agent in raw_action_dict}
         truncated = {agent: truncated for agent in raw_action_dict}
 
@@ -1258,10 +1263,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         #TODO
 
         # Environment corners
-        self.env_ll = np.array([0.0, 0.0], dtype=np.float32)
-        self.env_lr = np.array([self.env_size[0], 0.0], dtype=np.float32)
-        self.env_ul = np.array([0.0, self.env_size[1]], dtype=np.float32)
-        self.env_ur = np.array(self.env_size, dtype=np.float32)
+        self.env_ll = np.array([0.0, 0.0])
+        self.env_lr = np.array([self.env_size[0], 0.0])
+        self.env_ul = np.array([0.0, self.env_size[1]])
+        self.env_ur = np.array(self.env_size)
         # ll = lower left, lr = lower right
         # ul = upper left, ur = upper right
 
@@ -1336,12 +1341,17 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.sim_speedup_factor = int(np.round(self.sim_speedup_factor))
                 print(f"Warning: Converted sim_speedup_factor to integer: {self.sim_speedup_factor}")
 
+            # check that record_render is only True if environment is being rendered
+            if self.record_render:
+                assert self.render_mode is not None, "Render_mode cannot be None to record video."
+
     def set_geom_config(self, config_dict):
         self.n_circle_segments = config_dict.get("n_circle_segments", config_dict_std["n_circle_segments"])
         n_quad_segs = round(self.n_circle_segments/4)
 
         # Obstacles
         obstacle_params = config_dict.get("obstacles", config_dict_std["obstacles"])
+        border_contour = None
 
         if self.gps_env:
             border_contour, island_contours, land_mask = self._get_topo_geom()
@@ -1515,7 +1525,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.agent_int_seg_mask = np.expand_dims(agent_int_seg_mask, axis=1)
 
         # Occupancy map
-        #TODO:
         if self.gps_env:
             self._generate_valid_start_poses(land_mask)
 
@@ -1771,12 +1780,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         if self.render_mode:
             self.render_ctr = 0
-
             if self.record_render:
-                #TODO change this to step function
-                if len(self.render_buffer) > 0:
-                    self.buffer_to_video()
-                    self.render_buffer = []
+                self.render_buffer = []
             if self.render_traj_mode:
                 self.traj_render_buffer = {agent_id: {'traj': [], 'agent': []} for agent_id in self.players}
 
@@ -1816,7 +1821,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         agent_spd_hdg = []
         agent_on_sides = []
 
-        if True:
+        if self.gps_env:
             valid_start_pos_inds = [i for i in range(len(self.valid_start_poses))]
             for player in self.players.values():
                 #location
@@ -1846,12 +1851,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 agent_spd_hdg.append([player.speed, player.heading])
                 agent_on_sides.append(player.on_own_side)
         else:
-            # if self.random_init:
-            if True:
-                flags_separation = self.get_distance_between_2_points(
-                    flag_locations[0], flag_locations[1]
-                )
-
             for player in self.players.values():
                 player.is_tagged = False
                 player.thrust = 0.0
@@ -1859,49 +1858,20 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 player.has_flag = False
                 player.on_own_side = True
                 player.tagging_cooldown = self.tagging_cooldown
-                # if self.random_init:
-                if True:
-                    max_agent_separation = flags_separation - 2 * self.flag_keepout
 
-                    # starting center point between two agents
-                    agent_shift = np.random.choice((-1.0, 1.0)) * np.random.uniform(
-                        0, 0.5 * (0.5 * max_agent_separation + r) - r
-                    )
-
-                    # adjust agent max and min separation ranges based on shifted center point
-                    max_agent_separation = 2 * (
-                        max_agent_separation / 2 - np.abs(agent_shift)
-                    )
-                    min_agent_separation = max(4 * r, 2 * (np.abs(agent_shift) + r))
-
-                    # initial agent separation
-                    np.random.uniform(
-                        min_agent_separation, max_agent_separation
-                    )
-                    player.orientation = (
-                        flag_locations[int(not int(player.team))]
-                        - flag_locations[int(player.team)]
-                    ) / flags_separation
-                    player.pos = flag_locations[int(player.team)] + player.orientation * (
-                        flags_separation / 2
-                    )
-
-                    agent_shift = agent_shift * player.orientation
-                    player.pos += agent_shift
-                    player.prev_pos = copy.deepcopy(player.pos)
+                if player.team == Team.RED_TEAM:
+                    init_x_pos = self.env_size[0] / 4
+                    player.heading = 90
                 else:
-                    if player.team == Team.RED_TEAM:
-                        init_x_pos = self.env_size[0] / 4
-                        player.heading = 90
-                    else:
-                        init_x_pos = self.env_size[0] - self.env_size[0] / 4
-                        player.heading = -90
+                    init_x_pos = self.env_size[0] - self.env_size[0] / 4
+                    player.heading = -90
 
-                    init_y_pos = (self.env_size[1] / (self.team_size + 1)) * (
-                        (player.id % self.team_size) + 1
-                    )
-                    player.pos = [init_x_pos, init_y_pos]
-                    player.prev_pos = copy.deepcopy(player.pos)
+                init_y_pos = (self.env_size[1] / (self.team_size + 1)) * (
+                    (player.id % self.team_size) + 1
+                )
+                player.pos = [init_x_pos, init_y_pos]
+                player.prev_pos = copy.deepcopy(player.pos)
+
                 player.home = copy.deepcopy(player.pos)
                 agent_locations.append(player.pos)
                 agent_spd_hdg.append([player.speed, player.heading])
@@ -2299,8 +2269,8 @@ when gps environment bounds are specified in meters")
             if self._is_auto_string(flag_homes[Team.BLUE_TEAM]) and self._is_auto_string(flag_homes[Team.RED_TEAM]):
                 if flag_homes_unit == "ll" or flag_homes_unit == "wm_xy":
                     raise Exception("'ll' (Lat/Long) and 'wm_xy' (web mercator xy) units should only be used when gps_env is True")
-                flag_homes[Team.BLUE_TEAM] = np.array([7/8*self.env_size[0], 0.5*self.env_size[0]])
-                flag_homes[Team.RED_TEAM] = np.array([1/8*self.env_size[0], 0.5*self.env_size[0]])
+                flag_homes[Team.BLUE_TEAM] = np.array([7/8*self.env_size[0], 0.5*self.env_size[1]])
+                flag_homes[Team.RED_TEAM] = np.array([1/8*self.env_size[0], 0.5*self.env_size[1]])
             elif self._is_auto_string(flag_homes[Team.BLUE_TEAM]) or self._is_auto_string(flag_homes[Team.RED_TEAM]):
                 raise Exception("Flag homes are either all 'auto', or all specified")
             else:
@@ -2734,9 +2704,18 @@ when gps environment bounds are specified in meters")
             self.screen.blit(self.pygame_background_img, (0, 0))
         else:
             self.screen.fill((255, 255, 255))
-
-        # Boundary
-        #TODO: draw boundary for default mode (non gps env) or if gps env has no outer obstacles (self.render_boundary_rect)
+            draw.line(
+                self.screen, (0,0,0), self.env_to_screen(self.env_ul), self.env_to_screen(self.env_ur), width=self.boundary_width
+            )
+            draw.line(
+                self.screen, (0,0,0), self.env_to_screen(self.env_ll), self.env_to_screen(self.env_lr), width=self.boundary_width
+            )
+            draw.line(
+                self.screen, (0,0,0), self.env_to_screen(self.env_ul), self.env_to_screen(self.env_ll), width=self.boundary_width
+            )
+            draw.line(
+                self.screen, (0,0,0), self.env_to_screen(self.env_ur), self.env_to_screen(self.env_lr), width=self.boundary_width
+            )
 
         # Scrimmage line
         draw.line(
@@ -2759,11 +2738,11 @@ when gps environment bounds are specified in meters")
                 )
             elif isinstance(obstacle, PolygonObstacle):
                 draw.polygon(
-                        self.screen,
-                        (0, 0, 0),
-                        [self.env_to_screen(p) for p in obstacle.anchor_points],
-                        width=self.boundary_width,
-                    )
+                    self.screen,
+                    (0, 0, 0),
+                    [self.env_to_screen(p) for p in obstacle.anchor_points],
+                    width=self.boundary_width,
+                )
         
         # Aquaticus field points
         if self.render_field_points and not self.gps_env:
