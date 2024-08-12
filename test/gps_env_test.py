@@ -147,11 +147,15 @@ def main():
     # config["red_flag_home"] = (41.351528984663766, -74.06065239404523)
     config["flag_homes_unit"] = "ll"
     config["sim_speedup_factor"] = 50
+    config["agent_radius"] = 100
+    config["flag_radius"] = 50
+    config["catch_radius"] = 500
+    config["flag_keepout"] = 250
     config["max_time"] = 10_000
     # config["screen_frac"] = 0.9 
     config["lidar_obs"] = True
     config["num_lidar_rays"] = 100
-    config["lidar_range"] = 200
+    config["lidar_range"] = 1000
     config["render_agent_ids"] = True
     config["render_lidar_mode"] = "detection"
     # config["render_traj_mode"] = "traj_agent"
