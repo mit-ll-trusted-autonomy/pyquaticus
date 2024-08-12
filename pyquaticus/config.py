@@ -60,7 +60,7 @@ config_dict_std = {
     # Observation parameters
     "normalize":    True, # flag for normalizing the observation space.
     "lidar_obs":   False, # option to use lidar (ray casting model) observations
-    "lidar_range":  40.0, # meters
+    "lidar_range": 200.0, # meters
     "num_lidar_rays": 64, # number of rays for lidar
     
     # Rendering parameters

@@ -620,11 +620,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         for i in range(0, self.num_blue):
             b_players.append(
-                RenderingPlayer(i, Team.BLUE_TEAM, (self.agent_radius * self.pixel_size), render_mode)
+                RenderingPlayer(i, Team.BLUE_TEAM, self.agent_render_radius, render_mode)
             )
         for i in range(self.num_blue, self.num_blue + self.num_red):
             r_players.append(
-                RenderingPlayer(i, Team.RED_TEAM, (self.agent_radius * self.pixel_size), render_mode)
+                RenderingPlayer(i, Team.RED_TEAM, self.agent_render_radius, render_mode)
             )
 
         self.players = {player.id: player for player in itertools.chain(b_players, r_players)} #maps player ids (or names) to player objects
@@ -1295,6 +1295,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.arena_buffer = self.pixel_size * arena_buffer
             self.boundary_width = 2  #pixels
             self.a2a_line_width = 5 #pixels
+            self.flag_render_radius = np.clip(self.flag_radius * self.pixel_size, 10, None) #pixels
+            self.agent_render_radius = np.clip(self.agent_radius * self.pixel_size, 15, None) #pixels
 
             # miscellaneous
             self.num_renders_per_step = int(self.render_fps * self.tau)
@@ -2551,18 +2553,6 @@ when gps environment bounds are specified in meters")
             (water_pixel_color_gray <= grayscale_topo_img) * (grayscale_topo_img <= water_pixel_color_gray + 2)
         )
 
-        #################################################################################################################
-        # land_mask_binary = 255*land_mask.astype(np.uint8)
-        # cv2.imwrite("peter_old.png", land_mask_binary)
-        # water_contours, _ = cv2.findContours(land_mask_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        # print(ceil(2*self.agent_radius*self.pixel_size))
-        # print(self.agent_radius)
-        # land_mask_new = cv2.drawContours(land_mask_binary, water_contours, -1, 0, ceil(2*self.agent_radius*self.pixel_size))
-        # cv2.imwrite("peter_new.png", land_mask_new)
-        # import sys
-        # sys.exit()
-        ###################################################################################################################
-
         #water contours
         land_mask_binary = 255*land_mask.astype(np.uint8)
         water_contours, _ = cv2.findContours(land_mask_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -2714,7 +2704,7 @@ when gps environment bounds are specified in meters")
                 pygame.display.init()
                 self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
                 self.isopen = True
-                self.agent_id_font = pygame.font.SysFont(None, int(2*self.pixel_size*self.agent_radius))
+                self.agent_id_font = pygame.font.SysFont(None, int(2*self.agent_render_radius))
             elif self.render_mode == "rgb_array":
                 self.screen = pygame.Surface((self.screen_width, self.screen_height))
             else:
@@ -2787,16 +2777,6 @@ when gps environment bounds are specified in meters")
             color = "blue" if team == Team.BLUE_TEAM else "red"
             opp_color = "red" if team == Team.BLUE_TEAM else "blue"
 
-            # team home region
-            home_center_screen = self.env_to_screen(self.flags[int(team)].home)
-            draw.circle(
-                    self.screen,
-                    (128, 128, 128),
-                    home_center_screen,
-                    radius=self.catch_radius * self.pixel_size,
-                    width=self.boundary_width,
-                )
-
             # team flag (not picked up)
             if not self.state["flag_taken"][int(team)]:
                 flag_pos_screen = self.env_to_screen(flag.pos)
@@ -2804,7 +2784,7 @@ when gps environment bounds are specified in meters")
                     self.screen,
                     color,
                     flag_pos_screen,
-                    radius=self.flag_radius * self.pixel_size,
+                    radius=self.flag_render_radius,
                 )
                 draw.circle(
                     self.screen,
@@ -2813,6 +2793,16 @@ when gps environment bounds are specified in meters")
                     radius=(self.flag_keepout - self.agent_radius) * self.pixel_size,
                     width=self.boundary_width,
                 )
+            
+            # team home region
+            home_center_screen = self.env_to_screen(self.flags[int(team)].home)
+            draw.circle(
+                self.screen,
+                (128, 128, 128),
+                home_center_screen,
+                radius=self.catch_radius * self.pixel_size,
+                width=self.boundary_width,
+            )
 
             # players
             for player in teams_players:
@@ -2876,14 +2866,14 @@ when gps environment bounds are specified in meters")
                         rotated_surface,
                         opp_color,
                         0.5*rotated_surface_size,
-                        radius=0.55*(self.pixel_size * self.agent_radius)
+                        radius=0.55*self.agent_render_radius
                     )
 
                 #agent id
                 if self.render_ids:
                     agent_id_blit_pos = (
-                        0.5*rotated_surface_size[0] - 0.35 * self.pixel_size * self.agent_radius,
-                        0.5*rotated_surface_size[1] - 0.6 * self.pixel_size * self.agent_radius
+                        0.5*rotated_surface_size[0] - 0.35 * self.agent_render_radius,
+                        0.5*rotated_surface_size[1] - 0.6 * self.agent_render_radius
                     ) #TODO: adjust this based on a rect of the number and maybe agent too?
                     if self.gps_env:
                         font_color = "white"

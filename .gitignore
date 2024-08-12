@@ -8,6 +8,7 @@ env-full/
 ctf_gym.egg-info/
 pyquaticus.egg-info/
 _version.py
+*.png
 *.mp4
 *.avi
 __mapcache__/
