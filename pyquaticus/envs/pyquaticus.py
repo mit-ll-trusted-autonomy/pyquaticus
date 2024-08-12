@@ -1294,7 +1294,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.arena_width, self.arena_height = self.pixel_size * self.env_size
             self.arena_buffer = self.pixel_size * arena_buffer
             self.boundary_width = 2  #pixels
-            self.a2a_line_width = 3 #pixels
+            self.a2a_line_width = 5 #pixels
 
             # miscellaneous
             self.num_renders_per_step = int(self.render_fps * self.tau)
@@ -2097,7 +2097,7 @@ when gps environment bounds are specified in meters")
 
                     #horizontal bounds
                     geoc_lat = np.arctan(
-                        (POLAR_RADIUS / EQUATORIAL_RADIUS)**2 * np.tan(flag_midpoint[0])
+                        (POLAR_RADIUS / EQUATORIAL_RADIUS)**2 * np.tan(np.deg2rad(flag_midpoint[0]))
                     )
                     small_circle_circum = np.pi * 2 * EQUATORIAL_RADIUS * np.cos(geoc_lat)
                     env_left = flag_midpoint[1] - 360 * (0.5*env_bounds[1][0] / small_circle_circum)
@@ -2214,15 +2214,6 @@ when gps environment bounds are specified in meters")
             ### agent and flag geometries ###
             lon1, lat1 = _sm2ll(*env_bounds[0])
             lon2, lat2 = _sm2ll(*env_bounds[1])
-            print("coord1:", (lat1, lon1))
-            print("coord2:", (lat1, lon2))
-            geodict_test = Geodesic.WGS84.Inverse(
-                lat1=lat1,
-                lon1=lon1,
-                lat2=lat1,
-                lon2=lon2
-            )['s12']
-            print(geodict_test)
             lon_diff = self._longitude_diff_west2east(lon1, lon2)
 
             if np.abs(lat1) > np.abs(lat2):
@@ -2230,26 +2221,12 @@ when gps environment bounds are specified in meters")
             else:
                 lat = lat2
 
-            geoc_lat = np.arctan((POLAR_RADIUS / EQUATORIAL_RADIUS)**2 * np.tan(lat))
+            geoc_lat = np.arctan((POLAR_RADIUS / EQUATORIAL_RADIUS)**2 * np.tan(np.deg2rad(lat)))
             small_circle_circum = np.pi * 2 * EQUATORIAL_RADIUS * np.cos(geoc_lat)
-            
-            #########################################
-            small_circle_circum2 = np.pi * 2 * np.sqrt(
-                ((EQUATORIAL_RADIUS**2 * np.cos(lat))**2 + (POLAR_RADIUS**2 * np.sin(lat))**2) /
-                ((EQUATORIAL_RADIUS * np.cos(lat))**2 + (POLAR_RADIUS * np.sin(lat))**2)
-            ) * np.cos(geoc_lat)
-            #########################################
-            print(small_circle_circum)
-            print(small_circle_circum2)
 
             #use most warped (squished) horizontal border to underestimate the number of
             #meters per mercator xy, therefore overestimate how close objects are to one another
             self.meters_per_mercator_xy = small_circle_circum * (lon_diff/360) / self.env_size[0]
-            print('testttttt', small_circle_circum * (lon_diff/360))
-            print(small_circle_circum2 * (lon_diff/360))
-            import sys
-            sys.exit()
-            print(self.meters_per_mercator_xy)
             agent_radius /= self.meters_per_mercator_xy
             flag_radius /= self.meters_per_mercator_xy
             catch_radius /= self.meters_per_mercator_xy
@@ -2573,17 +2550,19 @@ when gps environment bounds are specified in meters")
             (labeled_mask == target_label) +
             (water_pixel_color_gray <= grayscale_topo_img) * (grayscale_topo_img <= water_pixel_color_gray + 2)
         )
-        land_mask_binary = 255*land_mask.astype(np.uint8)
-        cv2.imwrite("peter_old.png", land_mask_binary)
-        water_contours, _ = cv2.findContours(land_mask_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        print(ceil(2*self.agent_radius*self.pixel_size))
-        print(self.agent_radius)
-        land_mask_new = cv2.drawContours(land_mask_binary, water_contours, -1, 0, ceil(2*self.agent_radius*self.pixel_size))
-        cv2.imwrite("peter_new.png", land_mask_new)
-        import sys
-        sys.exit()
 
+        #################################################################################################################
+        # land_mask_binary = 255*land_mask.astype(np.uint8)
+        # cv2.imwrite("peter_old.png", land_mask_binary)
+        # water_contours, _ = cv2.findContours(land_mask_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # print(ceil(2*self.agent_radius*self.pixel_size))
+        # print(self.agent_radius)
+        # land_mask_new = cv2.drawContours(land_mask_binary, water_contours, -1, 0, ceil(2*self.agent_radius*self.pixel_size))
+        # cv2.imwrite("peter_new.png", land_mask_new)
+        # import sys
+        # sys.exit()
         ###################################################################################################################
+
         #water contours
         land_mask_binary = 255*land_mask.astype(np.uint8)
         water_contours, _ = cv2.findContours(land_mask_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -2877,7 +2856,7 @@ when gps environment bounds are specified in meters")
                                 color,
                                 self.env_to_screen(lidar_starts[i]),
                                 self.env_to_screen(self.state["lidar_ends"][player.id][i]),
-                                width=2
+                                width=1
                             )
                 #tagging
                 player.render_tagging(self.tagging_cooldown)
