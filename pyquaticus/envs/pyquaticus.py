@@ -2693,7 +2693,7 @@ when gps environment bounds are specified in meters")
                     np.transpose(self.background_img, (1,0,2)) #pygame assumes images are (h, w, 3)
                 )
 
-                ## TODO MC
+                # add attribution text
                 starting_font_size = 1*self.pixel_size*self.agent_radius
                 font_max_prop_buffer = 1/4
                 img_attribution_font = pygame.font.SysFont(None, int(starting_font_size))
