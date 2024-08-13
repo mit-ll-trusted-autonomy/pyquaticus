@@ -2280,6 +2280,7 @@ when gps environment bounds are specified in meters")
                     if np.any(env_bounds[1] == 0.):
                         raise Exception("Environment max bounds must be > 0 when specified in meters")
 
+
             self.env_diag = np.linalg.norm(self.env_size)
             self.env_bounds_vertices = np.array([
                 env_bounds[0],
@@ -2726,6 +2727,21 @@ when gps environment bounds are specified in meters")
                 pygame_background_img = pygame.surfarray.make_surface(
                     np.transpose(self.background_img, (1,0,2)) #pygame assumes images are (h, w, 3)
                 )
+
+                ## TODO MC
+                starting_font_size = 1*self.pixel_size*self.agent_radius
+                font_max_prop_buffer = 1/4
+                img_attribution_font = pygame.font.SysFont(None, int(starting_font_size))
+                text_width,text_height = img_attribution_font.size(self.background_img_attribution)
+                if text_height > self.arena_buffer*font_max_prop_buffer:
+                    new_font_size = int(starting_font_size*(self.arena_buffer*font_max_prop_buffer)/text_height)
+                    img_attribution_font = pygame.font.SysFont(None, new_font_size)
+
+                self.img_attribution_text = img_attribution_font.render(self.background_img_attribution, True, "black")
+                self.img_attribution_text_rect = self.img_attribution_text.get_rect()
+                center_x = self.screen_width-self.arena_buffer-self.img_attribution_text_rect[2]/2 ## object is [left,top,width,height]
+                center_y = self.screen_height-self.arena_buffer/2
+                self.img_attribution_text_rect.center = [center_x,center_y]
                 self.pygame_background_img = pygame.transform.scale(pygame_background_img, (self.screen_width, self.screen_height))
 
         if self.clock is None:
@@ -2737,8 +2753,10 @@ when gps environment bounds are specified in meters")
         # Background
         if self.gps_env:
             self.screen.blit(self.pygame_background_img, (0, 0))
+            self.screen.blit(self.img_attribution_text, self.img_attribution_text_rect)
         else:
             self.screen.fill((255, 255, 255))
+        
 
         # Boundary
         #TODO: draw boundary for default mode (non gps env) or if gps env has no outer obstacles (self.render_boundary_rect)
