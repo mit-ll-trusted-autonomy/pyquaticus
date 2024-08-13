@@ -60,7 +60,7 @@ config_dict_std = {
     # Observation parameters
     "normalize":    True, # flag for normalizing the observation space.
     "lidar_obs":   False, # option to use lidar (ray casting model) observations
-    "lidar_range":  40.0, # meters
+    "lidar_range": 200.0, # meters
     "num_lidar_rays": 64, # number of rays for lidar
     
     # Rendering parameters
@@ -157,7 +157,7 @@ LIDAR_DETECTION_CLASS_MAP = {class_name: i for i, class_name in enumerate(lidar_
 ### Action Map ###
 # maps discrete action id to (speed, heading)
 ACTION_MAP = []
-for spd in [MAX_SPEED, MAX_SPEED / 2.0]:
+for spd in [1.0, 0.5]:
     for hdg in range(180, -180, -45):
         ACTION_MAP.append([spd, hdg])
 # add a none action

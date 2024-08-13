@@ -180,7 +180,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         return processed_action_dict
 
     def _discrete_action_to_speed_relheading(self, action):
-        return ACTION_MAP[action]
+        return self.action_map[action]
 
     def _relheading_to_global_heading(self, player_heading, relheading):
         return angle180((player_heading + relheading) % 360)
@@ -509,8 +509,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
     def get_agent_action_space(self):
         """Overridden method inherited from `Gym`."""
-        #TODO: convert to mercator xy if necessary and define action map in here according to an imported utility function
-        return Discrete(len(ACTION_MAP))
+        return Discrete(len(self.action_map))
 
     def _determine_team_wall_orient(self):
         """
@@ -536,10 +535,10 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         """
 
         all_walls = [
-            [self.env_ul, self.env_ur],
-            [self.env_ur, self.env_lr],
-            [self.env_lr, self.env_ll],
-            [self.env_ll, self.env_ul]
+            [self.env_ul.astype(np.float32), self.env_ur.astype(np.float32)],
+            [self.env_ur.astype(np.float32), self.env_lr.astype(np.float32)],
+            [self.env_lr.astype(np.float32), self.env_ll.astype(np.float32)],
+            [self.env_ll.astype(np.float32), self.env_ul.astype(np.float32)]
         ]
 
         def rotate_walls(walls, amt):
@@ -620,11 +619,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         for i in range(0, self.num_blue):
             b_players.append(
-                RenderingPlayer(i, Team.BLUE_TEAM, (self.agent_radius * self.pixel_size), render_mode)
+                RenderingPlayer(i, Team.BLUE_TEAM, self.agent_render_radius, render_mode)
             )
         for i in range(self.num_blue, self.num_blue + self.num_red):
             r_players.append(
-                RenderingPlayer(i, Team.RED_TEAM, (self.agent_radius * self.pixel_size), render_mode)
+                RenderingPlayer(i, Team.RED_TEAM, self.agent_render_radius, render_mode)
             )
 
         self.players = {player.id: player for player in itertools.chain(b_players, r_players)} #maps player ids (or names) to player objects
@@ -664,6 +663,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.set_geom_config(config_dict)
 
         # Setup action and observation spaces
+        self.action_map = [[self.max_speed * spd, hdg] for (spd, hdg) in ACTION_MAP]
         self.action_spaces = {
             agent_id: self.get_agent_action_space() for agent_id in self.players
         }
@@ -791,10 +791,16 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         terminated = False
         truncated = False
         if self.dones["__all__"]:
+            #rendering
+            if self.record_render:
+                self.buffer_to_video()
+
+            #dones
             if self.dones["blue"] or self.dones["red"]:
                 terminated = True
             else:
                 truncated = True
+
         terminated = {agent: terminated for agent in raw_action_dict}
         truncated = {agent: truncated for agent in raw_action_dict}
 
@@ -1175,7 +1181,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.topo_contour_eps = config_dict.get("topo_contour_eps", config_dict_std["topo_contour_eps"])
 
         # MOOS dynamics parameters
-        self.max_speed = config_dict.get("max_speed", config_dict_std["max_speed"]) #TODO convert to web mercator xy
         self.speed_factor = config_dict.get("speed_factor", config_dict_std["speed_factor"])
         self.thrust_map = config_dict.get("thrust_map", config_dict_std["thrust_map"])
         self.max_thrust = config_dict.get("max_thrust", config_dict_std["max_thrust"])
@@ -1236,6 +1241,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         flag_radius = config_dict.get("flag_radius", config_dict_std["flag_radius"])
         flag_keepout = config_dict.get("flag_keepout", config_dict_std["flag_keepout"])
         catch_radius = config_dict.get("catch_radius", config_dict_std["catch_radius"])
+        max_speed = config_dict.get("max_speed", config_dict_std["max_speed"])
         lidar_range = config_dict.get("lidar_range", config_dict_std["lidar_range"])
         
         self._build_env_geom(
@@ -1249,6 +1255,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             flag_radius=flag_radius,
             flag_keepout=flag_keepout,
             catch_radius=catch_radius,
+            max_speed=max_speed,
             lidar_range=lidar_range
         )
 
@@ -1256,10 +1263,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         #TODO
 
         # Environment corners
-        self.env_ll = np.array([0.0, 0.0], dtype=np.float32)
-        self.env_lr = np.array([self.env_size[0], 0.0], dtype=np.float32)
-        self.env_ul = np.array([0.0, self.env_size[1]], dtype=np.float32)
-        self.env_ur = np.array(self.env_size, dtype=np.float32)
+        self.env_ll = np.array([0.0, 0.0])
+        self.env_lr = np.array([self.env_size[0], 0.0])
+        self.env_ul = np.array([0.0, self.env_size[1]])
+        self.env_ur = np.array(self.env_size)
         # ll = lower left, lr = lower right
         # ul = upper left, ur = upper right
 
@@ -1295,6 +1302,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.arena_buffer = self.pixel_size * arena_buffer
             self.boundary_width = 2  #pixels
             self.a2a_line_width = 5 #pixels
+            self.flag_render_radius = np.clip(self.flag_radius * self.pixel_size, 10, None) #pixels
+            self.agent_render_radius = np.clip(self.agent_radius * self.pixel_size, 15, None) #pixels
 
             # miscellaneous
             self.num_renders_per_step = int(self.render_fps * self.tau)
@@ -1332,12 +1341,17 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.sim_speedup_factor = int(np.round(self.sim_speedup_factor))
                 print(f"Warning: Converted sim_speedup_factor to integer: {self.sim_speedup_factor}")
 
+            # check that record_render is only True if environment is being rendered
+            if self.record_render:
+                assert self.render_mode is not None, "Render_mode cannot be None to record video."
+
     def set_geom_config(self, config_dict):
         self.n_circle_segments = config_dict.get("n_circle_segments", config_dict_std["n_circle_segments"])
         n_quad_segs = round(self.n_circle_segments/4)
 
         # Obstacles
         obstacle_params = config_dict.get("obstacles", config_dict_std["obstacles"])
+        border_contour = None
 
         if self.gps_env:
             border_contour, island_contours, land_mask = self._get_topo_geom()
@@ -1511,7 +1525,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.agent_int_seg_mask = np.expand_dims(agent_int_seg_mask, axis=1)
 
         # Occupancy map
-        #TODO:
         if self.gps_env:
             self._generate_valid_start_poses(land_mask)
 
@@ -1767,12 +1780,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         if self.render_mode:
             self.render_ctr = 0
-
             if self.record_render:
-                #TODO change this to step function
-                if len(self.render_buffer) > 0:
-                    self.buffer_to_video()
-                    self.render_buffer = []
+                self.render_buffer = []
             if self.render_traj_mode:
                 self.traj_render_buffer = {agent_id: {'traj': [], 'agent': []} for agent_id in self.players}
 
@@ -1812,7 +1821,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         agent_spd_hdg = []
         agent_on_sides = []
 
-        if True:
+        if self.gps_env:
             valid_start_pos_inds = [i for i in range(len(self.valid_start_poses))]
             for player in self.players.values():
                 #location
@@ -1842,12 +1851,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 agent_spd_hdg.append([player.speed, player.heading])
                 agent_on_sides.append(player.on_own_side)
         else:
-            # if self.random_init:
-            if True:
-                flags_separation = self.get_distance_between_2_points(
-                    flag_locations[0], flag_locations[1]
-                )
-
             for player in self.players.values():
                 player.is_tagged = False
                 player.thrust = 0.0
@@ -1855,49 +1858,20 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 player.has_flag = False
                 player.on_own_side = True
                 player.tagging_cooldown = self.tagging_cooldown
-                # if self.random_init:
-                if True:
-                    max_agent_separation = flags_separation - 2 * self.flag_keepout
 
-                    # starting center point between two agents
-                    agent_shift = np.random.choice((-1.0, 1.0)) * np.random.uniform(
-                        0, 0.5 * (0.5 * max_agent_separation + r) - r
-                    )
-
-                    # adjust agent max and min separation ranges based on shifted center point
-                    max_agent_separation = 2 * (
-                        max_agent_separation / 2 - np.abs(agent_shift)
-                    )
-                    min_agent_separation = max(4 * r, 2 * (np.abs(agent_shift) + r))
-
-                    # initial agent separation
-                    np.random.uniform(
-                        min_agent_separation, max_agent_separation
-                    )
-                    player.orientation = (
-                        flag_locations[int(not int(player.team))]
-                        - flag_locations[int(player.team)]
-                    ) / flags_separation
-                    player.pos = flag_locations[int(player.team)] + player.orientation * (
-                        flags_separation / 2
-                    )
-
-                    agent_shift = agent_shift * player.orientation
-                    player.pos += agent_shift
-                    player.prev_pos = copy.deepcopy(player.pos)
+                if player.team == Team.RED_TEAM:
+                    init_x_pos = self.env_size[0] / 4
+                    player.heading = 90
                 else:
-                    if player.team == Team.RED_TEAM:
-                        init_x_pos = self.env_size[0] / 4
-                        player.heading = 90
-                    else:
-                        init_x_pos = self.env_size[0] - self.env_size[0] / 4
-                        player.heading = -90
+                    init_x_pos = self.env_size[0] - self.env_size[0] / 4
+                    player.heading = -90
 
-                    init_y_pos = (self.env_size[1] / (self.team_size + 1)) * (
-                        (player.id % self.team_size) + 1
-                    )
-                    player.pos = [init_x_pos, init_y_pos]
-                    player.prev_pos = copy.deepcopy(player.pos)
+                init_y_pos = (self.env_size[1] / (self.team_size + 1)) * (
+                    (player.id % self.team_size) + 1
+                )
+                player.pos = [init_x_pos, init_y_pos]
+                player.prev_pos = copy.deepcopy(player.pos)
+
                 player.home = copy.deepcopy(player.pos)
                 agent_locations.append(player.pos)
                 agent_spd_hdg.append([player.speed, player.heading])
@@ -1999,6 +1973,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         flag_radius: float,
         flag_keepout: float,
         catch_radius: float,
+        max_speed: float, 
         lidar_range: float
     ):
         if (
@@ -2231,6 +2206,7 @@ when gps environment bounds are specified in meters")
             flag_radius /= self.meters_per_mercator_xy
             catch_radius /= self.meters_per_mercator_xy
             flag_keepout /= self.meters_per_mercator_xy
+            max_speed /= self.meters_per_mercator_xy
             lidar_range /= self.meters_per_mercator_xy
 
         else:
@@ -2294,8 +2270,8 @@ when gps environment bounds are specified in meters")
             if self._is_auto_string(flag_homes[Team.BLUE_TEAM]) and self._is_auto_string(flag_homes[Team.RED_TEAM]):
                 if flag_homes_unit == "ll" or flag_homes_unit == "wm_xy":
                     raise Exception("'ll' (Lat/Long) and 'wm_xy' (web mercator xy) units should only be used when gps_env is True")
-                flag_homes[Team.BLUE_TEAM] = np.array([7/8*self.env_size[0], 0.5*self.env_size[0]])
-                flag_homes[Team.RED_TEAM] = np.array([1/8*self.env_size[0], 0.5*self.env_size[0]])
+                flag_homes[Team.BLUE_TEAM] = np.array([7/8*self.env_size[0], 0.5*self.env_size[1]])
+                flag_homes[Team.RED_TEAM] = np.array([1/8*self.env_size[0], 0.5*self.env_size[1]])
             elif self._is_auto_string(flag_homes[Team.BLUE_TEAM]) or self._is_auto_string(flag_homes[Team.RED_TEAM]):
                 raise Exception("Flag homes are either all 'auto', or all specified")
             else:
@@ -2437,6 +2413,7 @@ when gps environment bounds are specified in meters")
         self.flag_radius = flag_radius
         self.catch_radius = catch_radius
         self.flag_keepout = flag_keepout
+        self.max_speed = max_speed
 
     def _get_line_intersection(self, origin: np.ndarray, vec: np.ndarray, line: np.ndarray):
         """
@@ -2552,18 +2529,6 @@ when gps environment bounds are specified in meters")
             (water_pixel_color_gray <= grayscale_topo_img) * (grayscale_topo_img <= water_pixel_color_gray + 2)
         )
 
-        #################################################################################################################
-        # land_mask_binary = 255*land_mask.astype(np.uint8)
-        # cv2.imwrite("peter_old.png", land_mask_binary)
-        # water_contours, _ = cv2.findContours(land_mask_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        # print(ceil(2*self.agent_radius*self.pixel_size))
-        # print(self.agent_radius)
-        # land_mask_new = cv2.drawContours(land_mask_binary, water_contours, -1, 0, ceil(2*self.agent_radius*self.pixel_size))
-        # cv2.imwrite("peter_new.png", land_mask_new)
-        # import sys
-        # sys.exit()
-        ###################################################################################################################
-
         #water contours
         land_mask_binary = 255*land_mask.astype(np.uint8)
         water_contours, _ = cv2.findContours(land_mask_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -2595,7 +2560,7 @@ when gps environment bounds are specified in meters")
         for i, cnt in enumerate(island_contours):
             if cnt.shape[0] != 1:
                 eps = self.topo_contour_eps * cv2.arcLength(cnt, True)
-                cnt_approx = cv2.approxPolyDP(cnt, eps, True) #TODO
+                cnt_approx = cv2.approxPolyDP(cnt, eps, True)
                 cvx_hull = cv2.convexHull(cnt_approx)
                 island_cnts_approx.append(cvx_hull)
 
@@ -2715,7 +2680,7 @@ when gps environment bounds are specified in meters")
                 pygame.display.init()
                 self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
                 self.isopen = True
-                self.agent_id_font = pygame.font.SysFont(None, int(2*self.pixel_size*self.agent_radius))
+                self.agent_id_font = pygame.font.SysFont(None, int(2*self.agent_render_radius))
             elif self.render_mode == "rgb_array":
                 self.screen = pygame.Surface((self.screen_width, self.screen_height))
             else:
@@ -2756,10 +2721,18 @@ when gps environment bounds are specified in meters")
             self.screen.blit(self.img_attribution_text, self.img_attribution_text_rect)
         else:
             self.screen.fill((255, 255, 255))
-        
-
-        # Boundary
-        #TODO: draw boundary for default mode (non gps env) or if gps env has no outer obstacles (self.render_boundary_rect)
+            draw.line(
+                self.screen, (0,0,0), self.env_to_screen(self.env_ul), self.env_to_screen(self.env_ur), width=self.boundary_width
+            )
+            draw.line(
+                self.screen, (0,0,0), self.env_to_screen(self.env_ll), self.env_to_screen(self.env_lr), width=self.boundary_width
+            )
+            draw.line(
+                self.screen, (0,0,0), self.env_to_screen(self.env_ul), self.env_to_screen(self.env_ll), width=self.boundary_width
+            )
+            draw.line(
+                self.screen, (0,0,0), self.env_to_screen(self.env_ur), self.env_to_screen(self.env_lr), width=self.boundary_width
+            )
 
         # Scrimmage line
         draw.line(
@@ -2782,11 +2755,11 @@ when gps environment bounds are specified in meters")
                 )
             elif isinstance(obstacle, PolygonObstacle):
                 draw.polygon(
-                        self.screen,
-                        (0, 0, 0),
-                        [self.env_to_screen(p) for p in obstacle.anchor_points],
-                        width=self.boundary_width,
-                    )
+                    self.screen,
+                    (0, 0, 0),
+                    [self.env_to_screen(p) for p in obstacle.anchor_points],
+                    width=self.boundary_width,
+                )
         
         # Aquaticus field points
         if self.render_field_points and not self.gps_env:
@@ -2805,16 +2778,6 @@ when gps environment bounds are specified in meters")
             color = "blue" if team == Team.BLUE_TEAM else "red"
             opp_color = "red" if team == Team.BLUE_TEAM else "blue"
 
-            # team home region
-            home_center_screen = self.env_to_screen(self.flags[int(team)].home)
-            draw.circle(
-                    self.screen,
-                    (128, 128, 128),
-                    home_center_screen,
-                    radius=self.catch_radius * self.pixel_size,
-                    width=self.boundary_width,
-                )
-
             # team flag (not picked up)
             if not self.state["flag_taken"][int(team)]:
                 flag_pos_screen = self.env_to_screen(flag.pos)
@@ -2822,7 +2785,7 @@ when gps environment bounds are specified in meters")
                     self.screen,
                     color,
                     flag_pos_screen,
-                    radius=self.flag_radius * self.pixel_size,
+                    radius=self.flag_render_radius,
                 )
                 draw.circle(
                     self.screen,
@@ -2831,6 +2794,16 @@ when gps environment bounds are specified in meters")
                     radius=(self.flag_keepout - self.agent_radius) * self.pixel_size,
                     width=self.boundary_width,
                 )
+            
+            # team home region
+            home_center_screen = self.env_to_screen(self.flags[int(team)].home)
+            draw.circle(
+                self.screen,
+                (128, 128, 128),
+                home_center_screen,
+                radius=self.catch_radius * self.pixel_size,
+                width=self.boundary_width,
+            )
 
             # players
             for player in teams_players:
@@ -2845,7 +2818,7 @@ when gps environment bounds are specified in meters")
                                 self.screen,
                                 color,
                                 prev_blit_pos,
-                                radius=2,
+                                radius=1,
                                 width=0
                             )
                     #agent 
@@ -2894,14 +2867,14 @@ when gps environment bounds are specified in meters")
                         rotated_surface,
                         opp_color,
                         0.5*rotated_surface_size,
-                        radius=0.55*(self.pixel_size * self.agent_radius)
+                        radius=0.55*self.agent_render_radius
                     )
 
                 #agent id
                 if self.render_ids:
                     agent_id_blit_pos = (
-                        0.5*rotated_surface_size[0] - 0.35 * self.pixel_size * self.agent_radius,
-                        0.5*rotated_surface_size[1] - 0.6 * self.pixel_size * self.agent_radius
+                        0.5*rotated_surface_size[0] - 0.35 * self.agent_render_radius,
+                        0.5*rotated_surface_size[1] - 0.6 * self.agent_render_radius
                     ) #TODO: adjust this based on a rect of the number and maybe agent too?
                     if self.gps_env:
                         font_color = "white"
