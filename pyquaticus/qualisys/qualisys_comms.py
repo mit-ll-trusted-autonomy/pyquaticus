@@ -37,8 +37,8 @@ def gather_agents(event, agents, agent_mapper):
         asyncio.get_event_loop().run_forever()
 
 class QualisysComms:
-    def __init__(self, agent_mapper={'blue_one':0,}):
-        self.num_agents = num_agents
+    def __init__(self, agent_mapper={'blue_one':0,'red_one':1}):
+        self.num_agents = len(agent_mapper)
         manager = multiprocessing.Manager()
         self.event = manager.Event()
 	    self.agents = manager.dict()
