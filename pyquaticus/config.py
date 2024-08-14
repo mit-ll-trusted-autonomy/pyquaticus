@@ -3,7 +3,7 @@ import numpy as np
 
 from pyquaticus.utils.utils import get_screen_res
 
-MAX_SPEED = 1.5
+MAX_SPEED = 0.75
 
 config_dict_std = {
     "world_size": [160.0, 80.0],  # meters

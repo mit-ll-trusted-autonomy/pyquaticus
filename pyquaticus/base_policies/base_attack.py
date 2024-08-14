@@ -318,7 +318,7 @@ class BaseAttacker(BaseAgentPolicy):
                 )
 
             # Increase the avoidance threshold to start avoiding when farther away
-            avoid_thresh = 30.0
+            avoid_thresh = 10.0
             # If I or someone on my team has the flag, go back to my side
             if self.has_flag or self.my_team_has_flag:
                 goal_vect = np.multiply(
