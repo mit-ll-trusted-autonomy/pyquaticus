@@ -953,8 +953,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             player.heading = angle180(new_heading)
             player.thrust = desired_thrust
 
-            self.state["agent_position"][i] = player.prev_pos
-            self.state["prev_agent_position"][i] = player.pos
+            self.state["agent_position"][i] = player.pos
+            self.state["prev_agent_position"][i] = player.prev_pos
             self.state["agent_spd_hdg"][i] = [player.speed, player.heading]
 
     def _check_on_sides(self, pos, team):
@@ -2206,7 +2206,6 @@ when gps environment bounds are specified in meters")
             flag_radius /= self.meters_per_mercator_xy
             catch_radius /= self.meters_per_mercator_xy
             flag_keepout /= self.meters_per_mercator_xy
-            max_speed /= self.meters_per_mercator_xy
             lidar_range /= self.meters_per_mercator_xy
 
         else:
