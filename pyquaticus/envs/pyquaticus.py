@@ -2311,7 +2311,6 @@ when gps environment bounds are specified in meters")
             flag_radius /= self.meters_per_mercator_xy
             catch_radius /= self.meters_per_mercator_xy
             flag_keepout /= self.meters_per_mercator_xy
-            max_speed /= self.meters_per_mercator_xy
             lidar_range /= self.meters_per_mercator_xy
 
         else:
