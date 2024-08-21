@@ -729,6 +729,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 player.tagging_cooldown = self._min(
                     (player.tagging_cooldown + self.sim_speedup_factor * self.tau), self.tagging_cooldown
                 )
+                self.state["agent_tagging_cooldown"][player.id] = player.tagging_cooldown
 
         self.flag_collision_bool = np.zeros(self.num_agents)
 
@@ -779,6 +780,41 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         rewards = {agent_id: self.compute_rewards(agent_id) for agent_id in self.players}
         obs = {agent_id: self.state_to_obs(agent_id, self.normalize) for agent_id in raw_action_dict}
+
+
+        for agent_id in raw_action_dict:
+
+            if agent_id == 4:
+                print("Agent " + str(agent_id))
+
+                print("obs")
+                print(obs[agent_id][0:5])
+
+                print("Old history")
+                print(self.state["obs_history"][agent_id])
+
+
+            self.state["obs_history"][agent_id][1:] = self.state["obs_history"][agent_id][:-1]
+            self.state["obs_history"][agent_id][0] = obs[agent_id]
+
+            short_hist_buffer = self.state["obs_history"][agent_id][0:self.short_hist_duration:self.short_hist_jump]
+            long_hist_buffer = self.state["obs_history"][agent_id][self.long_hist_jump:self.long_hist_duration+self.long_hist_jump:self.long_hist_jump]
+            self.obs_buffer[agent_id] = np.concatenate((short_hist_buffer,long_hist_buffer))
+
+            if agent_id == 4:
+                print("New history")
+                print(self.state["obs_history"][agent_id])
+
+                
+                print("All obs history")
+                print(self.state["obs_history"][agent_id])
+
+                print("Obs buffer")
+                print(self.obs_buffer[agent_id][:,0:5])
+        
+        input("wait")
+
+
         info = {}
 
         terminated = False
@@ -882,9 +918,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     self.state["flag_locations"][int(not int(player.team))] = np.array(self.flags[int(not int(player.team))].pos)
 
                     if player.team == Team.RED_TEAM:
-                        self.red_team_flag_pickup = False
+                        # self.red_team_flag_pickup = False
+                        self.state["team_flag_pickup"][1] = False
                     else:
-                        self.blue_team_flag_pickup = False
+                        # self.blue_team_flag_pickup = False
+                        self.state["team_flag_pickup"][0] = False
                 self.state["agent_oob"][player.id] = 1
                 if self.teleport_on_tag:
                     player.reset()
@@ -1051,10 +1089,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     self.state["agent_has_flag"][player.id] = 1
                     if player.team == Team.BLUE_TEAM:
                         self.state["grabs"][0] += 1
-                        self.blue_team_flag_pickup = True
+                        # self.blue_team_flag_pickup = True
+                        self.state["team_flag_pickup"][0] = True
                     else:
                         self.state["grabs"][1] += 1
-                        self.red_team_flag_pickup = True
+                        # self.red_team_flag_pickup = True
+                        self.state["team_flag_pickup"][1] = True
                         break
 
     def _check_untag(self):
@@ -1124,9 +1164,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                             if other_player.has_flag:
                                 # If the player with the flag was tagged, the flag also needs to be reset.
                                 if other_player.team == Team.BLUE_TEAM:
-                                    self.blue_team_flag_pickup = False
+                                    # self.blue_team_flag_pickup = False
+                                    self.state["team_flag_pickup"][0] = False
                                 else:
-                                    self.red_team_flag_pickup = False
+                                    # self.red_team_flag_pickup = False
+                                    self.state["team_flag_pickup"][1] = False
                                 
                                 self.state["flag_taken"][int(player.team)] = 0
                                 self.state["agent_has_flag"][other_player.id] = 0
@@ -1136,6 +1178,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
                             # Set players tagging cooldown
                             player.tagging_cooldown = 0.0
+                            self.state["agent_tagging_cooldown"][player.id] = 0.0
 
                             # Break loop (should not be allowed to tag again during current timestep)
                             break
@@ -1150,11 +1193,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 if player.team == Team.BLUE_TEAM:
                     self.blue_team_flag_capture = True
                     self.state["captures"][0] += 1
-                    self.blue_team_flag_pickup = False
+                    # self.blue_team_flag_pickup = False
+                    self.state["team_flag_pickup"][0] = False
                 else:
                     self.red_team_flag_capture = True
                     self.state["captures"][1] += 1
-                    self.red_team_flag_pickup = False
+                    # self.red_team_flag_pickup = False
+                    self.state["team_flag_pickup"][1] = False
                 player.has_flag = False
                 scored_flag = self.flags[not int(player.team)]
                 self.state["flag_taken"][int(scored_flag.team)] = False
@@ -1209,6 +1254,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.normalize = config_dict.get("normalize", config_dict_std["normalize"])
         self.lidar_obs = config_dict.get("lidar_obs", config_dict_std["lidar_obs"])
         self.num_lidar_rays = config_dict.get("num_lidar_rays", config_dict_std["num_lidar_rays"])
+        self.short_hist_duration = config_dict.get("short_hist_duration", config_dict_std["short_hist_duration"])
+        self.short_hist_jump = config_dict.get("short_hist_jump", config_dict_std["short_hist_jump"])
+        self.long_hist_duration = config_dict.get("long_hist_duration", config_dict_std["long_hist_duration"])
+        self.long_hist_jump = config_dict.get("long_hist_jump", config_dict_std["long_hist_jump"])
 
         # Rendering parameters
         self.render_fps = config_dict.get("render_fps", config_dict_std["render_fps"])
@@ -1348,6 +1397,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             # check that record_render is only True if environment is being rendered
             if self.record_render:
                 assert self.render_mode is not None, "Render_mode cannot be None to record video."
+        
+        # print warning if the short term history goes futher into the past than the long term history
+        if self.short_hist_duration > self.long_hist_duration:
+            print(f"Warning: The short term observation buffer will contain older data than the long term observation buffer.")
 
     def set_geom_config(self, config_dict):
         self.n_circle_segments = config_dict.get("n_circle_segments", config_dict_std["n_circle_segments"])
@@ -1586,9 +1639,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             # Game Events
             self.params[agent.id]["num_teammates"] = self.num_red
             self.params[agent.id]["num_opponents"] = self.num_blue
-            self.params[agent.id]["team_flag_pickup"] = self.red_team_flag_pickup
+            self.params[agent.id]["team_flag_pickup"] = self.state["team_flag_pickup"][1]
             self.params[agent.id]["team_flag_capture"] = self.red_team_flag_capture
-            self.params[agent.id]["opponent_flag_pickup"] = self.blue_team_flag_pickup
+            self.params[agent.id]["opponent_flag_pickup"] = self.state["team_flag_pickup"][0]
             self.params[agent.id]["opponent_flag_capture"] = self.blue_team_flag_capture
             # Elements
             self.params[agent.id]["team_flag_home"] = self.get_distance_between_2_points(
@@ -1606,9 +1659,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             # Game Events
             self.params[agent.id]["num_teammates"] = self.num_blue
             self.params[agent.id]["num_opponents"] = self.num_red
-            self.params[agent.id]["team_flag_pickup"] = self.blue_team_flag_pickup
+            self.params[agent.id]["team_flag_pickup"] = self.state["team_flag_pickup"][0]
             self.params[agent.id]["team_flag_capture"] = self.blue_team_flag_capture
-            self.params[agent.id]["opponent_flag_pickup"] = self.red_team_flag_pickup
+            self.params[agent.id]["opponent_flag_pickup"] = self.state["team_flag_pickup"][1]
             self.params[agent.id]["opponent_flag_capture"] = self.red_team_flag_capture
             # Elements
             self.params[agent.id]["team_flag_home"] = self.get_distance_between_2_points(
@@ -1696,7 +1749,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         dones["__all__"] = False
         return dones
 
-    def reset(self, seed=None, return_info=False, options: Optional[dict] = None):
+    def reset(self, seed=None, return_info=False, options: Optional[dict] = None, existing_state: Optional[dict] = None):
         """
         Resets the environment so that it is ready to be used.
 
@@ -1709,93 +1762,90 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         if options is not None:
             self.normalize = options.get("normalize", config_dict_std["normalize"])
-
+        
         if return_info:
             raise DeprecationWarning("return_info has been deprecated by PettingZoo -- https://github.com/Farama-Foundation/PettingZoo/pull/890")
 
-        flag_locations = np.asarray(list(self.flag_homes.values()))
+        if existing_state is None:
 
-        for flag in self.flags:
-            flag.home = flag_locations[int(flag.team)]
-            flag.reset()
+            flag_locations = np.asarray(list(self.flag_homes.values()))
 
+            for flag in self.flags:
+                flag.home = flag_locations[int(flag.team)]
+                flag.reset()
+
+            agent_positions, agent_spd_hdg, agent_on_sides = self._generate_agent_starts(flag_locations)
+
+            self.state = {
+                "agent_position": agent_positions,
+                "prev_agent_position": copy.deepcopy(agent_positions),
+                "agent_spd_hdg": agent_spd_hdg,
+                "agent_has_flag": np.zeros(self.num_agents),
+                "agent_on_sides": agent_on_sides,
+                "flag_home": copy.deepcopy(flag_locations),
+                "flag_locations": copy.deepcopy(flag_locations),
+                "flag_taken": np.zeros(len(self.flags)),
+                "team_flag_pickup": [False,False],
+                "current_time": 0.0,
+                "agent_captures": [
+                    None
+                ] * self.num_agents,  # whether this agent tagged something
+                "agent_tagged": [0] * self.num_agents,  # if this agent was tagged
+                "agent_oob": [0] * self.num_agents,  # if this agent went out of bounds
+                "agent_tagging_cooldown" : [self.tagging_cooldown] * self.num_agents,
+                "dist_to_obstacles": dict(),
+                "lidar_labels": dict(),
+                "lidar_ends": dict(),
+                "lidar_distances": dict(),
+                "captures": [0,0], # [blue_captures, red_captures]
+                "tags": [0,0], # [blue_tags, red_tags]
+                "grabs": [0,0], # [blue_grabs, red_grabs]
+                "obs_history" : dict() ## see the obs dict for how to do this
+            }
+
+            self.obs_buffer_len = floor(self.short_hist_duration/self.short_hist_jump) + floor(self.long_hist_duration/self.long_hist_jump)
+            self.obs_hist_len = max(self.short_hist_duration,self.long_hist_duration)
+            
+            self.current_time = 0
+
+            #blue_captures: number of times the blue team has grabbed (picked up) red's flag and brought it back to the blue side
+            #blue_tags: number of times the blue team successfully tagged an opponent
+            #blue_grabs: number of times the blue team grabbed (picked up) the opponents flag
+            #red_captures: number of times the red team has grabbed blue's flag and brought it back to the red side
+            #red_tags: number of times the blue team successfully tagged an opponent
+            #red_grabs: number of times the blue team grabbed (picked up) the opponents flag
+
+
+            agent_ids = list(self.players.keys())
+
+            if self.lidar_obs:
+                #reset lidar readings
+                for agent_id in agent_ids:
+                    self.state["lidar_labels"][agent_id] = np.zeros(self.num_lidar_rays)
+                    self.state["lidar_ends"][agent_id] = np.zeros((self.num_lidar_rays, 2))
+                    self.state["lidar_distances"][agent_id] = np.zeros(self.num_lidar_rays)
+                    self._update_lidar()
+
+                for team in self.agents_of_team:
+                    for label_name, label_idx in self.ray_int_label_map.items():
+                        if label_name.startswith("agent"):
+                            #reset agent lidar detection states
+                            if int(label_name[6:]) in self.agent_ids_of_team[team]:
+                                self.obj_ray_detection_states[team][label_idx] = LIDAR_DETECTION_CLASS_MAP["teammate"]
+                            else:
+                                self.obj_ray_detection_states[team][label_idx] = LIDAR_DETECTION_CLASS_MAP["opponent"]
+            else:
+                for agent_id in agent_ids:
+                    self.state["dist_to_obstacles"][agent_id] = [(0, 0)] * len(self.obstacles)
+
+            self._determine_team_wall_orient()
+
+        else:
+            self.reset_from_existing_state(existing_state)
+        
         self.dones = self._reset_dones()
 
-        agent_positions, agent_spd_hdg, agent_on_sides = self._generate_agent_starts(flag_locations)
-
-        ## TODO MC: add other parts of state here
-        self.state = {
-            "agent_position": agent_positions,
-            "prev_agent_position": copy.deepcopy(agent_positions),
-            "agent_spd_hdg": agent_spd_hdg,
-            "agent_has_flag": np.zeros(self.num_agents),
-            "agent_on_sides": agent_on_sides,
-            "flag_home": copy.deepcopy(flag_locations),
-            "flag_locations": copy.deepcopy(flag_locations),
-            "flag_taken": np.zeros(len(self.flags)),
-            "current_time": 0.0,
-            "agent_captures": [
-                None
-            ] * self.num_agents,  # whether this agent tagged something
-            "agent_tagged": [0] * self.num_agents,  # if this agent was tagged
-            "agent_oob": [0] * self.num_agents,  # if this agent went out of bounds
-            "dist_to_obstacles": dict(),
-            "lidar_labels": dict(),
-            "lidar_ends": dict(),
-            "lidar_distances": dict(),
-            "captures": [0,0], # [blue_captures, red_captures]
-            "tags": [0,0], # [blue_tags, red_tags]
-            "grabs": [0,0] # [blue_grabs, red_grabs]
-        } ## TODO: add scoring values here (see Peter's teams messages for that info)
-
-        #blue_captures: number of times the blue team has grabbed (picked up) red's flag and brought it back to the blue side
-        #blue_tags: number of times the blue team successfully tagged an opponent
-        #blue_grabs: number of times the blue team grabbed (picked up) the opponents flag
-        #red_captures: number of times the red team has grabbed blue's flag and brought it back to the red side
-        #red_tags: number of times the blue team successfully tagged an opponent
-        #red_grabs: number of times the blue team grabbed (picked up) the opponents flag
-
-
-        # print("Initial state")
-        # print(self.state)
-
-        # print("Flags")
-        # print(self.flags)
-        
-        # input("wait")
-        
-        agent_ids = list(self.players.keys())
-
-        if self.lidar_obs:
-            #reset lidar readings
-            for agent_id in agent_ids:
-                self.state["lidar_labels"][agent_id] = np.zeros(self.num_lidar_rays)
-                self.state["lidar_ends"][agent_id] = np.zeros((self.num_lidar_rays, 2))
-                self.state["lidar_distances"][agent_id] = np.zeros(self.num_lidar_rays)
-                self._update_lidar()
-
-            for team in self.agents_of_team:
-                for label_name, label_idx in self.ray_int_label_map.items():
-                    if label_name.startswith("agent"):
-                        #reset agent lidar detection states
-                        if int(label_name[6:]) in self.agent_ids_of_team[team]:
-                            self.obj_ray_detection_states[team][label_idx] = LIDAR_DETECTION_CLASS_MAP["teammate"]
-                        else:
-                            self.obj_ray_detection_states[team][label_idx] = LIDAR_DETECTION_CLASS_MAP["opponent"]
-        else:
-            for agent_id in agent_ids:
-                self.state["dist_to_obstacles"][agent_id] = [(0, 0)] * len(self.obstacles)
-
-        self._determine_team_wall_orient()
-
-        self.blue_team_flag_pickup = False
-        self.red_team_flag_pickup = False
-        self.blue_team_score = 0
-        self.blue_team_score_prev = 0
-        self.red_team_score = 0
-        self.red_team_score_prev = 0
         self.message = ""
-        self.current_time = 0
         self.reset_count += 1
         reset_obs = {agent_id: self.state_to_obs(agent_id, self.normalize) for agent_id in self.players}
 
@@ -1809,7 +1859,41 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self._render()
             self.render_ctr = 0
 
+        self.obs_buffer = dict()
+        if existing_state is None:
+            for player in self.players.values():
+                self.state["obs_history"][player.id] = np.zeros((self.obs_hist_len,reset_obs[player.id].shape[0]))
+                self.obs_buffer[player.id] = np.zeros((self.obs_buffer_len,reset_obs[player.id].shape[0]))
+
+
+
         return reset_obs
+
+    def reset_from_existing_state(self,prev_state):
+
+        # starting with the agents
+        for player in self.players.values():
+            player.pos = copy.deepcopy(prev_state["agent_position"][player.id])
+            player.prev_pos = copy.deepcopy(prev_state["prev_agent_position"][player.id])
+            player.speed = prev_state["agent_spd_hdg"][player.id][0]
+            player.heading = prev_state["agent_spd_hdg"][player.id][1]
+            player.has_flag = prev_state["agent_has_flag"][player.id]
+            player.on_own_side = prev_state["agent_on_sides"][player.id]
+            player.tagging_cooldown = prev_state["agent_tagging_cooldown"][player.id]
+            player.is_tagged = prev_state["agent_tagged"][player.id]
+
+        # next we do flags
+        for flag in self.flags:
+            flag.home = prev_state["flag_home"][int(flag.team)]
+            flag.pos = prev_state["flag_locations"][int(flag.team)]
+        
+        # current time
+        self.current_time = prev_state["current_time"]
+
+        # and updating the state dict
+        self.state = copy.deepcopy(prev_state)
+        
+
 
     def _generate_agent_starts(self, flag_locations):
         """

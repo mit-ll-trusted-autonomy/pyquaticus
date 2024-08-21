@@ -59,9 +59,14 @@ config_dict_std = {
 
     # Observation parameters
     "normalize":    True, # flag for normalizing the observation space.
+    "short_hist_duration": 2 , # amount of previous time incorporated into short term observation buffer
+    "short_hist_jump": 1, # number of steps in between readgins in short term observation buffer
+    "long_hist_duration": 5, # amount of previous time incorporated into long term observation buffer
+    "long_hist_jump": 2, # number of steps in between readgins in short term observation buffer
     "lidar_obs":   False, # option to use lidar (ray casting model) observations
     "lidar_range": 200.0, # meters
     "num_lidar_rays": 64, # number of rays for lidar
+
     
     # Rendering parameters
     "render_fps":             30, # target number of frames per second
