@@ -33,6 +33,7 @@ import pickle
 import pygame
 import random
 import warnings
+import subprocess
 
 from abc import ABC
 from collections import defaultdict, OrderedDict
@@ -749,7 +750,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # set the time
         self.current_time += self.sim_speedup_factor * self.tau
-        self.state["current_time"] = self.current_time
 
         # agent and flag capture checks and more
         self._check_pickup_flags()
@@ -783,17 +783,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
 
         for agent_id in raw_action_dict:
-
-            if agent_id == 4:
-                print("Agent " + str(agent_id))
-
-                print("obs")
-                print(obs[agent_id][0:5])
-
-                print("Old history")
-                print(self.state["obs_history"][agent_id])
-
-
             self.state["obs_history"][agent_id][1:] = self.state["obs_history"][agent_id][:-1]
             self.state["obs_history"][agent_id][0] = obs[agent_id]
 
@@ -801,27 +790,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             long_hist_buffer = self.state["obs_history"][agent_id][self.long_hist_jump:self.long_hist_duration+self.long_hist_jump:self.long_hist_jump]
             self.obs_buffer[agent_id] = np.concatenate((short_hist_buffer,long_hist_buffer))
 
-            if agent_id == 4:
-                print("New history")
-                print(self.state["obs_history"][agent_id])
-
-                
-                print("All obs history")
-                print(self.state["obs_history"][agent_id])
-
-                print("Obs buffer")
-                print(self.obs_buffer[agent_id][:,0:5])
-        
-        input("wait")
-
-
         info = {}
 
         terminated = False
         truncated = False
+
         if self.dones["__all__"]:
             #rendering
-            if self.record_render:
+            if self.render_saving:
                 self.buffer_to_video()
 
             #dones
@@ -931,6 +907,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         self.state["agent_tagged"][player.id] = 1
                         player.is_tagged = True
                     player.rotate(copy.deepcopy(player.prev_pos))
+                    self.state["agent_position"][i] = player.pos
+                    self.state["prev_agent_position"][i] = player.prev_pos
+                    self.state["agent_spd_hdg"][i] = [player.speed, player.heading]
                 continue
             else:
                 self.state["agent_oob"][player.id] = 0
@@ -1268,8 +1247,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.render_traj_freq = config_dict.get("render_traj_freq", config_dict_std["render_traj_freq"])
         self.render_traj_cutoff = config_dict.get("render_traj_cutoff", config_dict_std["render_traj_cutoff"])
         self.render_lidar_mode = config_dict.get("render_lidar_mode", config_dict_std["render_lidar_mode"])
-        self.record_render = config_dict.get("record_render", config_dict_std["record_render"])
-        self.recording_format = config_dict.get("recording_format", config_dict_std["recording_format"])
+        self.render_saving = config_dict.get("render_saving", config_dict_std["render_saving"])
+        self.render_saving_format = config_dict.get("render_saving_format", config_dict_std["render_saving_format"])
+        self.recording_compression = config_dict.get("recording_compression", config_dict_std["recording_compression"])
 
         # Miscellaneous parameters
         if config_dict.get("suppress_numpy_warnings", config_dict_std["suppress_numpy_warnings"]):
@@ -1394,8 +1374,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.sim_speedup_factor = int(np.round(self.sim_speedup_factor))
                 print(f"Warning: Converted sim_speedup_factor to integer: {self.sim_speedup_factor}")
 
-            # check that record_render is only True if environment is being rendered
-            if self.record_render:
+            # check that render_saving is only True if environment is being rendered
+            if self.render_saving:
                 assert self.render_mode is not None, "Render_mode cannot be None to record video."
         
         # print warning if the short term history goes futher into the past than the long term history
@@ -1610,7 +1590,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.dones["__all__"] = True
             self.message = "Blue Wins! Red Loses"
 
-        elif self.state["current_time"] >= self.max_time:
+        elif self.current_time >= self.max_time:
             self.dones["__all__"] = True
             if self.state["captures"][0] > self.state["captures"][1]:
                 self.message = "Blue Wins! Red Loses"
@@ -1851,7 +1831,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         if self.render_mode:
             self.render_ctr = 0
-            if self.record_render:
+            if self.render_saving:
                 self.render_buffer = []
             if self.render_traj_mode:
                 self.traj_render_buffer = {agent_id: {'traj': [], 'agent': []} for agent_id in self.players}
@@ -1888,10 +1868,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             flag.pos = prev_state["flag_locations"][int(flag.team)]
         
         # current time
-        self.current_time = prev_state["current_time"]
+        self.current_time = 0 #prev_state["current_time"]
 
         # and updating the state dict
         self.state = copy.deepcopy(prev_state)
+        self.state["current_time"] = 0
         
 
 
@@ -3055,7 +3036,7 @@ when gps environment bounds are specified in meters")
             pygame.display.flip()
         
         # Record
-        if self.record_render:
+        if self.render_saving:
             self.render_buffer.append(
                 np.transpose(np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2))
             )
@@ -3080,30 +3061,58 @@ when gps environment bounds are specified in meters")
             now = datetime.now() #get date and time
             video_id = now.strftime("%m-%d-%Y_%H-%M-%S")
 
-            if self.recording_format == "mp4":
+            if self.render_saving_format == "mp4":
                 video_file_name = f"pyquaticus_{video_id}.mp4"
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            elif self.recording_format == "avi":
+            elif self.render_saving_format == "avi":
                 video_file_name = f"pyquaticus_{video_id}.avi"
                 fourcc = cv2.VideoWriter_fourcc('X','V','I','D')
             else:
-                raise NotImplementedError(f"Saving video as .{self.recording_format} file is not supported.")
+                raise NotImplementedError(f"Saving video as .{self.render_saving_format} file is not supported.")
 
             video_file_path = os.path.join(video_file_dir, video_file_name)
-
             out = cv2.VideoWriter(video_file_path, fourcc, self.render_fps, (self.screen_width, self.screen_height))
             for img in self.render_buffer:
                 out.write(cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
 
             out.release()
+
+            if self.recording_compression:
+                if self.render_saving_format == "mp4":
+                    compressed_video_file_name = f"pyquaticus_{video_id}_compressed.mp4"
+                elif self.render_saving_format == "avi":
+                    compressed_video_file_name = f"pyquaticus_{video_id}_compressed.avi"
+                else:
+                    raise NotImplementedError(f"Saving video as .{self.render_saving_format} file is not supported.")
+
+                compressed_video_file_path = os.path.join(video_file_dir, compressed_video_file_name)
+                subprocess.run(["ffmpeg","-i",video_file_path,"-c:v","libx264",compressed_video_file_path])
         else:
             print("Attempted to save video but render_buffer is empty!")
             print()
 
+    def save_screenshot(self):
+
+        if self.render_mode is not None:
+            # we may not need to check the self.screen here
+            image_file_dir = str(pathlib.Path(__file__).resolve().parents[1] / 'screenshots')
+            if not os.path.isdir(image_file_dir):
+                os.mkdir(image_file_dir)
+
+            now = datetime.now() #get date and time
+            image_id = now.strftime("%m-%d-%Y_%H-%M-%S")
+            image_file_name = f"pyquaticus_{image_id}.png"
+            image_file_path = os.path.join(image_file_dir, image_file_name)
+            cv2.imwrite(image_file_path, self.render_buffer[-1])
+            
+        else:
+            raise Exception("Envrionment was not rendered. See the render_mode option in the config.")
+            
+
     def close(self):
         """Overridden method inherited from `Gym`."""
-        #TODO: save video if have not already on early exiting
         if self.screen is not None:
+            self.save_screenshot()
             pygame.display.quit()
             pygame.quit()
             self.isopen = False

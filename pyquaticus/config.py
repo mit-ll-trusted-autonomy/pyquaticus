@@ -77,8 +77,9 @@ config_dict_std = {
     "render_traj_freq":        1, # timesteps
     "render_traj_cutoff":   None, # max length (timesteps) of the traj to render, or None for no limit
     "render_lidar_mode":    None, # "full" (all rays), "detection" (only rays that detect something), or None
-    "record_render":       False, # option to save video of render frames
-    "recording_format":     "mp4", # mp4, avi
+    "render_saving":       False, # option to save video of render frames
+    "render_saving_format":     "mp4", # mp4, avi
+    "recording_compression":   None, # TODO MC: check ffmpeg for options
 
     #render_traj_mode has multiple options and combinations:
     #'traj': dashed line for agent trajectories
