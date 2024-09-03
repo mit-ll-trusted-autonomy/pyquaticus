@@ -367,3 +367,42 @@ def detect_collision(
         collisions = collisions.item()
 
     return collisions
+
+def intersect_line_rectangle(
+        line_points: np.ndarray,
+        rect_points: np.ndarray
+):
+    """
+    Returns the intersection points of a line and a rectangle.
+    Args:
+        line_points: np.ndarray of shape (2, 2)
+        rect_points: np.ndarray of shape (1, 4) # [left, right, top, bottom]
+    
+    Returns:
+        np.ndarray of shape (2, 2)
+    """
+
+    s1 = line_points[0]
+    s2 = line_points[1]
+    slope = (s2[1] - s1[1]) / (s2[0] - s1[0])
+    unit_vec = (s2 - s1) / np.linalg.norm(s2 - s1)
+
+    # Find the intersection points of the line with each side of the rectangle
+    intersections = []
+    for i in range(4):
+        p1 = rect_points[i]
+        p2 = rect_points[(i + 1) % 4]
+        side_slope = (p2[1] - p1[1]) / (p2[0] - p1[0])
+
+        # Check if the line and the side are parallel
+        if np.isclose(slope, side_slope):
+            continue
+
+        # Find the intersection point
+        x = (slope * s1[0] - side_slope * p1[0] + p1[1] - s1[1]) / (slope - side_slope)
+        y = slope * (x - s1[0]) + s1[1]
+        intersection = np.array([x, y])
+
+        # Check if the intersection point is on the side
+        if np.all(np.logical_and(np.min(rect_points, axis=0) <= intersection, intersection <= np.max(rect_points, axis=0))):
+            intersections.append(intersection)

@@ -45,6 +45,7 @@ config_dict_std = {
     "turn_rate":   70,
     "max_acc":      1, # meters / s**2
     "max_dec":      1, # meters / s**2
+    "oob_speed_frac": 0.5, # proportion
 
     # Simulation parameters
     "tau":              0.1, # dt (seconds) for updating the simulation
@@ -54,15 +55,14 @@ config_dict_std = {
     "max_score":            1, # maximum score per episode (until a winner is declared)
     "max_time":         100.0, # maximum time (seconds) per episode
     "tagging_cooldown":  30.0, # cooldown on an agent (seconds) after they tag another agent, to prevent consecutive tags
-    "teleport_on_tag":  False, # option for the agent when tagged (either out of bounds or by opponent) to teleport home or not
     "tag_on_collision": False, # option for setting the agent to a tagged state upon collsion with a boundary or obstacle
 
     # Observation parameters
     "normalize":    True, # flag for normalizing the observation space.
-    "short_hist_duration": 2 , # amount of previous time incorporated into short term observation buffer
+    "short_hist_duration": 5 , # amount of previous time incorporated into short term observation buffer
     "short_hist_jump": 1, # number of steps in between readgins in short term observation buffer
-    "long_hist_duration": 5, # amount of previous time incorporated into long term observation buffer
-    "long_hist_jump": 2, # number of steps in between readgins in short term observation buffer
+    "long_hist_duration": 20, # amount of previous time incorporated into long term observation buffer
+    "long_hist_jump": 4, # number of steps in between readgins in short term observation buffer
     "lidar_obs":   False, # option to use lidar (ray casting model) observations
     "lidar_range": 200.0, # meters
     "num_lidar_rays": 64, # number of rays for lidar
@@ -78,8 +78,6 @@ config_dict_std = {
     "render_traj_cutoff":   None, # max length (timesteps) of the traj to render, or None for no limit
     "render_lidar_mode":    None, # "full" (all rays), "detection" (only rays that detect something), or None
     "render_saving":       False, # option to save video of render frames
-    "render_saving_format":     "mp4", # mp4, avi
-    "recording_compression":   None, # TODO MC: check ffmpeg for options
 
     #render_traj_mode has multiple options and combinations:
     #'traj': dashed line for agent trajectories
