@@ -1256,6 +1256,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.render_lidar_mode = config_dict.get("render_lidar_mode", config_dict_std["render_lidar_mode"])
         self.render_saving = config_dict.get("render_saving", config_dict_std["render_saving"])
 
+        # agent spawn parameters
+        self.random_init = config_dict.get("random_init", config_dict_std["random_init"])
+
         # Miscellaneous parameters
         if config_dict.get("suppress_numpy_warnings", config_dict_std["suppress_numpy_warnings"]):
             # Suppress numpy warnings to avoid printing out extra stuff to the console
@@ -1448,15 +1451,19 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     trimmed_line_segments.append(line_segment)
             
             self.obstacle_geoms["polygon"] = trimmed_line_segments
-        self.obstacle_geoms["polygon"] = np.asarray(self.obstacle_geoms["polygon"])
+            self.obstacle_geoms["polygon"] = np.asarray(self.obstacle_geoms["polygon"])
 
-        # if there are no line segments left in polygon, remove it from the dict
-        if self.obstacle_geoms["polygon"].shape[0] == 0:
-            self.obstacle_geoms.pop("polygon",None)
+            # if there are no line segments left in polygon, remove it from the dict
+            if self.obstacle_geoms["polygon"].shape[0] == 0:
+                self.obstacle_geoms.pop("polygon",None)
 
         # Adjust scrimmage line
         scrim_seg = LineString(self.scrimmage_coords)
-        scrim_int_segs = [(p, param[(i+1) % len(param)]) for param in poly_obstacle for i, p in enumerate(param)]
+        scrim_int_segs = []
+        if obstacle_params is not None:
+            poly_obstacle = obstacle_params.get("polygon", None)
+            if poly_obstacle is not None:
+                scrim_int_segs = [(p, param[(i+1) % len(param)]) for param in poly_obstacle for i, p in enumerate(param)]
         if border_contour is None:
             scrim_int_segs.extend([
                 [self.env_ll, self.env_lr],
@@ -1865,9 +1872,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.obs_buffer = dict()
         if existing_state is None:
             for player in self.players.values():
-                self.state["obs_history"][player.id] = np.zeros((self.obs_hist_len,reset_obs[player.id].shape[0]))
-                self.obs_buffer[player.id] = np.zeros((self.obs_buffer_len,reset_obs[player.id].shape[0]))
-
+                if self.normalize:
+                    self.state["obs_history"][player.id] = np.zeros((self.obs_hist_len,reset_obs[player.id].shape[0]))
+                    self.obs_buffer[player.id] = np.zeros((self.obs_buffer_len,reset_obs[player.id].shape[0]))
+                else:                
+                    self.state["obs_history"][player.id] = [0]*self.obs_hist_len
+                    self.obs_buffer[player.id] = [0]*self.obs_buffer_len
 
 
         return reset_obs
@@ -1968,17 +1978,35 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 player.on_own_side = True
                 player.tagging_cooldown = self.tagging_cooldown
 
-                if player.team == Team.RED_TEAM:
-                    init_x_pos = self.env_size[0] / 4
-                    player.heading = 90
-                else:
-                    init_x_pos = self.env_size[0] - self.env_size[0] / 4
-                    player.heading = -90
+                if self.random_init:
+                    while True:
+                        # pick random point
+                        # check if it's onsides, not hitting other agents and not hitting other flag
+                        start_pos_x = np.random.rand()*self.env_size[0] ## does this need to be world coordinates or env coordinates
+                        start_pos_y = np.random.rand()*self.env_size[1]
+                        start_point = [start_pos_x,start_pos_y]
 
-                init_y_pos = (self.env_size[1] / (self.team_size + 1)) * (
-                    (player.id % self.team_size) + 1
-                )
-                player.pos = [init_x_pos, init_y_pos]
+                        # check if position is too close to obstacle
+                        point_onsides = self._check_on_sides(start_point, player.team)
+                        valid_pos = self._check_valid_pos(start_point, agent_locations, flag_locations)
+                        obst_collision = detect_collision(np.array(start_point),self.agent_radius,self.obstacle_geoms)
+                        if point_onsides and valid_pos and (not obst_collision):
+                            player.pos = start_point
+                            break
+                    player.heading = 360 * np.random.rand() - 180
+                    
+                else:
+                    if player.team == Team.RED_TEAM:
+                        init_x_pos = self.env_size[0] / 4
+                        player.heading = 90
+                    else:
+                        init_x_pos = self.env_size[0] - self.env_size[0] / 4
+                        player.heading = -90
+
+                    init_y_pos = (self.env_size[1] / (self.team_size + 1)) * (
+                        (player.id % self.team_size) + 1
+                    )
+                    player.pos = [init_x_pos, init_y_pos]
                 player.prev_pos = copy.deepcopy(player.pos)
 
                 player.home = copy.deepcopy(player.pos)
@@ -3119,10 +3147,6 @@ when gps environment bounds are specified in meters")
 
                 #agent id
                 if self.render_ids:
-                    # agent_id_blit_pos = (
-                    #     0.5*rotated_surface_size[0] - 0.35 * self.agent_render_radius,
-                    #     0.5*rotated_surface_size[1] - 0.6 * self.agent_render_radius
-                    # ) #TODO: adjust this based on a rect of the number and maybe agent too?
                     if self.gps_env:
                         font_color = "white"
                     else:

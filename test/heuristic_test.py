@@ -20,7 +20,9 @@ truncated_g = {0:False,1:False}
 term = term_g
 trunc = truncated_g
 obs = env.reset()
-temp_score = env.game_score
+temp_captures = env.state["captures"]
+temp_grabs = env.state["grabs"]
+temp_tags = env.state["tags"]
 
 H_one = BaseAttacker(2, Team.RED_TEAM, mode='competition_easy')
 H_two = BaseDefender(3, Team.RED_TEAM, mode='competition_easy')
@@ -45,6 +47,11 @@ while True:
     step += 1
     if term[k[0]] == True or trunc[k[0]]==True:
         break
-for k in env.game_score:
-    temp_score[k] += env.game_score[k]
+for i in range(len(env.state["captures"])):
+    temp_captures[i] += env.state["captures"][i]
+for i in range(len(env.state["grabs"])):
+    temp_grabs[i] += env.state["grabs"][i]
+for i in range(len(env.state["tags"])):
+    temp_tags[i] += env.state["tags"][i]
+
 env.close()

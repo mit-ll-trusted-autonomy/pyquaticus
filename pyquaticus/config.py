@@ -26,6 +26,7 @@ config_dict_std = {
     "catch_radius":         10.0, # distance (meters) for tagging and flag pickup
     "n_circle_segments":       8, # default is to approximate circles as an octagon 
     "obstacles":            None, # optional dictionary of obstacles in the enviornment
+    "random_init":         False, # Spawn agents randomly or programmatically (only for non-gps envs)
 
     #notes: obstacles are specified via dictionary. Keys are the obstacle type ("circle" or "polygon"). 
     #values are the parameters for the obstacle. 
