@@ -933,13 +933,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 pos_x = ag_pos[0]
                 pos_y = ag_pos[1]
 
-            if new_speed > 0.1:
+            if (not self.gps_env and new_speed > 0.1) or (self.gps_env and new_speed/self.meters_per_mercator_xy > 0.1):
                 # only rely on vel if speed is large enough to recover heading
                 new_speed, new_heading = vec_to_mag_heading(vel)
             # propagate vehicle position
             hdg_rad = math.radians(player.heading)
             new_hdg_rad = math.radians(new_heading)
             avg_speed = (new_speed + player.speed) / 2.0
+            if self.gps_env:
+                avg_speed = avg_speed/self.meters_per_mercator_xy
             s = math.sin(new_hdg_rad) + math.sin(hdg_rad)
             c = math.cos(new_hdg_rad) + math.cos(hdg_rad)
             avg_hdg = math.atan2(s, c)
@@ -1300,9 +1302,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             lidar_range=lidar_range
         )
 
-        # Aquaticus point field
-        #TODO
-
+        # Scale the aquaticus point field by env size
+        if not self.gps_env:
+            for k in self.config_dict["aquaticus_field_points"]:
+                self.config_dict["aquaticus_field_points"][k][0] = self.config_dict["aquaticus_field_points"][k][0]*self.env_size[0]
+                self.config_dict["aquaticus_field_points"][k][1] = self.config_dict["aquaticus_field_points"][k][1]*self.env_size[1]
+            
         # Environment corners
         self.env_ll = np.array([0.0, 0.0])
         self.env_lr = np.array([self.env_size[0], 0.0])
@@ -1996,17 +2001,44 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     player.heading = 360 * np.random.rand() - 180
                     
                 else:
-                    if player.team == Team.RED_TEAM:
-                        init_x_pos = self.env_size[0] / 4
-                        player.heading = 90
-                    else:
-                        init_x_pos = self.env_size[0] - self.env_size[0] / 4
-                        player.heading = -90
+                    player_flag_loc = self.flag_homes[player.team]
+                    closest_scrim_line_point = closest_point_on_line(self.scrimmage_coords[0],self.scrimmage_coords[1],player_flag_loc)
+                    halfway_point = (np.asarray(player_flag_loc)+closest_scrim_line_point)/2
 
-                    init_y_pos = (self.env_size[1] / (self.team_size + 1)) * (
-                        (player.id % self.team_size) + 1
-                    )
-                    player.pos = [init_x_pos, init_y_pos]
+                    mag,angle = vec_to_mag_heading(halfway_point-player_flag_loc)
+                    if mag < self.agent_radius+self.flag_keepout:
+                        raise Exception("Flag is too close to scrimmage line.")
+
+                    scrim_unit_vec = (self.scrimmage_coords[1]-self.scrimmage_coords[0])/np.linalg.norm(self.scrimmage_coords[1]-self.scrimmage_coords[0])
+                    if player.team == Team.BLUE_TEAM:
+                        halfway_point = halfway_point + 4*self.agent_radius*(player.id-self.team_size/2+0.5)*scrim_unit_vec
+                    else:
+                        halfway_point = halfway_point + 4*self.agent_radius*(player.id-3*self.team_size/2+0.5)*scrim_unit_vec
+                    
+                    ## if halfway point isn't in the env bounds, then project back into the env
+                    halfway_point[0] = max(self.env_bounds[0][0]+self.agent_radius,min(self.env_bounds[1][0]-self.agent_radius,halfway_point[0]))
+                    halfway_point[1] = max(self.env_bounds[0][1]+self.agent_radius,min(self.env_bounds[1][1]-self.agent_radius,halfway_point[1]))                    
+                    
+                    if detect_collision(halfway_point,self.agent_radius,self.obstacle_geoms): ## TODO: add check to make sure agent isn't spawned inside an obstacle
+                        print("Initial agent position collides with obstacle. Picking random point instead.")
+                        ## pick random point
+                        while True:
+                            start_pos_x = np.random.rand()*self.env_size[0] ## does this need to be world coordinates or env coordinates
+                            start_pos_y = np.random.rand()*self.env_size[1]
+                            start_point = [start_pos_x,start_pos_y]
+
+                            # check if position is too close to obstacle
+                            point_onsides = self._check_on_sides(start_point, player.team)
+                            valid_pos = self._check_valid_pos(start_point, agent_locations, flag_locations)
+                            obst_collision = detect_collision(np.array(start_point),self.agent_radius,self.obstacle_geoms)
+                            if point_onsides and valid_pos and (not obst_collision):
+                                halfway_point = start_point
+                                break
+                        angle = 360 * np.random.rand() - 180
+
+                    player.pos = list(halfway_point)
+                    player.heading = angle
+
                 player.prev_pos = copy.deepcopy(player.pos)
 
                 player.home = copy.deepcopy(player.pos)

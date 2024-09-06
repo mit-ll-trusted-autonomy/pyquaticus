@@ -94,10 +94,9 @@ class KeyTest:
             self.obs, rewards, terminated, truncated, info = self.env.step(action_dict)
             for k in terminated:
                 if terminated[k] == True or truncated[k]==True:
-                    self.env.save_screenshot()
                     time.sleep(1.)
                     last_obs = copy.deepcopy(self.obs)
-                    new_obs = self.env.reset(existing_state = self.env.state) ## TODO MC: check obs here after reset
+                    new_obs = self.env.reset(existing_state = self.env.state)
                     break
 
     def process_event(self, quittable):
@@ -143,14 +142,14 @@ def main():
     config["render_traj_cutoff"] = 55
     config["render_saving"] = True
 
-    config["blue_flag_home"] = [81,70]
+    config["blue_flag_home"] = [140,40]
     config["red_flag_home"] = [20,40]
     config["flag_homes_unit"] = "m"
     config["scrimmage_coords"] = [[80,0],[80,80]]
     config["scrimmage_coords_unit"] = "m"
 
     config["render_agent_ids"] = True
-    config["random_init"] = True
+    config["random_init"] = False
     
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
     try:

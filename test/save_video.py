@@ -94,7 +94,9 @@ class KeyTest:
             self.obs, rewards, terminated, truncated, info = self.env.step(action_dict)
             for k in terminated:
                 if terminated[k] == True or truncated[k]==True:
+                    self.env.save_screenshot() # save screenshot of last frame
                     time.sleep(1.)
+                    self.env.buffer_to_video(recording_compression=True) # save full sized video and compressed video
                     self.env.reset()
                     break
 
@@ -131,20 +133,24 @@ def main():
     parser.add_argument('--red-policy', default=None, choices=[], help='Select a red policy to play against.')
     args = parser.parse_args()
 
-    print("Warning: This script requires MOOS to be installed, which is not provided in this github repo")
-
-    #Setup for 1 blue player and 1 red player with sparse rewards
-    reward_config = {0:None, 1:None}
-    #Alternative
-    #reward_config = {0:reward.sparse, 1:reward.sparse}
-
     config = copy.deepcopy(pyquaticus.config.config_dict_std)
     config["obstacles"] = {
         "circle": [(4, (6, 5))],
         "polygon": [((70, 10), (85, 21), (83, 51), (72, 35))]
     }
     config["sim_speedup_factor"] = 8
-    # config["normalize"] = False
+    config["render_traj_freq"] = 10
+    config["render_traj_cutoff"] = 55
+    config["render_saving"] = True # This must be set to True to save screenshots and videos
+
+    config["blue_flag_home"] = [140,40]
+    config["red_flag_home"] = [20,40]
+    config["flag_homes_unit"] = "m"
+    config["scrimmage_coords"] = [[80,0],[80,80]]
+    config["scrimmage_coords_unit"] = "m"
+
+    config["render_agent_ids"] = True
+    config["random_init"] = True
     
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
     try:

@@ -109,13 +109,13 @@ if __name__ == '__main__':
 
 
 
-    config["gps_env"] = True
-    config["env_bounds"] = [[-100,-100],[100,100]]
-    config["env_bounds_unit"] = "wm_xy"
-    config["scrimmage_coords"] = np.array([[-100,-100],[100,100]])
-    config["scrimmage_coords_unit"] = "wm_xy"
-    config["blue_flag_home"] = "auto"
-    config["red_flag_home"]  = "auto"
+    # config["gps_env"] = True
+    # config["env_bounds"] = [[-100,-100],[100,100]]
+    # config["env_bounds_unit"] = "wm_xy"
+    # config["scrimmage_coords"] = np.array([[-100,-100],[100,100]])
+    # config["scrimmage_coords_unit"] = "wm_xy"
+    # config["blue_flag_home"] = "auto"
+    # config["red_flag_home"]  = "auto"
 
 
 
