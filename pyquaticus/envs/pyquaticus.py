@@ -22,11 +22,16 @@
 from abc import ABC
 import colorsys
 import copy
+import cv2
 import itertools
 import math
 import random
 from collections import OrderedDict, defaultdict
 from typing import Optional
+from math import floor
+import pathlib
+import os
+from datetime import datetime
 
 import numpy as np
 import pygame
@@ -619,6 +624,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.screen = None
         self.clock = None
         self.isopen = False
+        self.render_ctr = 0
+        self.render_buffer = []
+        self.traj_render_buffer = {}
 
     def seed(self, seed=None):
         """
@@ -1041,6 +1049,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.teleport_on_tag = config_dict.get("teleport_on_tag", config_dict_std["teleport_on_tag"])
         self.tag_on_wall_collision = config_dict.get("tag_on_wall_collision", config_dict_std["tag_on_wall_collision"])
 
+        self.render_traj_mode = config_dict.get("render_traj_mode", config_dict_std["render_traj_mode"])
+        self.render_traj_freq = config_dict.get("render_traj_freq", config_dict_std["render_traj_freq"])
+        self.render_traj_cutoff = config_dict.get("render_traj_cutoff", config_dict_std["render_traj_cutoff"])
+        self.render_saving = config_dict.get("render_saving", config_dict_std["render_saving"])
+
         # MOOS Dynamics Parameters
         self.speed_factor = config_dict.get(
             "speed_factor", config_dict_std["speed_factor"]
@@ -1089,6 +1102,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             self.arena_width = self.world_size[0] * self.pixel_size
             self.arena_height = self.world_size[1] * self.pixel_size
+            self.agent_render_radius = np.clip(self.agent_radius * self.pixel_size, 15, None) #pixels
 
             # check that world size (pixels) does not exceed the screen dimensions
             world_screen_err_msg = (
@@ -1323,7 +1337,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         dones["__all__"] = False
         return dones
 
-    def reset(self, seed=None, return_info=False, options: Optional[dict] = None):
+    def reset(self, seed=None, return_info=False, options: Optional[dict] = None, render:bool = False):
         """
         Resets the environment so that it is ready to be used.
 
@@ -1396,7 +1410,16 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         reset_obs = {agent_id: self.state_to_obs(agent_id, self.normalize) for agent_id in self.players}
 
         if self.render_mode:
-            self._render()
+            self.render_ctr = 0
+            if self.render_saving:
+                self.render_buffer = []
+            if self.render_traj_mode:
+                self.traj_render_buffer = {agent_id: {'traj': [], 'agent': [], 'history': []} for agent_id in self.players}
+
+            if render:
+                self._render()
+            self.render_ctr = 0
+
         return reset_obs
 
     def _generate_agent_starts(self, flag_locations):
@@ -1671,6 +1694,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             flag = self.flags[int(team)]
             teams_players = self.agents_of_team[team]
             color = "blue" if team == Team.BLUE_TEAM else "red"
+            opp_color = "red" if team == Team.BLUE_TEAM else "blue"
 
             # Draw team home region
             home_center_screen = self.world_to_screen(self.flags[int(team)].home)
@@ -1698,15 +1722,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     (self.flag_keepout - self.agent_radius) * self.pixel_size,
                     width=round(self.pixel_size / 10),
                 )
-            else:
-                # Flag is captured so draw a different shape
-                flag_pos_screen = self.world_to_screen(flag.pos)
-                draw.circle(
-                    self.screen,
-                    color,
-                    flag_pos_screen,
-                    0.55*(self.pixel_size * self.agent_radius)
-                )
 
             # Draw obstacles:
             for obstacle in self.obstacles:
@@ -1727,6 +1742,28 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         )
 
             for player in teams_players:
+                blit_pos = self.world_to_screen(player.pos)
+
+                #trajectory
+                if self.render_traj_mode:
+                    #traj
+                    if self.render_traj_mode.startswith("traj"):
+                        for prev_blit_pos in reversed(self.traj_render_buffer[player.id]['traj']):
+                            draw.circle(
+                                self.screen,
+                                color,
+                                prev_blit_pos,
+                                radius=2,
+                                width=0
+                            )
+                    #agent 
+                    if self.render_traj_mode.endswith("agent"):
+                        for prev_rot_blit_pos, prev_agent_surf in reversed(self.traj_render_buffer[player.id]['agent']):
+                            self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
+                    #history
+                    elif self.render_traj_mode.endswith("history"):
+                        raise NotImplementedError()
+
                 # render tagging
                 player.render_tagging(self.tagging_cooldown)
 
@@ -1735,56 +1772,116 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 ref_angle = -orientation.angle_to(self.UP)
 
                 # transform position to pygame coordinates
-                blit_pos = self.world_to_screen(player.pos)
                 rotated_surface = rotozoom(player.pygame_agent, ref_angle, 1.0)
                 rotated_surface_size = np.array(rotated_surface.get_size())
                 rotated_blit_pos = blit_pos - 0.5*rotated_surface_size
 
+                #flag pickup
+                if player.has_flag:
+                    draw.circle(
+                        rotated_surface,
+                        opp_color,
+                        0.5*rotated_surface_size,
+                        radius=0.55*self.agent_render_radius
+                    )
+
+                #agent id
+                if self.render_ids:
+                    font_color = "white" if team == Team.BLUE_TEAM else "black"
+
+                    ########### agent timepoint rendering ##################################
+                    timepoint = len(self.traj_render_buffer[player.id]['agent'])
+                    player_number_label = self.font.render(str(timepoint), True, font_color)
+                    ########################################################################
+
+                    # player_number_label = self.font.render(str(player.id), True, font_color)
+                    player_number_label_rect = player_number_label.get_rect()
+                    player_number_label_rect.center = (0.5*rotated_surface_size[0],0.52*rotated_surface_size[1]) # Using 0.52 for the y-coordinate because it looks nicer than 0.5
+                    rotated_surface.blit(player_number_label, player_number_label_rect)
+
                 # blit agent onto screen
                 self.screen.blit(rotated_surface, rotated_blit_pos)
 
-                #blit agent number onto agent
-                agent_id_blit_poses[player.id] = (
-                    blit_pos[0] - 0.35*self.pixel_size*self.agent_radius,
-                    blit_pos[1] - 0.6*self.pixel_size*self.agent_radius
-                )
+                #save agent surface for trajectory rendering
+                if (
+                    self.render_traj_mode and
+                    self.render_ctr % self.num_renders_per_step == 0
+                ):
+                    #add traj/ agent render data
+                    if self.render_traj_mode.startswith("traj"):
+                        self.traj_render_buffer[player.id]['traj'].insert(0, blit_pos)
+ 
+                    if (
+                        self.render_traj_mode.endswith("agent") and
+                        (self.render_ctr / self.num_renders_per_step) % self.render_traj_freq == 0
+                    ):
+                        self.traj_render_buffer[player.id]['agent'].insert(0, (rotated_blit_pos, rotated_surface))
 
-        # render agent ids
-        if self.render_ids:
-            for team in Team:
-                teams_players = self.agents_of_team[team]
-                font_color = "white" if team == Team.BLUE_TEAM else "black"
-                for player in teams_players:
-                    player_number_label = self.font.render(str(player.id), True, font_color)
-                    self.screen.blit(player_number_label, agent_id_blit_poses[player.id])
+                    elif (
+                        self.render_traj_mode.endswith("history") and
+                        self.render_ctr % self.num_renders_per_step == 0 
+                    ):
+                        # self.traj_render_buffer[player.id]['history'].insert(0, (rotated_blit_pos, rotated_surface))
+                        raise NotImplementedError()
+
+                    #truncate traj
+                    if self.render_traj_cutoff is not None:
+                        agent_render_cutoff = (
+                            floor(self.render_traj_cutoff / self.render_traj_freq) +
+                            (
+                                (
+                                    (self.render_ctr / self.num_renders_per_step) % self.render_traj_freq +
+                                    self.render_traj_freq * floor(self.render_traj_cutoff / self.render_traj_freq)
+                                ) <= self.render_traj_cutoff
+                            )
+                        )
+                        self.traj_render_buffer[player.id]['traj'] = self.traj_render_buffer[player.id]['traj'][
+                            : self.render_traj_cutoff
+                        ]
+                        self.traj_render_buffer[player.id]['agent'] = self.traj_render_buffer[player.id]['agent'][
+                            : agent_render_cutoff
+                        ]
+                    # self.traj_render_buffer[player.id]['history'] = self.traj_render_buffer[player.id]['history'][
+                    #     : self.obs_hist_len
+                    # ]
 
         # visually indicate distances between players of both teams 
-        assert len(self.agents_of_team) == 2, "If number of teams > 2, update code that draws distance indicator lines"
+        # assert len(self.agents_of_team) == 2, "If number of teams > 2, update code that draws distance indicator lines"
 
-        for blue_player in self.agents_of_team[Team.BLUE_TEAM]:
-            if not blue_player.is_tagged or (blue_player.is_tagged and blue_player.on_own_side):
-                for red_player in self.agents_of_team[Team.RED_TEAM]:
-                    if not red_player.is_tagged or (red_player.is_tagged and red_player.on_own_side):
-                        blue_player_pos = np.asarray(blue_player.pos)
-                        red_player_pos = np.asarray(red_player.pos)
-                        a2a_dis = np.linalg.norm(blue_player_pos - red_player_pos)
-                        if a2a_dis <= 2*self.catch_radius:
-                            hsv_hue = (a2a_dis - self.catch_radius) / (2*self.catch_radius - self.catch_radius)
-                            hsv_hue = 0.33 * np.clip(hsv_hue, 0, 1)
-                            line_color = tuple(255 * np.asarray(colorsys.hsv_to_rgb(hsv_hue, 0.9, 0.9)))
+        # for blue_player in self.agents_of_team[Team.BLUE_TEAM]:
+        #     if not blue_player.is_tagged or (blue_player.is_tagged and blue_player.on_own_side):
+        #         for red_player in self.agents_of_team[Team.RED_TEAM]:
+        #             if not red_player.is_tagged or (red_player.is_tagged and red_player.on_own_side):
+        #                 blue_player_pos = np.asarray(blue_player.pos)
+        #                 red_player_pos = np.asarray(red_player.pos)
+        #                 a2a_dis = np.linalg.norm(blue_player_pos - red_player_pos)
+        #                 if a2a_dis <= 2*self.catch_radius:
+        #                     hsv_hue = (a2a_dis - self.catch_radius) / (2*self.catch_radius - self.catch_radius)
+        #                     hsv_hue = 0.33 * np.clip(hsv_hue, 0, 1)
+        #                     line_color = tuple(255 * np.asarray(colorsys.hsv_to_rgb(hsv_hue, 0.9, 0.9)))
 
-                            draw.line(
-                                self.screen, 
-                                line_color,
-                                self.world_to_screen(blue_player_pos),
-                                self.world_to_screen(red_player_pos),
-                                width=self.a2a_line_width
-                            )
+        #                     draw.line(
+        #                         self.screen, 
+        #                         line_color,
+        #                         self.world_to_screen(blue_player_pos),
+        #                         self.world_to_screen(red_player_pos),
+        #                         width=self.a2a_line_width
+        #                     )
 
+        # Render
         if self.render_mode:
             pygame.event.pump()
             self.clock.tick(self.render_fps)
             pygame.display.flip()
+
+        # Record
+        if self.render_saving:
+            self.render_buffer.append(
+                np.transpose(np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2))
+            )
+
+        # Update counter
+        self.render_ctr += 1
 
     def world_to_screen(self, pos):
         screen_pos = self.pixel_size * np.asarray(pos)
@@ -1834,3 +1931,49 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             orig_obs = self.agent_obs_normalizer.normalized(orig_obs)
 
         return orig_obs
+
+    def buffer_to_video(self,recording_compression=False):
+        """Convert and save current render buffer as a video"""
+        if len(self.render_buffer) > 0:
+            video_file_dir = str(pathlib.Path(__file__).resolve().parents[1] / 'videos')
+            if not os.path.isdir(video_file_dir):
+                os.mkdir(video_file_dir)
+
+            now = datetime.now() #get date and time
+            video_id = now.strftime("%m-%d-%Y_%H-%M-%S")
+
+            video_file_name = f"pyquaticus_{video_id}.mp4"
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+
+            video_file_path = os.path.join(video_file_dir, video_file_name)
+            out = cv2.VideoWriter(video_file_path, fourcc, self.render_fps, (self.screen_width, self.screen_height))
+            for img in self.render_buffer:
+                out.write(cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+
+            out.release()
+
+            if recording_compression:
+                compressed_video_file_name = f"pyquaticus_{video_id}_compressed.mp4"
+
+                compressed_video_file_path = os.path.join(video_file_dir, compressed_video_file_name)
+                subprocess.run(["ffmpeg","-i",video_file_path,"-c:v","libx264",compressed_video_file_path])
+        else:
+            print("Attempted to save video but render_buffer is empty!")
+            print()
+
+    def save_screenshot(self):
+
+        if self.render_mode is not None:
+            # we may not need to check the self.screen here
+            image_file_dir = str(pathlib.Path(__file__).resolve().parents[1] / 'screenshots')
+            if not os.path.isdir(image_file_dir):
+                os.mkdir(image_file_dir)
+
+            now = datetime.now() #get date and time
+            image_id = now.strftime("%m-%d-%Y_%H-%M-%S")
+            image_file_name = f"pyquaticus_{image_id}.png"
+            image_file_path = os.path.join(image_file_dir, image_file_name)
+            cv2.imwrite(image_file_path, cv2.cvtColor(self.render_buffer[-1], cv2.COLOR_RGB2BGR))
+            
+        else:
+            raise Exception("Envrionment was not rendered. See the render_mode option in the config.")

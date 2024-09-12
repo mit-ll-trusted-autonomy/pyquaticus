@@ -60,7 +60,10 @@ config_dict_std = {
     # Note: For circles, it should be a list of tuples: (radius, (center_x, center_y)) all in meters
     # Note: For polygons, it should be a list of tuples: ((x1, y1), (x2, y2), (x3, y3), ..., (xn, yn)) all in meters
     # Note for polygons, there is an implied edge between (xn, yn) and (x1, y1), to complete the polygon.
-
+    "render_traj_mode":     None, # "traj", "agent", "history", "traj_agent", "traj_history", or None
+    "render_traj_freq":        1, # timesteps
+    "render_traj_cutoff":   None, # max length (timesteps) of the traj to render, or None for no limit
+    "render_saving":       False, # option to save video of render frames
 }
 #Build Point Field - Taken from Moos-IvP-Aquaticus Michael Benjamin
 #=================================================================
