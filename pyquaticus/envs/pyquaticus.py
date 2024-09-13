@@ -1691,6 +1691,21 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         agent_id_blit_poses = {}
 
         for team in Team:
+            teams_players = self.agents_of_team[team]
+            color = "blue" if team == Team.BLUE_TEAM else "red"
+            for player in teams_players:
+                #traj
+                if self.render_traj_mode.startswith("traj"):
+                    for prev_blit_pos in reversed(self.traj_render_buffer[player.id]['traj']):
+                        draw.circle(
+                            self.screen,
+                            color,
+                            prev_blit_pos,
+                            radius=2,
+                            width=0
+                        )
+
+        for team in Team:
             flag = self.flags[int(team)]
             teams_players = self.agents_of_team[team]
             color = "blue" if team == Team.BLUE_TEAM else "red"
@@ -1746,16 +1761,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
                 #trajectory
                 if self.render_traj_mode:
-                    #traj
-                    if self.render_traj_mode.startswith("traj"):
-                        for prev_blit_pos in reversed(self.traj_render_buffer[player.id]['traj']):
-                            draw.circle(
-                                self.screen,
-                                color,
-                                prev_blit_pos,
-                                radius=2,
-                                width=0
-                            )
                     #agent 
                     if self.render_traj_mode.endswith("agent"):
                         for prev_rot_blit_pos, prev_agent_surf in reversed(self.traj_render_buffer[player.id]['agent']):
