@@ -32,6 +32,7 @@ from math import floor
 import pathlib
 import os
 from datetime import datetime
+import subprocess
 
 import numpy as np
 import pygame
@@ -514,7 +515,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
     """
 
-    metadata = {"render_modes": ["human"]}
+    metadata = {"render_modes": ["human", "rgb_array"]}
 
     def __init__(
         self,
@@ -1104,6 +1105,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.arena_height = self.world_size[1] * self.pixel_size
             self.agent_render_radius = np.clip(self.agent_radius * self.pixel_size, 15, None) #pixels
 
+            self.screen_width = round(
+                self.arena_width + 2*self.arena_offset
+            )
+            self.screen_height = round(
+                self.arena_height + 2*self.arena_offset
+            )
+
             # check that world size (pixels) does not exceed the screen dimensions
             world_screen_err_msg = (
                 "Specified world_size {} exceeds the maximum size {} in at least one"
@@ -1595,14 +1603,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             pygame.display.set_caption("Capture the Flag")
             if self.render_mode:
                 pygame.display.init()
-                self.screen = pygame.display.set_mode(
-                    (
-                        self.arena_width + 2 * self.arena_offset,
-                        self.arena_height + 2 * self.arena_offset,
-                    )
-                )
+                self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
                 self.isopen = True
                 self.font = pygame.font.SysFont(None, int(2*self.pixel_size*self.agent_radius))
+            elif self.render_mode == "rgb_array":
+                self.screen = pygame.Surface((self.screen_width, self.screen_height))
             else:
                 raise Exception(
                     "Sorry, render modes other than 'human' are not supported"
@@ -1690,20 +1695,21 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         agent_id_blit_poses = {}
 
-        for team in Team:
-            teams_players = self.agents_of_team[team]
-            color = "blue" if team == Team.BLUE_TEAM else "red"
-            for player in teams_players:
-                #traj
-                if self.render_traj_mode.startswith("traj"):
-                    for prev_blit_pos in reversed(self.traj_render_buffer[player.id]['traj']):
-                        draw.circle(
-                            self.screen,
-                            color,
-                            prev_blit_pos,
-                            radius=2,
-                            width=0
-                        )
+        if self.render_traj_mode is not None:
+            for team in Team:
+                teams_players = self.agents_of_team[team]
+                color = "blue" if team == Team.BLUE_TEAM else "red"
+                for player in teams_players:
+                    #traj
+                    if self.render_traj_mode.startswith("traj"):
+                        for prev_blit_pos in reversed(self.traj_render_buffer[player.id]['traj']):
+                            draw.circle(
+                                self.screen,
+                                color,
+                                prev_blit_pos,
+                                radius=2,
+                                width=0
+                            )
 
         for team in Team:
             flag = self.flags[int(team)]
@@ -1794,12 +1800,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 if self.render_ids:
                     font_color = "white" if team == Team.BLUE_TEAM else "black"
 
-                    ########### agent timepoint rendering ##################################
-                    timepoint = len(self.traj_render_buffer[player.id]['agent'])
-                    player_number_label = self.font.render(str(timepoint), True, font_color)
-                    ########################################################################
+                    # ########### agent timepoint rendering ##################################
+                    # timepoint = len(self.traj_render_buffer[player.id]['agent'])
+                    # player_number_label = self.font.render(str(timepoint), True, font_color)
+                    # ########################################################################
 
-                    # player_number_label = self.font.render(str(player.id), True, font_color)
+                    player_number_label = self.font.render(str(player.id), True, font_color)
                     player_number_label_rect = player_number_label.get_rect()
                     player_number_label_rect.center = (0.5*rotated_surface_size[0],0.52*rotated_surface_size[1]) # Using 0.52 for the y-coordinate because it looks nicer than 0.5
                     rotated_surface.blit(player_number_label, player_number_label_rect)
@@ -1874,7 +1880,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         #                     )
 
         # Render
-        if self.render_mode:
+        if self.render_mode == "human":
             pygame.event.pump()
             self.clock.tick(self.render_fps)
             pygame.display.flip()
@@ -1937,7 +1943,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         return orig_obs
 
-    def buffer_to_video(self,recording_compression=False):
+    def buffer_to_video(self, recording_compression=False):
         """Convert and save current render buffer as a video"""
         if len(self.render_buffer) > 0:
             video_file_dir = str(pathlib.Path(__file__).resolve().parents[1] / 'videos')
@@ -1961,7 +1967,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 compressed_video_file_name = f"pyquaticus_{video_id}_compressed.mp4"
 
                 compressed_video_file_path = os.path.join(video_file_dir, compressed_video_file_name)
-                subprocess.run(["ffmpeg","-i",video_file_path,"-c:v","libx264",compressed_video_file_path])
+                subprocess.run(["ffmpeg","-loglevel","error","-i",video_file_path,"-c:v","libx264",compressed_video_file_path])
         else:
             print("Attempted to save video but render_buffer is empty!")
             print()
