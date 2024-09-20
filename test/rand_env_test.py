@@ -66,14 +66,11 @@ if __name__ == '__main__':
     config = copy.deepcopy(pyquaticus.config.config_dict_std)
     config["gps_env"] = True
     config["env_bounds"] = "auto"
-    # config["blue_flag_home"] = (41.3504170, -74.0614643)
-    # config["red_flag_home"] = (41.3512143, -74.0608635)
     config["blue_flag_home"] = (42.352229714597705, -70.99992567997114)
     config["red_flag_home"] = (42.32710627259394, -70.96739585043458)
     config["flag_homes_unit"] = "ll"
     config["sim_speedup_factor"] = 4
     config["max_time"] = 700
-    # config["screen_frac"] = 0.75 
     config["lidar_obs"] = True
     config["num_lidar_rays"] = 100
     config["lidar_range"] = 120
@@ -84,40 +81,6 @@ if __name__ == '__main__':
     config["render_traj_cutoff"] = 55
     config["render_saving"] = False
     config["render_saving_format"] = "mp4"
-    # config["render_fps"] = 10
-    # config["normalize"] = False
-
-
-
-    # scrimmage_coords = [[-7905540.31800678,5208479.26704238],[-7898189.62404293,5215514.40074666]] #[[   0.,          211.9230521 ],[7350.69396384, 7247.05675638]]
-    # # scrimmage_coords = [[7905540.31800678,5208267.34399028],[-7898189,5208267.34399028]]
-    # # scrimmage_coords = [[-7905540.31800678,5218479],[-7905540.31800678,5218479]]
-
-    # # env_bound_0 = [-7905540.31800678,  5208267.34399028]
-    # # scrimmage_coords = np.asarray(scrimmage_coords) + np.asarray(env_bound_0)
-    # # # print(scrimmage_coords)
-    # # # input("wait")
-    # config["scrimmage_coords"] = scrimmage_coords
-    # config["scrimmage_coords_unit"] = "wm_xy"
-
-
-
-
-
-
-
-
-
-
-    # config["gps_env"] = True
-    # config["env_bounds"] = [[-100,-100],[100,100]]
-    # config["env_bounds_unit"] = "wm_xy"
-    # config["scrimmage_coords"] = np.array([[-100,-100],[100,100]])
-    # config["scrimmage_coords_unit"] = "wm_xy"
-    # config["blue_flag_home"] = "auto"
-    # config["red_flag_home"]  = "auto"
-
-
 
 
     env = pyquaticus_v0.PyQuaticusEnv(render_mode=RENDER_MODE, team_size=3, config_dict=config)

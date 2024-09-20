@@ -47,6 +47,7 @@ config_dict_std = {
     "max_acc":      1, # meters / s**2
     "max_dec":      1, # meters / s**2
     "oob_speed_frac": 0.5, # proportion
+    "action_type": "discrete", # "discrete" or "continuous"
 
     # Simulation parameters
     "tau":              0.1, # dt (seconds) for updating the simulation
@@ -79,6 +80,7 @@ config_dict_std = {
     "render_traj_cutoff":   None, # max length (timesteps) of the traj to render, or None for no limit
     "render_lidar_mode":    None, # "full" (all rays), "detection" (only rays that detect something), or None
     "render_saving":       False, # option to save video of render frames
+    "render_transparency_alpha": 127, # controls the transparency when rendering previous agent states, 0 = fully transparent, 100 = not transparent
 
     #render_traj_mode has multiple options and combinations:
     #'traj': dashed line for agent trajectories

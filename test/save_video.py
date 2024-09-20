@@ -141,7 +141,7 @@ def main():
     config["sim_speedup_factor"] = 8
     config["render_traj_freq"] = 10
     config["render_traj_cutoff"] = 55
-    config["render_saving"] = True # This must be set to True to save screenshots and videos
+    config["render_saving"] = False # This must be set to True to save screenshots and videos
 
     config["blue_flag_home"] = [140,40]
     config["red_flag_home"] = [20,40]
