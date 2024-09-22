@@ -1858,27 +1858,27 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     # ]
 
         # visually indicate distances between players of both teams 
-        # assert len(self.agents_of_team) == 2, "If number of teams > 2, update code that draws distance indicator lines"
+        assert len(self.agents_of_team) == 2, "If number of teams > 2, update code that draws distance indicator lines"
 
-        # for blue_player in self.agents_of_team[Team.BLUE_TEAM]:
-        #     if not blue_player.is_tagged or (blue_player.is_tagged and blue_player.on_own_side):
-        #         for red_player in self.agents_of_team[Team.RED_TEAM]:
-        #             if not red_player.is_tagged or (red_player.is_tagged and red_player.on_own_side):
-        #                 blue_player_pos = np.asarray(blue_player.pos)
-        #                 red_player_pos = np.asarray(red_player.pos)
-        #                 a2a_dis = np.linalg.norm(blue_player_pos - red_player_pos)
-        #                 if a2a_dis <= 2*self.catch_radius:
-        #                     hsv_hue = (a2a_dis - self.catch_radius) / (2*self.catch_radius - self.catch_radius)
-        #                     hsv_hue = 0.33 * np.clip(hsv_hue, 0, 1)
-        #                     line_color = tuple(255 * np.asarray(colorsys.hsv_to_rgb(hsv_hue, 0.9, 0.9)))
+        for blue_player in self.agents_of_team[Team.BLUE_TEAM]:
+            if not blue_player.is_tagged or (blue_player.is_tagged and blue_player.on_own_side):
+                for red_player in self.agents_of_team[Team.RED_TEAM]:
+                    if not red_player.is_tagged or (red_player.is_tagged and red_player.on_own_side):
+                        blue_player_pos = np.asarray(blue_player.pos)
+                        red_player_pos = np.asarray(red_player.pos)
+                        a2a_dis = np.linalg.norm(blue_player_pos - red_player_pos)
+                        if a2a_dis <= 2*self.catch_radius:
+                            hsv_hue = (a2a_dis - self.catch_radius) / (2*self.catch_radius - self.catch_radius)
+                            hsv_hue = 0.33 * np.clip(hsv_hue, 0, 1)
+                            line_color = tuple(255 * np.asarray(colorsys.hsv_to_rgb(hsv_hue, 0.9, 0.9)))
 
-        #                     draw.line(
-        #                         self.screen, 
-        #                         line_color,
-        #                         self.world_to_screen(blue_player_pos),
-        #                         self.world_to_screen(red_player_pos),
-        #                         width=self.a2a_line_width
-        #                     )
+                            draw.line(
+                                self.screen, 
+                                line_color,
+                                self.world_to_screen(blue_player_pos),
+                                self.world_to_screen(red_player_pos),
+                                width=self.a2a_line_width
+                            )
 
         # Render
         if self.render_mode == "human":
