@@ -1600,14 +1600,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         """
         if self.screen is None:
             pygame.init()
-            pygame.display.set_caption("Capture the Flag")
             if self.render_mode:
-                pygame.display.init()
-                self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
-                self.isopen = True
                 self.font = pygame.font.SysFont(None, int(2*self.pixel_size*self.agent_radius))
-            elif self.render_mode == "rgb_array":
-                self.screen = pygame.Surface((self.screen_width, self.screen_height))
+                
+                if self.render_mode == "human":
+                    pygame.display.set_caption("Capture the Flag")
+                    self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
+                    self.isopen = True
+                elif self.render_mode == "rgb_array":
+                    self.screen = pygame.Surface((self.screen_width, self.screen_height))
             else:
                 raise Exception(
                     "Sorry, render modes other than 'human' are not supported"
@@ -1908,7 +1909,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     def close(self):
         """Overridden method inherited from `Gym`."""
         if self.screen is not None:
-            pygame.display.quit()
             pygame.quit()
             self.isopen = False
 
