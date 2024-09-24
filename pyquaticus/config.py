@@ -35,18 +35,18 @@ config_dict_std = {
     #note: for polygons, there is an implied edge between (xn, yn) and (x1, y1), to complete the polygon.
 
     # MOOS dynamics parameters
-    "max_speed": MAX_SPEED, # meters / s
-    "speed_factor":   20.0, # multiplicative factor for desired_speed -> desired_thrust
-    "thrust_map": np.array(
-        [[-100, 0, 20, 40, 60, 80, 100], [-2, 0, 1, 2, 3, 5, 5]] # piecewise linear mapping from desired_thrust to speed
+    "max_speed":    MAX_SPEED, # meters / s
+    "speed_factor":      20.0, # multiplicative factor for desired_speed -> desired_thrust
+    "thrust_map":   np.array(  # piecewise linear mapping from desired_thrust to speed
+        [[-100, 0, 20, 40, 60, 80, 100], [-2, 0, 1, 2, 3, 5, 5]]
     ),
-    "max_thrust":  70, # limit on vehicle thrust
-    "max_rudder": 100, # limit on vehicle rudder actuation
-    "turn_loss": 0.85,
-    "turn_rate":   70,
-    "max_acc":      1, # meters / s**2
-    "max_dec":      1, # meters / s**2
-    "oob_speed_frac": 0.5, # proportion
+    "max_thrust":          70, # limit on vehicle thrust
+    "max_rudder":         100, # limit on vehicle rudder actuation
+    "turn_loss":         0.85,
+    "turn_rate":           70,
+    "max_acc":              1, # meters / s**2
+    "max_dec":              1, # meters / s**2
+    "oob_speed_frac":     0.5, # proportion
     "action_type": "discrete", # "discrete" or "continuous"
 
     # Simulation parameters
@@ -60,26 +60,26 @@ config_dict_std = {
     "tag_on_collision": False, # option for setting the agent to a tagged state upon collsion with a boundary or obstacle
 
     # Observation parameters
-    "normalize":    True, # flag for normalizing the observation space.
-    "short_hist_duration": 5 , # amount of previous time incorporated into short term observation buffer
-    "short_hist_jump": 1, # number of steps in between readgins in short term observation buffer
+    "normalize":        True, # flag for normalizing the observation space.
+    "short_hist_duration": 5, # amount of previous time incorporated into short term observation buffer
+    "short_hist_jump":     1, # number of steps in between readgins in short term observation buffer
     "long_hist_duration": 20, # amount of previous time incorporated into long term observation buffer
-    "long_hist_jump": 4, # number of steps in between readgins in short term observation buffer
-    "lidar_obs":   False, # option to use lidar (ray casting model) observations
-    "lidar_range": 200.0, # meters
-    "num_lidar_rays": 64, # number of rays for lidar
-
+    "long_hist_jump":      4, # number of steps in between readgins in short term observation buffer
+    "lidar_obs":       False, # option to use lidar (ray casting model) observations
+    "lidar_range":     200.0, # meters
+    "num_lidar_rays":     64, # number of rays for lidar
     
     # Rendering parameters
-    "render_fps":             30, # target number of frames per second
-    "screen_frac":          0.90, # fraction of max possible pygame screen size to use for rendering
-    "render_agent_ids":    False, # option to render agent id's on agents
-    "render_field_points": False, # option to see the Aquaticus field points in the environment
-    "render_traj_mode":     None, # "traj", "agent", "history", "traj_agent", "traj_history", or None
-    "render_traj_freq":        1, # timesteps
-    "render_traj_cutoff":   None, # max length (timesteps) of the traj to render, or None for no limit
-    "render_lidar_mode":    None, # "full" (all rays), "detection" (only rays that detect something), or None
-    "render_saving":       False, # option to save video of render frames
+    "render_fps":                 30, # target number of frames per second
+    "screen_frac":              0.90, # fraction of max possible pygame screen size to use for rendering
+    "arena_buffer_frac":        0.05, # fraction of environment diagonal length to use as arena buffer
+    "render_agent_ids":        False, # option to render agent id's on agents
+    "render_field_points":     False, # option to see the Aquaticus field points in the environment
+    "render_traj_mode":         None, # "traj", "agent", "history", "traj_agent", "traj_history", or None
+    "render_traj_freq":            1, # timesteps
+    "render_traj_cutoff":       None, # max length (timesteps) of the traj to render, or None for no limit
+    "render_lidar_mode":        None, # "full" (all rays), "detection" (only rays that detect something), or None
+    "render_saving":           False, # option to save video of render frames
     "render_transparency_alpha": 127, # controls the transparency when rendering previous agent states, 0 = fully transparent, 100 = not transparent
 
     #render_traj_mode has multiple options and combinations:

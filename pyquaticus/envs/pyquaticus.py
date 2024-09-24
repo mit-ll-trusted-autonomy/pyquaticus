@@ -1563,6 +1563,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # Rendering parameters
         self.render_fps = config_dict.get("render_fps", config_dict_std["render_fps"])
         self.screen_frac = config_dict.get("screen_frac", config_dict_std["screen_frac"])
+        self.arena_buffer_frac = config_dict.get("arena_buffer_frac", config_dict_std["arena_buffer_frac"])
         self.render_ids = config_dict.get("render_agent_ids", config_dict_std["render_agent_ids"])
         self.render_field_points = config_dict.get("render_field_points", config_dict_std["render_field_points"])
         self.render_traj_mode = config_dict.get("render_traj_mode", config_dict_std["render_traj_mode"])
@@ -1636,7 +1637,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.PYGAME_UP = Vector2((0.0, 1.0))
 
             # pygame screen size
-            self.arena_buffer_frac = 1/20
             arena_buffer = self.arena_buffer_frac * self.env_diag
 
             max_screen_size = get_screen_res()
@@ -1668,22 +1668,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             # miscellaneous
             self.num_renders_per_step = int(self.render_fps * self.tau)
             self.render_boundary_rect = True #standard rectangular boundary
-
-            # check that world size (pixels) does not exceed the screen dimensions
-            world_screen_err_msg = (
-                "Specified env_size with arena_buffer ({} pixels) exceeds the maximum size {} in at least one"
-                " dimension".format(
-                    [
-                        round(2*self.arena_buffer + self.pixel_size * self.env_size[0]),
-                        round(2*self.arena_buffer + self.pixel_size * self.env_size[1])
-                    ],
-                    max_screen_size
-                )
-            )
-            assert (
-                2*self.arena_buffer + self.pixel_size * self.env_size[0] <= max_screen_size[0] and
-                2*self.arena_buffer + self.pixel_size * self.env_size[1] <= max_screen_size[1]
-            ), world_screen_err_msg
 
             # check that time between frames (1/render_fps) is not larger than timestep (tau)
             frame_rate_err_msg = (
