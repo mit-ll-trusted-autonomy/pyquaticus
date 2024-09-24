@@ -131,8 +131,6 @@ def main():
     parser.add_argument('--red-policy', default=None, choices=[], help='Select a red policy to play against.')
     args = parser.parse_args()
 
-    print("Warning: This script requires MOOS to be installed, which is not provided in this github repo")
-
     #Setup for 1 blue player and 1 red player with sparse rewards
     reward_config = {0:None, 1:None}
     #Alternative

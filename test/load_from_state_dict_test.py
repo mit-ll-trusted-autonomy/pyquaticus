@@ -95,6 +95,7 @@ class KeyTest:
             for k in terminated:
                 if terminated[k] == True or truncated[k]==True:
                     time.sleep(1.)
+                    self.env.save_screenshot() # save screenshot of last frame
                     last_obs = copy.deepcopy(self.obs)
                     new_obs = self.env.reset(existing_state = self.env.state)
                     break
@@ -150,6 +151,11 @@ def main():
 
     config["render_agent_ids"] = True
     config["random_init"] = False
+
+    config["render_traj_mode"] = "history"
+    # config["short_hist_duration"] = 100
+    # config["long_hist_jump"] = 6
+    config["render_transparency_alpha"] = 127
     
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
     try:
