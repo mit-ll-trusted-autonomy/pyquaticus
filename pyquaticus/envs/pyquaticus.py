@@ -3301,7 +3301,7 @@ when gps environment bounds are specified in meters")
                 compressed_video_file_name = f"pyquaticus_{video_id}_compressed.mp4"
 
                 compressed_video_file_path = os.path.join(video_file_dir, compressed_video_file_name)
-                subprocess.run(["ffmpeg","-i",video_file_path,"-c:v","libx264",compressed_video_file_path])
+                subprocess.run(["ffmpeg","-loglevel","error","-i",video_file_path,"-c:v","libx264",compressed_video_file_path])
         else:
             print("Attempted to save video but render_buffer is empty!")
             print()
