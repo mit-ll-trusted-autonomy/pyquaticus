@@ -1628,6 +1628,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.env_lr = np.array([self.env_size[0], 0.0])
         self.env_ul = np.array([0.0, self.env_size[1]])
         self.env_ur = np.array(self.env_size)
+        self.env_vertices = np.array([self.env_ll, self.env_lr, self.env_ul, self.env_ur])
         # ll = lower left, lr = lower right
         # ul = upper left, ur = upper right
 
@@ -1703,8 +1704,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         if self.gps_env:
             border_contour, island_contours, land_mask = self._get_topo_geom()
+            print(border_contour)
 
             if border_contour is not None:
+                # border_contours = self._border_contour_to_border_obstacles(border_contour)
+
                 if obstacle_params is None:
                     obstacle_params = {"polygon": []}
                 obstacle_params["polygon"].append(border_contour)
@@ -2553,18 +2557,18 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 flag_perp_vec = np.array([-flag_unit_vec[1], flag_unit_vec[0]])
 
                 #assuming default aquaticus field size ratio drawn on web mercator, these bounds will contain it
-                border_pt1 =  flag_home_blue + (flag_distance/6) * flag_unit_vec + (flag_distance/3) * flag_perp_vec
-                border_pt2 =  flag_home_blue + (flag_distance/6) * flag_unit_vec + (flag_distance/3) * -flag_perp_vec
-                border_pt3 =  flag_home_red + (flag_distance/6) * -flag_unit_vec + (flag_distance/3) * flag_perp_vec
-                border_pt4 =  flag_home_red + (flag_distance/6) * -flag_unit_vec + (flag_distance/3) * -flag_perp_vec
-                border_points = np.array([border_pt1, border_pt2, border_pt3, border_pt4])
+                bounds_pt1 =  flag_home_blue + (flag_distance/6) * flag_unit_vec + (flag_distance/3) * flag_perp_vec
+                bounds_pt2 =  flag_home_blue + (flag_distance/6) * flag_unit_vec + (flag_distance/3) * -flag_perp_vec
+                bounds_pt3 =  flag_home_red + (flag_distance/6) * -flag_unit_vec + (flag_distance/3) * flag_perp_vec
+                bounds_pt4 =  flag_home_red + (flag_distance/6) * -flag_unit_vec + (flag_distance/3) * -flag_perp_vec
+                bounds_points = np.array([bounds_pt1, bounds_pt2, bounds_pt3, bounds_pt4])
 
                 #environment bounds will be in web mercator xy
                 env_bounds = np.zeros((2,2))
-                env_bounds[0][0] = np.min(border_points[:, 0])
-                env_bounds[0][1] = np.min(border_points[:, 1])
-                env_bounds[1][0] = np.max(border_points[:, 0])
-                env_bounds[1][1] = np.max(border_points[:, 1])
+                env_bounds[0][0] = np.min(bounds_points[:, 0])
+                env_bounds[0][1] = np.min(bounds_points[:, 1])
+                env_bounds[1][0] = np.max(bounds_points[:, 0])
+                env_bounds[1][1] = np.max(bounds_points[:, 1])
             else:
                 env_bounds = np.asarray(env_bounds)
 
@@ -2828,7 +2832,7 @@ when gps environment bounds are specified in meters")
             geoc_lat = np.arctan((POLAR_RADIUS / EQUATORIAL_RADIUS)**2 * np.tan(np.deg2rad(lat)))
             small_circle_circum = np.pi * 2 * EQUATORIAL_RADIUS * np.cos(geoc_lat)
 
-            #use most warped (squished) horizontal border to underestimate the number of
+            #use most warped (squished) horizontal environment border to underestimate the number of
             #meters per mercator xy, therefore overestimate how close objects are to one another
             self.meters_per_mercator_xy = small_circle_circum * (lon_diff/360) / self.env_size[0]
             agent_radius /= self.meters_per_mercator_xy
@@ -2884,7 +2888,7 @@ when gps environment bounds are specified in meters")
                     if np.any(env_bounds[1] == 0.):
                         raise Exception("Environment max bounds must be > 0 when specified in meters")
 
-
+            #environment diagonal and vertices
             self.env_diag = np.linalg.norm(self.env_size)
             self.env_bounds_vertices = np.array([
                 env_bounds[0],
@@ -3248,6 +3252,104 @@ when gps environment bounds are specified in meters")
         cnt[:, 1] =  self.env_size[1] * (1 - cnt[:, 1] / (image_shape[0] - 1))
 
         return cnt
+
+    def _border_contour_to_border_obstacles(self, border_cnt):
+        border_pt_inds = np.where(self._on_border(border_cnt))[0]
+
+        if len(border_pt_inds) == 0:
+            return border_cnt
+        else:
+            border_cnt = np.roll(border_cnt, -border_pt_inds[0], axis=0)
+            border_cnt = np.append(border_cnt, [border_cnt[0]], axis=0)
+
+            contours = []
+            current_cnt = []
+            current_cnt_border_pts = 0
+            for i, pt in enumerate(border_cnt):
+                current_cnt.append(pt)
+                n_cnt_border_points += self._on_border(pt)
+                if current_cnt_border_pts == 2
+                    if len(current_cnt) > 2:
+                        # contour start wall
+                        cnt_start_borders = self._on_which_border(current_cnt[0])
+                        if len(cnt_start_borders) == 2:
+                            if 3 in cnt_start_borders and 0 in cnt_start_borders:
+                                #moving counterclockwise wall 0 comes after wall 3
+                                cnt_start_border = 0
+                            else:
+                                cnt_start_border = max(cnt_start_borders)
+                        else:
+                            cnt_start_border = cnt_start_borders[0]
+
+                        # contour end wall
+                        cnt_end_borders = self._on_which_border(current_cnt[-1])
+                        if len(cnt_end_borders) == 2:
+                            if 3 in cnt_end_borders and 0 in cnt_end_borders:
+                                #moving counterclockwise wall 0 comes after wall 3
+                                cnt_end_border = 0
+                            else:
+                                cnt_end_border = max(cnt_end_borders)
+                        else:
+                            cnt_end_border = cnt_end_borders[0]
+
+                        # add boundary vertices if necessary
+                        if cnt_start_border != cnt_end_border:
+                            missing_borders = []
+                            current_border = cnt_start_border
+                            while current_border != cnt_end_border:
+                                missing_borders.append(current_border)
+                                current_border = (current_border + 1) % 4
+
+                            for j in missing_borders:
+                                current_cnt.insert()
+
+                        contours.append(np.array(current_cnt))
+
+
+
+
+
+                    
+
+                    #next border contour
+                    current_cnt = [p]
+                        
+
+
+
+
+                current_cnt.append(p)
+
+        # self.env_ll = np.array([0.0, 0.0])
+        # self.env_lr = np.array([self.env_size[0], 0.0])
+        # self.env_ul = np.array([0.0, self.env_size[1]])
+        # self.env_ur = np.array(self.env_size)
+
+    def _on_border(self, p):
+        """p can be a single point or multiple points"""
+        p = np.asarray(p)
+        return np.any(p == 0, axis=-1) | np.any(p == self.env_size, axis=-1)
+
+    def _on_which_border(self, p):
+        """
+        p can be a single point or multiple points
+        
+        Wall convention:
+         _____________ 3 _____________
+        |                             |
+        |                             |
+        |                             |
+        0                             2
+        |                             |
+        |                             |
+        |_____________ 1 _____________|
+
+        """
+        p = np.asarray(p)
+        p_borders_bool = np.hstack((p==0, p==self.env_size))
+        p_borders = [np.where(pt_borders_bool)[0] for pt_borders_bool in p_borders_bool]
+
+        return p_borders
 
     def _generate_segments_from_obstacles(self, obstacle, n_quad_segs):
         if isinstance(obstacle, PolygonObstacle):
