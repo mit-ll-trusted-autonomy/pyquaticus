@@ -1626,9 +1626,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # Environment corners
         self.env_ll = np.array([0.0, 0.0])
         self.env_lr = np.array([self.env_size[0], 0.0])
-        self.env_ul = np.array([0.0, self.env_size[1]])
         self.env_ur = np.array(self.env_size)
-        self.env_vertices = np.array([self.env_ll, self.env_lr, self.env_ul, self.env_ur])
+        self.env_ul = np.array([0.0, self.env_size[1]])
+        self.env_vertices = np.array([self.env_ll, self.env_lr, self.env_ur, self.env_ul])
         # ll = lower left, lr = lower right
         # ul = upper left, ur = upper right
 
@@ -1704,15 +1704,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         if self.gps_env:
             border_contour, island_contours, land_mask = self._get_topo_geom()
-            print(border_contour)
 
             if border_contour is not None:
-                # border_contours = self._border_contour_to_border_obstacles(border_contour)
-
+                border_contours = self._border_contour_to_border_obstacles(border_contour)
                 if obstacle_params is None:
                     obstacle_params = {"polygon": []}
-                obstacle_params["polygon"].append(border_contour)
-                self.render_boundary_rect = False
+                obstacle_params["polygon"].extend(border_contours)
 
             if len(island_contours) > 0:
                 if obstacle_params is None:
@@ -1746,23 +1743,23 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         elif obstacle_params is not None:
             raise TypeError(f"Expected obstacle_params to be None or a dict, not {type(obstacle_params)}")
 
-        if "polygon" in self.obstacle_geoms.keys():
-            trimmed_line_segments = []
-            obst_geoms_polygon_segs = self.obstacle_geoms["polygon"]
+        # if "polygon" in self.obstacle_geoms.keys():
+        #     trimmed_line_segments = []
+        #     obst_geoms_polygon_segs = self.obstacle_geoms["polygon"]
 
-            for line_segment in obst_geoms_polygon_segs:
-                p1 = line_segment[0]
-                p2 = line_segment[1]
+        #     for line_segment in obst_geoms_polygon_segs:
+        #         p1 = line_segment[0]
+        #         p2 = line_segment[1]
 
-                if not ((p1[0]==p2[0] and (p1[0] == 0 or p1[0] == self.env_size[0])) or (p1[1]==p2[1] and (p1[1] == 0 or p1[1] == self.env_size[1]))):
-                    trimmed_line_segments.append(line_segment)
+        #         if not ((p1[0]==p2[0] and (p1[0] == 0 or p1[0] == self.env_size[0])) or (p1[1]==p2[1] and (p1[1] == 0 or p1[1] == self.env_size[1]))):
+        #             trimmed_line_segments.append(line_segment)
 
-            self.obstacle_geoms["polygon"] = trimmed_line_segments
-            self.obstacle_geoms["polygon"] = np.asarray(self.obstacle_geoms["polygon"])
+        #     self.obstacle_geoms["polygon"] = trimmed_line_segments
+        #     self.obstacle_geoms["polygon"] = np.asarray(self.obstacle_geoms["polygon"])
 
-            # if there are no line segments left in polygon, remove it from the dict
-            if self.obstacle_geoms["polygon"].shape[0] == 0:
-                self.obstacle_geoms.pop("polygon",None)
+        #     # if there are no line segments left in polygon, remove it from the dict
+        #     if self.obstacle_geoms["polygon"].shape[0] == 0:
+        #         self.obstacle_geoms.pop("polygon",None)
 
         # Adjust scrimmage line
         scrim_seg = LineString(self.scrimmage_coords)
@@ -1771,7 +1768,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             poly_obstacle = obstacle_params.get("polygon", None)
             if poly_obstacle is not None:
                 scrim_int_segs = [(p, param[(i+1) % len(param)]) for param in poly_obstacle for i, p in enumerate(param)]
-        if border_contour is None:
+        if border_contour is None: #need to fix this so out of bounds segments are not considered (should bring back the border polys and check against those)
             scrim_int_segs.extend([
                 [self.env_ll, self.env_lr],
                 [self.env_lr, self.env_ur],
@@ -1885,8 +1882,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 )
                 ray_int_segments.extend(segments)
 
-            self.ray_int_segments = np.asarray(ray_int_segments)
-            self.ray_int_seg_labels = np.asarray(ray_int_seg_labels)
+            #arrays
+            self.ray_int_segments = np.array(ray_int_segments)
+            self.ray_int_seg_labels = np.array(ray_int_seg_labels)
 
             #agent ray self intersection mask
             agent_int_seg_mask = np.ones((self.num_agents, len(self.ray_int_seg_labels)), dtype=bool)
@@ -3257,18 +3255,17 @@ when gps environment bounds are specified in meters")
         border_pt_inds = np.where(self._on_border(border_cnt))[0]
 
         if len(border_pt_inds) == 0:
-            return border_cnt
+            return [border_cnt]
         else:
-            border_cnt = np.roll(border_cnt, -border_pt_inds[0], axis=0)
-            border_cnt = np.append(border_cnt, [border_cnt[0]], axis=0)
+            border_cnt = np.roll(border_cnt, -(border_pt_inds[0] + 1), axis=0)
 
             contours = []
-            current_cnt = []
-            current_cnt_border_pts = 0
+            current_cnt = [border_cnt[-1]]
+            current_cnt_border_pts = 1
             for i, pt in enumerate(border_cnt):
                 current_cnt.append(pt)
                 n_cnt_border_points += self._on_border(pt)
-                if current_cnt_border_pts == 2
+                if current_cnt_border_pts == 2:
                     if len(current_cnt) > 2:
                         # contour start wall
                         cnt_start_borders = self._on_which_border(current_cnt[0])
@@ -3301,29 +3298,15 @@ when gps environment bounds are specified in meters")
                                 current_border = (current_border + 1) % 4
 
                             for j in missing_borders:
-                                current_cnt.insert()
+                                current_cnt.insert(0, self.env_vertices[j])
 
                         contours.append(np.array(current_cnt))
 
-
-
-
-
-                    
-
                     #next border contour
-                    current_cnt = [p]
-                        
+                    current_cnt = [pt]
+                    n_cnt_border_points = 1
 
-
-
-
-                current_cnt.append(p)
-
-        # self.env_ll = np.array([0.0, 0.0])
-        # self.env_lr = np.array([self.env_size[0], 0.0])
-        # self.env_ul = np.array([0.0, self.env_size[1]])
-        # self.env_ur = np.array(self.env_size)
+            return contours
 
     def _on_border(self, p):
         """p can be a single point or multiple points"""
