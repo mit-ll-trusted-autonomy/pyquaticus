@@ -789,7 +789,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             agent_id: self.get_agent_action_space() for agent_id in self.players
         }
 
-        self.agent_obs_normalizer,self.global_obs_normalizer = self._register_state_elements(team_size, len(self.obstacles))
+        self.agent_obs_normalizer, self.global_obs_normalizer = self._register_state_elements(team_size, len(self.obstacles))
         self.observation_spaces = {
             agent_id: self.get_agent_observation_space() for agent_id in self.players
         }
@@ -810,8 +810,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.render_buffer = []
         self.traj_render_buffer = {}
 
-        # create background pygame surface (for faster rendering)
-        self.create_background_image()
+        if self.render_mode:
+            self.create_background_image() #create background pygame surface (for faster rendering)
 
     def seed(self, seed=None):
         """
@@ -1555,10 +1555,17 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.normalize = config_dict.get("normalize", config_dict_std["normalize"])
         self.lidar_obs = config_dict.get("lidar_obs", config_dict_std["lidar_obs"])
         self.num_lidar_rays = config_dict.get("num_lidar_rays", config_dict_std["num_lidar_rays"])
-        self.short_hist_duration = config_dict.get("short_hist_duration", config_dict_std["short_hist_duration"])
-        self.short_hist_jump = config_dict.get("short_hist_jump", config_dict_std["short_hist_jump"])
-        self.long_hist_duration = config_dict.get("long_hist_duration", config_dict_std["long_hist_duration"])
-        self.long_hist_jump = config_dict.get("long_hist_jump", config_dict_std["long_hist_jump"])
+        self.short_hist_length = config_dict.get("short_hist_length", config_dict_std["short_hist_length"])
+        self.short_hist_interval = config_dict.get("short_hist_interval", config_dict_std["short_hist_interval"])
+        self.long_hist_length = config_dict.get("long_hist_length", config_dict_std["long_hist_length"])
+        self.long_hist_interval = config_dict.get("long_hist_interval", config_dict_std["long_hist_interval"])
+
+        short_hist_buffer_inds = np.arange(0, self.short_hist_length*self.short_hist_interval, self.short_hist_interval)
+        long_hist_buffer_inds = np.arange(0, self.long_hist_length*self.long_hist_interval, self.long_hist_interval)
+        self.hist_buffer_inds = np.unique(np.concatenate((short_hist_buffer_inds, long_hist_buffer_inds))) #indices of history buffer corresponding to history entries
+
+        self.hist_len = len(self.hist_buffer_inds)
+        self.hist_buffer_len = self.hist_buffer_inds[-1]
 
         # Rendering parameters
         self.render_fps = config_dict.get("render_fps", config_dict_std["render_fps"])
@@ -1743,40 +1750,19 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         elif obstacle_params is not None:
             raise TypeError(f"Expected obstacle_params to be None or a dict, not {type(obstacle_params)}")
 
-        # if "polygon" in self.obstacle_geoms.keys():
-        #     trimmed_line_segments = []
-        #     obst_geoms_polygon_segs = self.obstacle_geoms["polygon"]
-
-        #     for line_segment in obst_geoms_polygon_segs:
-        #         p1 = line_segment[0]
-        #         p2 = line_segment[1]
-
-        #         if not ((p1[0]==p2[0] and (p1[0] == 0 or p1[0] == self.env_size[0])) or (p1[1]==p2[1] and (p1[1] == 0 or p1[1] == self.env_size[1]))):
-        #             trimmed_line_segments.append(line_segment)
-
-        #     self.obstacle_geoms["polygon"] = trimmed_line_segments
-        #     self.obstacle_geoms["polygon"] = np.asarray(self.obstacle_geoms["polygon"])
-
-        #     # if there are no line segments left in polygon, remove it from the dict
-        #     if self.obstacle_geoms["polygon"].shape[0] == 0:
-        #         self.obstacle_geoms.pop("polygon",None)
-
         # Adjust scrimmage line
-        scrim_seg = LineString(self.scrimmage_coords)
-        scrim_int_segs = []
-        if obstacle_params is not None:
-            poly_obstacle = obstacle_params.get("polygon", None)
-            if poly_obstacle is not None:
-                scrim_int_segs = [(p, param[(i+1) % len(param)]) for param in poly_obstacle for i, p in enumerate(param)]
-        if border_contour is None: #need to fix this so out of bounds segments are not considered (should bring back the border polys and check against those)
-            scrim_int_segs.extend([
-                [self.env_ll, self.env_lr],
-                [self.env_lr, self.env_ur],
-                [self.env_ur, self.env_ul],
-                [self.env_ul, self.env_ll]
-            ])
+        if border_contour is None:
+            scrim_int_segs = [
+                (self.env_ll, self.env_lr),
+                (self.env_lr, self.env_ur),
+                (self.env_ur, self.env_ul),
+                (self.env_ul, self.env_ll)
+            ]
+        else:
+            scrim_int_segs = [(p, border_contour[(i+1) % len(border_contour)]) for i, p in enumerate(border_contour)]
 
         scrim_ints = []
+        scrim_seg = LineString(self.scrimmage_coords)
         for seg in scrim_int_segs:
             seg_int = intersection(scrim_seg, LineString(seg))
             if not seg_int.is_empty:
@@ -1827,29 +1813,20 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 (label[: label.find("_")] if label[-1].isnumeric() else label): [] for label in ray_int_label_names
             }
 
-            #boundary
-            if self.gps_env:
-                if border_contour is None:
-                    ray_int_segments.extend([
-                        [*self.env_ll, *self.env_lr],
-                        [*self.env_lr, *self.env_ur],
-                        [*self.env_ur, *self.env_ul],
-                        [*self.env_ul, *self.env_ll]
-                    ])
-                    ray_int_seg_labels.extend(4 * [self.ray_int_label_map["obstacle"]])
-                    self.seg_label_type_to_inds["obstacle"].extend(np.arange(4))
-            else:
-                ray_int_segments.extend([
-                    [*self.env_ll, *self.env_lr],
-                    [*self.env_lr, *self.env_ur],
-                    [*self.env_ur, *self.env_ul],
-                    [*self.env_ul, *self.env_ll]
-                ])
-                ray_int_seg_labels.extend(4 * [self.ray_int_label_map["obstacle"]])
-                self.seg_label_type_to_inds["obstacle"].extend(np.arange(4))
+            #boundaries
+            ray_int_segments.extend([
+                [*self.env_ll, *self.env_lr],
+                [*self.env_lr, *self.env_ur],
+                [*self.env_ur, *self.env_ul],
+                [*self.env_ul, *self.env_ll]
+            ])
+            ray_int_seg_labels.extend(4 * [self.ray_int_label_map["obstacle"]])
+            self.seg_label_type_to_inds["obstacle"].extend(np.arange(4))
 
             #obstacles
-            obstacle_segments = [segment for obstacle in self.obstacles for segment in self._generate_segments_from_obstacles(obstacle, n_quad_segs)]
+            obstacle_segments = [
+                segment for obstacle in self.obstacles for segment in self._generate_segments_from_obstacles(obstacle, n_quad_segs) if not self._segment_on_border(segment)
+            ]
             ray_int_seg_labels.extend(
                 len(obstacle_segments) * [self.ray_int_label_map["obstacle"]]
             )
@@ -1902,7 +1879,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     
     def create_background_image(self):
         """"Creates pygame surface with static objects for faster rendering."""
-        pygame.init() # needed to import pygame fonts
+        pygame.font.init() # needed to import pygame fonts
 
         if self.gps_env:
             pygame_background_img = pygame.surfarray.make_surface(
@@ -2170,9 +2147,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             agent_positions, agent_spd_hdg, agent_on_sides = self._generate_agent_starts(flag_locations)
 
-            self.obs_buffer_len = floor(self.short_hist_duration/self.short_hist_jump) + floor(self.long_hist_duration/self.long_hist_jump)
-            self.obs_hist_len = max(self.short_hist_duration,self.long_hist_duration)
-
             self.state = {
                 "agent_position": agent_positions,
                 "prev_agent_position": copy.deepcopy(agent_positions),
@@ -2182,11 +2156,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 "flag_home": copy.deepcopy(flag_locations),
                 "flag_locations": copy.deepcopy(flag_locations),
                 "flag_taken": np.zeros(len(self.flags)),
-                "team_flag_pickup": np.array([False,False]),
+                "team_flag_pickup": np.zeros(len(self.agents_of_team)),
                 "current_time": 0.0,
-                "agent_captures": np.array([
-                    None
-                ] * self.num_agents),  # whether this agent tagged something
+                "agent_captures": np.array([None] * self.num_agents),  # whether this agent tagged something
                 "agent_tagged": np.array([0] * self.num_agents),  # if this agent was tagged
                 "agent_oob": np.array([0] * self.num_agents),  # if this agent went out of bounds
                 "agent_tagging_cooldown" : np.array([self.tagging_cooldown] * self.num_agents),
@@ -2194,22 +2166,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 "lidar_labels": dict(),
                 "lidar_ends": dict(),
                 "lidar_distances": dict(),
-                "captures": np.array([0,0]), # [blue_captures, red_captures]
-                "tags": np.array([0,0]), # [blue_tags, red_tags]
-                "grabs": np.array([0,0]), # [blue_grabs, red_grabs]
-                "obs_history" : dict(), ## see the obs dict for how to do this
-                "global_obs_history" : np.zeros((self.obs_hist_len,11*self.num_agents+12))
+                "captures": np.zeros(len(self.agents_of_team)),
+                "tags": np.array(len(self.agents_of_team)),
+                "grabs": np.array(len(self.agents_of_team)),
+                "obs_history" : dict(),
+                "global_obs_history" : np.zeros((self.hist_len, 11*self.num_agents+12)) #TODO: make calculation automatic
             }
 
             self.current_time = 0
-
-            #blue_captures: number of times the blue team has grabbed (picked up) red's flag and brought it back to the blue side
-            #blue_tags: number of times the blue team successfully tagged an opponent
-            #blue_grabs: number of times the blue team grabbed (picked up) the opponents flag
-            #red_captures: number of times the red team has grabbed blue's flag and brought it back to the red side
-            #red_tags: number of times the blue team successfully tagged an opponent
-            #red_grabs: number of times the blue team grabbed (picked up) the opponents flag
-
 
             agent_ids = list(self.players.keys())
 
@@ -2258,11 +2222,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if existing_state is None:
             for player in self.players.values():
                 if self.normalize:
-                    self.state["obs_history"][player.id] = np.zeros((self.obs_hist_len,reset_obs[player.id].shape[0]))
-                    self.obs_buffer[player.id] = np.zeros((self.obs_buffer_len,reset_obs[player.id].shape[0]))
+                    self.state["obs_history"][player.id] = np.zeros((self.hist_len, reset_obs[player.id].shape[0]))
+                    self.obs_buffer[player.id] = np.zeros((self.hist_buffer_len, reset_obs[player.id].shape[0]))
                 else:
-                    self.state["obs_history"][player.id] = [0]*self.obs_hist_len
-                    self.obs_buffer[player.id] = [0]*self.obs_buffer_len
+                    self.state["obs_history"][player.id] = [0]*self.hist_len
+                    self.obs_buffer[player.id] = [0]*self.hist_buffer_len
         
         return reset_obs
 
@@ -3252,7 +3216,7 @@ when gps environment bounds are specified in meters")
         return cnt
 
     def _border_contour_to_border_obstacles(self, border_cnt):
-        border_pt_inds = np.where(self._on_border(border_cnt))[0]
+        border_pt_inds = np.where(self._point_on_border(border_cnt))[0]
 
         if len(border_pt_inds) == 0:
             return [border_cnt]
@@ -3262,13 +3226,13 @@ when gps environment bounds are specified in meters")
             contours = []
             current_cnt = [border_cnt[-1]]
             current_cnt_border_pts = 1
-            for i, pt in enumerate(border_cnt):
-                current_cnt.append(pt)
-                n_cnt_border_points += self._on_border(pt)
+            for i, p in enumerate(border_cnt):
+                current_cnt.append(p)
+                n_cnt_border_points += self._point_on_border(p)
                 if current_cnt_border_pts == 2:
                     if len(current_cnt) > 2:
                         # contour start wall
-                        cnt_start_borders = self._on_which_border(current_cnt[0])
+                        cnt_start_borders = self._point_on_which_border(current_cnt[0])
                         if len(cnt_start_borders) == 2:
                             if 3 in cnt_start_borders and 0 in cnt_start_borders:
                                 #moving counterclockwise wall 0 comes after wall 3
@@ -3279,7 +3243,7 @@ when gps environment bounds are specified in meters")
                             cnt_start_border = cnt_start_borders[0]
 
                         # contour end wall
-                        cnt_end_borders = self._on_which_border(current_cnt[-1])
+                        cnt_end_borders = self._point_on_which_border(current_cnt[-1])
                         if len(cnt_end_borders) == 2:
                             if 3 in cnt_end_borders and 0 in cnt_end_borders:
                                 #moving counterclockwise wall 0 comes after wall 3
@@ -3303,17 +3267,17 @@ when gps environment bounds are specified in meters")
                         contours.append(np.array(current_cnt))
 
                     #next border contour
-                    current_cnt = [pt]
+                    current_cnt = [p]
                     n_cnt_border_points = 1
 
             return contours
 
-    def _on_border(self, p):
+    def _point_on_border(self, p):
         """p can be a single point or multiple points"""
         p = np.asarray(p)
         return np.any(p == 0, axis=-1) | np.any(p == self.env_size, axis=-1)
 
-    def _on_which_border(self, p):
+    def _point_on_which_border(self, p):
         """
         p can be a single point or multiple points
         
@@ -3329,10 +3293,17 @@ when gps environment bounds are specified in meters")
 
         """
         p = np.asarray(p)
-        p_borders_bool = np.hstack((p==0, p==self.env_size))
+        p_borders_bool = np.concatenate((p==0, p==self.env_size), axis=-1)
         p_borders = [np.where(pt_borders_bool)[0] for pt_borders_bool in p_borders_bool]
 
         return p_borders
+
+    def _segment_on_border(self, segment):
+        p1_borders, p2_borders = _point_on_which_border(segment)
+        same_border = len(np.intersect1d(p1_borders, p2_borders, assume_unique=True)) > 0
+        
+        return same_border
+
 
     def _generate_segments_from_obstacles(self, obstacle, n_quad_segs):
         if isinstance(obstacle, PolygonObstacle):
@@ -3376,17 +3347,19 @@ when gps environment bounds are specified in meters")
 
         Draws all players/flags/etc on the pygame screen.
         """
+        # Create screen
         if self.screen is None:
-            #create screen
             pygame.init()
-            pygame.display.set_caption("Capture The Flag")
-            if self.render_mode == "human":
-                pygame.display.init()
-                self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
-                self.isopen = True
-                self.agent_id_font = pygame.font.SysFont(None, int(2*self.agent_render_radius))
-            elif self.render_mode == "rgb_array":
-                self.screen = pygame.Surface((self.screen_width, self.screen_height))
+
+            if self.render_mode:
+                self.agent_font = pygame.font.SysFont(None, int(2*self.agent_render_radius))
+
+                if self.render_mode == "human":
+                    pygame.display.set_caption("Capture The Flag")
+                    self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
+                    self.isopen = True
+                elif self.render_mode == "rgb_array":
+                    self.screen = pygame.Surface((self.screen_width, self.screen_height))            
             else:
                 raise Exception(
                     f"Sorry, render modes other than f{self.metadata['render_modes']} are not supported"
@@ -3401,15 +3374,10 @@ when gps environment bounds are specified in meters")
         # Background
         self.screen.blit(self.pygame_background_img, (0, 0))
 
-        # Flags and players
-        rotated_surfaces = []
-        rotated_blit_positions = []
-
+        # Flags
         for team in Team:
             flag = self.flags[int(team)]
-            teams_players = self.agents_of_team[team]
             color = "blue" if team == Team.BLUE_TEAM else "red"
-            opp_color = "red" if team == Team.BLUE_TEAM else "blue"
 
             # team flag (not picked up)
             if not self.state["flag_taken"][int(team)]:
@@ -3438,7 +3406,61 @@ when gps environment bounds are specified in meters")
                 width=self.boundary_width,
             )
 
-            # players
+        # Trajectories
+        if self.render_traj_mode
+            #traj
+            if self.render_traj_mode.startswith("traj"):
+                for team in Team:
+                    teams_players = self.agents_of_team[team]
+                    color = "blue" if team == Team.BLUE_TEAM else "red"
+
+                    for player in teams_players:
+                        for prev_blit_pos in reversed(self.traj_render_buffer[player.id]['traj']):
+                            draw.circle(
+                                self.screen,
+                                color,
+                                prev_blit_pos,
+                                radius=2,
+                                width=0
+                            )
+            #agent
+            if self.render_traj_mode.endswith("agent"):
+                for i in range(len(self.traj_render_buffer[self.players[0]]['agent'])):
+                    for agent_id in self.players:
+                        for prev_rot_blit_pos, prev_agent_surf in reversed(self.traj_render_buffer[player.id]['agent']):
+                            prev_agent_surf.set_alpha(self.render_transparency_alpha)
+                            self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
+            #history
+            elif self.render_traj_mode.endswith("history"):
+                short_hist_points_blit = self.traj_render_buffer[player.id]['history'][
+                    0 : self.short_hist_duration : self.short_hist_jump
+                ]
+                long_hist_points_blit = self.traj_render_buffer[player.id]['history'][
+                    self.long_hist_jump : self.long_hist_duration + self.long_hist_jump : self.long_hist_jump
+                ]
+                short_hist_points_blit_positions = [short_hist_entry[0] for short_hist_entry in short_hist_points_blit]
+                num_prev_points_to_render = len(short_hist_points_blit) + len(long_hist_points_blit)
+
+                for i,(prev_rot_blit_pos, prev_agent_surf) in enumerate(reversed(short_hist_points_blit)):
+                    render_tranparency = self.render_transparency_alpha + (255-self.render_transparency_alpha) * (i+len(long_hist_points_blit)+1)/(num_prev_points_to_render+1)
+                    prev_agent_surf.set_alpha(render_tranparency)
+                    self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
+
+                for i,(prev_rot_blit_pos, prev_agent_surf) in enumerate(reversed(long_hist_points_blit)):
+                    if np.any(prev_rot_blit_pos == short_hist_points_blit_positions): # avoid double plotting overlapping elements
+                        continue
+                    render_tranparency = self.render_transparency_alpha + (255-self.render_transparency_alpha) * (i+1)/(num_prev_points_to_render+1)
+                    prev_agent_surf.set_alpha(render_tranparency)
+                    self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
+
+
+
+        # Players
+        for team in Team:
+            teams_players = self.agents_of_team[team]
+            color = "blue" if team == Team.BLUE_TEAM else "red"
+            opp_color = "red" if team == Team.BLUE_TEAM else "blue"
+
             for player in teams_players:
                 blit_pos = self.env_to_screen(player.pos)
 
@@ -3461,18 +3483,24 @@ when gps environment bounds are specified in meters")
                             self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
                     #history
                     elif self.render_traj_mode.endswith("history"):
-                        short_hist_points_blit = self.traj_render_buffer[player.id]['history'][0:self.short_hist_duration:self.short_hist_jump]
-                        long_hist_points_blit = self.traj_render_buffer[player.id]['history'][self.long_hist_jump:self.long_hist_duration+self.long_hist_jump:self.long_hist_jump]
+                        short_hist_points_blit = self.traj_render_buffer[player.id]['history'][
+                            0 : self.short_hist_duration : self.short_hist_jump
+                        ]
+                        long_hist_points_blit = self.traj_render_buffer[player.id]['history'][
+                            self.long_hist_jump : self.long_hist_duration + self.long_hist_jump : self.long_hist_jump
+                        ]
                         short_hist_points_blit_positions = [short_hist_entry[0] for short_hist_entry in short_hist_points_blit]
                         num_prev_points_to_render = len(short_hist_points_blit) + len(long_hist_points_blit)
+
                         for i,(prev_rot_blit_pos, prev_agent_surf) in enumerate(reversed(short_hist_points_blit)):
-                            render_tranparency = self.render_transparency_alpha+(255-self.render_transparency_alpha)*(i+len(long_hist_points_blit)+1)/(num_prev_points_to_render+1)
+                            render_tranparency = self.render_transparency_alpha + (255-self.render_transparency_alpha) * (i+len(long_hist_points_blit)+1)/(num_prev_points_to_render+1)
                             prev_agent_surf.set_alpha(render_tranparency)
                             self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
+
                         for i,(prev_rot_blit_pos, prev_agent_surf) in enumerate(reversed(long_hist_points_blit)):
                             if np.any(prev_rot_blit_pos == short_hist_points_blit_positions): # avoid double plotting overlapping elements
                                 continue
-                            render_tranparency = self.render_transparency_alpha+(255-self.render_transparency_alpha)*(i+1)/(num_prev_points_to_render+1)
+                            render_tranparency = self.render_transparency_alpha + (255-self.render_transparency_alpha) * (i+1)/(num_prev_points_to_render+1)
                             prev_agent_surf.set_alpha(render_tranparency)
                             self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
 
@@ -3524,15 +3552,13 @@ when gps environment bounds are specified in meters")
                     else:
                         font_color = "white" if team == Team.BLUE_TEAM else "black"
 
-                    player_number_label = self.agent_id_font.render(str(player.id), True, font_color)
+                    player_number_label = self.agent_font.render(str(player.id), True, font_color)
                     player_number_label_rect = player_number_label.get_rect()
                     player_number_label_rect.center = (0.5*rotated_surface_size[0],0.52*rotated_surface_size[1]) # Using 0.52 for the y-coordinate because it looks nicer than 0.5
                     rotated_surface.blit(player_number_label, player_number_label_rect)
 
                 #blit agent onto screen
-                # self.screen.blit(rotated_surface, rotated_blit_pos)
-                rotated_surfaces.append(rotated_surface)
-                rotated_blit_positions.append(rotated_blit_pos)
+                self.screen.blit(rotated_surface, rotated_blit_pos)
 
                 #save agent surface for trajectory rendering
                 if (
@@ -3566,18 +3592,10 @@ when gps environment bounds are specified in meters")
                                 ) <= self.render_traj_cutoff
                             )
                         )
-                        self.traj_render_buffer[player.id]['traj'] = self.traj_render_buffer[player.id]['traj'][
-                            : self.render_traj_cutoff
-                        ]
-                        self.traj_render_buffer[player.id]['agent'] = self.traj_render_buffer[player.id]['agent'][
-                            : agent_render_cutoff
-                        ]
-                    self.traj_render_buffer[player.id]['history'] = self.traj_render_buffer[player.id]['history'][
-                        : self.obs_hist_len
-                    ]
-            
-        for i in range(self.num_agents):
-            self.screen.blit(rotated_surfaces[i], rotated_blit_positions[i])
+                        self.traj_render_buffer[player.id]['traj'] = self.traj_render_buffer[player.id]['traj'][ :self.render_traj_cutoff]
+                        self.traj_render_buffer[player.id]['agent'] = self.traj_render_buffer[player.id]['agent'][ :agent_render_cutoff]
+
+                    self.traj_render_buffer[player.id]['history'] = self.traj_render_buffer[player.id]['history'][: self.hist_len]
 
         # Agent-to-agent distances
         for blue_player in self.agents_of_team[Team.BLUE_TEAM]:

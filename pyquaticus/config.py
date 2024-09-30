@@ -61,13 +61,13 @@ config_dict_std = {
 
     # Observation parameters
     "normalize":        True, # flag for normalizing the observation space.
-    "short_hist_duration": 5, # amount of previous time incorporated into short term observation buffer
-    "short_hist_jump":     1, # number of steps in between readgins in short term observation buffer
-    "long_hist_duration": 20, # amount of previous time incorporated into long term observation buffer
-    "long_hist_jump":      4, # number of steps in between readgins in short term observation buffer
+    "short_hist_length":   1, # number of timesteps to include for the short-term history
+    "short_hist_interval": 1, # number of steps in between entries in the short-term history
+    "long_hist_duration":  1, # number of timesteps to include for the long-term history
+    "long_hist_interval":      4, # number of steps in between entries in the long-term history
     "lidar_obs":       False, # option to use lidar (ray casting model) observations
     "lidar_range":     200.0, # meters
-    "num_lidar_rays":     64, # number of rays for lidar
+    "num_lidar_rays":     50, # number of rays for lidar
     
     # Rendering parameters
     "render_fps":                 30, # target number of frames per second
@@ -80,7 +80,7 @@ config_dict_std = {
     "render_traj_cutoff":       None, # max length (timesteps) of the traj to render, or None for no limit
     "render_lidar_mode":        None, # "full" (all rays), "detection" (only rays that detect something), or None
     "render_saving":           False, # option to save video of render frames
-    "render_transparency_alpha": 127, # controls the transparency when rendering previous agent states, 0 = fully transparent, 100 = not transparent
+    "render_transparency_alpha": 127, # controls the transparency when rendering previous agent states, 0 = fully transparent, 255 = fully opaque
 
     #render_traj_mode has multiple options and combinations:
     #'traj': dashed line for agent trajectories
