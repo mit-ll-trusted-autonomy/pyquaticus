@@ -63,8 +63,8 @@ config_dict_std = {
     "normalize":        True, # flag for normalizing the observation space.
     "short_hist_length":   1, # number of timesteps to include for the short-term history
     "short_hist_interval": 1, # number of steps in between entries in the short-term history
-    "long_hist_duration":  1, # number of timesteps to include for the long-term history
-    "long_hist_interval":      4, # number of steps in between entries in the long-term history
+    "long_hist_length":  1, # number of timesteps to include for the long-term history
+    "long_hist_interval":  4, # number of steps in between entries in the long-term history
     "lidar_obs":       False, # option to use lidar (ray casting model) observations
     "lidar_range":     200.0, # meters
     "num_lidar_rays":     50, # number of rays for lidar

@@ -97,7 +97,7 @@ class KeyTest:
                     time.sleep(1.)
                     self.env.save_screenshot() # save screenshot of last frame
                     last_obs = copy.deepcopy(self.obs)
-                    new_obs = self.env.reset(existing_state = self.env.state)
+                    new_obs = self.env.reset(state_dict = self.env.state)
                     break
 
     def process_event(self, quittable):
