@@ -1581,7 +1581,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.render_transparency_alpha = config_dict.get("render_transparency_alpha", config_dict_std["render_transparency_alpha"])
 
         # agent spawn parameters
-        self.random_init = config_dict.get("random_init", config_dict_std["random_init"])
+        self.random_init = config_dict.get("random_init", config_dict_std["random_init"]) #TODO: change to default init and raise warning if GPS mode is used
 
         # Miscellaneous parameters
         if config_dict.get("suppress_numpy_warnings", config_dict_std["suppress_numpy_warnings"]):
