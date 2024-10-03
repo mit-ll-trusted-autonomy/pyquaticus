@@ -191,7 +191,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
     def _register_state_elements(self, num_on_team, num_obstacles):
         """Initializes the normalizers."""
         agent_obs_normalizer = ObsNormalizer(False)
-        global_obs_normalizer = ObsNormalizer(False)
+        global_state_normalizer = ObsNormalizer(False)
         if self.lidar_obs:
             max_bearing = [180]
             max_dist_scrimmage = [self.env_diag]
@@ -216,11 +216,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             agent_obs_normalizer.register("ray_labels", self.num_lidar_rays * [len(LIDAR_DETECTION_CLASS_MAP) - 1])
         else:
             max_bearing = [180]
-            if self.gps_env:
-                max_dist = [self.env_diag + 10/self.meters_per_mercator_xy]  # add a ten meter buffer
-            else:
-                max_dist = [self.env_diag + 10]  # add a ten meter buffer
-            max_dist_scrimmage = [self.env_diag]
+            max_dist = [self.env_diag]
             min_dist = [0.0]
             max_bool, min_bool = [1.0], [0.0]
             max_speed, min_speed = [MAX_SPEED], [0.0]
@@ -238,7 +234,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             agent_obs_normalizer.register("wall_3_bearing", max_bearing)
             agent_obs_normalizer.register("wall_3_distance", max_dist, min_dist)
             agent_obs_normalizer.register("scrimmage_line_bearing", max_bearing)
-            agent_obs_normalizer.register("scrimmage_line_distance", max_dist_scrimmage, min_dist)
+            agent_obs_normalizer.register("scrimmage_line_distance", max_dist, min_dist)
             agent_obs_normalizer.register("speed", max_speed, min_speed)
             agent_obs_normalizer.register("has_flag", max_bool, min_bool)
             agent_obs_normalizer.register("on_side", max_bool, min_bool)
@@ -313,37 +309,37 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         for player in self.players.values():
             player_name  = f"player_{player.id}"
 
-            global_obs_normalizer.register((player_name, "player_pos_x"),pos_x_max)
-            global_obs_normalizer.register((player_name, "player_pos_y"),pos_y_max)
-            global_obs_normalizer.register((player_name, "player_bearing"),max_bearing)
-            global_obs_normalizer.register((player_name, "player_scrimmage_line_distance"),max_dist_scrimmage, min_dist)
-            global_obs_normalizer.register((player_name, "player_scrimmage_line_bearing"),max_bearing)
-            global_obs_normalizer.register((player_name, "player_speed"),max_speed, min_speed)
-            global_obs_normalizer.register((player_name, "player_is_tagged"),max_bool, min_bool)
-            global_obs_normalizer.register((player_name, "player_has_flag"),max_bool, min_bool)
-            global_obs_normalizer.register((player_name, "player_tagging_cooldown"),[self.tagging_cooldown], [0.0])
-            global_obs_normalizer.register((player_name, "player_on_side"),max_bool, min_bool)
-            global_obs_normalizer.register((player_name, "player_oob"),max_bool, min_bool)
+            global_state_normalizer.register((player_name, "player_pos_x"), pos_x_max)
+            global_state_normalizer.register((player_name, "player_pos_y"), pos_y_max)
+            global_state_normalizer.register((player_name, "player_bearing"), max_bearing)
+            global_state_normalizer.register((player_name, "player_scrimmage_line_distance"), max_dist_scrimmage, min_dist)
+            global_state_normalizer.register((player_name, "player_scrimmage_line_bearing"), max_bearing)
+            global_state_normalizer.register((player_name, "player_speed"), max_speed, min_speed)
+            global_state_normalizer.register((player_name, "player_is_tagged"), max_bool, min_bool)
+            global_state_normalizer.register((player_name, "player_has_flag"), max_bool, min_bool)
+            global_state_normalizer.register((player_name, "player_tagging_cooldown"), [self.tagging_cooldown], [0.0])
+            global_state_normalizer.register((player_name, "player_on_side"), max_bool, min_bool)
+            global_state_normalizer.register((player_name, "player_oob"), max_bool, min_bool)
 
-        global_obs_normalizer.register("blue_flag_home_x",pos_x_max)
-        global_obs_normalizer.register("blue_flag_home_y",pos_y_max)
-        global_obs_normalizer.register("red_flag_home_x",pos_x_max)
-        global_obs_normalizer.register("red_flag_home_y",pos_y_max)
+        global_state_normalizer.register("blue_flag_home_x", pos_x_max)
+        global_state_normalizer.register("blue_flag_home_y", pos_y_max)
+        global_state_normalizer.register("red_flag_home_x", pos_x_max)
+        global_state_normalizer.register("red_flag_home_y", pos_y_max)
 
-        global_obs_normalizer.register("blue_flag_pos_x",pos_x_max)
-        global_obs_normalizer.register("blue_flag_pos_y",pos_y_max)
-        global_obs_normalizer.register("red_flag_pos_x",pos_x_max)
-        global_obs_normalizer.register("red_flag_pos_y",pos_y_max)
+        global_state_normalizer.register("blue_flag_pos_x", pos_x_max)
+        global_state_normalizer.register("blue_flag_pos_y", pos_y_max)
+        global_state_normalizer.register("red_flag_pos_x", pos_x_max)
+        global_state_normalizer.register("red_flag_pos_y", pos_y_max)
 
-        global_obs_normalizer.register("blue_flag_pickup",max_bool, min_bool)
-        global_obs_normalizer.register("red_flag_pickup",max_bool, min_bool)
+        global_state_normalizer.register("blue_flag_pickup", max_bool, min_bool)
+        global_state_normalizer.register("red_flag_pickup", max_bool, min_bool)
 
-        global_obs_normalizer.register("blue_team_score",max_score, min_score)
-        global_obs_normalizer.register("red_team_score",max_score, min_score)
+        global_state_normalizer.register("blue_team_score", max_score, min_score)
+        global_state_normalizer.register("red_team_score", max_score, min_score)
 
 
         self._state_elements_initialized = True
-        return agent_obs_normalizer, global_obs_normalizer
+        return agent_obs_normalizer, global_state_normalizer
 
     def state_to_obs(self, agent_id, normalize=True):
         """
@@ -617,7 +613,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         global_obs_dict["red_team_score"] = self.state["captures"][1]
 
         if normalize:
-            global_obs_array = self.global_obs_normalizer.normalized(
+            global_obs_array = self.global_state_normalizer.normalized(
                 global_obs_dict
             )
             return global_obs_array
@@ -789,7 +785,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             agent_id: self.get_agent_action_space() for agent_id in self.players
         }
 
-        self.agent_obs_normalizer, self.global_obs_normalizer = self._register_state_elements(team_size, len(self.obstacles))
+        self.agent_obs_normalizer, self.global_state_normalizer = self._register_state_elements(team_size, len(self.obstacles))
         self.observation_spaces = {
             agent_id: self.get_agent_observation_space() for agent_id in self.players
         }
@@ -1697,9 +1693,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             if self.render_saving:
                 assert self.render_mode is not None, "Render_mode cannot be None to record video."
 
-        # print warning if the short term history goes futher into the past than the long term history
-        if self.short_hist_duration > self.long_hist_duration:
-            print(f"Warning: The short term observation buffer will contain older data than the long term observation buffer.")
+        # raise warning if the short term history goes futher into the past than the long term history
+        short_hist_oldest_timestep = self.short_hist_length*self.short_hist_interval - self.short_hist_interval
+        long_hist_oldest_timestep = self.long_hist_length*self.long_hist_interval - self.long_hist_interval
+        if short_hist_oldest_timestep > long_hist_oldest_timestep:
+            raise Warning(f"The short term history contains older timestep (-{short_hist_oldest_timestep}) than the long term history (-{long_hist_oldest_timestep}).")
 
     def set_geom_config(self, config_dict):
         self.n_circle_segments = config_dict.get("n_circle_segments", config_dict_std["n_circle_segments"])
@@ -2157,7 +2155,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 "flag_locations":         copy.deepcopy(flag_locations),
                 "flag_taken":             np.zeros(len(self.flags)),
                 "team_flag_pickup":       np.zeros(len(self.agents_of_team)),
-                "current_time":           0.0,
                 "agent_captures":         np.array([None] * self.num_agents), # whether this agent tagged something
                 "agent_tagged":           np.zeros(self.num_agents), # if this agent is tagged
                 "agent_oob":              np.zeros(self.num_agents), # if this agent is out of bounds
@@ -2170,7 +2167,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 "tags":                   np.zeros(len(self.agents_of_team)), #number of tags made by this team
                 "grabs":                  np.zeros(len(self.agents_of_team)), #number of flag grabs made by this team
                 "obs_history":            dict(),
-                "global_state_history":   np.zeros((self.hist_len, 11*self.num_agents+12)) #TODO: remove magic numbers
+                "global_state_history":   np.zeros((self.hist_len, self.global_state_normalizer.flattened_length))
             }
 
             self.current_time = 0
@@ -2256,7 +2253,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # and updating the state dict
         self.state = copy.deepcopy(state_dict)
-        self.state["current_time"] = 0
 
     def _generate_agent_starts(self, flag_locations):
         """
@@ -3409,7 +3405,7 @@ when gps environment bounds are specified in meters")
             )
 
         # Trajectories
-        if self.render_traj_mode
+        if self.render_traj_mode:
             #traj
             if self.render_traj_mode.startswith("traj"):
                 for team in Team:

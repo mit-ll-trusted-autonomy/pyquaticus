@@ -140,7 +140,7 @@ class ObsNormalizer:
         avg = (high + low) / 2.0
         r = (high - low) / 2.0
         assert state_array.shape == avg.shape
-        norm_obs = np.clip((state_array - avg) / r,a_min=-1,a_max=1) ## TODO MC: clip between -1 and 1
+        norm_obs = np.clip((state_array - avg) / r, a_min=-1, a_max=1)
         return norm_obs.reshape(self.normalized_space.shape)
 
     def unnormalized(self, norm_obs: np.ndarray) -> Dict[str, np.ndarray]:
