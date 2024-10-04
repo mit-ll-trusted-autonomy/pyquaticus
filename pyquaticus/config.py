@@ -26,7 +26,7 @@ config_dict_std = {
     "catch_radius":         10.0, # distance (meters) for tagging and flag pickup
     "n_circle_segments":       8, # default is to approximate circles as an octagon 
     "obstacles":            None, # optional dictionary of obstacles in the enviornment
-    "random_init":         False, # Spawn agents randomly or programmatically (only for non-gps envs)
+    "default_init":         True, # Spawn agents programmatically, rather than randomly (only for non-gps envs)
 
     #notes: obstacles are specified via dictionary. Keys are the obstacle type ("circle" or "polygon"). 
     #values are the parameters for the obstacle. 
@@ -63,7 +63,7 @@ config_dict_std = {
     "normalize":        True, # flag for normalizing the observation space.
     "short_hist_length":   1, # number of timesteps to include for the short-term history
     "short_hist_interval": 1, # number of steps in between entries in the short-term history
-    "long_hist_length":  1, # number of timesteps to include for the long-term history
+    "long_hist_length":    1, # number of timesteps to include for the long-term history
     "long_hist_interval":  4, # number of steps in between entries in the long-term history
     "lidar_obs":       False, # option to use lidar (ray casting model) observations
     "lidar_range":     200.0, # meters
