@@ -616,7 +616,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             |                             |
             |_____________ 2 _____________|
 
-        Note that for the other team, the walls will be rotated such that the
+        Note that for each team, the walls will be rotated such that the
         first wall observation is from the wall to the right if facing away
         from your own flag.
         """
@@ -632,11 +632,6 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             rot_walls = copy.deepcopy(walls)
             return rot_walls[amt:] + rot_walls[:amt]
 
-        def dist_from_wall(flag_pos, wall):
-            pt = closest_point_on_line(wall[0], wall[1], flag_pos)
-            dist, _ = mag_bearing_to(flag_pos, pt)
-            return dist
-
         # determine orientation for each team
         blue_flag = self.flags[int(Team.BLUE_TEAM)].home
         red_flag  = self.flags[int(Team.RED_TEAM)].home
@@ -651,42 +646,38 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         red_wall_ray_end = team_flags_midpoint + self.env_diag * (red_wall_vec / np.linalg.norm(red_wall_vec))
         blue_wall_ray = LineString((team_flags_midpoint, red_wall_ray_end))
 
-        blue_walls = _point_on_which_border(intersection(blue_wall_ray, Polygon(self.env_bounds_vertices)).coords[1])
-        red_walls = _point_on_which_border(intersection(red_wall_ray, Polygon(self.env_bounds_vertices)).coords[1])
+        blue_borders = _point_on_which_border(intersection(blue_wall_ray, Polygon(self.env_bounds_vertices)).coords[1])
+        red_borders = _point_on_which_border(intersection(red_wall_ray, Polygon(self.env_bounds_vertices)).coords[1])
 
-        if len(blue_walls) == len(red_walls) == 2:
+        if len(blue_borders) == len(red_borders) == 2:
             #blue wall
-            if 3 in blue_walls and 0 in blue_walls:
-                blue_wall = 0:
+            if 3 in blue_borders and 0 in blue_borders:
+                blue_border = 0:
             else:
-                blue_wall = max(blue_walls)
+                blue_border = max(blue_borders)
             #red wall
-            if 3 in blue_walls and 0 in blue_walls:
-                red_wall = 0:
+            if 3 in blue_borders and 0 in blue_borders:
+                red_border = 0:
             else:
-                red_wall = max(red_walls)
-        elif len(blue_walls) == 2:
-            red_wall = red_walls[0]
-            blue_wall = (red_wall + 2) % 4
-        elif len(red_walls) == 2:
-            blue_wall = blue_walls[0]
-            red_wall = (blue_wall + 2) % 4
+                red_border = max(red_borders)
+        elif len(blue_borders) == 2:
+            red_border = red_borders[0]
+            blue_border = (red_border + 2) % 4
+        elif len(red_borders) == 2:
+            blue_border = blue_borders[0]
+            red_border = (blue_border + 2) % 4
         else:
-            blue_wall = blue_walls[0]
-            red_wall = red_walls[0]
+            blue_border = blue_borders[0]
+            red_border = red_borders[0]
 
-        
+        blue_wall = 3 - blue_border #converting to corresponding wall idx within all_walls for backwards compatibility
+        red_wall = 3 - red_border #converting to corresponding wall idx within all_walls for backwards compatibility
 
-        self._walls = {}
-        if dist_from_wall(blue_flag, all_walls[1]) < dist_from_wall(blue_flag, all_walls[3]):
-            self._walls[int(Team.BLUE_TEAM)] = all_walls
-            self._walls[int(Team.RED_TEAM)] = rotate_walls(all_walls, 2)
-        else:
-            assert dist_from_wall(red_flag, all_walls[1]) < dist_from_wall(red_flag, all_walls[3])
-            self._walls[int(Team.RED_TEAM)] = all_walls
-            self._walls[int(Team.BLUE_TEAM)] = rotate_walls(all_walls, 2)
+        blue_rot_amt = blue_wall - 1 #wall 1 is the flag wall (see wall ordering in function description)
+        red_rot_amt = red_wall - 1 #wall 1 is the flag wall (see wall ordering in function description)
 
-
+        self._walls[int(Team.BLUE_TEAM)] = rotate_walls(all_walls, blue_rot_amt)
+        self._walls[int(Team.RED_TEAM)] = rotate_walls(all_walls, red_rot_amt)
 
 
 class PyQuaticusEnv(PyQuaticusEnvBase):
@@ -2194,16 +2185,17 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     self.state["dist_to_obstacles"][agent_id] = np.zeros((len(self.obstacles), 2))
                     self._get_dist_to_obstacles()
 
-            self._determine_team_wall_orient() #TODO: fix to be more generalized
+            self._determine_team_wall_orient()
 
         else:
             self.reset_from_state_dict(state_dict)
             self._determine_team_wall_orient()
 
+        self.message = ""
+        self.current_time = 0
+        self.reset_count += 1
         self.dones = self._reset_dones()
 
-        self.message = ""
-        self.reset_count += 1
         reset_obs = {agent_id: self.state_to_obs(agent_id, self.normalize) for agent_id in self.players}
 
         # Rendering
@@ -2250,9 +2242,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         for flag in self.flags:
             flag.home = state_dict["flag_home"][int(flag.team)]
             flag.pos = state_dict["flag_locations"][int(flag.team)]
-
-        # current time
-        self.current_time = 0
 
         # and updating the state dict
         self.state = copy.deepcopy(state_dict)
