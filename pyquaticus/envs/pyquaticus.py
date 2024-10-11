@@ -877,7 +877,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self._check_flag_captures()
         self._check_untag_vectorized() if self.team_size>=10 else self._check_untag()
         self._set_dones()
-        self._get_dist_to_obstacles()
+        self._get_dist_bearing_to_obstacles()
 
         if self.lidar_obs:
             for team in self.agents_of_team:
@@ -1989,7 +1989,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.params[agent.id]["agent_oob"] = copy.deepcopy(self.state["agent_oob"])
 
         # Obstacle Distance/Bearing
-        for i, obstacle in enumerate(self.state["dist_to_obstacles"][agent.id]):
+        for i, obstacle in enumerate(self.state["dist_bearing_to_obstacles"][agent.id]):
             self.params[agent.id][f"obstacle_{i}_distance"] = obstacle[0]
             self.params[agent.id][f"obstacle_{i}_bearing"] = obstacle[1]
 
@@ -2135,38 +2135,40 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             agent_positions, agent_spd_hdg, agent_on_sides = self._generate_agent_starts(flag_locations)
 
             self.state = {
-                "agent_position":         agent_positions,
-                "prev_agent_position":    copy.deepcopy(agent_positions),
-                "agent_spd_hdg":          agent_spd_hdg,
-                "agent_has_flag":         np.zeros(self.num_agents),
-                "agent_on_sides":         agent_on_sides,
-                "flag_home":              copy.deepcopy(flag_locations),
-                "flag_locations":         copy.deepcopy(flag_locations),
-                "flag_taken":             np.zeros(len(self.flags)),
-                "team_flag_pickup":       np.zeros(len(self.agents_of_team)),
-                "agent_captures":         np.array([None] * self.num_agents), #whether this agent tagged something at the current timestep (will be index of tagged agent if so)
-                "agent_tagged":           np.zeros(self.num_agents), #if this agent is tagged
-                "agent_oob":              np.zeros(self.num_agents), #if this agent is out of bounds
-                "agent_tagging_cooldown": np.array([self.tagging_cooldown] * self.num_agents),
-                "dist_to_obstacles":      dict(),
-                "captures":               np.zeros(len(self.agents_of_team)), #number of flag captures made by this team
-                "tags":                   np.zeros(len(self.agents_of_team)), #number of tags made by this team
-                "grabs":                  np.zeros(len(self.agents_of_team)), #number of flag grabs made by this team
-                "obs_history":            dict(),
-                "global_state_history":   list()
+                "agent_position":            agent_positions,
+                "prev_agent_position":       copy.deepcopy(agent_positions),
+                "agent_spd_hdg":             agent_spd_hdg,
+                "agent_has_flag":            np.zeros(self.num_agents),
+                "agent_on_sides":            agent_on_sides,
+                "flag_home":                 copy.deepcopy(flag_locations),
+                "flag_locations":            copy.deepcopy(flag_locations),
+                "flag_taken":                np.zeros(len(self.flags)),
+                "team_flag_pickup":          np.zeros(len(self.agents_of_team)),
+                "agent_captures":            np.array([None] * self.num_agents), #whether this agent tagged something at the current timestep (will be index of tagged agent if so)
+                "agent_tagged":              np.zeros(self.num_agents), #if this agent is tagged
+                "agent_oob":                 np.zeros(self.num_agents), #if this agent is out of bounds
+                "agent_tagging_cooldown":    np.array([self.tagging_cooldown] * self.num_agents),
+                "dist_bearing_to_obstacles": {agent_id: np.zeros((len(self.obstacles), 2)) for agent_id in self.players},
+                "captures":                  np.zeros(len(self.agents_of_team)), #number of flag captures made by this team
+                "tags":                      np.zeros(len(self.agents_of_team)), #number of tags made by this team
+                "grabs":                     np.zeros(len(self.agents_of_team)), #number of flag grabs made by this team
+                "obs_history":               dict(),
+                "global_state_history":      list()
             }
 
-            self.current_time = 0
+            # Obstacles
+            for agent_id in self.players:
+                self.state["dist_bearing_to_obstacles"][agent_id] = np.zeros((len(self.obstacles), 2))
+                self._get_dist_bearing_to_obstacles()
 
-            agent_ids = list(self.players.keys())
-
+            # Lidar
             if self.lidar_obs:
                 #reset lidar readings
                 self.state["lidar_labels"] = dict()
                 self.state["lidar_ends"] = dict()
                 self.state["lidar_distances"] = dict()
 
-                for agent_id in agent_ids:
+                for agent_id in self.players:
                     self.state["lidar_labels"][agent_id] = np.zeros(self.num_lidar_rays)
                     self.state["lidar_ends"][agent_id] = np.zeros((self.num_lidar_rays, 2))
                     self.state["lidar_distances"][agent_id] = np.zeros(self.num_lidar_rays)
@@ -2180,11 +2182,20 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                                 self.obj_ray_detection_states[team][label_idx] = LIDAR_DETECTION_CLASS_MAP["teammate"]
                             else:
                                 self.obj_ray_detection_states[team][label_idx] = LIDAR_DETECTION_CLASS_MAP["opponent"]
-            else:
-                for agent_id in agent_ids:
-                    self.state["dist_to_obstacles"][agent_id] = np.zeros((len(self.obstacles), 2))
-                    self._get_dist_to_obstacles()
 
+            # History
+            reset_obs = {agent_id: self.state_to_obs(agent_id, self.normalize) for agent_id in self.players}
+
+            self.obs_buffer = dict()
+            for player in self.players.values():
+                if self.normalize:
+                    self.state["obs_history"][player.id] = np.zeros((self.hist_len, reset_obs[player.id].shape[0]))
+                    self.obs_buffer[player.id] = np.zeros((self.hist_buffer_len, reset_obs[player.id].shape[0]))
+                else:
+                    self.state["obs_history"][player.id] = [0]*self.hist_len
+                    self.obs_buffer[player.id] = [0]*self.hist_buffer_len
+
+            # Team wall orientation
             self._determine_team_wall_orient()
 
         else:
@@ -2208,17 +2219,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             self._render()
             self.render_ctr = 0
-
-        # History
-        self.obs_buffer = dict()
-        if state_dict is None:
-            for player in self.players.values():
-                if self.normalize:
-                    self.state["obs_history"][player.id] = np.zeros((self.hist_len, reset_obs[player.id].shape[0]))
-                    self.obs_buffer[player.id] = np.zeros((self.hist_buffer_len, reset_obs[player.id].shape[0]))
-                else:
-                    self.state["obs_history"][player.id] = [0]*self.hist_len
-                    self.obs_buffer[player.id] = [0]*self.hist_buffer_len
         
         # np.zeros((self.hist_len, self.global_state_normalizer.flattened_length))
 
@@ -2450,9 +2450,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         return flag_vecs
 
-    def _get_dist_to_obstacles(self):
+    def _get_dist_bearing_to_obstacles(self):
         """Computes the distance and heading from each player to each obstacle"""
-        dist_to_obstacles = dict()
+        dist_bearing_to_obstacles = dict()
         for player in self.players.values():
             player_pos = player.pos
             player_dists_to_obstacles = list()
@@ -2460,8 +2460,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 #TODO: vectorize
                 dist_to_obstacle = obstacle.distance_from(player_pos, radius = self.agent_radius, heading=player.heading)
                 player_dists_to_obstacles.append(dist_to_obstacle)
-            dist_to_obstacles[player.id] = player_dists_to_obstacles
-        self.state["dist_to_obstacles"] = dist_to_obstacles
+            dist_bearing_to_obstacles[player.id] = player_dists_to_obstacles
+        self.state["dist_bearing_to_obstacles"] = dist_bearing_to_obstacles
 
     def _build_env_geom(
         self,
@@ -3709,7 +3709,7 @@ when gps environment bounds are specified in meters")
 
         if not self.lidar_obs:
             # Obstacle Distance/Bearing
-            for i, obstacle in enumerate(self.state["dist_to_obstacles"][agent_id]):
+            for i, obstacle in enumerate(self.state["dist_bearing_to_obstacles"][agent_id]):
                 orig_obs[f"obstacle_{i}_distance"] = obstacle[0]
                 orig_obs[f"obstacle_{i}_bearing"] = obstacle[1]
 
