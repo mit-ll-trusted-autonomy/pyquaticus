@@ -644,13 +644,38 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         team_flags_midpoint = (blue_flag + red_flag)/2
         
         blue_wall_vec = blue_flag - team_flags_midpoint
-        blue_wall_ray = team_flags_midpoint + self.env_diag * (blue_wall_vec / np.linalg.norm(blue_wall_vec))
+        blue_wall_ray_end = team_flags_midpoint + self.env_diag * (blue_wall_vec / np.linalg.norm(blue_wall_vec))
+        blue_wall_ray = LineString((team_flags_midpoint, blue_wall_ray_end))
 
         red_wall_vec = red_flag - team_flags_midpoint
-        red_wall_ray = team_flags_midpoint + self.env_diag * (red_wall_vec / np.linalg.norm(red_wall_vec))
+        red_wall_ray_end = team_flags_midpoint + self.env_diag * (red_wall_vec / np.linalg.norm(red_wall_vec))
+        blue_wall_ray = LineString((team_flags_midpoint, red_wall_ray_end))
 
-        # full_scrim_line = LineString(extended_scrimmage_coords)
-        # scrim_line_env_intersection = intersection(full_scrim_line, Polygon(self.env_bounds_vertices))
+        blue_walls = _point_on_which_border(intersection(blue_wall_ray, Polygon(self.env_bounds_vertices)).coords[1])
+        red_walls = _point_on_which_border(intersection(red_wall_ray, Polygon(self.env_bounds_vertices)).coords[1])
+
+        if len(blue_walls) == len(red_walls) == 2:
+            #blue wall
+            if 3 in blue_walls and 0 in blue_walls:
+                blue_wall = 0:
+            else:
+                blue_wall = max(blue_walls)
+            #red wall
+            if 3 in blue_walls and 0 in blue_walls:
+                red_wall = 0:
+            else:
+                red_wall = max(red_walls)
+        elif len(blue_walls) == 2:
+            red_wall = red_walls[0]
+            blue_wall = (red_wall + 2) % 4
+        elif len(red_walls) == 2:
+            blue_wall = blue_walls[0]
+            red_wall = (blue_wall + 2) % 4
+        else:
+            blue_wall = blue_walls[0]
+            red_wall = red_walls[0]
+
+        
 
         self._walls = {}
         if dist_from_wall(blue_flag, all_walls[1]) < dist_from_wall(blue_flag, all_walls[3]):
@@ -861,8 +886,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self._check_flag_captures()
         self._check_untag_vectorized() if self.team_size>=10 else self._check_untag()
         self._set_dones()
-        if not self.lidar_obs:
-            self._get_dist_to_obstacles()
+        self._get_dist_to_obstacles()
 
         if self.lidar_obs:
             for team in self.agents_of_team:
@@ -2134,14 +2158,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 "agent_oob":              np.zeros(self.num_agents), #if this agent is out of bounds
                 "agent_tagging_cooldown": np.array([self.tagging_cooldown] * self.num_agents),
                 "dist_to_obstacles":      dict(),
-                "lidar_labels":           dict(),
-                "lidar_ends":             dict(),
-                "lidar_distances":        dict(),
                 "captures":               np.zeros(len(self.agents_of_team)), #number of flag captures made by this team
                 "tags":                   np.zeros(len(self.agents_of_team)), #number of tags made by this team
                 "grabs":                  np.zeros(len(self.agents_of_team)), #number of flag grabs made by this team
                 "obs_history":            dict(),
-                "global_state_history":   np.zeros((self.hist_len, self.global_state_normalizer.flattened_length))
+                "global_state_history":   list()
             }
 
             self.current_time = 0
@@ -2150,6 +2171,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             if self.lidar_obs:
                 #reset lidar readings
+                self.state["lidar_labels"] = dict()
+                self.state["lidar_ends"] = dict()
+                self.state["lidar_distances"] = dict()
+
                 for agent_id in agent_ids:
                     self.state["lidar_labels"][agent_id] = np.zeros(self.num_lidar_rays)
                     self.state["lidar_ends"][agent_id] = np.zeros((self.num_lidar_rays, 2))
@@ -2159,15 +2184,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 for team in self.agents_of_team:
                     for label_name, label_idx in self.ray_int_label_map.items():
                         if label_name.startswith("agent"):
-                            #reset agent lidar detection states
+                            #reset agent lidar detection states (not tagged and do not have flag)
                             if int(label_name[6:]) in self.agent_ids_of_team[team]:
                                 self.obj_ray_detection_states[team][label_idx] = LIDAR_DETECTION_CLASS_MAP["teammate"]
                             else:
                                 self.obj_ray_detection_states[team][label_idx] = LIDAR_DETECTION_CLASS_MAP["opponent"]
             else:
                 for agent_id in agent_ids:
-                    self.state["dist_to_obstacles"][agent_id] = [(0, 0)] * len(self.obstacles)
-                    #TODO: need to set these here
+                    self.state["dist_to_obstacles"][agent_id] = np.zeros((len(self.obstacles), 2))
+                    self._get_dist_to_obstacles()
 
             self._determine_team_wall_orient() #TODO: fix to be more generalized
 
@@ -2203,6 +2228,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     self.state["obs_history"][player.id] = [0]*self.hist_len
                     self.obs_buffer[player.id] = [0]*self.hist_buffer_len
         
+        # np.zeros((self.hist_len, self.global_state_normalizer.flattened_length))
+
         return reset_obs
 
     def reset_from_state_dict(self, state_dict):
@@ -2435,7 +2462,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         return flag_vecs
 
     def _get_dist_to_obstacles(self):
-        """Computes the distance from each player to each obstacle"""
+        """Computes the distance and heading from each player to each obstacle"""
         dist_to_obstacles = dict()
         for player in self.players.values():
             player_pos = player.pos
