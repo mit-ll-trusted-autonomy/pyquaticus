@@ -197,7 +197,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         if self.lidar_obs:
             max_bearing = [180]
             max_dist_scrimmage = [self.env_diag]
-            max_lidar_dist = self.num_lidar_rays * [self.lidar_range]
+            max_dist_lidar = self.num_lidar_rays * [self.lidar_range]
             min_dist = [0.0]
             max_bool, min_bool = [1.0], [0.0]
             max_speed, min_speed = [MAX_SPEED], [0.0]
@@ -214,7 +214,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             agent_obs_normalizer.register("is_tagged", max_bool, min_bool)
             agent_obs_normalizer.register("team_score", max_score, min_score)
             agent_obs_normalizer.register("opponent_score", max_score, min_score)
-            agent_obs_normalizer.register("ray_distances", max_lidar_dist)
+            agent_obs_normalizer.register("ray_distances", max_dist_lidar)
             agent_obs_normalizer.register("ray_labels", self.num_lidar_rays * [len(LIDAR_DETECTION_CLASS_MAP) - 1])
         else:
             max_bearing = [180]
@@ -223,6 +223,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             max_bool, min_bool = [1.0], [0.0]
             max_speed, min_speed = [MAX_SPEED], [0.0]
             max_score, min_score = [self.max_score], [0.0]
+
             agent_obs_normalizer.register("opponent_home_bearing", max_bearing)
             agent_obs_normalizer.register("opponent_home_distance", max_dist, min_dist)
             agent_obs_normalizer.register("own_home_bearing", max_bearing)
@@ -274,15 +275,22 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                 agent_obs_normalizer.register(f"obstacle_{i}_bearing", max_bearing)
 
         ### Global State Normalizer ###
+        max_heading = [180]
+        max_bearing = [180]
         pos_x_max = [self.env_size[0]/2]
         pos_y_max = [self.env_size[1]/2]
+        max_dist_scrimmage = [self.env_diag]
+        min_dist = [0.0]
+        max_bool, min_bool = [1.0], [0.0]
+        max_speed, min_speed = [MAX_SPEED], [0.0]
+        max_score, min_score = [self.max_score], [0.0]
 
         for player in self.players.values():
             player_name  = f"player_{player.id}"
 
             global_state_normalizer.register((player_name, "player_pos_x"), pos_x_max)
             global_state_normalizer.register((player_name, "player_pos_y"), pos_y_max)
-            global_state_normalizer.register((player_name, "player_bearing"), max_bearing)
+            global_state_normalizer.register((player_name, "player_heading"), max_heading)
             global_state_normalizer.register((player_name, "player_scrimmage_line_distance"), max_dist_scrimmage, min_dist)
             global_state_normalizer.register((player_name, "player_scrimmage_line_bearing"), max_bearing)
             global_state_normalizer.register((player_name, "player_speed"), max_speed, min_speed)
@@ -552,7 +560,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
             global_obs_dict[(player_name, "player_pos_x")] = np_pos[0]-self.env_size[0]/2
             global_obs_dict[(player_name, "player_pos_y")] = np_pos[1]-self.env_size[1]/2
-            global_obs_dict[(player_name, "player_bearing")] = player.heading
+            global_obs_dict[(player_name, "player_heading")] = player.heading
             global_obs_dict[(player_name, "player_scrimmage_line_distance")] = scrimmage_line_dist
             global_obs_dict[(player_name, "player_scrimmage_line_bearing")] = player_scrimmage_line_bearing
             global_obs_dict[(player_name, "player_speed")] = player.speed
@@ -644,20 +652,20 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
         red_wall_vec = red_flag - team_flags_midpoint
         red_wall_ray_end = team_flags_midpoint + self.env_diag * (red_wall_vec / np.linalg.norm(red_wall_vec))
-        blue_wall_ray = LineString((team_flags_midpoint, red_wall_ray_end))
+        red_wall_ray = LineString((team_flags_midpoint, red_wall_ray_end))
 
-        blue_borders = _point_on_which_border(intersection(blue_wall_ray, Polygon(self.env_bounds_vertices)).coords[1])
-        red_borders = _point_on_which_border(intersection(red_wall_ray, Polygon(self.env_bounds_vertices)).coords[1])
+        blue_borders = self._point_on_which_border(intersection(blue_wall_ray, Polygon(self.env_bounds_vertices)).coords[1])
+        red_borders = self._point_on_which_border(intersection(red_wall_ray, Polygon(self.env_bounds_vertices)).coords[1])
 
         if len(blue_borders) == len(red_borders) == 2:
             #blue wall
             if 3 in blue_borders and 0 in blue_borders:
-                blue_border = 0:
+                blue_border = 0
             else:
                 blue_border = max(blue_borders)
             #red wall
             if 3 in blue_borders and 0 in blue_borders:
-                red_border = 0:
+                red_border = 0
             else:
                 red_border = max(red_borders)
         elif len(blue_borders) == 2:
@@ -676,6 +684,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         blue_rot_amt = blue_wall - 1 #wall 1 is the flag wall (see wall ordering in function description)
         red_rot_amt = red_wall - 1 #wall 1 is the flag wall (see wall ordering in function description)
 
+        self._walls = {}
         self._walls[int(Team.BLUE_TEAM)] = rotate_walls(all_walls, blue_rot_amt)
         self._walls[int(Team.RED_TEAM)] = rotate_walls(all_walls, red_rot_amt)
 
@@ -2192,7 +2201,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             #observation history
             reset_obs = {agent_id: self.state_to_obs(agent_id, self.normalize) for agent_id in self.players}
             for agent_id in self.players:
-                self.state["obs_history_buffer"][agent_id] = np.array(self.hist_buffer_len * [reset_obs[agent_id]])
+                self.state["obs_hist_buffer"][agent_id] = np.array(self.hist_buffer_len * [reset_obs[agent_id]])
 
             #global state history
             reset_global_state = self.state_to_global_obs(self.normalize)
@@ -2211,7 +2220,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if self.render_mode:
             self.render_ctr = 0
             if self.render_saving:
-                self.render_buffer = [] #np.zeros((TODO num timesteps + 1, 3, self.screen_height, self.screen_width))
+                self.render_buffer = [] #np.zeros((self.screen_height, self.screen_width, TODO num timesteps + 1, 3))
             if self.render_traj_mode:
                 self.traj_render_buffer = {agent_id: {'traj': [], 'agent': [], 'history': []} for agent_id in self.players}
 
@@ -3281,7 +3290,11 @@ when gps environment bounds are specified in meters")
         """
         p = np.asarray(p)
         p_borders_bool = np.concatenate((p==0, p==self.env_size), axis=-1)
-        p_borders = [np.where(pt_borders_bool)[0] for pt_borders_bool in p_borders_bool]
+
+        if p_borders_bool.ndim == 1:
+            p_borders = np.where(p_borders_bool)[0]
+        else:
+            p_borders = [np.where(pt_borders_bool)[0] for pt_borders_bool in p_borders_bool]
 
         return p_borders
 
@@ -3393,52 +3406,52 @@ when gps environment bounds are specified in meters")
                 width=self.boundary_width,
             )
 
-        # Trajectories
-        if self.render_traj_mode:
-            #traj
-            if self.render_traj_mode.startswith("traj"):
-                for team in Team:
-                    teams_players = self.agents_of_team[team]
-                    color = "blue" if team == Team.BLUE_TEAM else "red"
+        # # Trajectories
+        # if self.render_traj_mode:
+        #     #traj
+        #     if self.render_traj_mode.startswith("traj"):
+        #         for team in Team:
+        #             teams_players = self.agents_of_team[team]
+        #             color = "blue" if team == Team.BLUE_TEAM else "red"
 
-                    for player in teams_players:
-                        for prev_blit_pos in reversed(self.traj_render_buffer[player.id]['traj']):
-                            draw.circle(
-                                self.screen,
-                                color,
-                                prev_blit_pos,
-                                radius=2,
-                                width=0
-                            )
-            #agent
-            if self.render_traj_mode.endswith("agent"):
-                for i in range(len(self.traj_render_buffer[self.players[0]]['agent'])):
-                    for agent_id in self.players:
-                        for prev_rot_blit_pos, prev_agent_surf in reversed(self.traj_render_buffer[player.id]['agent']):
-                            prev_agent_surf.set_alpha(self.render_transparency_alpha)
-                            self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
-            #history
-            elif self.render_traj_mode.endswith("history"):
-                short_hist_points_blit = self.traj_render_buffer[player.id]['history'][
-                    0 : self.short_hist_duration : self.short_hist_jump
-                ]
-                long_hist_points_blit = self.traj_render_buffer[player.id]['history'][
-                    self.long_hist_jump : self.long_hist_duration + self.long_hist_jump : self.long_hist_jump
-                ]
-                short_hist_points_blit_positions = [short_hist_entry[0] for short_hist_entry in short_hist_points_blit]
-                num_prev_points_to_render = len(short_hist_points_blit) + len(long_hist_points_blit)
+        #             for player in teams_players:
+        #                 for prev_blit_pos in reversed(self.traj_render_buffer[player.id]['traj']):
+        #                     draw.circle(
+        #                         self.screen,
+        #                         color,
+        #                         prev_blit_pos,
+        #                         radius=2,
+        #                         width=0
+        #                     )
+        #     #agent
+        #     if self.render_traj_mode.endswith("agent"):
+        #         for i in range(len(self.traj_render_buffer[self.players[0]]['agent'])):
+        #             for agent_id in self.players:
+        #                 for prev_rot_blit_pos, prev_agent_surf in reversed(self.traj_render_buffer[player.id]['agent']):
+        #                     prev_agent_surf.set_alpha(self.render_transparency_alpha)
+        #                     self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
+        #     #history
+        #     elif self.render_traj_mode.endswith("history"):
+        #         short_hist_points_blit = self.traj_render_buffer[player.id]['history'][
+        #             0 : self.short_hist_duration : self.short_hist_jump
+        #         ]
+        #         long_hist_points_blit = self.traj_render_buffer[player.id]['history'][
+        #             self.long_hist_jump : self.long_hist_duration + self.long_hist_jump : self.long_hist_jump
+        #         ]
+        #         short_hist_points_blit_positions = [short_hist_entry[0] for short_hist_entry in short_hist_points_blit]
+        #         num_prev_points_to_render = len(short_hist_points_blit) + len(long_hist_points_blit)
 
-                for i,(prev_rot_blit_pos, prev_agent_surf) in enumerate(reversed(short_hist_points_blit)):
-                    render_tranparency = self.render_transparency_alpha + (255-self.render_transparency_alpha) * (i+len(long_hist_points_blit)+1)/(num_prev_points_to_render+1)
-                    prev_agent_surf.set_alpha(render_tranparency)
-                    self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
+        #         for i,(prev_rot_blit_pos, prev_agent_surf) in enumerate(reversed(short_hist_points_blit)):
+        #             render_tranparency = self.render_transparency_alpha + (255-self.render_transparency_alpha) * (i+len(long_hist_points_blit)+1)/(num_prev_points_to_render+1)
+        #             prev_agent_surf.set_alpha(render_tranparency)
+        #             self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
 
-                for i,(prev_rot_blit_pos, prev_agent_surf) in enumerate(reversed(long_hist_points_blit)):
-                    if np.any(prev_rot_blit_pos == short_hist_points_blit_positions): # avoid double plotting overlapping elements
-                        continue
-                    render_tranparency = self.render_transparency_alpha + (255-self.render_transparency_alpha) * (i+1)/(num_prev_points_to_render+1)
-                    prev_agent_surf.set_alpha(render_tranparency)
-                    self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
+        #         for i,(prev_rot_blit_pos, prev_agent_surf) in enumerate(reversed(long_hist_points_blit)):
+        #             if np.any(prev_rot_blit_pos == short_hist_points_blit_positions): # avoid double plotting overlapping elements
+        #                 continue
+        #             render_tranparency = self.render_transparency_alpha + (255-self.render_transparency_alpha) * (i+1)/(num_prev_points_to_render+1)
+        #             prev_agent_surf.set_alpha(render_tranparency)
+        #             self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
 
 
 
@@ -3618,6 +3631,8 @@ when gps environment bounds are specified in meters")
             )
 
         # Update counter
+        print(np.transpose(np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2)).shape)
+        sys.exit()
         self.render_ctr += 1
 
     def env_to_screen(self, pos):
