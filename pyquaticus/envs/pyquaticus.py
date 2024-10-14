@@ -562,14 +562,14 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             global_obs_dict[(player_name, "player_on_side")] = player.on_own_side
             global_obs_dict[(player_name, "player_oob")] = self.state["agent_oob"][player.id]
 
-        global_obs_dict["blue_flag_home_x"] = self.flags[0].home[0]-self.env_size[0]/2
-        global_obs_dict["blue_flag_home_y"] = self.flags[0].home[1]-self.env_size[1]/2
-        global_obs_dict["red_flag_home_x"] = self.flags[1].home[0]-self.env_size[0]/2
-        global_obs_dict["red_flag_home_y"] = self.flags[1].home[1]-self.env_size[1]/2
-        global_obs_dict["blue_flag_pos_x"] = self.flags[0].pos[0]-self.env_size[0]/2
-        global_obs_dict["blue_flag_pos_y"] = self.flags[0].pos[1]-self.env_size[1]/2
-        global_obs_dict["red_flag_pos_x"] = self.flags[1].pos[0]-self.env_size[0]/2
-        global_obs_dict["red_flag_pos_y"] = self.flags[1].pos[1]-self.env_size[1]/2
+        global_obs_dict["blue_flag_home_x"] = self.flags[0].home[0] - self.env_size[0]/2
+        global_obs_dict["blue_flag_home_y"] = self.flags[0].home[1] - self.env_size[1]/2
+        global_obs_dict["red_flag_home_x"] = self.flags[1].home[0] - self.env_size[0]/2
+        global_obs_dict["red_flag_home_y"] = self.flags[1].home[1] - self.env_size[1]/2
+        global_obs_dict["blue_flag_pos_x"] = self.flags[0].pos[0] - self.env_size[0]/2
+        global_obs_dict["blue_flag_pos_y"] = self.flags[0].pos[1] - self.env_size[1]/2
+        global_obs_dict["red_flag_pos_x"] = self.flags[1].pos[0] - self.env_size[0]/2
+        global_obs_dict["red_flag_pos_y"] = self.flags[1].pos[1] - self.env_size[1]/2
         global_obs_dict["blue_flag_pickup"] = self.state["flag_taken"][0]
         global_obs_dict["red_flag_pickup"] = self.state["flag_taken"][1]
         global_obs_dict["blue_team_score"] = self.state["captures"][0]
@@ -871,11 +871,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.current_time += self.sim_speedup_factor * self.tau
 
         # agent and flag capture checks and more
-        self._check_oob_vectorized() if self.team_size>=40 else self._check_oob()
-        self._check_pickup_flags_vectorized() if self.team_size>=40 else self._check_pickup_flags()
+        self._check_oob_vectorized() if self.team_size >= 40 else self._check_oob()
+        self._check_pickup_flags_vectorized() if self.team_size >= 40 else self._check_pickup_flags()
         self._check_agent_captures_vectorized() if self.team_size >= 10 else self._check_agent_captures()
         self._check_flag_captures()
-        self._check_untag_vectorized() if self.team_size>=10 else self._check_untag()
+        self._check_untag_vectorized() if self.team_size >= 10 else self._check_untag()
         self._set_dones()
         self._get_dist_bearing_to_obstacles()
 
@@ -896,31 +896,24 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if self.message and self.render_mode:
             print(self.message)
 
+        # Rewards
         rewards = {agent_id: self.compute_rewards(agent_id) for agent_id in self.players}
-        obs = {agent_id: self.state_to_obs(agent_id, self.normalize) for agent_id in raw_action_dict}
 
-
+        # Observations
         for agent_id in raw_action_dict:
-            self.state["obs_history"][agent_id][1:] = self.state["obs_history"][agent_id][:-1]
-            self.state["obs_history"][agent_id][0] = obs[agent_id]
+            self.state["obs_hist_buffer"][agent_id][1:] = self.state["obs_hist_buffer"][agent_id][:-1]
+            self.state["obs_hist_buffer"][agent_id][0] = self.state_to_obs(agent_id, self.normalize)
 
-            short_hist_buffer = self.state["obs_history"][agent_id][0:self.short_hist_duration:self.short_hist_jump]
-            long_hist_buffer = self.state["obs_history"][agent_id][self.long_hist_jump:self.long_hist_duration+self.long_hist_jump:self.long_hist_jump]
-            self.obs_buffer[agent_id] = np.concatenate((short_hist_buffer,long_hist_buffer))
+        if self.hist_len > 1:
+            obs = {agent_id: self.state["obs_hist_buffer"][agent_id][self.hist_buffer_inds] for agent_id in self.players}
+        else:
+            obs = {agent_id: self.state["obs_hist_buffer"][agent_id][0] for agent_id in self.players}
 
-        info = {"global_state": self.state_to_global_obs(self.normalize)}
-        self.state["global_state_history"][1:] = self.state["global_state_history"][:-1]
-        self.state["global_state_history"][0] = info["global_state"]
-
-        short_hist_global_buffer = np.asarray(self.state["global_state_history"][0:self.short_hist_duration:self.short_hist_jump])
-        long_hist_global_buffer = np.asarray(self.state["global_state_history"][self.long_hist_jump:self.long_hist_duration+self.long_hist_jump:self.long_hist_jump])
-        self.global_obs_buffer = np.concatenate((short_hist_global_buffer,long_hist_global_buffer))
-
+        # Dones
         terminated = False
         truncated = False
 
         if self.dones["__all__"]:
-            #dones
             if self.dones["blue"] or self.dones["red"]:
                 terminated = True
             else:
@@ -928,6 +921,16 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         terminated = {agent: terminated for agent in raw_action_dict}
         truncated = {agent: truncated for agent in raw_action_dict}
+
+        # Info
+        self.state["global_state_hist_buffer"][1:] = self.state["global_state_hist_buffer"][:-1]
+        self.state["global_state_hist_buffer"][0] = self.state_to_global_obs(self.normalize)
+
+        if self.hist_len > 1:
+            info = {"global_state": self.state["global_state_hist_buffer"][self.hist_buffer_inds]}
+        else:
+            info = {"global_state": self.state["global_state_hist_buffer"][0]}
+
 
         return obs, rewards, terminated, truncated, info
 
@@ -2152,16 +2155,19 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 "captures":                  np.zeros(len(self.agents_of_team)), #number of flag captures made by this team
                 "tags":                      np.zeros(len(self.agents_of_team)), #number of tags made by this team
                 "grabs":                     np.zeros(len(self.agents_of_team)), #number of flag grabs made by this team
-                "obs_history":               dict(),
-                "global_state_history":      list()
+                "obs_hist_buffer":           dict(),
+                "global_state_hist_buffer":  list()
             }
 
-            # Obstacles
+            #team wall orientation
+            self._determine_team_wall_orient()
+
+            #obstacles
             for agent_id in self.players:
                 self.state["dist_bearing_to_obstacles"][agent_id] = np.zeros((len(self.obstacles), 2))
                 self._get_dist_bearing_to_obstacles()
 
-            # Lidar
+            #lidar
             if self.lidar_obs:
                 #reset lidar readings
                 self.state["lidar_labels"] = dict()
@@ -2183,46 +2189,43 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                             else:
                                 self.obj_ray_detection_states[team][label_idx] = LIDAR_DETECTION_CLASS_MAP["opponent"]
 
-            # History
+            #observation history
             reset_obs = {agent_id: self.state_to_obs(agent_id, self.normalize) for agent_id in self.players}
+            for agent_id in self.players:
+                self.state["obs_history_buffer"][agent_id] = np.array(self.hist_buffer_len * [reset_obs[agent_id]])
 
-            self.obs_buffer = dict()
-            for player in self.players.values():
-                if self.normalize:
-                    self.state["obs_history"][player.id] = np.zeros((self.hist_len, reset_obs[player.id].shape[0]))
-                    self.obs_buffer[player.id] = np.zeros((self.hist_buffer_len, reset_obs[player.id].shape[0]))
-                else:
-                    self.state["obs_history"][player.id] = [0]*self.hist_len
-                    self.obs_buffer[player.id] = [0]*self.hist_buffer_len
-
-            # Team wall orientation
-            self._determine_team_wall_orient()
+            #global state history
+            reset_global_state = self.state_to_global_obs(self.normalize)
+            self.state["global_state_hist_buffer"] = np.array(self.hist_buffer_len * [reset_global_state])
 
         else:
-            self.reset_from_state_dict(state_dict)
             self._determine_team_wall_orient()
+            self.reset_from_state_dict(state_dict)
 
         self.message = ""
         self.current_time = 0
         self.reset_count += 1
         self.dones = self._reset_dones()
 
-        reset_obs = {agent_id: self.state_to_obs(agent_id, self.normalize) for agent_id in self.players}
-
         # Rendering
         if self.render_mode:
             self.render_ctr = 0
             if self.render_saving:
-                self.render_buffer = []
+                self.render_buffer = [] #np.zeros((TODO num timesteps + 1, 3, self.screen_height, self.screen_width))
             if self.render_traj_mode:
                 self.traj_render_buffer = {agent_id: {'traj': [], 'agent': [], 'history': []} for agent_id in self.players}
 
             self._render()
             self.render_ctr = 0
-        
-        # np.zeros((self.hist_len, self.global_state_normalizer.flattened_length))
 
-        return reset_obs
+        # Observations
+        obs = {agent_id: self.state["obs_hist_buffer"][agent_id][self.hist_buffer_inds] for agent_id in self.players}
+
+        if return_info:
+            info = {"global_state": self.state["global_state_hist_buffer"][self.hist_buffer_inds]}
+            return obs, info
+        else:
+            return obs
 
     def reset_from_state_dict(self, state_dict):
         """"Initialize env state from a previous run's self.state value."""
