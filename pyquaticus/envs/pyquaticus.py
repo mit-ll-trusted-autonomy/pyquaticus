@@ -654,8 +654,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         red_wall_ray_end = team_flags_midpoint + self.env_diag * (red_wall_vec / np.linalg.norm(red_wall_vec))
         red_wall_ray = LineString((team_flags_midpoint, red_wall_ray_end))
 
-        blue_borders = self._point_on_which_border(intersection(blue_wall_ray, Polygon(self.env_bounds_vertices)).coords[1])
-        red_borders = self._point_on_which_border(intersection(red_wall_ray, Polygon(self.env_bounds_vertices)).coords[1])
+        blue_borders = self._point_on_which_border(intersection(blue_wall_ray, Polygon(self.env_vertices)).coords[1])
+        red_borders = self._point_on_which_border(intersection(red_wall_ray, Polygon(self.env_vertices)).coords[1])
 
         if len(blue_borders) == len(red_borders) == 2:
             #blue wall
@@ -1308,7 +1308,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 )
 
                 if distance_to_flag < self.catch_radius:
-                    print("Flag picked up")
                     player.has_flag = True
                     self.state["flag_taken"][other_team] = 1
                     self.state["agent_has_flag"][player.id] = 1
@@ -1581,7 +1580,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.hist_buffer_inds = np.unique(np.concatenate((short_hist_buffer_inds, long_hist_buffer_inds))) #indices of history buffer corresponding to history entries
 
         self.hist_len = len(self.hist_buffer_inds)
-        self.hist_buffer_len = self.hist_buffer_inds[-1]
+        self.hist_buffer_len = self.hist_buffer_inds[-1] + 1
 
         short_hist_oldest_timestep = self.short_hist_length*self.short_hist_interval - self.short_hist_interval
         long_hist_oldest_timestep = self.long_hist_length*self.long_hist_interval - self.long_hist_interval
@@ -1824,7 +1823,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             #obstacles
             obstacle_segments = [
-                segment for obstacle in self.obstacles for segment in self._generate_segments_from_obstacles(obstacle, n_quad_segs) if not self._segment_on_border(segment)
+                [*segment[0], *segment[1]] for obstacle in self.obstacles for segment in self._generate_segments_from_obstacles(obstacle, n_quad_segs) if not self._segment_on_border(segment)
             ]
             ray_int_seg_labels.extend(
                 len(obstacle_segments) * [self.ray_int_label_map["obstacle"]]
@@ -1884,25 +1883,18 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             pygame_background_img = pygame.surfarray.make_surface(
                 np.transpose(self.background_img, (1,0,2)) #pygame assumes images are (h, w, 3)
             )
-
-            # add attribution text
-            starting_font_size = 1*self.pixel_size*self.agent_radius
-            font_max_prop_buffer = 1/4
-            img_attribution_font = pygame.font.SysFont(None, int(starting_font_size))
-            text_width,text_height = img_attribution_font.size(self.background_img_attribution)
-            if text_height > self.arena_buffer*font_max_prop_buffer:
-                new_font_size = int(starting_font_size*(self.arena_buffer*font_max_prop_buffer)/text_height)
-                img_attribution_font = pygame.font.SysFont(None, new_font_size)
-
-            self.img_attribution_text = img_attribution_font.render(self.background_img_attribution, True, "black")
-            self.img_attribution_text_rect = self.img_attribution_text.get_rect()
-            center_x = self.screen_width-self.arena_buffer-self.img_attribution_text_rect[2]/2 ## object is [left,top,width,height]
-            center_y = self.screen_height-self.arena_buffer/2
-            self.img_attribution_text_rect.center = [center_x,center_y]
             self.pygame_background_img = pygame.transform.scale(pygame_background_img, (self.screen_width, self.screen_height))
 
-            self.pygame_background_img.blit(self.img_attribution_text, self.img_attribution_text_rect)
+            # add attribution text
+            img_attribution_font = pygame.font.SysFont(None, round(0.35*self.arena_buffer))
+            img_attribution_text = img_attribution_font.render(self.background_img_attribution, True, "black")
+            img_attribution_text_rect = img_attribution_text.get_rect()
 
+            center_x = self.screen_width - self.arena_buffer - 0.5*img_attribution_text_rect[2] #object is [left,top,width,height]
+            center_y = self.screen_height - 0.5*self.arena_buffer
+            img_attribution_text_rect.center = [center_x, center_y]
+
+            self.pygame_background_img.blit(img_attribution_text, img_attribution_text_rect)
         else:
             self.pygame_background_img = pygame.Surface((self.screen_width, self.screen_height))
             self.pygame_background_img.fill((255, 255, 255))
@@ -2119,20 +2111,20 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         dones["__all__"] = False
         return dones
 
-    def reset(self, seed=None, return_info=False, options: Optional[dict] = None, state_dict: Optional[dict] = None):
+    def reset(self, seed=None, return_info=False, options: Optional[dict] = None):
         """
         Resets the environment so that it is ready to be used.
 
         Args:
             seed (optional): Starting seed.
             options (optional): Additonal options for resetting the environment (for now it just contains normalize)
-            state_dict (optional): state dictionary with which to initialize the environemnt
         """
         if seed is not None:
             self.seed(seed=seed)
 
         if options is not None:
             self.normalize = options.get("normalize", config_dict_std["normalize"])
+            state_dict = options.get("state_dict", None)
 
         if return_info:
             raise DeprecationWarning("return_info has been deprecated by PettingZoo -- https://github.com/Farama-Foundation/PettingZoo/pull/890")
@@ -2218,20 +2210,29 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Rendering
         if self.render_mode:
-            self.render_ctr = 0
             if self.render_saving:
-                self.render_buffer = [] #np.zeros((self.screen_height, self.screen_width, TODO num timesteps + 1, 3))
+                max_renders = 1 + ceil(self.max_time / (self.sim_speedup_factor * self.tau)) * self.num_renders_per_step
+                self.render_buffer = np.zeros((max_renders, self.screen_height, self.screen_width, 3))
             if self.render_traj_mode:
-                self.traj_render_buffer = {agent_id: {'traj': [], 'agent': [], 'history': []} for agent_id in self.players}
+                self.traj_render_buffer = {agent_id: {"traj": [], "agent": [], "history": []} for agent_id in self.players}
 
-            self._render()
-            self.render_ctr = 0
+            self.render_ctr = -1 #reset render doesn't count
+            self._render() 
 
         # Observations
-        obs = {agent_id: self.state["obs_hist_buffer"][agent_id][self.hist_buffer_inds] for agent_id in self.players}
+        if self.hist_len > 1:
+            obs = {agent_id: self.state["obs_hist_buffer"][agent_id][self.hist_buffer_inds] for agent_id in self.players}
+        else:
+            obs = {agent_id: self.state["obs_hist_buffer"][agent_id][0] for agent_id in self.players}
 
+        # Return
         if return_info:
-            info = {"global_state": self.state["global_state_hist_buffer"][self.hist_buffer_inds]}
+            # Info
+            if self.hist_len > 1:
+                info = {"global_state": self.state["global_state_hist_buffer"][self.hist_buffer_inds]}
+            else:
+                info = {"global_state": self.state["global_state_hist_buffer"][0]}
+            
             return obs, info
         else:
             return obs
@@ -2350,8 +2351,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         raise Exception("Flag is too close to scrimmage line.")
 
                     scrimmage_vec = self.scrimmage_coords[1]-self.scrimmage_coords[0]
-                    spawn_line_env_intersection_1 = self._get_polygon_intersection(halfway_point, scrimmage_vec, self.env_bounds_vertices)[1]
-                    spawn_line_env_intersection_2 = self._get_polygon_intersection(halfway_point, -scrimmage_vec, self.env_bounds_vertices)[1]
+                    spawn_line_env_intersection_1 = self._get_polygon_intersection(halfway_point, scrimmage_vec, self.env_vertices)[1]
+                    spawn_line_env_intersection_2 = self._get_polygon_intersection(halfway_point, -scrimmage_vec, self.env_vertices)[1]
                     spawn_line_mag = np.linalg.norm(spawn_line_env_intersection_1-spawn_line_env_intersection_2)
                     spawn_line_unit_vec = (spawn_line_env_intersection_2-spawn_line_env_intersection_1)/spawn_line_mag
 
@@ -2361,15 +2362,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         spawn_point = spawn_line_env_intersection_1+(spawn_line_mag*((player.id+1)-self.team_size)/(self.team_size+1))*spawn_line_unit_vec
 
                     ## if spawn point isn't in the env bounds, then project back into the env
-                    spawn_point[0] = max(self.env_bounds[0][0]+self.agent_radius,min(self.env_bounds[1][0]-self.agent_radius,spawn_point[0]))
-                    spawn_point[1] = max(self.env_bounds[0][1]+self.agent_radius,min(self.env_bounds[1][1]-self.agent_radius,spawn_point[1]))
+                    spawn_point[0] = max(self.agent_radius, min(self.env_size[1][0] - self.agent_radius, spawn_point[0]))
+                    spawn_point[1] = max(self.agent_radius, min(self.env_size[1][1] - self.agent_radius, spawn_point[1]))
 
                     if detect_collision(spawn_point,self.agent_radius,self.obstacle_geoms): ## TODO: add check to make sure agent isn't spawned inside an obstacle
                         print("Initial agent position collides with obstacle. Picking random point instead.")
                         ## pick random point
                         while True:
-                            start_pos_x = np.random.rand()*self.env_size[0] ## does this need to be world coordinates or env coordinates
-                            start_pos_y = np.random.rand()*self.env_size[1]
+                            start_pos_x = np.random.rand() * self.env_size[0]
+                            start_pos_y = np.random.rand() * self.env_size[1]
                             start_point = [start_pos_x,start_pos_y]
 
                             # check if position is too close to obstacle
@@ -2631,7 +2632,7 @@ when gps environment bounds are specified in meters")
             self.env_diag = np.linalg.norm(self.env_size)
 
             #vertices
-            self.env_bounds_vertices = np.array([
+            env_bounds_vertices = np.array([
                 env_bounds[0],
                 (env_bounds[1][0], env_bounds[0][1]),
                 env_bounds[1],
@@ -2686,8 +2687,8 @@ when gps environment bounds are specified in meters")
                 scrim_vec2 = np.array([flags_vec[1], -flags_vec[0]])
                 flags_midpoint = 0.5 * (flag_homes[Team.BLUE_TEAM] + flag_homes[Team.RED_TEAM]) + env_bounds[0]
 
-                scrimmage_coord1 = self._get_polygon_intersection(flags_midpoint, scrim_vec1, self.env_bounds_vertices)[1]
-                scrimmage_coord2 = self._get_polygon_intersection(flags_midpoint, scrim_vec2, self.env_bounds_vertices)[1]
+                scrimmage_coord1 = self._get_polygon_intersection(flags_midpoint, scrim_vec1, env_bounds_vertices)[1]
+                scrimmage_coord2 = self._get_polygon_intersection(flags_midpoint, scrim_vec2, env_bounds_vertices)[1]
                 scrimmage_coords = np.asarray([scrimmage_coord1, scrimmage_coord2]) - env_bounds[0]
             else:
                 if scrimmage_coords_unit == "m":
@@ -2732,7 +2733,7 @@ when gps environment bounds are specified in meters")
 
                 extended_scrimmage_coords = np.array([extended_point_1, extended_point_2])
                 full_scrim_line = LineString(extended_scrimmage_coords)
-                scrim_line_env_intersection = intersection(full_scrim_line, Polygon(self.env_bounds_vertices))
+                scrim_line_env_intersection = intersection(full_scrim_line, Polygon(env_bounds_vertices))
 
                 if (
                     scrim_line_env_intersection.is_empty or
@@ -2848,7 +2849,7 @@ when gps environment bounds are specified in meters")
 
             #environment diagonal and vertices
             self.env_diag = np.linalg.norm(self.env_size)
-            self.env_bounds_vertices = np.array([
+            env_bounds_vertices = np.array([
                 env_bounds[0],
                 (env_bounds[1][0], env_bounds[0][1]),
                 env_bounds[1],
@@ -2890,8 +2891,8 @@ when gps environment bounds are specified in meters")
                 scrim_vec2 = np.array([flags_vec[1], -flags_vec[0]])
                 flags_midpoint = 0.5 * (flag_homes[Team.BLUE_TEAM] + flag_homes[Team.RED_TEAM])
 
-                scrimmage_coord1 = self._get_polygon_intersection(flags_midpoint, scrim_vec1, self.env_bounds_vertices)[1]
-                scrimmage_coord2 = self._get_polygon_intersection(flags_midpoint, scrim_vec2, self.env_bounds_vertices)[1]
+                scrimmage_coord1 = self._get_polygon_intersection(flags_midpoint, scrim_vec1, env_bounds_vertices)[1]
+                scrimmage_coord2 = self._get_polygon_intersection(flags_midpoint, scrim_vec2, env_bounds_vertices)[1]
                 scrimmage_coords = np.asarray([scrimmage_coord1, scrimmage_coord2])
             else:
                 if scrimmage_coords_unit == "ll" or scrimmage_coords_unit == "wm_xy":
@@ -2909,7 +2910,7 @@ when gps environment bounds are specified in meters")
 
                 #env biseciton check
                 full_scrim_line = LineString(scrimmage_coords)
-                scrim_line_env_intersection = intersection(full_scrim_line, Polygon(self.env_bounds_vertices))
+                scrim_line_env_intersection = intersection(full_scrim_line, Polygon(env_bounds_vertices))
 
                 if (
                     scrim_line_env_intersection.is_empty or
@@ -3221,11 +3222,11 @@ when gps environment bounds are specified in meters")
 
             contours = []
             current_cnt = [border_cnt[-1]]
-            current_cnt_border_pts = 1
+            n_cnt_border_pts = 1
             for i, p in enumerate(border_cnt):
                 current_cnt.append(p)
-                n_cnt_border_points += self._point_on_border(p)
-                if current_cnt_border_pts == 2:
+                n_cnt_border_pts += self._point_on_border(p)
+                if n_cnt_border_pts == 2:
                     if len(current_cnt) > 2:
                         # contour start wall
                         cnt_start_borders = self._point_on_which_border(current_cnt[0])
@@ -3264,7 +3265,7 @@ when gps environment bounds are specified in meters")
 
                     #next border contour
                     current_cnt = [p]
-                    n_cnt_border_points = 1
+                    n_cnt_border_pts = 1
 
             return contours
 
@@ -3299,7 +3300,7 @@ when gps environment bounds are specified in meters")
         return p_borders
 
     def _segment_on_border(self, segment):
-        p1_borders, p2_borders = _point_on_which_border(segment)
+        p1_borders, p2_borders = self._point_on_which_border(segment)
         same_border = len(np.intersect1d(p1_borders, p2_borders, assume_unique=True)) > 0
         
         return same_border
@@ -3313,7 +3314,7 @@ when gps environment bounds are specified in meters")
             center = obstacle.center_point
             vertices = list(Point(*center).buffer(radius, quad_segs=n_quad_segs).exterior.coords)[:-1] #approximate circle with an octagon
 
-        segments = [[*vertex, *vertices[(i+1) % len(vertices)]] for i, vertex in enumerate(vertices)]
+        segments = [[vertex, vertices[(i+1) % len(vertices)]] for i, vertex in enumerate(vertices)]
 
         return segments
 
@@ -3410,26 +3411,23 @@ when gps environment bounds are specified in meters")
         # if self.render_traj_mode:
         #     #traj
         #     if self.render_traj_mode.startswith("traj"):
-        #         for team in Team:
-        #             teams_players = self.agents_of_team[team]
-        #             color = "blue" if team == Team.BLUE_TEAM else "red"
-
-        #             for player in teams_players:
-        #                 for prev_blit_pos in reversed(self.traj_render_buffer[player.id]['traj']):
-        #                     draw.circle(
-        #                         self.screen,
-        #                         color,
-        #                         prev_blit_pos,
-        #                         radius=2,
-        #                         width=0
-        #                     )
+        #         for i in range(1, len(self.traj_render_buffer[self.players[0]]['traj']) + 1)
+        #             for player in self.players.values():
+        #                 color = "blue" if team == Team.BLUE_TEAM else "red"
+        #                 draw.circle(
+        #                     self.screen,
+        #                     color,
+        #                     self.traj_render_buffer[player.id]['traj'][-i],
+        #                     radius=2,
+        #                     width=0
+        #                 )
         #     #agent
         #     if self.render_traj_mode.endswith("agent"):
-        #         for i in range(len(self.traj_render_buffer[self.players[0]]['agent'])):
+        #         for i in range(1, len(self.traj_render_buffer[self.players[0]]['agent']) + 1):
         #             for agent_id in self.players:
-        #                 for prev_rot_blit_pos, prev_agent_surf in reversed(self.traj_render_buffer[player.id]['agent']):
-        #                     prev_agent_surf.set_alpha(self.render_transparency_alpha)
-        #                     self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
+        #                 prev_rot_blit_pos, prev_agent_surf = self.traj_render_buffer[player.id]['agent'][-i]:
+        #                 prev_agent_surf.set_alpha(self.render_transparency_alpha)
+        #                 self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
         #     #history
         #     elif self.render_traj_mode.endswith("history"):
         #         short_hist_points_blit = self.traj_render_buffer[player.id]['history'][
@@ -3438,22 +3436,19 @@ when gps environment bounds are specified in meters")
         #         long_hist_points_blit = self.traj_render_buffer[player.id]['history'][
         #             self.long_hist_jump : self.long_hist_duration + self.long_hist_jump : self.long_hist_jump
         #         ]
-        #         short_hist_points_blit_positions = [short_hist_entry[0] for short_hist_entry in short_hist_points_blit]
-        #         num_prev_points_to_render = len(short_hist_points_blit) + len(long_hist_points_blit)
+        #         self.hist_len = len(short_hist_points_blit) + len(long_hist_points_blit)
 
         #         for i,(prev_rot_blit_pos, prev_agent_surf) in enumerate(reversed(short_hist_points_blit)):
-        #             render_tranparency = self.render_transparency_alpha + (255-self.render_transparency_alpha) * (i+len(long_hist_points_blit)+1)/(num_prev_points_to_render+1)
+        #             render_tranparency = self.render_transparency_alpha + (255-self.render_transparency_alpha) * (i+len(long_hist_points_blit)+1)/(self.hist_len+1)
         #             prev_agent_surf.set_alpha(render_tranparency)
         #             self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
 
         #         for i,(prev_rot_blit_pos, prev_agent_surf) in enumerate(reversed(long_hist_points_blit)):
         #             if np.any(prev_rot_blit_pos == short_hist_points_blit_positions): # avoid double plotting overlapping elements
         #                 continue
-        #             render_tranparency = self.render_transparency_alpha + (255-self.render_transparency_alpha) * (i+1)/(num_prev_points_to_render+1)
+        #             render_tranparency = self.render_transparency_alpha + (255-self.render_transparency_alpha) * (i+1)/(self.hist_len+1)
         #             prev_agent_surf.set_alpha(render_tranparency)
         #             self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
-
-
 
         # Players
         for team in Team:
@@ -3595,7 +3590,7 @@ when gps environment bounds are specified in meters")
                         self.traj_render_buffer[player.id]['traj'] = self.traj_render_buffer[player.id]['traj'][ :self.render_traj_cutoff]
                         self.traj_render_buffer[player.id]['agent'] = self.traj_render_buffer[player.id]['agent'][ :agent_render_cutoff]
 
-                    self.traj_render_buffer[player.id]['history'] = self.traj_render_buffer[player.id]['history'][: self.hist_len]
+                    self.traj_render_buffer[player.id]['history'] = self.traj_render_buffer[player.id]['history'][: self.hist_buffer_len]
 
         # Agent-to-agent distances
         for blue_player in self.agents_of_team[Team.BLUE_TEAM]:
@@ -3626,13 +3621,12 @@ when gps environment bounds are specified in meters")
 
         # Record
         if self.render_saving:
-            self.render_buffer.append(
-                np.transpose(np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2))
+            self.render_buffer[self.render_ctr + 1] = np.transpose(
+                np.array(pygame.surfarray.pixels3d(self.screen)),
+                axes=(1, 0, 2)
             )
 
         # Update counter
-        print(np.transpose(np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2)).shape)
-        sys.exit()
         self.render_ctr += 1
 
     def env_to_screen(self, pos):
@@ -3647,7 +3641,7 @@ when gps environment bounds are specified in meters")
         if not self.render_saving:
             print("Warning: Environment rendering is disabled. Cannot save the video. See the render_saving option in the config.")
             print()
-        elif len(self.render_buffer) > 0:
+        elif self.render_ctr > 0:
             video_file_dir = str(pathlib.Path(__file__).resolve().parents[1] / 'videos')
             if not os.path.isdir(video_file_dir):
                 os.mkdir(video_file_dir)
@@ -3691,7 +3685,7 @@ when gps environment bounds are specified in meters")
             image_file_name = f"pyquaticus_{image_id}.png"
             image_file_path = os.path.join(image_file_dir, image_file_name)
 
-            cv2.imwrite(image_file_path, cv2.cvtColor(self.render_buffer[-1],cv2.COLOR_RGB2BGR))
+            cv2.imwrite(image_file_path, cv2.cvtColor(self.render_buffer[self.render_ctr],cv2.COLOR_RGB2BGR))
 
         else:
             raise Exception("Envrionment was not rendered. See the render_mode option in the config.")

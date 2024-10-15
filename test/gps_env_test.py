@@ -139,14 +139,14 @@ def main():
     config = copy.deepcopy(pyquaticus.config.config_dict_std)
     config["gps_env"] = True
     config["env_bounds"] = "auto"
-    config["blue_flag_home"] = (41.3504170, -74.0614643)
-    config["red_flag_home"] = (41.3512143, -74.0608635)
-    # config["blue_flag_home"] = (42.352229714597705, -70.99992567997114)
-    # config["red_flag_home"] = (42.32710627259394, -70.96739585043458)
+    # config["blue_flag_home"] = (41.3504170, -74.0614643)
+    # config["red_flag_home"] = (41.3512143, -74.0608635)
+    config["blue_flag_home"] = (42.352229714597705, -70.99992567997114)
+    config["red_flag_home"] = (42.32710627259394, -70.96739585043458)
     # config["blue_flag_home"] = (41.346438772724014, -74.06513704774754)
     # config["red_flag_home"] = (41.351528984663766, -74.06065239404523)
     config["flag_homes_unit"] = "ll"
-    config["sim_speedup_factor"] = 10
+    config["sim_speedup_factor"] = 50
     config["max_time"] = 10_000
     config["lidar_obs"] = True
     config["num_lidar_rays"] = 100
@@ -156,16 +156,17 @@ def main():
     # config["render_traj_mode"] = "traj_agent"
     config["render_traj_freq"] = 50
     config["render_traj_cutoff"] = 100
-    # config["record_render"] = True
-    config["recording_format"] = "mp4"
+    # config["render_saving"] = True
+    config["default_init"] = False
     # config["render_fps"] = 10
     # config["normalize"] = False
     
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
-    try:
-        env = pyquaticus_v0.PyQuaticusEnv(team_size=3, render_mode='human', config_dict=config)
-    except Warning as err:
-        ...
+    env = pyquaticus_v0.PyQuaticusEnv(team_size=3, render_mode='human', config_dict=config)
+    # try:
+    #     env = pyquaticus_v0.PyQuaticusEnv(team_size=3, render_mode='human', config_dict=config)
+    # except Warning as err:
+    #     ...
     red_policy = args.red_policy
 
     kt = KeyTest(env, red_policy)
