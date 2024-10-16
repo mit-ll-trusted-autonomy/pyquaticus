@@ -2125,17 +2125,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if options is not None:
             self.normalize = options.get("normalize", config_dict_std["normalize"])
             state_dict = options.get("state_dict", None)
+        else:
+            state_dict = None
 
         if return_info:
             raise DeprecationWarning("return_info has been deprecated by PettingZoo -- https://github.com/Farama-Foundation/PettingZoo/pull/890")
 
         if state_dict is None:
             flag_locations = np.asarray(list(self.flag_homes.values()))
-
-            for flag in self.flags:
-                flag.home = flag_locations[int(flag.team)]
-                flag.reset()
-
             agent_positions, agent_spd_hdg, agent_on_sides = self._generate_agent_starts(flag_locations)
 
             self.state = {
@@ -2159,6 +2156,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 "obs_hist_buffer":           dict(),
                 "global_state_hist_buffer":  list()
             }
+
+            #set player and flag attributes
+            self._set_player_attributes_from_state_dict()
+            self._set_flag_attributes_from_state_dict()
 
             #team wall orientation
             self._determine_team_wall_orient()
@@ -2258,6 +2259,22 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # and updating the state dict
         self.state = copy.deepcopy(state_dict)
+
+    def _set_player_attributes_from_state_dict(self):
+        for player in self.players.values():
+            player.pos = copy.deepcopy(state_dict["agent_position"][player.id])
+            player.prev_pos = copy.deepcopy(state_dict["prev_agent_position"][player.id])
+            player.speed = state_dict["agent_spd_hdg"][player.id][0]
+            player.heading = state_dict["agent_spd_hdg"][player.id][1]
+            player.has_flag = state_dict["agent_has_flag"][player.id]
+            player.on_own_side = state_dict["agent_on_sides"][player.id]
+            player.tagging_cooldown = state_dict["agent_tagging_cooldown"][player.id]
+            player.is_tagged = state_dict["agent_tagged"][player.id]
+
+    def _set_flag_attributes_from_state_dict(self):
+        for flag in self.flags:
+            flag.home = self.state['flag_home'][int(flag.team)]
+            flag.pos = self.state['flag_locations'][int(flag.team)]
 
     def _generate_agent_starts(self, flag_locations):
         """
@@ -2362,8 +2379,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         spawn_point = spawn_line_env_intersection_1+(spawn_line_mag*((player.id+1)-self.team_size)/(self.team_size+1))*spawn_line_unit_vec
 
                     ## if spawn point isn't in the env bounds, then project back into the env
-                    spawn_point[0] = max(self.agent_radius, min(self.env_size[1][0] - self.agent_radius, spawn_point[0]))
-                    spawn_point[1] = max(self.agent_radius, min(self.env_size[1][1] - self.agent_radius, spawn_point[1]))
+                    spawn_point[0] = max(self.agent_radius, min(self.env_size[0] - self.agent_radius, spawn_point[0]))
+                    spawn_point[1] = max(self.agent_radius, min(self.env_size[1] - self.agent_radius, spawn_point[1]))
 
                     if detect_collision(spawn_point,self.agent_radius,self.obstacle_geoms): ## TODO: add check to make sure agent isn't spawned inside an obstacle
                         print("Initial agent position collides with obstacle. Picking random point instead.")
@@ -3407,48 +3424,36 @@ when gps environment bounds are specified in meters")
                 width=self.boundary_width,
             )
 
-        # # Trajectories
-        # if self.render_traj_mode:
-        #     #traj
-        #     if self.render_traj_mode.startswith("traj"):
-        #         for i in range(1, len(self.traj_render_buffer[self.players[0]]['traj']) + 1)
-        #             for player in self.players.values():
-        #                 color = "blue" if team == Team.BLUE_TEAM else "red"
-        #                 draw.circle(
-        #                     self.screen,
-        #                     color,
-        #                     self.traj_render_buffer[player.id]['traj'][-i],
-        #                     radius=2,
-        #                     width=0
-        #                 )
-        #     #agent
-        #     if self.render_traj_mode.endswith("agent"):
-        #         for i in range(1, len(self.traj_render_buffer[self.players[0]]['agent']) + 1):
-        #             for agent_id in self.players:
-        #                 prev_rot_blit_pos, prev_agent_surf = self.traj_render_buffer[player.id]['agent'][-i]:
-        #                 prev_agent_surf.set_alpha(self.render_transparency_alpha)
-        #                 self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
-        #     #history
-        #     elif self.render_traj_mode.endswith("history"):
-        #         short_hist_points_blit = self.traj_render_buffer[player.id]['history'][
-        #             0 : self.short_hist_duration : self.short_hist_jump
-        #         ]
-        #         long_hist_points_blit = self.traj_render_buffer[player.id]['history'][
-        #             self.long_hist_jump : self.long_hist_duration + self.long_hist_jump : self.long_hist_jump
-        #         ]
-        #         self.hist_len = len(short_hist_points_blit) + len(long_hist_points_blit)
-
-        #         for i,(prev_rot_blit_pos, prev_agent_surf) in enumerate(reversed(short_hist_points_blit)):
-        #             render_tranparency = self.render_transparency_alpha + (255-self.render_transparency_alpha) * (i+len(long_hist_points_blit)+1)/(self.hist_len+1)
-        #             prev_agent_surf.set_alpha(render_tranparency)
-        #             self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
-
-        #         for i,(prev_rot_blit_pos, prev_agent_surf) in enumerate(reversed(long_hist_points_blit)):
-        #             if np.any(prev_rot_blit_pos == short_hist_points_blit_positions): # avoid double plotting overlapping elements
-        #                 continue
-        #             render_tranparency = self.render_transparency_alpha + (255-self.render_transparency_alpha) * (i+1)/(self.hist_len+1)
-        #             prev_agent_surf.set_alpha(render_tranparency)
-        #             self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
+        # Trajectories
+        if self.render_traj_mode:
+            #traj
+            if self.render_traj_mode.startswith("traj"):
+                for i in range(1, len(self.traj_render_buffer[self.agents[0]]['traj']) + 1):
+                    for player in self.players.values():
+                        color = "blue" if player.team == Team.BLUE_TEAM else "red"
+                        draw.circle(
+                            self.screen,
+                            color,
+                            self.traj_render_buffer[player.id]['traj'][-i],
+                            radius=2,
+                            width=0
+                        )
+            #agent
+            if self.render_traj_mode.endswith("agent"):
+                for i in range(1, len(self.traj_render_buffer[self.agents[0]]['agent']) + 1):
+                    for agent_id in self.players:
+                        prev_rot_blit_pos, prev_agent_surf = self.traj_render_buffer[agent_id]['agent'][-i]
+                        prev_agent_surf.set_alpha(self.render_transparency_alpha)
+                        self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
+            #history
+            elif self.render_traj_mode.endswith("history"):
+                for i in reversed(self.hist_buffer_inds[1:] - 1): #current state of agent is not included in history buffer
+                    for agent_id in self.players:
+                        if i < len(self.traj_render_buffer[agent_id]['history']):
+                            prev_rot_blit_pos, prev_agent_surf = self.traj_render_buffer[agent_id]['history'][i]
+                            render_tranparency = 255 - ((255 - self.render_transparency_alpha) * (i+1) / (self.hist_buffer_len-1))
+                            prev_agent_surf.set_alpha(render_tranparency)
+                            self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
 
         # Players
         for team in Team:
@@ -3458,46 +3463,6 @@ when gps environment bounds are specified in meters")
 
             for player in teams_players:
                 blit_pos = self.env_to_screen(player.pos)
-
-                #trajectory
-                if self.render_traj_mode:
-                    #traj
-                    if self.render_traj_mode.startswith("traj"):
-                        for prev_blit_pos in reversed(self.traj_render_buffer[player.id]['traj']):
-                            draw.circle(
-                                self.screen,
-                                color,
-                                prev_blit_pos,
-                                radius=1,
-                                width=0
-                            )
-                    #agent
-                    if self.render_traj_mode.endswith("agent"):
-                        for prev_rot_blit_pos, prev_agent_surf in reversed(self.traj_render_buffer[player.id]['agent']):
-                            prev_agent_surf.set_alpha(self.render_transparency_alpha)
-                            self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
-                    #history
-                    elif self.render_traj_mode.endswith("history"):
-                        short_hist_points_blit = self.traj_render_buffer[player.id]['history'][
-                            0 : self.short_hist_duration : self.short_hist_jump
-                        ]
-                        long_hist_points_blit = self.traj_render_buffer[player.id]['history'][
-                            self.long_hist_jump : self.long_hist_duration + self.long_hist_jump : self.long_hist_jump
-                        ]
-                        short_hist_points_blit_positions = [short_hist_entry[0] for short_hist_entry in short_hist_points_blit]
-                        num_prev_points_to_render = len(short_hist_points_blit) + len(long_hist_points_blit)
-
-                        for i,(prev_rot_blit_pos, prev_agent_surf) in enumerate(reversed(short_hist_points_blit)):
-                            render_tranparency = self.render_transparency_alpha + (255-self.render_transparency_alpha) * (i+len(long_hist_points_blit)+1)/(num_prev_points_to_render+1)
-                            prev_agent_surf.set_alpha(render_tranparency)
-                            self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
-
-                        for i,(prev_rot_blit_pos, prev_agent_surf) in enumerate(reversed(long_hist_points_blit)):
-                            if np.any(prev_rot_blit_pos == short_hist_points_blit_positions): # avoid double plotting overlapping elements
-                                continue
-                            render_tranparency = self.render_transparency_alpha + (255-self.render_transparency_alpha) * (i+1)/(num_prev_points_to_render+1)
-                            prev_agent_surf.set_alpha(render_tranparency)
-                            self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
 
                 #lidar
                 if self.lidar_obs and self.render_lidar_mode:

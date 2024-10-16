@@ -143,6 +143,21 @@ def main():
     }
     config["sim_speedup_factor"] = 8
     # config["normalize"] = False
+    config["max_time"] = 1000
+    config["lidar_obs"] = True
+    config["num_lidar_rays"] = 100
+    config["lidar_range"] = 20
+    config["render_lidar_mode"] = "detection"
+    config["render_agent_ids"] = True
+    config["render_traj_mode"] = "traj_history"
+    config["render_traj_freq"] = 50
+    config["max_speed"] = 1.5
+    config["short_hist_length"] = 4
+    config["long_hist_length"] = 5
+    config["long_hist_interval"] = 20
+    config["render_traj_cutoff"] = 300
+
+
     
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
     try:

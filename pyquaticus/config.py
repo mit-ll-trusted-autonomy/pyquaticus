@@ -80,7 +80,7 @@ config_dict_std = {
     "render_traj_cutoff":       None, # max length (timesteps) of the traj to render, or None for no limit
     "render_lidar_mode":        None, # "full" (all rays), "detection" (only rays that detect something), or None
     "render_saving":           False, # option to save video of render frames
-    "render_transparency_alpha": 127, # controls the transparency when rendering previous agent states, 0 = fully transparent, 255 = fully opaque
+    "render_transparency_alpha": 128, # controls the transparency when rendering previous agent states, 0 = fully transparent, 255 = fully opaque
 
     #render_traj_mode has multiple options and combinations:
     #'traj': dashed line for agent trajectories
