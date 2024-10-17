@@ -2114,29 +2114,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 -"normalize": Whether or not to normalize observations and global state
                 -"state_dict": self.state value from a previous episode
                 -"init_dict": partial state_dict containing any information found in self.state aside from the following:
-                    *prev_agent_position, agent_on_sides, flag_locations", flag_taken, 
-                    self.state = {
-                    "agent_position":            agent_positions,
-                    "prev_agent_position":       copy.deepcopy(agent_positions),
-                    "agent_spd_hdg":             agent_spd_hdg,
-                    "agent_has_flag":            np.zeros(self.num_agents),
-                    "agent_on_sides":            agent_on_sides,
-                    "flag_home":                 copy.deepcopy(flag_locations),
-                    "flag_locations":            copy.deepcopy(flag_locations),
-                    "flag_taken":                np.zeros(len(self.flags)),
-                    "team_has_flag":          np.zeros(len(self.agents_of_team)),
-                    "agent_made_tag":            np.array([None] * self.num_agents), #whether this agent tagged something at the current timestep (will be index of tagged agent if so)
-                    "agent_is_tagged":              np.zeros(self.num_agents), #if this agent is tagged
-                    "agent_oob":                 np.zeros(self.num_agents), #if this agent is out of bounds
-                    "agent_tagging_cooldown":    np.array([self.tagging_cooldown] * self.num_agents),
-                    "dist_bearing_to_obstacles": {agent_id: np.zeros((len(self.obstacles), 2)) for agent_id in self.players},
-                    "captures":                  np.zeros(len(self.agents_of_team)), #number of flag captures made by this team
-                    "tags":                      np.zeros(len(self.agents_of_team)), #number of tags made by this team
-                    "grabs":                     np.zeros(len(self.agents_of_team)), #number of flag grabs made by this team
-                    "obs_hist_buffer":           dict(),
-                    "global_state_hist_buffer":  list()
-                }
-
+                    *prev_agent_position, agent_on_sides, agent_oob, agent_made_tag, dist_bearing_to_obstacles, flag_locations, flag_taken,
+                     team_has_flag, obs_history_buffer, global_state_hist_buffer, lidar_labels, lidar_ends, lidar_distances
         """
         if seed is not None:
             self.seed(seed=seed)
