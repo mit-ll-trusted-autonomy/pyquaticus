@@ -2222,11 +2222,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if self.render_mode:
             if self.render_saving:
                 max_renders = 1 + ceil(self.max_time / (self.sim_speedup_factor * self.tau)) * self.num_renders_per_step
-                self.render_buffer = np.zeros((max_renders, self.screen_height, self.screen_width, 3))
+                self.render_buffer = []
             if self.render_traj_mode:
                 self.traj_render_buffer = {agent_id: {"traj": [], "agent": [], "history": []} for agent_id in self.players}
 
-            self.render_ctr = -1 #reset render doesn't count
+            self.render_ctr -= 1 #reset render doesn't count
             self._render() 
 
         # Observations
@@ -3577,9 +3577,11 @@ when gps environment bounds are specified in meters")
 
         # Record
         if self.render_saving:
-            self.render_buffer[self.render_ctr + 1] = np.transpose(
-                np.array(pygame.surfarray.pixels3d(self.screen)),
-                axes=(1, 0, 2)
+            self.render_buffer.append(
+                np.transpose(
+                    np.array(pygame.surfarray.pixels3d(self.screen)),
+                    axes=(1, 0, 2)
+                )
             )
 
         # Update counter

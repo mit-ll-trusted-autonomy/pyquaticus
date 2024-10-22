@@ -94,6 +94,7 @@ class KeyTest:
             self.obs, rewards, terminated, truncated, info = self.env.step(action_dict)
             for k in terminated:
                 if terminated[k] == True or truncated[k]==True:
+                    self.env.save_screenshot() # save screenshot of last frame
                     time.sleep(1.)
                     self.env.reset()
                     break
@@ -160,6 +161,7 @@ def main():
     config["default_init"] = False
     # config["render_fps"] = 10
     # config["normalize"] = False
+    config["render_saving"] = True
     
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
     env = pyquaticus_v0.PyQuaticusEnv(team_size=3, render_mode='human', config_dict=config)
