@@ -30,9 +30,9 @@ def heron_move_agents(
         env.max_speed,
     )
     if (new_speed - player.speed) / dt > env.max_acc:
-        new_speed = new_speed + env.max_acc * dt
+        new_speed = player.speed + env.max_acc * dt
     elif (player.speed - new_speed) / dt > env.max_dec:
-        new_speed = new_speed - env.max_dec * dt
+        new_speed = player.speed - env.max_dec * dt
 
     # propagate vehicle heading
     raw_d_hdg = desired_rudder * (env.turn_rate / 100) * dt

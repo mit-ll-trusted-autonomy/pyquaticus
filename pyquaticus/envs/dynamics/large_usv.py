@@ -36,9 +36,9 @@ def large_usv_move_agents(
         env.large_usv_max_speed,
     )
     if (new_speed - player.speed) / dt > env.large_usv_max_acc:
-        new_speed = new_speed + env.large_usv_max_acc * dt
+        new_speed = player.speed + env.large_usv_max_acc * dt
     elif (player.speed - new_speed) / dt > env.large_usv_max_dec:
-        new_speed = new_speed - env.large_usv_max_dec * dt
+        new_speed = player.speed - env.large_usv_max_dec * dt
 
     # propagate vehicle heading
     raw_d_hdg = desired_rudder * (env.large_usv_turn_rate / 100) * dt
