@@ -1,0 +1,21 @@
+import numpy as np
+from pyquaticus.utils.utils import clip, angle180
+from pyquaticus.structs import RenderingPlayer
+
+
+def si_move_agents(
+    env,
+    player: RenderingPlayer,
+    desired_speed: float,
+    heading_error: float,
+    dt: float,
+) -> tuple[float, float, float]:
+    # Use single-integrator dynamics to go from desired_speed and heading_error
+    # to new_speed, new_heading, and new_thrust
+
+    new_speed = clip(desired_speed, -env.si_max_speed, env.si_max_speed)
+    omega = clip(heading_error / dt, -env.si_max_omega, env.si_max_omega)
+    new_heading = player.heading + omega * dt
+    new_thrust = desired_speed
+
+    return new_speed, new_heading, new_thrust

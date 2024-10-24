@@ -90,6 +90,7 @@ from typing import Optional, Union
 from pyquaticus.envs.dynamics.heron import heron_move_agents
 from pyquaticus.envs.dynamics.large_usv import large_usv_move_agents
 from pyquaticus.envs.dynamics.drone import drone_move_agents
+from pyquaticus.envs.dynamics.single_integrator import si_move_agents
 
 
 class PyQuaticusEnvBase(ParallelEnv, ABC):
@@ -1169,6 +1170,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 new_speed, new_heading, new_thrust = drone_move_agents(
                     self, player, desired_speed, heading_error, dt
                 )
+            elif self.dynamics_dict[i] == "si":
+                new_speed, new_heading, new_thrust = si_move_agents(
+                    self, player, desired_speed, heading_error, dt
+                )
 
             vel = mag_heading_to_vec(new_speed, new_heading)
 
@@ -1851,7 +1856,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.large_usv_speed_factor = config_dict.get(
             "speed_factor", config_dict_std["speed_factor"]
         )
-        self.large_usv_max_speed = config_dict.get("large_usv_max_speed", config_dict_std["large_usv_max_speed"])
+        self.large_usv_max_speed = config_dict.get(
+            "large_usv_max_speed", config_dict_std["large_usv_max_speed"]
+        )
         self.large_usv_thrust_map = config_dict.get(
             "large_usv_thrust_map", config_dict_std["large_usv_thrust_map"]
         )
@@ -1878,6 +1885,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         )
         self.action_type = config_dict.get(
             "action_type", config_dict_std["action_type"]
+        )
+        self.si_max_speed = config_dict.get(
+            "si_max_speed", config_dict_std["si_max_speed"]
+        )
+        self.si_max_omega = config_dict.get(
+            "si_max_omega", config_dict_std["si_max_omega"]
         )
 
         # Simulation parameters

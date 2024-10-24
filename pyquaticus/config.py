@@ -51,7 +51,7 @@ config_dict_std = {
     "dynamics_dict": None,
     # Example:
     # {               # if default_dynamics is false, use this dict to determine each vehicle's dynamics
-    #    0: "heron",  # accepted values are "heron", "large_usv", "drone"
+    #    0: "heron",  # accepted values are "heron", "large_usv", "si"
     #    1: "heron",
     #    2: "heron",
     #    3: "heron",
@@ -79,7 +79,8 @@ config_dict_std = {
     # Large USV parameters
     #
     "large_usv_max_speed": 12,  # meters / s
-    "large_usv_speed_factor": 20.0,  # multiplicative factor for desired_speed -> desired_thrust
+    "large_usv_speed_factor": 20.0
+    / 3,  # multiplicative factor for desired_speed -> desired_thrust
     "large_usv_thrust_map": np.array(  # piecewise linear mapping from desired_thrust to speed
         [[-100, 0, 20, 40, 60, 80, 100], [-3, 0, 3, 6, 9, 12, 12]]
     ),
@@ -87,12 +88,26 @@ config_dict_std = {
     "large_usv_max_rudder": 100,  # limit on vehicle rudder actuation
     "large_usv_turn_loss": 0.85,
     "large_usv_turn_rate": 50,
-    "large_usv_max_acc": 0.1,  # meters / s**2
-    "large_usv_max_dec": 0.1,  # meters / s**2
+    "large_usv_max_acc": 0.5,  # meters / s**2
+    "large_usv_max_dec": 0.5,  # meters / s**2
     "large_usv_oob_speed_frac": 0.5,  # proportion
     #
     #
     # Drone parameters
+    #
+    #
+    # Single Integrator parameters
+    #
+    "si_max_speed": 10,  # m/s
+    "si_max_omega": 180,  # deg/s
+    #
+    #
+    # Double Integrator parameters
+    #
+    "di_max_speed": 10,  # m/s
+    "di_max_acc": 1,  # m/s^2
+    "di_max_omega": 180,  # deg/s
+    "di_max_alpha": 90,  # deg/s^2
     #
     #
     # Simulation parameters
