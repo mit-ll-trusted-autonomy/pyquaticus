@@ -99,16 +99,22 @@ config_dict_std = {
     # Single Integrator parameters
     #
     "si_max_speed": 10,  # m/s
-    "si_max_omega": 180,  # deg/s
+    "si_max_turn_rate": 180,  # deg/s
     #
     #
     # Double Integrator parameters
     #
     "di_max_speed": 10,  # m/s
     "di_max_acc": 1,  # m/s^2
-    "di_max_omega": 180,  # deg/s
+    "di_max_turn_rate": 180,  # deg/s
     "di_max_alpha": 90,  # deg/s^2
     #
+    #
+    # Fixed Wing parameters
+    #
+    "fixed_wing_min_speed": 5,  # m/s
+    "fixed_wing_max_speed": 10,  # m/s
+    "fixed_wing_min_turn_radius": 10,  # m
     #
     # Simulation parameters
     #

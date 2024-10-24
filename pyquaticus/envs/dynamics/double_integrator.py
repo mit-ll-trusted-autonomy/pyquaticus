@@ -14,17 +14,17 @@ def di_move_agents(
     # to new_speed, new_heading, and new_thrust
 
     desired_acc = (desired_speed - player.speed) / dt
-    desired_omega = heading_error / dt
-    desired_alpha = (desired_omega - player.turn_rate) / dt
+    desired_turn_rate = heading_error / dt
+    desired_alpha = (desired_turn_rate - player.turn_rate) / dt
     desired_acc = clip(desired_acc, -env.di_max_acc, env.di_max_acc)
     desired_alpha = clip(desired_alpha, -env.di_max_alpha, env.di_max_alpha)
 
     new_speed = player.speed + desired_acc * dt
     new_speed = clip(new_speed, -env.di_max_speed, env.di_max_speed)
 
-    new_omega = player.turn_rate + desired_alpha * dt
-    new_omega = clip(new_omega, -env.di_max_omega, env.di_max_omega)
-    player.turn_rate = new_omega
-    new_heading = player.heading + new_omega * dt
+    new_turn_rate = player.turn_rate + desired_alpha * dt
+    new_turn_rate = clip(new_turn_rate, -env.di_max_turn_rate, env.di_max_turn_rate)
+    player.turn_rate = new_turn_rate
+    new_heading = player.heading + new_turn_rate * dt
 
     return new_speed, new_heading, new_speed

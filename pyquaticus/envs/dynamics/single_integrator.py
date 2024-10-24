@@ -14,8 +14,8 @@ def si_move_agents(
     # to new_speed, new_heading, and new_thrust
 
     new_speed = clip(desired_speed, -env.si_max_speed, env.si_max_speed)
-    omega = clip(heading_error / dt, -env.si_max_omega, env.si_max_omega)
-    new_heading = player.heading + omega * dt
+    turn_rate = clip(heading_error / dt, -env.si_max_turn_rate, env.si_max_turn_rate)
+    new_heading = player.heading + turn_rate * dt
     new_thrust = desired_speed
 
     return new_speed, new_heading, new_thrust
