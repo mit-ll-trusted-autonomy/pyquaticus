@@ -47,6 +47,7 @@ config_dict_std = {
     # Dynamics parameters
     #
     "action_type": "discrete",  # "discrete" or "continuous"
+    "global_max_speed": 100,
     "default_dynamics": True,  # use Heron dynamics for all vehicles
     "dynamics_dict": None,
     # Example:
@@ -62,18 +63,18 @@ config_dict_std = {
     #
     # Heron parameters
     #
-    "max_speed": MAX_SPEED,  # meters / s
-    "speed_factor": 20.0,  # multiplicative factor for desired_speed -> desired_thrust
-    "thrust_map": np.array(  # piecewise linear mapping from desired_thrust to speed
+    "heron_max_speed": 3.5,  # meters / s
+    "heron_speed_factor": 20.0,  # multiplicative factor for desired_speed -> desired_thrust
+    "heron_thrust_map": np.array(  # piecewise linear mapping from desired_thrust to speed
         [[-100, 0, 20, 40, 60, 80, 100], [-2, 0, 1, 2, 3, 5, 5]]
     ),
-    "max_thrust": 70,  # limit on vehicle thrust
-    "max_rudder": 100,  # limit on vehicle rudder actuation
-    "turn_loss": 0.85,
-    "turn_rate": 70,
-    "max_acc": 1,  # meters / s**2
-    "max_dec": 1,  # meters / s**2
-    "oob_speed_frac": 0.5,  # proportion
+    "heron_max_thrust": 70,  # limit on vehicle thrust
+    "heron_max_rudder": 100,  # limit on vehicle rudder actuation
+    "heron_turn_loss": 0.85,
+    "heron_turn_rate": 70,
+    "heron_max_acc": 1,  # meters / s**2
+    "heron_max_dec": 1,  # meters / s**2
+    "heron_oob_speed_frac": 0.5,  # proportion
     #
     #
     # Large USV parameters

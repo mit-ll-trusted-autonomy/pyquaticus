@@ -1850,21 +1850,22 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.dynamics_dict = config_dict.get(
             "dynamics_dict", config_dict_std["dynamics_dict"]
         )
-        self.speed_factor = config_dict.get(
-            "speed_factor", config_dict_std["speed_factor"]
+        self.heron_max_speed = config_dict.get("heron_max_speed", config_dict_std["heron_max_speed"])
+        self.heron_speed_factor = config_dict.get(
+            "heron_speed_factor", config_dict_std["heron_speed_factor"]
         )
-        self.thrust_map = config_dict.get("thrust_map", config_dict_std["thrust_map"])
-        self.max_thrust = config_dict.get("max_thrust", config_dict_std["max_thrust"])
-        self.max_rudder = config_dict.get("max_rudder", config_dict_std["max_rudder"])
-        self.turn_loss = config_dict.get("turn_loss", config_dict_std["turn_loss"])
-        self.turn_rate = config_dict.get("turn_rate", config_dict_std["turn_rate"])
-        self.max_acc = config_dict.get("max_acc", config_dict_std["max_acc"])
-        self.max_dec = config_dict.get("max_dec", config_dict_std["max_dec"])
-        self.oob_speed_frac = config_dict.get(
-            "oob_speed_frac", config_dict_std["oob_speed_frac"]
+        self.heron_thrust_map = config_dict.get("heron_thrust_map", config_dict_std["heron_thrust_map"])
+        self.heron_max_thrust = config_dict.get("heron_max_thrust", config_dict_std["heron_max_thrust"])
+        self.heron_max_rudder = config_dict.get("heron_max_rudder", config_dict_std["heron_max_rudder"])
+        self.heron_turn_loss = config_dict.get("heron_turn_loss", config_dict_std["heron_turn_loss"])
+        self.heron_turn_rate = config_dict.get("heron_turn_rate", config_dict_std["heron_turn_rate"])
+        self.heron_max_acc = config_dict.get("heron_max_acc", config_dict_std["heron_max_acc"])
+        self.heron_max_dec = config_dict.get("heron_max_dec", config_dict_std["heron_max_dec"])
+        self.heron_oob_speed_frac = config_dict.get(
+            "heron_oob_speed_frac", config_dict_std["heron_oob_speed_frac"]
         )
         self.large_usv_speed_factor = config_dict.get(
-            "speed_factor", config_dict_std["speed_factor"]
+            "large_usv_speed_factor", config_dict_std["large_usv_speed_factor"]
         )
         self.large_usv_max_speed = config_dict.get(
             "large_usv_max_speed", config_dict_std["large_usv_max_speed"]
@@ -2051,7 +2052,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         flag_radius = config_dict.get("flag_radius", config_dict_std["flag_radius"])
         flag_keepout = config_dict.get("flag_keepout", config_dict_std["flag_keepout"])
         catch_radius = config_dict.get("catch_radius", config_dict_std["catch_radius"])
-        max_speed = config_dict.get("max_speed", config_dict_std["max_speed"])
+        max_speed = config_dict.get("global_max_speed", config_dict_std["global_max_speed"])
         lidar_range = config_dict.get("lidar_range", config_dict_std["lidar_range"])
 
         self._build_env_geom(

@@ -18,24 +18,26 @@ def heron_move_agents(
     desired_speed = env._pid_controllers[player.id]["speed"](speed_error)
     desired_rudder = env._pid_controllers[player.id]["heading"](heading_error)
 
-    desired_thrust = player.thrust + env.speed_factor * desired_speed
+    desired_thrust = player.thrust + env.heron_speed_factor * desired_speed
 
-    desired_thrust = clip(desired_thrust, -env.max_thrust, env.max_thrust)
-    desired_rudder = clip(desired_rudder, -env.max_rudder, env.max_rudder)
+    desired_thrust = clip(desired_thrust, -env.heron_max_thrust, env.heron_max_thrust)
+    desired_rudder = clip(desired_rudder, -env.heron_max_rudder, env.heron_max_rudder)
 
     # propagate vehicle speed
-    raw_speed = np.interp(desired_thrust, env.thrust_map[0, :], env.thrust_map[1, :])
-    new_speed = env._min(
-        raw_speed * 1 - ((abs(desired_rudder) / 100) * env.turn_loss),
-        env.max_speed,
+    raw_speed = np.interp(
+        desired_thrust, env.heron_thrust_map[0, :], env.heron_thrust_map[1, :]
     )
-    if (new_speed - player.speed) / dt > env.max_acc:
-        new_speed = player.speed + env.max_acc * dt
-    elif (player.speed - new_speed) / dt > env.max_dec:
-        new_speed = player.speed - env.max_dec * dt
+    new_speed = env._min(
+        raw_speed * 1 - ((abs(desired_rudder) / 100) * env.heron_turn_loss),
+        env.heron_max_speed,
+    )
+    if (new_speed - player.speed) / dt > env.heron_max_acc:
+        new_speed = player.speed + env.heron_max_acc * dt
+    elif (player.speed - new_speed) / dt > env.heron_max_dec:
+        new_speed = player.speed - env.heron_max_dec * dt
 
     # propagate vehicle heading
-    raw_d_hdg = desired_rudder * (env.turn_rate / 100) * dt
+    raw_d_hdg = desired_rudder * (env.heron_turn_rate / 100) * dt
     thrust_d_hdg = raw_d_hdg * (1 + (abs(desired_thrust) - 50) / 50)
     if desired_thrust < 0:
         thrust_d_hdg = -thrust_d_hdg
