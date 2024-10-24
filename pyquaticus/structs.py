@@ -53,6 +53,7 @@ class Player:
     pos: list[float] = field(init=False, default_factory=list)
     speed: float = field(init=False, default_factory=float)
     heading: float = field(init=False, default_factory=float)
+    turn_rate: float = field(init=False, default_factory=float)
     prev_pos: list[float] = field(init=False, default_factory=list)
     has_flag: bool = field(init=False, default=False)
     on_own_side: bool = field(init=False, default=True)
