@@ -94,11 +94,7 @@ class KeyTest:
             self.obs, rewards, terminated, truncated, info = self.env.step(action_dict)
             for k in terminated:
                 if terminated[k] == True or truncated[k]==True:
-                    self.env.save_screenshot() # save screenshot of last frame
                     time.sleep(1.)
-                    self.env.buffer_to_video(recording_compression=True) # save full sized video and compressed video
-                    self.env.reset()
-                    break
                     self.env.reset()
                     break
 
@@ -160,7 +156,6 @@ def main():
     config["long_hist_length"] = 5
     config["long_hist_interval"] = 20
     config["render_traj_cutoff"] = 300
-    config["render_saving"] = True
 
 
     

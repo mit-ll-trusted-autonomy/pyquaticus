@@ -990,9 +990,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.max_speed,
             )
             if (new_speed - player.speed) / dt > self.max_acc:
-                new_speed = new_speed + self.max_acc * dt
+                new_speed = player.speed + self.max_acc * dt
             elif (player.speed - new_speed) / dt > self.max_dec:
-                new_speed = new_speed - self.max_dec * dt
+                new_speed = player.speed - self.max_dec * dt
 
             # propagate vehicle heading
             raw_d_hdg = desired_rudder * (self.turn_rate / 100) * dt
