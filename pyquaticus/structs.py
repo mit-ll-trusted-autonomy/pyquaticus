@@ -154,20 +154,6 @@ class RenderingPlayer(Player):
             # pygame Rect object the same size as pygame_agent Surface
             self.pygame_agent_rect = pygame.Rect((0, 0), (2*self.r, 2*self.r))
 
-    def reset(self):
-        """Method to return a player to their original starting position."""
-        self.prev_pos = self.pos
-        self.pos = self.home
-        self.speed = 0
-        if self.team == Team.RED_TEAM:
-            self.heading = 90
-        else:
-            self.heading = -90
-        self.thrust = 0
-        self.is_tagged = False
-        self.has_flag = False
-        self.on_own_side = True
-
     def rotate(self, prev_pos, angle=180):
         """Method to rotate the player 180"""
         self.prev_pos = self.pos
@@ -179,8 +165,6 @@ class RenderingPlayer(Player):
        
         self.pos[0] = prev_pos[0]
         self.pos[1] = prev_pos[1]
-        
-        
 
     def render_tagging(self, cooldown_time):
         self.pygame_agent = self.pygame_agent_base.copy()
