@@ -153,9 +153,10 @@ def main():
     config["render_traj_freq"] = 50
     config["max_speed"] = 1.5
     config["short_hist_length"] = 4
+    config["short_hist_interval"] = 5
     config["long_hist_length"] = 5
     config["long_hist_interval"] = 20
-    config["render_traj_cutoff"] = 300
+    config["render_traj_cutoff"] = 100
 
 
     
