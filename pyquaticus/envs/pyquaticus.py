@@ -2328,8 +2328,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     def _generate_agent_starts(
         self,
         flag_homes: Union[list, np.ndarray],
-        # agent_positions: Optional[Union[dict, np.ndarray]] = [],
-        # agent_spd_hdg: Optional[Union[dict, np.ndarray]] = []
+        agent_positions: Optional[dict] = [],
     ):
         """
         Generates starting positions for all players based on flag home locations.
