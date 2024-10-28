@@ -748,14 +748,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Agents (player objects) of each team
         self.agents_of_team = {Team.BLUE_TEAM: b_players, Team.RED_TEAM: r_players}
-        self.agent_ids_of_team = {team: [player.id for player in self.agents_of_team[team]] for team in Team}
+        self.agent_ids_of_team = {team: np.array([player.id for player in self.agents_of_team[team]]) for team in Team}
 
         # Mappings from agent ids to team member ids and opponent ids
         self.agent_to_team_ids = {
-            agent_id: [p.id for p in self.agents_of_team[player.team]] for agent_id, player in self.players.items()
+            agent_id: np.array([p.id for p in self.agents_of_team[player.team]]) for agent_id, player in self.players.items()
         }
         self.agent_to_opp_ids = {
-            agent_id: [p.id for p in self.agents_of_team[Team(not player.team.value)]] for agent_id, player in self.players.items()
+            agent_id: np.array([p.id for p in self.agents_of_team[Team(not player.team.value)]]) for agent_id, player in self.players.items()
         }
 
         # Create a PID controller for each agent
@@ -2257,7 +2257,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         else:
             return obs
 
-    def _set_state_from_init_dict(self, init_dict):
+    def _set_state_from_init_dict(self, init_dict: dict):
         """
         Args:
             "init_dict": partial state dictionary for initializing the environment with the following optional keys:
@@ -2266,17 +2266,20 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 -'agent_has_flag'*, 'agent_is_tagged'*, 'agent_tagging_cooldown'*,
                 -'captures'***, 'tags'***, 'grabs'***
 
-                  *Note 1: These variables can either be specified as a dict with agent id's as keys, in which case
-                           variable-specific information for each agent is not required and the others will be initialized
-                           with _generate_agent_starts, or as an array, which must be be of length num_agents and the
-                           indices of the entries must match the indices of the corresponding agents' ids in self.agents
+                  *Note 1: These variables can either be specified as a dict with agent id's as keys, in which case it is not
+                           required to specify variable-specific information for each agent and _generate_agent_starts() will
+                           be used to generate unspecified information, or as an array, which must be be of length self.num_agents
+                           and the indices of the entries must match the indices of the corresponding agents' ids in self.agents
 
-                 **Note 2: agent_pos_unit should be either "wm_xy" (web mercator xy) or "ll" (lat-lon) when gps_env is True,
-                           and should not be specified for default (non-gps) environment. If not specified, agent_position
+                 **Note 2: 'agent_pos_unit' should be either "wm_xy" (web mercator xy) or "ll" (lat-lon) when self.gps_env is
+                           True, and should not be specified for default (non-gps) environment. If not specified, 'agent_position'
                            will be assumed to be relative to the environment origin (bottom left) and in the default environment 
-                           units (these can be found by checking env_bounds_unit after initializing the environment)
+                           units (these can be found by checking self.env_bounds_unit after initializing the environment)
                 
-                ***Note 3: 
+                ***Note 3: These variables can either be specified as a dict with teams (from the Team class in structs.py) as keys,
+                           in which case it is not required to specify variable-specific information for each team and variables will
+                           be set to 0 for unspecified teams, or as an array, which must be of length self.agents_of_team and the indides
+                           of the entries must match the indices of the corresponding teams' ids in self.agents_of_team
         """
         flag_homes = list(self.flag_homes.values())
 
@@ -2322,7 +2325,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             flag.home = self.state['flag_home'][int(flag.team)]
             flag.pos = self.state['flag_position'][int(flag.team)]
 
-    def _generate_agent_starts(self, flag_homes):
+    def _generate_agent_starts(
+        self,
+        flag_homes: Union[list, np.ndarray],
+        # agent_positions: Optional[Union[dict, np.ndarray]] = [],
+        # agent_spd_hdg: Optional[Union[dict, np.ndarray]] = []
+    ):
         """
         Generates starting positions for all players based on flag home locations.
 
@@ -2402,48 +2410,36 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         else:
             for player in self.players.values():
                 if self.default_init:
-                    player_flag_pos = self.flag_homes[player.team]
-                    closest_scrim_line_point = closest_point_on_line(self.scrimmage_coords[0],self.scrimmage_coords[1],player_flag_pos)
-                    halfway_point = (np.asarray(player_flag_pos)+closest_scrim_line_point)/2
+                    #position and heading
+                    flag_home = self.flag_homes[player.team]
+                    closest_scrim_line_point = closest_point_on_line(*self.scrimmage_coords, flag_home)
+                    halfway_point = (flag_home + closest_scrim_line_point)/2
 
-                    mag, angle = vec_to_mag_heading(halfway_point-player_flag_pos)
-                    if mag < self.agent_radius + self.flag_keepout_radius:
+                    mag, heading = vec_to_mag_heading(halfway_point - flag_home)
+                    if mag < self.flag_keepout_radius:
                         raise Exception("Flag is too close to scrimmage line.")
 
-                    scrimmage_vec = self.scrimmage_coords[1]-self.scrimmage_coords[0]
-                    spawn_line_env_intersection_1 = self._get_polygon_intersection(halfway_point, scrimmage_vec, self.env_vertices)[1]
-                    spawn_line_env_intersection_2 = self._get_polygon_intersection(halfway_point, -scrimmage_vec, self.env_vertices)[1]
-                    spawn_line_mag = np.linalg.norm(spawn_line_env_intersection_1-spawn_line_env_intersection_2)
-                    spawn_line_unit_vec = (spawn_line_env_intersection_2-spawn_line_env_intersection_1)/spawn_line_mag
+                    spawn_line_env_intersection_1 = self._get_polygon_intersection(halfway_point, self.scrimmage_vec, self.env_vertices)[1]
+                    spawn_line_env_intersection_2 = self._get_polygon_intersection(halfway_point, -self.scrimmage_vec, self.env_vertices)[1]
+                    spawn_line_mag = np.linalg.norm(spawn_line_env_intersection_1 - spawn_line_env_intersection_2)
+                    spawn_line_unit_vec = (spawn_line_env_intersection_2 - spawn_line_env_intersection_1)/spawn_line_mag
 
-                    if player.team == Team.BLUE_TEAM:
-                        spawn_point = spawn_line_env_intersection_1+(spawn_line_mag*(player.id+1)/(self.team_size+1))*spawn_line_unit_vec
-                    else:
-                        spawn_point = spawn_line_env_intersection_1+(spawn_line_mag*((player.id+1)-self.team_size)/(self.team_size+1))*spawn_line_unit_vec
+                    agent_idx_within_team = np.where(self.agent_ids_of_team[player.team] == player.id)[0] + 1
+                    pos = spawn_line_env_intersection_1 + (spawn_line_mag * agent_idx_within_team/(self.team_size + 1)) * spawn_line_unit_vec
 
-                    ## if spawn point isn't in the env bounds, then project back into the env
-                    spawn_point[0] = max(self.agent_radius, min(self.env_size[0] - self.agent_radius, spawn_point[0]))
-                    spawn_point[1] = max(self.agent_radius, min(self.env_size[1] - self.agent_radius, spawn_point[1]))
+                    pos[0] = max(self.agent_radius, min(self.env_size[0] - self.agent_radius, spawn_point[0])) #project out-of-bounds pos back into the environment
+                    pos[1] = max(self.agent_radius, min(self.env_size[1] - self.agent_radius, spawn_point[1])) #project out-of-bounds pos back into the environment
 
-                    if detect_collision(spawn_point,self.agent_radius,self.obstacle_geoms): ## TODO: add check to make sure agent isn't spawned inside an obstacle
-                        print("Initial agent position collides with obstacle. Picking random point instead.")
-                        ## pick random point
-                        while True:
-                            start_pos_x = np.random.rand() * self.env_size[0]
-                            start_pos_y = np.random.rand() * self.env_size[1]
-                            start_point = [start_pos_x,start_pos_y]
+                    valid_pos = self._check_valid_pos(pos, agent_positions, flag_homes) and self._check_on_sides(pos, player.team)
+                    while not valid_pos:
+                        pos = np.random.choice((-1,1), size=2) * np.random.rand(2) * (self.env_size/2 - self.agent_radius) + self.env_size/2
+                        valid_pos = self._check_valid_pos(pos, agent_positions, flag_homes) and self._check_on_sides(pos, player.team)
 
-                            # check if position is too close to obstacle
-                            point_onsides = self._check_on_sides(start_point, player.team)
-                            valid_pos = self._check_valid_pos(start_point, agent_positions, flag_homes)
-                            obst_collision = detect_collision(np.array(start_point),self.agent_radius,self.obstacle_geoms)
-                            if point_onsides and valid_pos and (not obst_collision):
-                                spawn_point = start_point
-                                break
-                        angle = 360 * np.random.rand() - 180
+                    #speed
+                    speed = 0.0
 
-                    player.pos = list(spawn_point)
-                    player.heading = angle
+                    #on-sides
+                    on_own_side = True
                 else:
                     #position
                     valid_pos = False
@@ -2460,11 +2456,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     #on-sides
                     on_own_side = self._check_on_sides(pos, player.team)
 
-                    #add to lists
-                    agent_positions.append(pos)
-                    agent_spd_hdg.append([speed, heading])
-                    agent_on_sides.append(on_own_side)
-
                 # add to lists
                 agent_positions.append(pos)
                 agent_spd_hdg.append([speed, heading])
@@ -2476,13 +2467,20 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         agent_positions = np.asarray(agent_positions)
         flag_homes = np.asarray(flag_homes)
 
+        #agents
         if len(agent_positions) > 0:
             ag_distance = np.linalg.norm(agent_positions - new_pos, axis=1)
             if np.any(ag_distance <= 2*self.agent_radius):
                 return False
 
+        #flags
         flag_distance = np.linalg.norm(flag_positions - new_pos, axis=1)
         if np.any(flag_distance <= self.flag_keepout_radius):
+            return False
+
+        #obstacles
+        ## TODO: add check to make sure agent isn't spawned inside an obstacle
+        if detect_collision(new_pos, self.agent_radius, self.obstacle_geoms):
             return False
 
         return True
