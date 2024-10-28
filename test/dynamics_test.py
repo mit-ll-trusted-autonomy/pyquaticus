@@ -185,7 +185,7 @@ def main():
     config["render_traj_mode"] = "traj"
     config["render_traj_cutoff"] = 100
     config["default_dynamics"] = False
-    config["dynamics_dict"] = {0: "heron", 1: "drone"}
+    config["dynamics_dict"] = {0: "heron", 1: "large_usv"}
     config["render_saving"] = False
 
     # PyQuaticusEnv is a Parallel Petting Zoo Environment

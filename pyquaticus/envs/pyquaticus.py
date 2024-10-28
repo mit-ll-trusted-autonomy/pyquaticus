@@ -1126,7 +1126,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             player.on_own_side = self._check_on_sides(player.pos, player.team)
             self.state["agent_on_sides"][i] = player.on_own_side
 
-            # If the player hits a boundary, return them to their original starting position and skip
+            # If the player hits an obstacle, return them to their original starting position and skip
             # to the next agent.
             player_hit_obstacle = detect_collision(
                 np.asarray([pos_x, pos_y]), self.agent_radius, self.obstacle_geoms
@@ -1229,7 +1229,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 )
 
             vel = mag_heading_to_vec(new_speed, new_heading)
-
             # Check if agent is in keepout region for their own flag
             ag_dis_2_flag = self.get_distance_between_2_points(
                 np.asarray([pos_x, pos_y]), np.asarray(flag_loc)
@@ -1259,39 +1258,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 pos_x = ag_pos[0]
                 pos_y = ag_pos[1]
 
-            if (not self.gps_env and new_speed > 0.1) or (
-                self.gps_env and new_speed / self.meters_per_mercator_xy > 0.1
-            ):
-                # only rely on vel if speed is large enough to recover heading
-                new_speed, new_heading = vec_to_mag_heading(vel)
-
-            # Propagate vehicle position based on new_heading and new_speed
-            # TODO: Move this inside each dynamics
-            hdg_rad = math.radians(player.heading)
-            new_hdg_rad = math.radians(new_heading)
-            avg_speed = (new_speed + player.speed) / 2.0
-            if self.gps_env:
-                avg_speed = avg_speed / self.meters_per_mercator_xy
-            s = math.sin(new_hdg_rad) + math.sin(hdg_rad)
-            c = math.cos(new_hdg_rad) + math.cos(hdg_rad)
-            avg_hdg = math.atan2(s, c)
-            # Note: sine/cos swapped because of the heading / angle difference
-            new_ag_pos = [
-                pos_x + math.sin(avg_hdg) * avg_speed * dt,
-                pos_y + math.cos(avg_hdg) * avg_speed * dt,
-            ]
-
+            
             if player.has_flag:
                 flg_idx = not int(player.team)
-                self.flags[flg_idx].pos = list(new_ag_pos)
+                self.flags[flg_idx].pos = player.pos
                 self.state["flag_locations"][int(flg_idx)] = np.array(
                     self.flags[flg_idx].pos
                 )
-            if self.dynamics_dict[i] != "drone":
-                player.prev_pos = player.pos
-                player.pos = np.asarray(new_ag_pos)
-                player.speed = clip(new_speed, 0.0, self.max_speed)
-                player.heading = angle180(new_heading)
 
             self.state["agent_position"][i] = player.pos
             self.state["prev_agent_position"][i] = player.prev_pos
