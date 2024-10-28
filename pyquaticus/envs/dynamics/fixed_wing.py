@@ -9,7 +9,7 @@ def fixed_wing_move_agents(
     desired_speed: float,
     heading_error: float,
     dt: float,
-) -> tuple[float, float, float]:
+) -> tuple[float, float]:
 
     new_speed = clip(desired_speed, env.fixed_wing_min_speed, env.fixed_wing_max_speed)
 
@@ -23,4 +23,4 @@ def fixed_wing_move_agents(
 
     new_heading = player.heading + np.sign(heading_error) * new_turn_rate * dt
 
-    return new_speed, new_heading, new_speed
+    return new_speed, new_heading

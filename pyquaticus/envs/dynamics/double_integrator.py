@@ -9,9 +9,9 @@ def di_move_agents(
     desired_speed: float,
     heading_error: float,
     dt: float,
-) -> tuple[float, float, float]:
+) -> tuple[float, float]:
     # Use double-integrator dynamics to go from desired_speed and heading_error
-    # to new_speed, new_heading, and new_thrust
+    # to new_speed, new_heading
 
     desired_acc = (desired_speed - player.speed) / dt
     desired_turn_rate = heading_error / dt
@@ -27,4 +27,4 @@ def di_move_agents(
     player.turn_rate = new_turn_rate
     new_heading = player.heading + new_turn_rate * dt
 
-    return new_speed, new_heading, new_speed
+    return new_speed, new_heading

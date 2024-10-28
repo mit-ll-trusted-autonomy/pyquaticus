@@ -1126,67 +1126,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             player.on_own_side = self._check_on_sides(player.pos, player.team)
             self.state["agent_on_sides"][i] = player.on_own_side
 
-            # convert desired_speed   and  desired_heading to
-            #         desired_thrust  and  desired_rudder
-            # requested heading is relative so it directly maps to the heading error
-
-            # If agent is tagged, drive at max speed towards home
-            if player.is_tagged:
-                flag_home = self.flags[int(player.team)].home
-                _, heading_error = mag_bearing_to(player.pos, flag_home, player.heading)
-                desired_speed = self.config_dict["max_speed"]
-
-            # If agent is out of bounds, drive back in bounds at low speed
-            elif self.state["agent_oob"][i]:
-                ## compute the closest point in the env
-                closest_point_x = max(
-                    self.agent_radius, min(self.env_size[0] - self.agent_radius, pos_x)
-                )
-                closest_point_y = max(
-                    self.agent_radius, min(self.env_size[1] - self.agent_radius, pos_y)
-                )
-                closest_point = [closest_point_x, closest_point_y]
-                _, heading_error = mag_bearing_to(
-                    player.pos, closest_point, player.heading
-                )
-                desired_speed = self.config_dict["max_speed"] * self.oob_speed_frac
-
-            # Else get desired speed and heading from action_dict
-            else:
-                desired_speed, heading_error = action_dict[player.id]
-
-            # Get new speed, heading, and thrust based on desired speed, desired heading, and agent dynamics
-            if self.default_dynamics:
-                new_speed, new_heading, new_thrust = heron_move_agents(
-                    self, player, desired_speed, heading_error, dt
-                )
-            elif self.dynamics_dict[i] == "heron":
-                new_speed, new_heading, new_thrust = heron_move_agents(
-                    self, player, desired_speed, heading_error, dt
-                )
-            elif self.dynamics_dict[i] == "large_usv":
-                new_speed, new_heading, new_thrust = large_usv_move_agents(
-                    self, player, desired_speed, heading_error, dt
-                )
-            elif self.dynamics_dict[i] == "drone":
-                new_speed, new_heading, new_thrust = drone_move_agents(
-                    self, player, desired_speed, heading_error, dt
-                )
-            elif self.dynamics_dict[i] == "si":
-                new_speed, new_heading, new_thrust = si_move_agents(
-                    self, player, desired_speed, heading_error, dt
-                )
-            elif self.dynamics_dict[i] == "di":
-                new_speed, new_heading, new_thrust = di_move_agents(
-                    self, player, desired_speed, heading_error, dt
-                )
-            elif self.dynamics_dict[i] == "fixed_wing":
-                new_speed, new_heading, new_thrust = fixed_wing_move_agents(
-                    self, player, desired_speed, heading_error, dt
-                )
-
-            vel = mag_heading_to_vec(new_speed, new_heading)
-
             # If the player hits a boundary, return them to their original starting position and skip
             # to the next agent.
             player_hit_obstacle = detect_collision(
@@ -1220,6 +1159,76 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.state["prev_agent_position"][i] = player.prev_pos
                 self.state["agent_spd_hdg"][i] = [player.speed, player.heading]
                 continue
+
+            # If agent is tagged, drive at max speed towards home
+            if player.is_tagged:
+                flag_home = self.flags[int(player.team)].home
+                _, heading_error = mag_bearing_to(player.pos, flag_home, player.heading)
+                desired_speed = self.config_dict["global_max_speed"]
+
+            # If agent is out of bounds, drive back in bounds at low speed
+            elif self.state["agent_oob"][i]:
+                ## compute the closest point in the env
+                closest_point_x = max(
+                    self.agent_radius, min(self.env_size[0] - self.agent_radius, pos_x)
+                )
+                closest_point_y = max(
+                    self.agent_radius, min(self.env_size[1] - self.agent_radius, pos_y)
+                )
+                closest_point = [closest_point_x, closest_point_y]
+                _, heading_error = mag_bearing_to(
+                    player.pos, closest_point, player.heading
+                )
+                desired_speed = (
+                    self.config_dict["global_max_speed"] * self.oob_speed_frac
+                )
+
+            # Else get desired speed and heading from action_dict
+            else:
+                desired_speed, heading_error = action_dict[player.id]
+
+            # Get new speed, heading, and thrust based on desired speed, desired heading, and agent dynamics
+            if self.default_dynamics:
+                new_speed, new_heading = heron_move_agents(
+                    self, player, desired_speed, heading_error, dt
+                )
+            elif self.dynamics_dict[i] == "heron":
+                new_speed, new_heading = heron_move_agents(
+                    self, player, desired_speed, heading_error, dt
+                )
+            elif self.dynamics_dict[i] == "large_usv":
+                new_speed, new_heading = large_usv_move_agents(
+                    self, player, desired_speed, heading_error, dt
+                )
+            elif self.dynamics_dict[i] == "drone":
+                new_speed, new_heading = drone_move_agents(
+                    self, player, desired_speed, heading_error, dt
+                )
+            elif self.dynamics_dict[i] == "si":
+                new_speed, new_heading = si_move_agents(
+                    self, player, desired_speed, heading_error, dt
+                )
+            elif self.dynamics_dict[i] == "di":
+                new_speed, new_heading = di_move_agents(
+                    self, player, desired_speed, heading_error, dt
+                )
+            elif self.dynamics_dict[i] == "fixed_wing":
+                new_speed, new_heading = fixed_wing_move_agents(
+                    self, player, desired_speed, heading_error, dt
+                )
+            elif self.dynamics_dict[i] == "drone":
+                new_speed, new_heading = drone_move_agents(
+                    self, player, desired_speed, heading_error, dt
+                )
+            else:
+                print(
+                    f"Warning: {self.dynamics_dict[i]} is not a valid dynamics model. Defaulting to Heron dynamics."
+                )
+                new_speed, new_heading = heron_move_agents(
+                    self, player, desired_speed, heading_error, dt
+                )
+
+            vel = mag_heading_to_vec(new_speed, new_heading)
 
             # Check if agent is in keepout region for their own flag
             ag_dis_2_flag = self.get_distance_between_2_points(
@@ -1257,6 +1266,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 new_speed, new_heading = vec_to_mag_heading(vel)
 
             # Propagate vehicle position based on new_heading and new_speed
+            # TODO: Move this inside each dynamics
             hdg_rad = math.radians(player.heading)
             new_hdg_rad = math.radians(new_heading)
             avg_speed = (new_speed + player.speed) / 2.0
@@ -1277,11 +1287,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.state["flag_locations"][int(flg_idx)] = np.array(
                     self.flags[flg_idx].pos
                 )
-            player.prev_pos = player.pos
-            player.pos = np.asarray(new_ag_pos)
-            player.speed = clip(new_speed, 0.0, self.max_speed)
-            player.heading = angle180(new_heading)
-            player.thrust = new_thrust
+            if self.dynamics_dict[i] != "drone":
+                player.prev_pos = player.pos
+                player.pos = np.asarray(new_ag_pos)
+                player.speed = clip(new_speed, 0.0, self.max_speed)
+                player.heading = angle180(new_heading)
 
             self.state["agent_position"][i] = player.pos
             self.state["prev_agent_position"][i] = player.prev_pos
@@ -1850,19 +1860,35 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.dynamics_dict = config_dict.get(
             "dynamics_dict", config_dict_std["dynamics_dict"]
         )
-        self.heron_max_speed = config_dict.get("heron_max_speed", config_dict_std["heron_max_speed"])
+        self.heron_max_speed = config_dict.get(
+            "heron_max_speed", config_dict_std["heron_max_speed"]
+        )
         self.heron_speed_factor = config_dict.get(
             "heron_speed_factor", config_dict_std["heron_speed_factor"]
         )
-        self.heron_thrust_map = config_dict.get("heron_thrust_map", config_dict_std["heron_thrust_map"])
-        self.heron_max_thrust = config_dict.get("heron_max_thrust", config_dict_std["heron_max_thrust"])
-        self.heron_max_rudder = config_dict.get("heron_max_rudder", config_dict_std["heron_max_rudder"])
-        self.heron_turn_loss = config_dict.get("heron_turn_loss", config_dict_std["heron_turn_loss"])
-        self.heron_turn_rate = config_dict.get("heron_turn_rate", config_dict_std["heron_turn_rate"])
-        self.heron_max_acc = config_dict.get("heron_max_acc", config_dict_std["heron_max_acc"])
-        self.heron_max_dec = config_dict.get("heron_max_dec", config_dict_std["heron_max_dec"])
-        self.heron_oob_speed_frac = config_dict.get(
-            "heron_oob_speed_frac", config_dict_std["heron_oob_speed_frac"]
+        self.heron_thrust_map = config_dict.get(
+            "heron_thrust_map", config_dict_std["heron_thrust_map"]
+        )
+        self.heron_max_thrust = config_dict.get(
+            "heron_max_thrust", config_dict_std["heron_max_thrust"]
+        )
+        self.heron_max_rudder = config_dict.get(
+            "heron_max_rudder", config_dict_std["heron_max_rudder"]
+        )
+        self.heron_turn_loss = config_dict.get(
+            "heron_turn_loss", config_dict_std["heron_turn_loss"]
+        )
+        self.heron_turn_rate = config_dict.get(
+            "heron_turn_rate", config_dict_std["heron_turn_rate"]
+        )
+        self.heron_max_acc = config_dict.get(
+            "heron_max_acc", config_dict_std["heron_max_acc"]
+        )
+        self.heron_max_dec = config_dict.get(
+            "heron_max_dec", config_dict_std["heron_max_dec"]
+        )
+        self.oob_speed_frac = config_dict.get(
+            "oob_speed_frac", config_dict_std["oob_speed_frac"]
         )
         self.large_usv_speed_factor = config_dict.get(
             "large_usv_speed_factor", config_dict_std["large_usv_speed_factor"]
@@ -1891,9 +1917,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.large_usv_max_dec = config_dict.get(
             "large_usv_max_dec", config_dict_std["large_usv_max_dec"]
         )
-        self.large_usv_oob_speed_frac = config_dict.get(
-            "large_usv_oob_speed_frac", config_dict_std["large_usv_oob_speed_frac"]
-        )
         self.action_type = config_dict.get(
             "action_type", config_dict_std["action_type"]
         )
@@ -1913,9 +1936,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.di_max_alpha = config_dict.get(
             "di_max_alpha", config_dict_std["di_max_alpha"]
         )
-        self.fixed_wing_min_speed = config_dict.get("fixed_wing_min_speed", config_dict_std["fixed_wing_min_speed"])
-        self.fixed_wing_max_speed = config_dict.get("fixed_wing_max_speed", config_dict_std["fixed_wing_max_speed"])
-        self.fixed_wing_min_turn_radius = config_dict.get("fixed_wing_min_turn_radius", config_dict_std["fixed_wing_min_turn_radius"])
+        self.fixed_wing_min_speed = config_dict.get(
+            "fixed_wing_min_speed", config_dict_std["fixed_wing_min_speed"]
+        )
+        self.fixed_wing_max_speed = config_dict.get(
+            "fixed_wing_max_speed", config_dict_std["fixed_wing_max_speed"]
+        )
+        self.fixed_wing_min_turn_radius = config_dict.get(
+            "fixed_wing_min_turn_radius", config_dict_std["fixed_wing_min_turn_radius"]
+        )
         # Simulation parameters
         self.tau = config_dict.get("tau", config_dict_std["tau"])
         self.sim_speedup_factor = config_dict.get(
@@ -2052,7 +2081,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         flag_radius = config_dict.get("flag_radius", config_dict_std["flag_radius"])
         flag_keepout = config_dict.get("flag_keepout", config_dict_std["flag_keepout"])
         catch_radius = config_dict.get("catch_radius", config_dict_std["catch_radius"])
-        max_speed = config_dict.get("global_max_speed", config_dict_std["global_max_speed"])
+        max_speed = config_dict.get(
+            "global_max_speed", config_dict_std["global_max_speed"]
+        )
         lidar_range = config_dict.get("lidar_range", config_dict_std["lidar_range"])
 
         self._build_env_geom(

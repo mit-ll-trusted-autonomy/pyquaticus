@@ -20,8 +20,8 @@ config_dict_std = {
     #
     "gps_env": False,  # option to use a real world location for the game
     "env_bounds": [
+        320.0,
         160.0,
-        80.0,
     ],  # meters [xmax, ymax], lat/lon [(south, west), (north, east)], web mercator xy [(xmin, ymin), (xmax, ymax)], or "auto"
     "env_bounds_unit": "m",  # "m" (meters), "wm_xy" (web mercator xy), "ll" (lat/lon)
     "blue_flag_home": "auto",  # coordinates (lat, lon), list of coordinates, or "auto"
@@ -48,15 +48,16 @@ config_dict_std = {
     #
     "action_type": "discrete",  # "discrete" or "continuous"
     "global_max_speed": 100,
+    "oob_speed_frac": 0.5,  # proportion
     "default_dynamics": True,  # use Heron dynamics for all vehicles
     "dynamics_dict": None,
     # Example:
-    # {               # if default_dynamics is false, use this dict to determine each vehicle's dynamics
-    #    0: "heron",  # accepted values are "heron", "large_usv", "si"
-    #    1: "heron",
-    #    2: "heron",
-    #    3: "heron",
-    #    4: "heron",
+    # {                  # if default_dynamics is false, use this dict to determine each vehicle's dynamics
+    #    0: "heron",     # accepted values are "heron", "large_usv", "si", "di", "fixed_wing"
+    #    1: "large_usv",
+    #    2: "si",
+    #    3: "di",
+    #    4: "fixed_wing",
     #    5: "heron",
     # }
     #
@@ -74,14 +75,12 @@ config_dict_std = {
     "heron_turn_rate": 70,
     "heron_max_acc": 1,  # meters / s**2
     "heron_max_dec": 1,  # meters / s**2
-    "heron_oob_speed_frac": 0.5,  # proportion
     #
     #
     # Large USV parameters
     #
     "large_usv_max_speed": 12,  # meters / s
-    "large_usv_speed_factor": 20.0
-    / 3,  # multiplicative factor for desired_speed -> desired_thrust
+    "large_usv_speed_factor": (20.0 / 3),  # multiplicative factor for desired_speed -> desired_thrust
     "large_usv_thrust_map": np.array(  # piecewise linear mapping from desired_thrust to speed
         [[-100, 0, 20, 40, 60, 80, 100], [-3, 0, 3, 6, 9, 12, 12]]
     ),
@@ -91,7 +90,6 @@ config_dict_std = {
     "large_usv_turn_rate": 50,
     "large_usv_max_acc": 0.5,  # meters / s**2
     "large_usv_max_dec": 0.5,  # meters / s**2
-    "large_usv_oob_speed_frac": 0.5,  # proportion
     #
     #
     # Drone parameters

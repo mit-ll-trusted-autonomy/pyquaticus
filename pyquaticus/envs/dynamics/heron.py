@@ -9,9 +9,9 @@ def heron_move_agents(
     desired_speed: float,
     heading_error: float,
     dt: float,
-) -> tuple[float, float, float]:
+) -> tuple[float, float]:
     # Use vehicle dynamics to go from desired_speed and heading_error
-    # to new_speed, new_heading, and new_thrust
+    # to new_speed, new_heading
 
     # desired heading is relative to current heading
     speed_error = desired_speed - player.speed
@@ -42,9 +42,11 @@ def heron_move_agents(
     if desired_thrust < 0:
         thrust_d_hdg = -thrust_d_hdg
 
+    player.thrust = desired_thrust
+
     # if not moving, then can't turn
     if (new_speed + player.speed) / 2.0 < 0.5:
         thrust_d_hdg = 0.0
     new_heading = angle180(player.heading + thrust_d_hdg)
 
-    return new_speed, new_heading, desired_thrust
+    return new_speed, new_heading
