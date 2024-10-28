@@ -40,6 +40,7 @@ import sys
 import time
 from pyquaticus.envs.pyquaticus import Team
 import pyquaticus.config
+from pyquaticus.config_aas import config_dict_aas
 import copy
 from pyquaticus import pyquaticus_v0
 import pyquaticus.utils.rewards as reward
@@ -105,11 +106,14 @@ class KeyTest:
         while True:
             action_dict = self.process_event(self.quittable)
             self.obs, rewards, terminated, truncated, info = self.env.step(action_dict)
-            for k in terminated:
-                if terminated[k] == True or truncated[k] == True:
-                    time.sleep(1.0)
-                    self.env.reset()
-                    break
+            k = list(terminated.keys())
+            if terminated[k[0]] == True or truncated[k[0]] == True:
+                break
+            # for k in terminated:
+            #     if terminated[k] == True or truncated[k] == True:
+            #         # time.sleep(1.0)
+            #         # self.env.reset()
+            #         break
 
     def process_event(self, quittable):
 
@@ -174,12 +178,15 @@ def main():
     config = copy.deepcopy(pyquaticus.config.config_dict_std)
     config["sim_speedup_factor"] = 1
     # config["normalize"] = False
-    config["max_time"] = 10000
+    config["max_time"] = 100.0
+    config["tau"] = 0.1
+    config["sim_speedup_factor"] = 2
     config["render_agent_ids"] = True
     config["render_traj_mode"] = "traj"
     config["render_traj_cutoff"] = 100
     config["default_dynamics"] = False
-    config["dynamics_dict"] = {0: "heron", 1: "heron"}
+    config["dynamics_dict"] = {0: "heron", 1: "drone"}
+    config["render_saving"] = False
 
     # PyQuaticusEnv is a Parallel Petting Zoo Environment
     try:
@@ -192,6 +199,8 @@ def main():
 
     kt = KeyTest(env, red_policy)
     kt.begin()
+    # env.buffer_to_video()
+    env.close()
 
 
 if __name__ == "__main__":
