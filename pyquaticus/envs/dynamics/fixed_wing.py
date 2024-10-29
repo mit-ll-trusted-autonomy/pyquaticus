@@ -10,6 +10,20 @@ def fixed_wing_move_agents(
     heading_error: float,
     dt: float,
 ) -> tuple[float, float]:
+    """
+    Use Dubins vehicle dynamics to move the agent given a desired speed and heading error.
+
+    Args:
+        env: the PyQuaticusEnv
+        player: the player to move
+        desired speed: desired speed, in m/s
+        heading_error: heading error, in deg
+        dt: the length of time to simulate
+
+    Returns:
+        new_speed: current speed, in m/s
+        new_heading: current heading, in degrees east of north
+    """
 
     new_speed = clip(desired_speed, env.fixed_wing_min_speed, env.fixed_wing_max_speed)
 

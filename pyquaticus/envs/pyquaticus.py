@@ -1189,46 +1189,46 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             # Get new speed, heading, and thrust based on desired speed, desired heading, and agent dynamics
             if self.default_dynamics:
-                new_speed, new_heading = heron_move_agents(
+                heron_move_agents(
                     self, player, desired_speed, heading_error, dt
                 )
             elif self.dynamics_dict[i] == "heron":
-                new_speed, new_heading = heron_move_agents(
+                heron_move_agents(
                     self, player, desired_speed, heading_error, dt
                 )
             elif self.dynamics_dict[i] == "large_usv":
-                new_speed, new_heading = large_usv_move_agents(
+                large_usv_move_agents(
                     self, player, desired_speed, heading_error, dt
                 )
             elif self.dynamics_dict[i] == "drone":
-                new_speed, new_heading = drone_move_agents(
+                drone_move_agents(
                     self, player, desired_speed, heading_error, dt
                 )
             elif self.dynamics_dict[i] == "si":
-                new_speed, new_heading = si_move_agents(
+                si_move_agents(
                     self, player, desired_speed, heading_error, dt
                 )
             elif self.dynamics_dict[i] == "di":
-                new_speed, new_heading = di_move_agents(
+                di_move_agents(
                     self, player, desired_speed, heading_error, dt
                 )
             elif self.dynamics_dict[i] == "fixed_wing":
-                new_speed, new_heading = fixed_wing_move_agents(
+                fixed_wing_move_agents(
                     self, player, desired_speed, heading_error, dt
                 )
             elif self.dynamics_dict[i] == "drone":
-                new_speed, new_heading = drone_move_agents(
+                drone_move_agents(
                     self, player, desired_speed, heading_error, dt
                 )
             else:
                 print(
                     f"Warning: {self.dynamics_dict[i]} is not a valid dynamics model. Defaulting to Heron dynamics."
                 )
-                new_speed, new_heading = heron_move_agents(
+                heron_move_agents(
                     self, player, desired_speed, heading_error, dt
                 )
 
-            vel = mag_heading_to_vec(new_speed, new_heading)
+            vel = mag_heading_to_vec(player.speed, player.heading)
             # Check if agent is in keepout region for their own flag
             ag_dis_2_flag = self.get_distance_between_2_points(
                 np.asarray([pos_x, pos_y]), np.asarray(flag_loc)
@@ -1257,8 +1257,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 vel = rot2d(vel_ref, crd_ref_angle)
                 pos_x = ag_pos[0]
                 pos_y = ag_pos[1]
+                player.pos = [pos_x, pos_y]
+                speed, heading = vec_to_mag_heading(vel)
+                player.speed = speed
+                player.heading = heading
 
-            
+            # Move flag, if necessary
             if player.has_flag:
                 flg_idx = not int(player.team)
                 self.flags[flg_idx].pos = player.pos
@@ -1266,6 +1270,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     self.flags[flg_idx].pos
                 )
 
+            # Update environment state
             self.state["agent_position"][i] = player.pos
             self.state["prev_agent_position"][i] = player.prev_pos
             self.state["agent_spd_hdg"][i] = [player.speed, player.heading]
@@ -1833,6 +1838,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.dynamics_dict = config_dict.get(
             "dynamics_dict", config_dict_std["dynamics_dict"]
         )
+        
+        for k, v in self.dynamics_dict.items():
+            if v not in list(config_dict_std["dynamics_dict"].values()):
+                print(
+                    f"Warning: {v} is not a valid dynamics model. Defaulting to Heron dynamics."
+                )
+                self.dynamics_dict[k] = "heron"
+
+        
         self.heron_max_speed = config_dict.get(
             "heron_max_speed", config_dict_std["heron_max_speed"]
         )
@@ -1893,6 +1907,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.action_type = config_dict.get(
             "action_type", config_dict_std["action_type"]
         )
+        self.drone_max_speed = config_dict.get("drone_max_speed", config_dict_std["drone_max_speed"])
         self.si_max_speed = config_dict.get(
             "si_max_speed", config_dict_std["si_max_speed"]
         )

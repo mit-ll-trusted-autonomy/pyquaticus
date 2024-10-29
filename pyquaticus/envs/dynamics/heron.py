@@ -10,8 +10,21 @@ def heron_move_agents(
     heading_error: float,
     dt: float,
 ) -> tuple[float, float]:
-    # Use vehicle dynamics to go from desired_speed and heading_error
-    # to new_speed, new_heading
+    """
+    Use MOOS-IVP default dynamics to move the agent given a desired speed and heading error.
+    Adapted from https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarineV22
+
+    Args:
+        env: the PyQuaticusEnv
+        player: the player to move
+        desired speed: desired speed, in m/s
+        heading_error: heading error, in deg
+        dt: the length of time to simulate
+
+    Returns:
+        new_speed: current speed, in m/s
+        new_heading: current heading, in degrees east of north
+    """
 
     # desired heading is relative to current heading
     speed_error = desired_speed - player.speed

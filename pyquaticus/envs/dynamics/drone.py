@@ -10,12 +10,23 @@ def drone_move_agents(
     heading_error: float,
     dt: float,
 ) -> tuple[float, float]:
-    # Use drone dynamics to go from desired_speed and heading_error
-    # to new_speed, new_heading
+    """
+    Use quadcopter dynamics to move the agent given a desired speed and heading error.
+    Adapted from https://github.com/AtsushiSakai/PythonRobotics?tab=readme-ov-file#drone-3d-trajectory-following
 
-    desired_speed = clip(desired_speed, 0, 10)
+    Args:
+        env: the PyQuaticusEnv
+        player: the player to move
+        desired speed: desired speed, in m/s
+        heading_error: heading error, in deg
+        dt: the length of time to simulate
 
-    # Adapted from https://github.com/AtsushiSakai/PythonRobotics?tab=readme-ov-file#drone-3d-trajectory-following
+    Returns:
+        new_speed: current speed, in m/s
+        new_heading: current heading, in degrees east of north
+    """
+
+    desired_speed = clip(desired_speed, 0, env.drone_max_speed)
 
     # Constants
     g = 9.81

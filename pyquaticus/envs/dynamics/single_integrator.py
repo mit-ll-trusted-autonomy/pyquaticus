@@ -10,8 +10,20 @@ def si_move_agents(
     heading_error: float,
     dt: float,
 ) -> tuple[float, float]:
-    # Use single-integrator dynamics to go from desired_speed and heading_error
-    # to new_speed, new_heading
+    """
+    Use single-integrator unicycle dynamics to move the agent given a desired speed and heading error.
+
+    Args:
+        env: the PyQuaticusEnv
+        player: the player to move
+        desired speed: desired speed, in m/s
+        heading_error: heading error, in deg
+        dt: the length of time to simulate
+
+    Returns:
+        new_speed: current speed, in m/s
+        new_heading: current heading, in degrees east of north
+    """
 
     new_speed = clip(desired_speed, -env.si_max_speed, env.si_max_speed)
     turn_rate = clip(heading_error / dt, -env.si_max_turn_rate, env.si_max_turn_rate)
