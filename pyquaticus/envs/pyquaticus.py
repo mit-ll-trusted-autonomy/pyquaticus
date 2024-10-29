@@ -1839,6 +1839,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             "dynamics_dict", config_dict_std["dynamics_dict"]
         )
         
+        if len(self.dynamics_dict.keys()) != self.team_size * 2:
+            print(f"Warning: dynamics_dict is not length {self.team_size * 2}. Defaulting to Heron dynamics.")
+            self.default_dynamics = True
         for k, v in self.dynamics_dict.items():
             if v not in list(config_dict_std["dynamics_dict"].values()):
                 print(

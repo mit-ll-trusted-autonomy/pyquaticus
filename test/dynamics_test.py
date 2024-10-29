@@ -180,21 +180,18 @@ def main():
     # config["normalize"] = False
     config["max_time"] = 100.0
     config["tau"] = 0.1
-    config["sim_speedup_factor"] = 2
+    config["sim_speedup_factor"] = 1
     config["render_agent_ids"] = True
     config["render_traj_mode"] = "traj"
     config["render_traj_cutoff"] = 100
     config["default_dynamics"] = False
-    config["dynamics_dict"] = {0: "heron", 1: "large_usv"}
+    config["dynamics_dict"] = {0: "drone", 1: "drone"}
     config["render_saving"] = False
 
     # PyQuaticusEnv is a Parallel Petting Zoo Environment
-    try:
-        env = pyquaticus_v0.PyQuaticusEnv(
-            render_mode="human", team_size=1, config_dict=config
-        )
-    except Warning as err:
-        ...
+    env = pyquaticus_v0.PyQuaticusEnv(
+        render_mode="human", team_size=1, config_dict=config
+    )
     red_policy = args.red_policy
 
     kt = KeyTest(env, red_policy)

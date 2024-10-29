@@ -39,15 +39,16 @@ def drone_move_agents(
     Kp_x = 1
     Kp_y = 1
     Kp_z = 1
-    Kp_roll = 50
-    Kp_pitch = 50
-    Kp_yaw = 5
+    Kp_roll = 100
+    Kp_pitch = 100
+    Kp_yaw = 25
 
-    Kd_x = 10
-    Kd_y = 10
+    Kd_x = 1
+    Kd_y = 1
     Kd_z = 1
     Kd_roll = 5
     Kd_pitch = 5
+    Kd_yaw = 5
 
     # Convert heading error (deg) to desired yaw
     player.yaw = np.deg2rad(player.heading)
@@ -57,10 +58,10 @@ def drone_move_agents(
     # Calculate desired acceleration in x and y directions
     des_x_vel = desired_speed * np.sin(des_yaw)
     cur_x_vel = player.x_vel
-    des_x_acc = clip((des_x_vel - cur_x_vel) / dt, -3, 3)
+    des_x_acc = clip((des_x_vel - cur_x_vel) / dt, -10, 10)
     des_y_vel = desired_speed * np.cos(des_yaw)
     cur_y_vel = player.y_vel
-    des_y_acc = clip((des_y_vel - cur_y_vel) / dt, -3, 3)
+    des_y_acc = clip((des_y_vel - cur_y_vel) / dt, -10, 10)
 
     # Placeholders for z for now so that it is easier to add in the future
     des_z_pos = 0
@@ -92,7 +93,7 @@ def drone_move_agents(
         - Kd_pitch * player.pitch_rate
     )
 
-    yaw_torque = Kp_yaw * (des_yaw - player.yaw) - 2 * player.yaw_rate
+    yaw_torque = Kp_yaw * (des_yaw - player.yaw) - Kd_yaw * player.yaw_rate
 
     # Get roll, pitch, and yaw rates from torques and moments of inertia
     player.roll_rate += roll_torque * dt / Ixx

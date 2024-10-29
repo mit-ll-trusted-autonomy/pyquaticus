@@ -50,8 +50,8 @@ config_dict_std = {
     "global_max_speed": 100,
     "oob_speed_frac": 0.5,  # proportion
     "default_dynamics": True,  # use Heron dynamics for all vehicles
-    "dynamics_dict": {         # if default_dynamics is false, use this dict to determine each vehicle's dynamics
-        0: "heron",            # accepted values are "heron", "large_usv", "si", "di", "fixed_wing", "drone"
+    "dynamics_dict": {  # if default_dynamics is false, use this dict to determine each vehicle's dynamics
+        0: "heron",  # accepted values are "heron", "large_usv", "si", "di", "fixed_wing", "drone"
         1: "large_usv",
         2: "si",
         3: "di",
@@ -98,22 +98,22 @@ config_dict_std = {
     # Single Integrator parameters
     #
     "si_max_speed": 10,  # m/s
-    "si_max_turn_rate": 180,  # deg/s
+    "si_max_turn_rate": 90,  # deg/s
     #
     #
     # Double Integrator parameters
     #
     "di_max_speed": 10,  # m/s
     "di_max_acc": 1,  # m/s^2
-    "di_max_turn_rate": 180,  # deg/s
-    "di_max_alpha": 90,  # deg/s^2
+    "di_max_turn_rate": 90,  # deg/s
+    "di_max_alpha": 180,  # deg/s^2
     #
     #
     # Fixed Wing parameters
     #
-    "fixed_wing_min_speed": 5,  # m/s
-    "fixed_wing_max_speed": 10,  # m/s
-    "fixed_wing_min_turn_radius": 10,  # m
+    "fixed_wing_min_speed": 10,  # m/s
+    "fixed_wing_max_speed": 20,  # m/s
+    "fixed_wing_min_turn_radius": 20,  # m
     #
     # Simulation parameters
     #
