@@ -57,7 +57,8 @@ config_dict_std = {
     "max_score":            1, # maximum score per episode (until a winner is declared)
     "max_time":         100.0, # maximum time (seconds) per episode
     "tagging_cooldown":  30.0, # cooldown on an agent (seconds) after they tag another agent, to prevent consecutive tags
-    "tag_on_collision": False, # option for setting the agent to a tagged state upon collsion with a boundary or obstacle
+    "tag_on_collision": False, # option for setting the agent to a tagged state upon collsion with an obstacle
+    "tag_on_oob":       False, # option for setting the agent to a tagged state upon driving out-of-bounds
 
     # Observation parameters
     "normalize":        True, # flag for normalizing the observation space.
