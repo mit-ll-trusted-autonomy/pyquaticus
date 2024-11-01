@@ -87,12 +87,7 @@ from scipy.ndimage import label
 from shapely import intersection, LineString, Point, Polygon
 from typing import Optional, Union
 
-from pyquaticus.envs.dynamics.heron import heron_move_agents
-from pyquaticus.envs.dynamics.large_usv import large_usv_move_agents
-from pyquaticus.envs.dynamics.drone import drone_move_agents
-from pyquaticus.envs.dynamics.single_integrator import si_move_agents
-from pyquaticus.envs.dynamics.double_integrator import di_move_agents
-from pyquaticus.envs.dynamics.fixed_wing import fixed_wing_move_agents
+from pyquaticus.dynamics.dynamics_registry import dynamics_registry
 
 
 class PyQuaticusEnvBase(ParallelEnv, ABC):
@@ -854,6 +849,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # Set variables from config
         self.set_config_values(config_dict)
 
+        # Set dt (needed for dynamics)
+        if self.render_mode:
+            self.dt = 1 / self.render_fps
+        else:
+            self.dt = self.tau
+
         # Create players, use IDs from [0, (2 * team size) - 1] so their IDs can also be used as indices.
         b_players = []
         r_players = []
@@ -861,13 +862,35 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         for i in range(0, self.num_blue):
             b_players.append(
                 RenderingPlayer(
-                    i, Team.BLUE_TEAM, self.agent_render_radius, render_mode
+                    i,
+                    Team.BLUE_TEAM,
+                    self.agent_render_radius,
+                    render_mode,
+                    dynamics_registry[self.dynamics[i]](
+                        None,
+                        self.gps_env,
+                        getattr(self, "meters_per_mercator_xy", None),
+                        self.dt,
+                    ),
                 )
             )
+            b_players[-1].dynamics.player = b_players[-1]
         for i in range(self.num_blue, self.num_blue + self.num_red):
             r_players.append(
-                RenderingPlayer(i, Team.RED_TEAM, self.agent_render_radius, render_mode)
+                RenderingPlayer(
+                    i,
+                    Team.RED_TEAM,
+                    self.agent_render_radius,
+                    render_mode,
+                    dynamics_registry[self.dynamics[i]](
+                        None,
+                        self.gps_env,
+                        getattr(self, "meters_per_mercator_xy", None),
+                        self.dt,
+                    ),
+                )
             )
+            r_players[-1].dynamics.player = r_players[-1]
 
         self.players = {
             player.id: player for player in itertools.chain(b_players, r_players)
@@ -889,19 +912,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             agent_id: [p.id for p in self.agents_of_team[Team(not player.team.value)]]
             for agent_id, player in self.players.items()
         }
-
-        # Create a PID controller for each agent
-        if self.render_mode:
-            dt = 1 / self.render_fps
-        else:
-            dt = self.tau
-
-        self._pid_controllers = {}
-        for player in self.players.values():
-            self._pid_controllers[player.id] = {
-                "speed": PID(dt=dt, kp=1.0, ki=0.0, kd=0.0, integral_max=0.07),
-                "heading": PID(dt=dt, kp=0.35, ki=0.0, kd=0.07, integral_max=0.07),
-            }
 
         # Create the list of flags that are indexed by self.flags[int(player.team)]
         self.flags = []
@@ -1164,7 +1174,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             if player.is_tagged:
                 flag_home = self.flags[int(player.team)].home
                 _, heading_error = mag_bearing_to(player.pos, flag_home, player.heading)
-                desired_speed = self.config_dict["global_max_speed"]
+                desired_speed = player.dynamics.get_max_speed()
 
             # If agent is out of bounds, drive back in bounds at low speed
             elif self.state["agent_oob"][i]:
@@ -1179,54 +1189,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 _, heading_error = mag_bearing_to(
                     player.pos, closest_point, player.heading
                 )
-                desired_speed = (
-                    self.config_dict["global_max_speed"] * self.oob_speed_frac
-                )
+                desired_speed = player.dynamics.get_max_speed() * self.oob_speed_frac
 
             # Else get desired speed and heading from action_dict
             else:
                 desired_speed, heading_error = action_dict[player.id]
 
-            # Get new speed, heading, and thrust based on desired speed, desired heading, and agent dynamics
-            if self.default_dynamics:
-                heron_move_agents(
-                    self, player, desired_speed, heading_error, dt
-                )
-            elif self.dynamics_dict[i] == "heron":
-                heron_move_agents(
-                    self, player, desired_speed, heading_error, dt
-                )
-            elif self.dynamics_dict[i] == "large_usv":
-                large_usv_move_agents(
-                    self, player, desired_speed, heading_error, dt
-                )
-            elif self.dynamics_dict[i] == "drone":
-                drone_move_agents(
-                    self, player, desired_speed, heading_error, dt
-                )
-            elif self.dynamics_dict[i] == "si":
-                si_move_agents(
-                    self, player, desired_speed, heading_error, dt
-                )
-            elif self.dynamics_dict[i] == "di":
-                di_move_agents(
-                    self, player, desired_speed, heading_error, dt
-                )
-            elif self.dynamics_dict[i] == "fixed_wing":
-                fixed_wing_move_agents(
-                    self, player, desired_speed, heading_error, dt
-                )
-            elif self.dynamics_dict[i] == "drone":
-                drone_move_agents(
-                    self, player, desired_speed, heading_error, dt
-                )
-            else:
-                print(
-                    f"Warning: {self.dynamics_dict[i]} is not a valid dynamics model. Defaulting to Heron dynamics."
-                )
-                heron_move_agents(
-                    self, player, desired_speed, heading_error, dt
-                )
+            # Move agent
+            player.dynamics._move_agent(desired_speed, heading_error)
 
             vel = mag_heading_to_vec(player.speed, player.heading)
             # Check if agent is in keepout region for their own flag
@@ -1831,110 +1801,31 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             "topo_contour_eps", config_dict_std["topo_contour_eps"]
         )
 
-        # MOOS dynamics parameters
-        self.default_dynamics = config_dict.get(
-            "default_dynamics", config_dict_std["default_dynamics"]
-        )
-        self.dynamics_dict = config_dict.get(
-            "dynamics_dict", config_dict_std["dynamics_dict"]
-        )
-        
-        if len(self.dynamics_dict.keys()) != self.team_size * 2:
-            print(f"Warning: dynamics_dict is not length {self.team_size * 2}. Defaulting to Heron dynamics.")
-            self.default_dynamics = True
-        for k, v in self.dynamics_dict.items():
-            if v not in list(config_dict_std["dynamics_dict"].values()):
-                print(
-                    f"Warning: {v} is not a valid dynamics model. Defaulting to Heron dynamics."
-                )
-                self.dynamics_dict[k] = "heron"
+        # Dynamics parameters
+        self.dynamics = config_dict.get("dynamics", config_dict_std["dynamics"])
 
-        
-        self.heron_max_speed = config_dict.get(
-            "heron_max_speed", config_dict_std["heron_max_speed"]
-        )
-        self.heron_speed_factor = config_dict.get(
-            "heron_speed_factor", config_dict_std["heron_speed_factor"]
-        )
-        self.heron_thrust_map = config_dict.get(
-            "heron_thrust_map", config_dict_std["heron_thrust_map"]
-        )
-        self.heron_max_thrust = config_dict.get(
-            "heron_max_thrust", config_dict_std["heron_max_thrust"]
-        )
-        self.heron_max_rudder = config_dict.get(
-            "heron_max_rudder", config_dict_std["heron_max_rudder"]
-        )
-        self.heron_turn_loss = config_dict.get(
-            "heron_turn_loss", config_dict_std["heron_turn_loss"]
-        )
-        self.heron_turn_rate = config_dict.get(
-            "heron_turn_rate", config_dict_std["heron_turn_rate"]
-        )
-        self.heron_max_acc = config_dict.get(
-            "heron_max_acc", config_dict_std["heron_max_acc"]
-        )
-        self.heron_max_dec = config_dict.get(
-            "heron_max_dec", config_dict_std["heron_max_dec"]
-        )
+        if isinstance(self.dynamics, list):
+            if len(self.dynamics) != self.team_size * 2:
+                raise Warning("Dynamics list incorrect length")
+
+        if not isinstance(self.dynamics, list):
+            self.dynamics = [self.dynamics for i in range(self.team_size * 2)]
+
+        for dynamics in self.dynamics:
+            if dynamics not in dynamics_registry.keys():
+                raise Warning(
+                    f"{dynamics} is not a valid dynamics class. Please check dynamics_registry.py"
+                )
+
         self.oob_speed_frac = config_dict.get(
             "oob_speed_frac", config_dict_std["oob_speed_frac"]
         )
-        self.large_usv_speed_factor = config_dict.get(
-            "large_usv_speed_factor", config_dict_std["large_usv_speed_factor"]
+        max_speed = config_dict.get(
+            "global_max_speed", config_dict_std["global_max_speed"]
         )
-        self.large_usv_max_speed = config_dict.get(
-            "large_usv_max_speed", config_dict_std["large_usv_max_speed"]
-        )
-        self.large_usv_thrust_map = config_dict.get(
-            "large_usv_thrust_map", config_dict_std["large_usv_thrust_map"]
-        )
-        self.large_usv_max_thrust = config_dict.get(
-            "large_usv_max_thrust", config_dict_std["large_usv_max_thrust"]
-        )
-        self.large_usv_max_rudder = config_dict.get(
-            "large_usv_max_rudder", config_dict_std["large_usv_max_rudder"]
-        )
-        self.large_usv_turn_loss = config_dict.get(
-            "large_usv_turn_loss", config_dict_std["large_usv_turn_loss"]
-        )
-        self.large_usv_turn_rate = config_dict.get(
-            "large_usv_turn_rate", config_dict_std["large_usv_turn_rate"]
-        )
-        self.large_usv_max_acc = config_dict.get(
-            "large_usv_max_acc", config_dict_std["large_usv_max_acc"]
-        )
-        self.large_usv_max_dec = config_dict.get(
-            "large_usv_max_dec", config_dict_std["large_usv_max_dec"]
-        )
+
         self.action_type = config_dict.get(
             "action_type", config_dict_std["action_type"]
-        )
-        self.drone_max_speed = config_dict.get("drone_max_speed", config_dict_std["drone_max_speed"])
-        self.si_max_speed = config_dict.get(
-            "si_max_speed", config_dict_std["si_max_speed"]
-        )
-        self.si_max_turn_rate = config_dict.get(
-            "si_max_turn_rate", config_dict_std["si_max_turn_rate"]
-        )
-        self.di_max_speed = config_dict.get(
-            "di_max_speed", config_dict_std["di_max_speed"]
-        )
-        self.di_max_turn_rate = config_dict.get(
-            "di_max_turn_rate", config_dict_std["di_max_turn_rate"]
-        )
-        self.di_max_acc = config_dict.get("di_max_acc", config_dict_std["di_max_acc"])
-        self.di_max_alpha = config_dict.get(
-            "di_max_alpha", config_dict_std["di_max_alpha"]
-        )
-        self.fixed_wing_min_speed = config_dict.get(
-            "fixed_wing_min_speed", config_dict_std["fixed_wing_min_speed"]
-        )
-        self.fixed_wing_max_speed = config_dict.get(
-            "fixed_wing_max_speed", config_dict_std["fixed_wing_max_speed"]
-        )
-        self.fixed_wing_min_turn_radius = config_dict.get(
-            "fixed_wing_min_turn_radius", config_dict_std["fixed_wing_min_turn_radius"]
         )
         # Simulation parameters
         self.tau = config_dict.get("tau", config_dict_std["tau"])
@@ -2072,9 +1963,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         flag_radius = config_dict.get("flag_radius", config_dict_std["flag_radius"])
         flag_keepout = config_dict.get("flag_keepout", config_dict_std["flag_keepout"])
         catch_radius = config_dict.get("catch_radius", config_dict_std["catch_radius"])
-        max_speed = config_dict.get(
-            "global_max_speed", config_dict_std["global_max_speed"]
-        )
+
         lidar_range = config_dict.get("lidar_range", config_dict_std["lidar_range"])
 
         self._build_env_geom(

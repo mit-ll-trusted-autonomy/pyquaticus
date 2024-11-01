@@ -184,9 +184,11 @@ def main():
     config["render_agent_ids"] = True
     config["render_traj_mode"] = "traj"
     config["render_traj_cutoff"] = 100
-    config["default_dynamics"] = False
-    config["dynamics_dict"] = {0: "drone", 1: "drone"}
+    config["dynamics"] = ["heron", "heron"]
     config["render_saving"] = False
+    config["lidar_obs"] = True
+    config["render_lidar_mode"] = "detection"
+    config["lidar_range"] = 20
 
     # PyQuaticusEnv is a Parallel Petting Zoo Environment
     env = pyquaticus_v0.PyQuaticusEnv(

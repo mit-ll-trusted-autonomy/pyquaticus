@@ -49,71 +49,9 @@ config_dict_std = {
     "action_type": "discrete",  # "discrete" or "continuous"
     "global_max_speed": 100,
     "oob_speed_frac": 0.5,  # proportion
-    "default_dynamics": True,  # use Heron dynamics for all vehicles
-    "dynamics_dict": {  # if default_dynamics is false, use this dict to determine each vehicle's dynamics
-        0: "heron",  # accepted values are "heron", "large_usv", "si", "di", "fixed_wing", "drone"
-        1: "large_usv",
-        2: "si",
-        3: "di",
-        4: "fixed_wing",
-        5: "drone",
-    },
-    #
-    # Heron parameters
-    #
-    "heron_max_speed": 3.5,  # meters / s
-    "heron_speed_factor": 20.0,  # multiplicative factor for desired_speed -> desired_thrust
-    "heron_thrust_map": np.array(  # piecewise linear mapping from desired_thrust to speed
-        [[-100, 0, 20, 40, 60, 80, 100], [-2, 0, 1, 2, 3, 5, 5]]
-    ),
-    "heron_max_thrust": 70,  # limit on vehicle thrust
-    "heron_max_rudder": 100,  # limit on vehicle rudder actuation
-    "heron_turn_loss": 0.85,
-    "heron_turn_rate": 70,
-    "heron_max_acc": 1,  # meters / s**2
-    "heron_max_dec": 1,  # meters / s**2
-    #
-    #
-    # Large USV parameters
-    #
-    "large_usv_max_speed": 12,  # meters / s
-    "large_usv_speed_factor": (
-        20.0 / 3
-    ),  # multiplicative factor for desired_speed -> desired_thrust
-    "large_usv_thrust_map": np.array(  # piecewise linear mapping from desired_thrust to speed
-        [[-100, 0, 20, 40, 60, 80, 100], [-3, 0, 3, 6, 9, 12, 12]]
-    ),
-    "large_usv_max_thrust": 70,  # limit on vehicle thrust
-    "large_usv_max_rudder": 100,  # limit on vehicle rudder actuation
-    "large_usv_turn_loss": 0.85,
-    "large_usv_turn_rate": 50,
-    "large_usv_max_acc": 0.5,  # meters / s**2
-    "large_usv_max_dec": 0.5,  # meters / s**2
-    #
-    #
-    # Drone parameters
-    #
-    "drone_max_speed": 10,  # m/s
-    #
-    # Single Integrator parameters
-    #
-    "si_max_speed": 10,  # m/s
-    "si_max_turn_rate": 90,  # deg/s
-    #
-    #
-    # Double Integrator parameters
-    #
-    "di_max_speed": 10,  # m/s
-    "di_max_acc": 1,  # m/s^2
-    "di_max_turn_rate": 90,  # deg/s
-    "di_max_alpha": 180,  # deg/s^2
-    #
-    #
-    # Fixed Wing parameters
-    #
-    "fixed_wing_min_speed": 10,  # m/s
-    "fixed_wing_max_speed": 20,  # m/s
-    "fixed_wing_min_turn_radius": 20,  # m
+    "dynamics": "heron",  # dynamics to use for all agents
+    # if different dynamics are desired for different agents, provide a list like
+    # ["heron", "large_usv", "drone", "fixed_wing"]
     #
     # Simulation parameters
     #
