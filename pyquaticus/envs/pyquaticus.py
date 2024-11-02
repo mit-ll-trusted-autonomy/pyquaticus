@@ -1194,6 +1194,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 # set out-of-bounds
                 self.state["agent_oob"][i] = 1
 
+                # set tag (if applicable)
+                if self.tag_on_oob:
+                    if not player.is_tagged:
+                        self.state['tags'][int(player.team)] += 1
+                        self.state['agent_is_tagged'][i] = 1
+                        player.is_tagged = True
+
                 # reset picked-up flag (if applicable)
                 if player.has_flag:
                     player.has_flag = False
@@ -1204,12 +1211,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     self.state['flag_taken'][int(not int(player.team))] = 0
                     self.state['team_has_flag'][int(player.team)] = 0
 
-                # set tag (if applicable)
-                if self.tag_on_oob:
-                    if not player.is_tagged:
-                        self.state['tags'][int(player.team)] += 1
-                        self.state["agent_is_tagged"][i] = 1
-                        player.is_tagged = True
             else:
                 # set in-bounds
                 self.state["agent_oob"][i] = 0
@@ -1219,20 +1220,20 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # set out-of-bounds
         agent_poses = self.state["agent_position"]
         agent_oob = np.any((agent_poses <= self.agent_radius) | ((self.env_size - self.agent_radius) <= agent_poses), axis=-1)
-        agent_oob_inds = np.where(agent_oob)[0]
+        self.state["agent_oob"] = agent_oob
         if not np.any(agent_oob):
             return
 
-        self.state["agent_oob"] = agent_oob
+        agent_oob_inds = np.where(agent_oob)[0]
 
         # set tag (if applicable)
         if self.tag_on_oob:
             for team, agent_inds in self.agent_inds_of_team.items():
-                self.state['tags'][int(team)] += np.sum(agent_oob[agent_ids] & np.logical_not(self.state["agent_is_tagged"][agent_inds]))
+                self.state['tags'][int(team)] += np.sum(agent_oob[agent_inds] & np.logical_not(self.state["agent_is_tagged"][agent_inds]))
 
             self.state["agent_is_tagged"][agent_oob_inds] = 1
             for i in agent_oob_inds:
-                self.players[self.agents[i]].is_tagged = 1
+                self.players[self.agents[i]].is_tagged = True
 
         # reset picked-up flag (if applicable)
         agent_has_flag_oob = self.state['agent_has_flag'] & agent_oob
@@ -1240,11 +1241,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             #agent
             self.state['agent_has_flag'][agent_oob_inds] = 0
             for i in agent_oob_inds:
-                self.players[self.agents[i]].has_flag = 0
+                self.players[self.agents[i]].has_flag = False
             #flag
             for team, agent_inds in self.agent_inds_of_team.items():
                 if np.any(agent_has_flag_oob[agent_inds]):
-                    #note: assumes each team has one flag
+                    #note: assumes one flag per team
                     self.flags[int(not int(team))].reset()
                     self.state['flag_position'][int(not int(team))] = self.flags[int(not int(team))].pos
                     self.state['flag_taken'][int(not int(team))] = 0
@@ -1255,22 +1256,21 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         for i, player in enumerate(self.players.values()):
             team = int(player.team)
             other_team = int(not team)
-            if not (player.has_flag or self.state["flag_taken"][other_team]) and (not player.is_tagged) and (not player.on_own_side):
+            if not (player.has_flag or self.state["flag_taken"][other_team]) and not player.on_own_side and not player.is_tagged:
                 flag_pos = self.flags[other_team].pos
-                distance_to_flag = self.get_distance_between_2_points(
-                    player.pos, flag_pos
-                )
+                distance_to_flag = self.get_distance_between_2_points(player.pos, flag_pos)
 
                 if distance_to_flag < self.catch_radius:
+                    #agent
                     player.has_flag = True
-                    self.state["flag_taken"][other_team] = 1
-                    self.state["agent_has_flag"][i] = 1
-                    if player.team == Team.BLUE_TEAM:
-                        self.state["grabs"][0] += 1
-                        self.state["team_has_flag"][0] = True
-                    else:
-                        self.state["grabs"][1] += 1
-                        self.state["team_has_flag"][1] = True
+                    self.state['agent_has_flag'][i] = 1
+
+                    #flag
+                    self.state['flag_taken'][other_team] = 1
+                    self.state['team_has_flag'][team] = 1
+
+                    #grabs
+                    self.state['grabs'][team] += 1
 
     def _check_pickup_flags_vectorized(self):
         """Updates player states if they picked up the flag."""
