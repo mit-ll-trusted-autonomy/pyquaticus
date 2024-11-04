@@ -40,7 +40,6 @@ import sys
 import time
 from pyquaticus.envs.pyquaticus import Team
 import pyquaticus.config
-from pyquaticus.config_aas import config_dict_aas
 import copy
 from pyquaticus import pyquaticus_v0
 import pyquaticus.utils.rewards as reward
@@ -184,7 +183,7 @@ def main():
     config["render_agent_ids"] = True
     config["render_traj_mode"] = "traj"
     config["render_traj_cutoff"] = 100
-    config["dynamics"] = ["drone", "fixed_wing"]
+    config["dynamics"] = ["large_usv", "drone"]
     config["render_saving"] = False
     config["lidar_obs"] = True
     config["render_lidar_mode"] = "detection"

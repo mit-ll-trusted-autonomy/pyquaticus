@@ -7,7 +7,6 @@ import pygame
 from pygame import SRCALPHA, Surface, draw
 from typing import Hashable
 from pyquaticus.utils.utils import angle180, closest_point_on_line, mag_bearing_to
-from pyquaticus.dynamics.dynamics import Dynamics
 
 
 class Team(Enum):
@@ -93,7 +92,6 @@ class RenderingPlayer(Player):
     r: float
     render_mode: str
     home: list[float] = field(init=False, default_factory=list)
-    dynamics: Dynamics
 
     def __post_init__(self):
         """Called automatically after __init__ to set up pygame object interface."""

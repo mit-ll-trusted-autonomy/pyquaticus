@@ -2,28 +2,22 @@ import numpy as np
 from pyquaticus.utils.utils import clip, angle180
 from pyquaticus.dynamics.dynamics_utils import rotation_matrix
 from pyquaticus.utils.pid import PID
-
-# from pyquaticus.structs import RenderingPlayer
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from pyquaticus.structs import RenderingPlayer
+from pyquaticus.structs import RenderingPlayer
 
 
-class Dynamics:
+class Dynamics(RenderingPlayer):
     """
     Base class for dynamics
     """
 
     def __init__(
         self,
-        player: "RenderingPlayer",
         gps_env: bool,
         meters_per_mercator_xy: float,
         dt: float,
+        **kwargs,
     ):
-
-        self.player = player
+        super().__init__(**kwargs)
         self.gps_env = gps_env
         self.meters_per_mercator_xy = meters_per_mercator_xy
         self.dt = dt
@@ -41,15 +35,12 @@ class FixedWing(Dynamics):
 
     def __init__(
         self,
-        player: "RenderingPlayer",
-        gps_env: bool,
-        meters_per_mercator_xy: float,
-        dt: float,
         min_speed: float = 10,
         max_speed: float = 20,
         min_turn_radius: float = 20,
+        **kwargs,
     ):
-        super().__init__(player, gps_env, meters_per_mercator_xy, dt)
+        super().__init__(**kwargs)
         self.min_speed = min_speed
         self.max_speed = max_speed
         self.min_turn_radius = min_turn_radius
@@ -81,13 +72,13 @@ class FixedWing(Dynamics):
         new_turn_rate = np.rad2deg(new_speed / new_turn_radius)
 
         new_heading = (
-            self.player.heading + np.sign(heading_error) * new_turn_rate * self.dt
+            self.heading + np.sign(heading_error) * new_turn_rate * self.dt
         )
 
         # Propagate vehicle position based on new_heading and new_speed
-        hdg_rad = np.deg2rad(self.player.heading)
+        hdg_rad = np.deg2rad(self.heading)
         new_hdg_rad = np.deg2rad(new_heading)
-        avg_speed = (new_speed + self.player.speed) / 2.0
+        avg_speed = (new_speed + self.speed) / 2.0
         if self.gps_env:
             avg_speed = avg_speed / self.meters_per_mercator_xy
         s = np.sin(new_hdg_rad) + np.sin(hdg_rad)
@@ -95,29 +86,26 @@ class FixedWing(Dynamics):
         avg_hdg = np.arctan2(s, c)
         # Note: sine/cos swapped because of the heading / angle difference
         new_ag_pos = [
-            self.player.pos[0] + np.sin(avg_hdg) * avg_speed * self.dt,
-            self.player.pos[1] + np.cos(avg_hdg) * avg_speed * self.dt,
+            self.pos[0] + np.sin(avg_hdg) * avg_speed * self.dt,
+            self.pos[1] + np.cos(avg_hdg) * avg_speed * self.dt,
         ]
 
-        self.player.prev_pos = self.player.pos
-        self.player.pos = np.asarray(new_ag_pos)
-        self.player.speed = clip(new_speed, 0.0, self.max_speed)
-        self.player.heading = angle180(new_heading)
+        self.prev_pos = self.pos
+        self.pos = np.asarray(new_ag_pos)
+        self.speed = clip(new_speed, 0.0, self.max_speed)
+        self.heading = angle180(new_heading)
 
 
 class SingleIntegrator(Dynamics):
 
     def __init__(
         self,
-        player: "RenderingPlayer",
-        gps_env: bool,
-        meters_per_mercator_xy: float,
-        dt: float,
         max_speed: float = 10,
         max_turn_rate: float = 90,
+        **kwargs
     ):
 
-        super().__init__(player, gps_env, meters_per_mercator_xy, dt)
+        super().__init__(**kwargs)
 
         self.max_speed = max_speed
         self.max_turn_rate = max_turn_rate
@@ -132,23 +120,19 @@ class SingleIntegrator(Dynamics):
         Args:
             desired speed: desired speed, in m/s
             heading_error: heading error, in deg
-
-        Returns:
-            new_speed: current speed, in m/s
-            new_heading: current heading, in degrees east of north
         """
 
         new_speed = clip(desired_speed, -self.max_speed, self.max_speed)
         turn_rate = clip(
             heading_error / self.dt, -self.max_turn_rate, self.max_turn_rate
         )
-        new_heading = self.player.heading + turn_rate * self.dt
+        new_heading = self.heading + turn_rate * self.dt
         new_thrust = desired_speed
 
         # Propagate vehicle position based on new_heading and new_speed
-        hdg_rad = np.deg2rad(self.player.heading)
+        hdg_rad = np.deg2rad(self.heading)
         new_hdg_rad = np.deg2rad(new_heading)
-        avg_speed = (new_speed + self.player.speed) / 2.0
+        avg_speed = (new_speed + self.speed) / 2.0
         if self.gps_env:
             avg_speed = avg_speed / self.meters_per_mercator_xy
         s = np.sin(new_hdg_rad) + np.sin(hdg_rad)
@@ -156,24 +140,20 @@ class SingleIntegrator(Dynamics):
         avg_hdg = np.arctan2(s, c)
         # Note: sine/cos swapped because of the heading / angle difference
         new_ag_pos = [
-            self.player.pos[0] + np.sin(avg_hdg) * avg_speed * self.dt,
-            self.player.pos[1] + np.cos(avg_hdg) * avg_speed * self.dt,
+            self.pos[0] + np.sin(avg_hdg) * avg_speed * self.dt,
+            self.pos[1] + np.cos(avg_hdg) * avg_speed * self.dt,
         ]
 
-        self.player.prev_pos = self.player.pos
-        self.player.pos = np.asarray(new_ag_pos)
-        self.player.speed = clip(new_speed, 0.0, self.max_speed)
-        self.player.heading = angle180(new_heading)
+        self.prev_pos = self.pos
+        self.pos = np.asarray(new_ag_pos)
+        self.speed = clip(new_speed, 0.0, self.max_speed)
+        self.heading = angle180(new_heading)
 
 
 class LargeUSV(Dynamics):
 
     def __init__(
         self,
-        player: "RenderingPlayer",
-        gps_env: bool,
-        meters_per_mercator_xy: float,
-        dt: float,
         max_speed: float = 12,  # meters / s
         speed_factor: float = (
             20.0 / 3
@@ -187,9 +167,10 @@ class LargeUSV(Dynamics):
         turn_rate: float = 50,
         max_acc: float = 0.5,  # meters / s**2
         max_dec: float = 0.5,  # meters / s**2
+        **kwargs
     ):
 
-        super().__init__(player, gps_env, meters_per_mercator_xy, dt)
+        super().__init__(**kwargs)
 
         self.max_speed = max_speed
         self.speed_factor = speed_factor
@@ -202,8 +183,8 @@ class LargeUSV(Dynamics):
         self.max_dec = max_dec
 
         self._pid_controllers = {
-            "speed": PID(dt=dt, kp=1.0, ki=0.0, kd=0.0, integral_max=0.07),
-            "heading": PID(dt=dt, kp=0.35, ki=0.0, kd=0.07, integral_max=0.07),
+            "speed": PID(dt=kwargs["dt"], kp=1.0, ki=0.0, kd=0.0, integral_max=0.07),
+            "heading": PID(dt=kwargs["dt"], kp=0.35, ki=0.0, kd=0.07, integral_max=0.07),
         }
 
     def get_max_speed(self) -> float:
@@ -217,18 +198,14 @@ class LargeUSV(Dynamics):
         Args:
             desired speed: desired speed, in m/s
             heading_error: heading error, in deg
-
-        Returns:
-            new_speed: current speed, in m/s
-            new_heading: current heading, in degrees east of north
         """
 
         # desired heading is relative to current heading
-        speed_error = desired_speed - self.player.speed
+        speed_error = desired_speed - self.speed
         desired_speed = self._pid_controllers["speed"](speed_error)
         desired_rudder = self._pid_controllers["heading"](heading_error)
 
-        desired_thrust = self.player.thrust + self.speed_factor * desired_speed
+        desired_thrust = self.thrust + self.speed_factor * desired_speed
 
         desired_thrust = clip(desired_thrust, -self.max_thrust, self.max_thrust)
         desired_rudder = clip(desired_rudder, -self.max_rudder, self.max_rudder)
@@ -241,10 +218,10 @@ class LargeUSV(Dynamics):
             raw_speed * 1 - ((abs(desired_rudder) / 100) * self.turn_loss),
             self.max_speed,
         )
-        if (new_speed - self.player.speed) / self.dt > self.max_acc:
-            new_speed = self.player.speed + self.max_acc * self.dt
-        elif (self.player.speed - new_speed) / self.dt > self.max_dec:
-            new_speed = self.player.speed - self.max_dec * self.dt
+        if (new_speed - self.speed) / self.dt > self.max_acc:
+            new_speed = self.speed + self.max_acc * self.dt
+        elif (self.speed - new_speed) / self.dt > self.max_dec:
+            new_speed = self.speed - self.max_dec * self.dt
 
         # propagate vehicle heading
         raw_d_hdg = desired_rudder * (self.turn_rate / 100) * self.dt
@@ -252,17 +229,17 @@ class LargeUSV(Dynamics):
         if desired_thrust < 0:
             thrust_d_hdg = -thrust_d_hdg
 
-        self.player.thrust = desired_thrust
+        self.thrust = desired_thrust
 
         # if not moving, then can't turn
-        if (new_speed + self.player.speed) / 2.0 < 0.5:
+        if (new_speed + self.speed) / 2.0 < 0.5:
             thrust_d_hdg = 0.0
-        new_heading = angle180(self.player.heading + thrust_d_hdg)
+        new_heading = angle180(self.heading + thrust_d_hdg)
 
         # Propagate vehicle position based on new_heading and new_speed
-        hdg_rad = np.deg2rad(self.player.heading)
+        hdg_rad = np.deg2rad(self.heading)
         new_hdg_rad = np.deg2rad(new_heading)
-        avg_speed = (new_speed + self.player.speed) / 2.0
+        avg_speed = (new_speed + self.speed) / 2.0
         if self.gps_env:
             avg_speed = avg_speed / self.meters_per_mercator_xy
         s = np.sin(new_hdg_rad) + np.sin(hdg_rad)
@@ -270,24 +247,20 @@ class LargeUSV(Dynamics):
         avg_hdg = np.arctan2(s, c)
         # Note: sine/cos swapped because of the heading / angle difference
         new_ag_pos = [
-            self.player.pos[0] + np.sin(avg_hdg) * avg_speed * self.dt,
-            self.player.pos[1] + np.cos(avg_hdg) * avg_speed * self.dt,
+            self.pos[0] + np.sin(avg_hdg) * avg_speed * self.dt,
+            self.pos[1] + np.cos(avg_hdg) * avg_speed * self.dt,
         ]
 
-        self.player.prev_pos = self.player.pos
-        self.player.pos = np.asarray(new_ag_pos)
-        self.player.speed = clip(new_speed, 0.0, self.max_speed)
-        self.player.heading = angle180(new_heading)
+        self.prev_pos = self.pos
+        self.pos = np.asarray(new_ag_pos)
+        self.speed = clip(new_speed, 0.0, self.max_speed)
+        self.heading = angle180(new_heading)
 
 
 class Heron(Dynamics):
 
     def __init__(
         self,
-        player: "RenderingPlayer",
-        gps_env: bool,
-        meters_per_mercator_xy: float,
-        dt: float,
         max_speed: float = 3.5,  # meters / s
         speed_factor: float = 20.0,  # multiplicative factor for desired_speed -> desired_thrust
         thrust_map: np.ndarray = np.array(  # piecewise linear mapping from desired_thrust to speed
@@ -299,9 +272,10 @@ class Heron(Dynamics):
         turn_rate: float = 70,
         max_acc: float = 1,  # meters / s**2
         max_dec: float = 1,  # meters / s**2
+        **kwargs
     ):
 
-        super().__init__(player, gps_env, meters_per_mercator_xy, dt)
+        super().__init__(**kwargs)
 
         self.max_speed = max_speed
         self.speed_factor = speed_factor
@@ -314,8 +288,8 @@ class Heron(Dynamics):
         self.max_dec = max_dec
 
         self._pid_controllers = {
-            "speed": PID(dt=dt, kp=1.0, ki=0.0, kd=0.0, integral_max=0.07),
-            "heading": PID(dt=dt, kp=0.35, ki=0.0, kd=0.07, integral_max=0.07),
+            "speed": PID(dt=kwargs["dt"], kp=1.0, ki=0.0, kd=0.0, integral_max=0.07),
+            "heading": PID(dt=kwargs["dt"], kp=0.35, ki=0.0, kd=0.07, integral_max=0.07),
         }
 
     def get_max_speed(self) -> float:
@@ -329,18 +303,14 @@ class Heron(Dynamics):
         Args:
             desired speed: desired speed, in m/s
             heading_error: heading error, in deg
-
-        Returns:
-            new_speed: current speed, in m/s
-            new_heading: current heading, in degrees east of north
         """
 
         # desired heading is relative to current heading
-        speed_error = desired_speed - self.player.speed
+        speed_error = desired_speed - self.speed
         desired_speed = self._pid_controllers["speed"](speed_error)
         desired_rudder = self._pid_controllers["heading"](heading_error)
 
-        desired_thrust = self.player.thrust + self.speed_factor * desired_speed
+        desired_thrust = self.thrust + self.speed_factor * desired_speed
 
         desired_thrust = clip(desired_thrust, -self.max_thrust, self.max_thrust)
         desired_rudder = clip(desired_rudder, -self.max_rudder, self.max_rudder)
@@ -353,10 +323,10 @@ class Heron(Dynamics):
             raw_speed * 1 - ((abs(desired_rudder) / 100) * self.turn_loss),
             self.max_speed,
         )
-        if (new_speed - self.player.speed) / self.dt > self.max_acc:
-            new_speed = self.player.speed + self.max_acc * self.dt
-        elif (self.player.speed - new_speed) / self.dt > self.max_dec:
-            new_speed = self.player.speed - self.max_dec * self.dt
+        if (new_speed - self.speed) / self.dt > self.max_acc:
+            new_speed = self.speed + self.max_acc * self.dt
+        elif (self.speed - new_speed) / self.dt > self.max_dec:
+            new_speed = self.speed - self.max_dec * self.dt
 
         # propagate vehicle heading
         raw_d_hdg = desired_rudder * (self.turn_rate / 100) * self.dt
@@ -364,17 +334,17 @@ class Heron(Dynamics):
         if desired_thrust < 0:
             thrust_d_hdg = -thrust_d_hdg
 
-        self.player.thrust = desired_thrust
+        self.thrust = desired_thrust
 
         # if not moving, then can't turn
-        if (new_speed + self.player.speed) / 2.0 < 0.5:
+        if (new_speed + self.speed) / 2.0 < 0.5:
             thrust_d_hdg = 0.0
-        new_heading = angle180(self.player.heading + thrust_d_hdg)
+        new_heading = angle180(self.heading + thrust_d_hdg)
 
         # Propagate vehicle position based on new_heading and new_speed
-        hdg_rad = np.deg2rad(self.player.heading)
+        hdg_rad = np.deg2rad(self.heading)
         new_hdg_rad = np.deg2rad(new_heading)
-        avg_speed = (new_speed + self.player.speed) / 2.0
+        avg_speed = (new_speed + self.speed) / 2.0
         if self.gps_env:
             avg_speed = avg_speed / self.meters_per_mercator_xy
         s = np.sin(new_hdg_rad) + np.sin(hdg_rad)
@@ -382,27 +352,24 @@ class Heron(Dynamics):
         avg_hdg = np.arctan2(s, c)
         # Note: sine/cos swapped because of the heading / angle difference
         new_ag_pos = [
-            self.player.pos[0] + np.sin(avg_hdg) * avg_speed * self.dt,
-            self.player.pos[1] + np.cos(avg_hdg) * avg_speed * self.dt,
+            self.pos[0] + np.sin(avg_hdg) * avg_speed * self.dt,
+            self.pos[1] + np.cos(avg_hdg) * avg_speed * self.dt,
         ]
 
-        self.player.prev_pos = self.player.pos
-        self.player.pos = np.asarray(new_ag_pos)
-        self.player.speed = clip(new_speed, 0.0, self.max_speed)
-        self.player.heading = angle180(new_heading)
+        self.prev_pos = self.pos
+        self.pos = np.asarray(new_ag_pos)
+        self.speed = clip(new_speed, 0.0, self.max_speed)
+        self.heading = angle180(new_heading)
 
 
 class Drone(Dynamics):
 
     def __init__(
         self,
-        player: "RenderingPlayer",
-        gps_env: bool,
-        meters_per_mercator_xy: float,
-        dt: float,
         max_speed: float = 10,
+        **kwargs
     ):
-        super().__init__(player, gps_env, meters_per_mercator_xy, dt)
+        super().__init__(**kwargs)
 
         self.max_speed = max_speed
 
@@ -428,10 +395,6 @@ class Drone(Dynamics):
         Args:
             desired speed: desired speed, in m/s
             heading_error: heading error, in deg
-
-        Returns:
-            new_speed: current speed, in m/s
-            new_heading: current heading, in degrees east of north
         """
 
         desired_speed = clip(desired_speed, 0, self.max_speed)
@@ -459,7 +422,7 @@ class Drone(Dynamics):
         Kd_yaw = 5
 
         # Convert heading error (deg) to desired yaw
-        self.yaw = np.deg2rad(self.player.heading)
+        self.yaw = np.deg2rad(self.heading)
         yaw_error = np.deg2rad(heading_error)
         des_yaw = self.yaw + yaw_error
 
@@ -513,7 +476,7 @@ class Drone(Dynamics):
         self.pitch += self.pitch_rate * self.dt
         self.yaw += self.yaw_rate * self.dt
         self.yaw = np.arctan2(np.sin(self.yaw), np.cos(self.yaw))
-        self.player.heading = np.rad2deg(self.yaw)
+        self.heading = np.rad2deg(self.yaw)
 
         # Transform into world frame to get x, y, and z accelerations, velocities, and positions
         R = rotation_matrix(self.roll, self.pitch, self.yaw)
@@ -525,28 +488,25 @@ class Drone(Dynamics):
         self.y_vel = cur_y_vel + y_acc * self.dt
         z_vel += z_acc * self.dt
         z_pos += z_vel * self.dt
-        x_pos = self.player.pos[0] + cur_x_vel * self.dt
-        y_pos = self.player.pos[1] + cur_y_vel * self.dt
+        x_pos = self.pos[0] + cur_x_vel * self.dt
+        y_pos = self.pos[1] + cur_y_vel * self.dt
 
-        self.player.prev_pos = self.player.pos
-        self.player.pos = np.asarray([x_pos, y_pos])
-        self.player.speed = np.sqrt(np.power(cur_x_vel, 2) + np.power(cur_y_vel, 2))
+        self.prev_pos = self.pos
+        self.pos = np.asarray([x_pos, y_pos])
+        self.speed = np.sqrt(np.power(cur_x_vel, 2) + np.power(cur_y_vel, 2))
 
 
 class DoubleIntegrator(Dynamics):
 
     def __init__(
         self,
-        player: "RenderingPlayer",
-        gps_env: bool,
-        meters_per_mercator_xy: float,
-        dt: float,
         max_speed: float = 10,
         max_accel: float = 1,
         max_turn_rate: float = 90,
         max_angular_accel: float = 180,
+        **kwargs
     ):
-        super().__init__(player, gps_env, meters_per_mercator_xy, dt)
+        super().__init__(**kwargs)
 
         self.max_speed = max_speed
         self.max_accel = max_accel
@@ -563,17 +523,13 @@ class DoubleIntegrator(Dynamics):
         Args:
             desired speed: desired speed, in m/s
             heading_error: heading error, in deg
-
-        Returns:
-            new_speed: current speed, in m/s
-            new_heading: current heading, in degrees east of north
         """
 
         # Get and clip desired linear and angular acceleration
-        desired_acc = (desired_speed - self.player.speed) / self.dt
+        desired_acc = (desired_speed - self.speed) / self.dt
 
         desired_turn_rate = heading_error / self.dt
-        desired_alpha = (desired_turn_rate - self.player.turn_rate) / self.dt
+        desired_alpha = (desired_turn_rate - self.turn_rate) / self.dt
 
         desired_acc = clip(desired_acc, -self.max_accel, self.max_accel)
         desired_alpha = clip(
@@ -581,19 +537,19 @@ class DoubleIntegrator(Dynamics):
         )
 
         # Calculate new linear speed and turn rate
-        new_speed = self.player.speed + desired_acc * self.dt
+        new_speed = self.speed + desired_acc * self.dt
         new_speed = clip(new_speed, -self.max_speed, self.max_speed)
 
-        new_turn_rate = self.player.turn_rate + desired_alpha * self.dt
+        new_turn_rate = self.turn_rate + desired_alpha * self.dt
         new_turn_rate = clip(new_turn_rate, -self.max_turn_rate, self.max_turn_rate)
 
-        self.player.turn_rate = new_turn_rate
-        new_heading = self.player.heading + new_turn_rate * self.dt
+        self.turn_rate = new_turn_rate
+        new_heading = self.heading + new_turn_rate * self.dt
 
         # Propagate vehicle position based on new speed and heading
-        hdg_rad = np.deg2rad(self.player.heading)
+        hdg_rad = np.deg2rad(self.heading)
         new_hdg_rad = np.deg2rad(new_heading)
-        avg_speed = (new_speed + self.player.speed) / 2.0
+        avg_speed = (new_speed + self.speed) / 2.0
         if self.gps_env:
             avg_speed = avg_speed / self.meters_per_mercator_xy
         s = np.sin(new_hdg_rad) + np.sin(hdg_rad)
@@ -601,11 +557,11 @@ class DoubleIntegrator(Dynamics):
         avg_hdg = np.arctan2(s, c)
         # Note: sine/cos swapped because of the heading / angle difference
         new_ag_pos = [
-            self.player.pos[0] + np.sin(avg_hdg) * avg_speed * self.dt,
-            self.player.pos[1] + np.cos(avg_hdg) * avg_speed * self.dt,
+            self.pos[0] + np.sin(avg_hdg) * avg_speed * self.dt,
+            self.pos[1] + np.cos(avg_hdg) * avg_speed * self.dt,
         ]
 
-        self.player.prev_pos = self.player.pos
-        self.player.pos = np.asarray(new_ag_pos)
-        self.player.speed = clip(new_speed, 0.0, self.max_speed)
-        self.player.heading = angle180(new_heading)
+        self.prev_pos = self.pos
+        self.pos = np.asarray(new_ag_pos)
+        self.speed = clip(new_speed, 0.0, self.max_speed)
+        self.heading = angle180(new_heading)

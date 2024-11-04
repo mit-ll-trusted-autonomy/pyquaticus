@@ -863,36 +863,32 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         for i in range(0, self.num_blue):
             b_players.append(
-                RenderingPlayer(
-                    i,
-                    Team.BLUE_TEAM,
-                    self.agent_render_radius,
-                    render_mode,
-                    dynamics_registry[self.dynamics[i]](
-                        None,
-                        self.gps_env,
-                        getattr(self, "meters_per_mercator_xy", None),
-                        self.dt,
+                dynamics_registry[self.dynamics[i]](
+                    gps_env=self.gps_env,
+                    meters_per_mercator_xy=getattr(
+                        self, "meters_per_mercator_xy", None
                     ),
+                    dt=self.dt,
+                    id=i,
+                    team=Team.BLUE_TEAM,
+                    r=self.agent_render_radius,
+                    render_mode=render_mode,
                 )
             )
-            b_players[-1].dynamics.player = b_players[-1]
         for i in range(self.num_blue, self.num_blue + self.num_red):
             r_players.append(
-                RenderingPlayer(
-                    i,
-                    Team.RED_TEAM,
-                    self.agent_render_radius,
-                    render_mode,
-                    dynamics_registry[self.dynamics[i]](
-                        None,
-                        self.gps_env,
-                        getattr(self, "meters_per_mercator_xy", None),
-                        self.dt,
+                dynamics_registry[self.dynamics[i]](
+                    gps_env=self.gps_env,
+                    meters_per_mercator_xy=getattr(
+                        self, "meters_per_mercator_xy", None
                     ),
+                    dt=self.dt,
+                    id=i,
+                    team=Team.RED_TEAM,
+                    r=self.agent_render_radius,
+                    render_mode=render_mode,
                 )
             )
-            r_players[-1].dynamics.player = r_players[-1]
 
         self.players = {
             player.id: player for player in itertools.chain(b_players, r_players)
@@ -900,7 +896,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.agents = [agent_id for agent_id in self.players]
 
         self.max_speeds = [
-            player.dynamics.get_max_speed() for player in self.players.values()
+            player.get_max_speed() for player in self.players.values()
         ]
 
         # Agents (player objects) of each team
@@ -1180,7 +1176,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             if player.is_tagged:
                 flag_home = self.flags[int(player.team)].home
                 _, heading_error = mag_bearing_to(player.pos, flag_home, player.heading)
-                desired_speed = player.dynamics.get_max_speed()
+                desired_speed = player.get_max_speed()
 
             # If agent is out of bounds, drive back in bounds at low speed
             elif self.state["agent_oob"][i]:
@@ -1195,14 +1191,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 _, heading_error = mag_bearing_to(
                     player.pos, closest_point, player.heading
                 )
-                desired_speed = player.dynamics.get_max_speed() * self.oob_speed_frac
+                desired_speed = player.get_max_speed() * self.oob_speed_frac
 
             # Else get desired speed and heading from action_dict
             else:
                 desired_speed, heading_error = action_dict[player.id]
 
             # Move agent
-            player.dynamics._move_agent(desired_speed, heading_error)
+            player._move_agent(desired_speed, heading_error)
 
             vel = mag_heading_to_vec(player.speed, player.heading)
             # Check if agent is in keepout region for their own flag
