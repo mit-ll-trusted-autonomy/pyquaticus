@@ -882,7 +882,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # agent and flag capture checks and more
         self._check_oob_vectorized() if self.team_size >= 40 else self._check_oob()
-        self._check_pickup_flags_vectorized() if self.team_size >= 40 else self._check_pickup_flags()
+        self._check_flag_pickups_vectorized() if self.team_size >= 40 else self._check_flag_pickups()
         self._check_agent_made_tag_vectorized() if self.team_size >= 10 else self._check_agent_made_tag()
         self._check_flag_captures()
         self._check_untag_vectorized() if self.team_size >= 10 else self._check_untag()
@@ -1259,7 +1259,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     self.state['flag_taken'][other_team_idx] = 0
                     self.state['team_has_flag'][team_idx] = 0
 
-    def _check_pickup_flags(self):
+    def _check_flag_pickups(self):
         """
         Updates player states if they picked up the flag.
         Note: assumes two teams, and one flag per team.
@@ -1283,7 +1283,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     #grabs
                     self.state['grabs'][team] += 1
 
-    def _check_pickup_flags_vectorized(self):
+    def _check_flag_pickups_vectorized(self):
         """
         Updates player states if they picked up the flag.
         Note: assumes two teams, and one flag per team.
