@@ -1325,36 +1325,32 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     def _check_agent_made_tag(self):
         """Updates player states if they tagged another player."""
 
-        self.state["agent_made_tag"] = [None] * self.num_agents
+        self.state["agent_made_tag"] = np.asarray([None] * self.num_agents)
         for i, player in enumerate(self.players.values()):
-            # Only continue logic check if player tagged someone if it's on its own side and is untagged.
-            if player.on_own_side and (
+            # Only continue logic if agent is on its own side, in-bounds, untagged, and its tagging cooldown is recharged.
+            if (
+                player.on_own_side and
+                not self.state['agent_oob'][i] and
+                not player.is_tagged and
                 player.tagging_cooldown == self.tagging_cooldown
-            ) and not player.is_tagged:
+            ):
                 for j, other_player in enumerate(self.players.values()):
-                    o_team = int(other_player.team)
-                    # Only do the rest if the other player is NOT on sides and they are not on the same team.
+                    # Only continue logic if the other agent is NOT on sides and they are not on the same team.
                     if (
+                        not other_player.on_own_side and
                         not other_player.is_tagged
-                        and not other_player.on_own_side
                         and other_player.team != player.team
                     ):
-                        dist_between_agents = self.get_distance_between_2_points(
+                        agent_distance = self.get_distance_between_2_points(
                             player.pos, other_player.pos
                         )
-                        if (
-                            dist_between_agents > 0.0
-                            and dist_between_agents < self.catch_radius
-                        ):
-                            if other_player.team == Team.RED_TEAM:
-                                self.state["tags"][0] += 1
-                            else:
-                                self.state["tags"][1] += 1
-                            self.state["agent_is_tagged"][j] = 1
+                        if agent_distance < self.catch_radius:
                             other_player.is_tagged = True
-                            self.state["agent_made_tag"][i] = other_player.id
-                            # If we get here, then `player` tagged `other_player` and we need to reset `other_player`
+                            self.state['agent_is_tagged'][j] = 1
+                            self.state['agent_made_tag'][i] = other_player.id
+                            self.state['tags'][int(other_player.team)] += 1
 
+                            # If we get here, then `player` tagged `other_player` and we need to reset `other_player`
                             if other_player.has_flag:
                                 # If the player with the flag was tagged, the flag also needs to be reset.
                                 if other_player.team == Team.BLUE_TEAM:
@@ -1705,10 +1701,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             border_contour, island_contours, land_mask = self._get_topo_geom()
 
             if border_contour is not None:
-                border_contours = self._border_contour_to_border_obstacles(border_contour)
+                border_obstacles = self._border_contour_to_border_obstacles(border_contour)
                 if obstacle_params is None:
                     obstacle_params = {"polygon": []}
-                obstacle_params["polygon"].extend(border_contours)
+                obstacle_params["polygon"].extend(border_obstacles)
 
             if len(island_contours) > 0:
                 if obstacle_params is None:
@@ -1718,6 +1714,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.obstacles = list()
         self.obstacle_geoms = dict() #arrays with geometric info for obstacles to be used for vectorized calculations
         if obstacle_params is not None and isinstance(obstacle_params, dict):
+            #circle obstacles
             circle_obstacles = obstacle_params.get("circle", None)
             if circle_obstacles is not None and isinstance(circle_obstacles, list):
                 self.obstacle_geoms["circle"] = []
@@ -1727,6 +1724,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.obstacle_geoms["circle"] = np.asarray(self.obstacle_geoms["circle"])
             elif circle_obstacles is not None:
                 raise TypeError(f"Expected circle obstacle parameters to be a list of tuples, not {type(circle_obstacles)}")
+
+            #polygon obstacle
             poly_obstacle = obstacle_params.get("polygon", None)
             if poly_obstacle is not None and isinstance(poly_obstacle, list):
                 self.obstacle_geoms["polygon"] = []
@@ -1739,6 +1738,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.obstacle_geoms["polygon"] = np.asarray(self.obstacle_geoms["polygon"])
             elif poly_obstacle is not None:
                 raise TypeError(f"Expected polygon obstacle parameters to be a list of tuples, not {type(poly_obstacle)}")
+
         elif obstacle_params is not None:
             raise TypeError(f"Expected obstacle_params to be None or a dict, not {type(obstacle_params)}")
 
@@ -2050,8 +2050,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.params[agent.id]["wall_3_bearing"] = obs["wall_3_bearing"]
         self.params[agent.id]["wall_3_distance"] = obs["wall_3_distance"]
         self.params[agent.id]["wall_distances"] =  self._get_dists_to_boundary()[agent.id]
-        self.params[agent.id]["agent_made_tag"] = copy.deepcopy(self.state["agent_made_tag"])
         self.params[agent.id]["agent_is_tagged"] = copy.deepcopy(self.state["agent_is_tagged"])
+        self.params[agent.id]["agent_made_tag"] = copy.deepcopy(self.state["agent_made_tag"])
         own_team = agent.team
         other_team = Team.BLUE_TEAM if own_team == Team.RED_TEAM else Team.RED_TEAM
         # Add Teamate and Opponent Information
@@ -2177,8 +2177,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     "agent_on_sides":            agent_on_sides,
                     "agent_oob":                 np.zeros(self.num_agents), #if this agent is out of bounds
                     "agent_has_flag":            np.zeros(self.num_agents),
-                    "agent_made_tag":            np.array([None] * self.num_agents), #whether this agent tagged something at the current timestep (will be index of tagged agent if so)
                     "agent_is_tagged":           np.zeros(self.num_agents), #if this agent is tagged
+                    "agent_made_tag":            np.array([None] * self.num_agents), #whether this agent tagged something at the current timestep (will be index of tagged agent if so)
                     "agent_tagging_cooldown":    np.array([self.tagging_cooldown] * self.num_agents),
                     "dist_bearing_to_obstacles": {agent_id: np.zeros((len(self.obstacles), 2)) for agent_id in self.players},
                     "flag_home":                 np.array(flag_homes),
@@ -2307,8 +2307,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             "agent_on_sides":            np.zeros(self.num_agents),
             "agent_oob":                 np.zeros(self.num_agents), 
             "agent_has_flag":            np.zeros(self.num_agents),
-            "agent_made_tag":            np.array([None] * self.num_agents),
             "agent_is_tagged":           np.zeros(self.num_agents),
+            "agent_made_tag":            np.array([None] * self.num_agents),
             "agent_tagging_cooldown":    np.array([self.tagging_cooldown] * self.num_agents),
             "dist_bearing_to_obstacles": {agent_id: np.zeros((len(self.obstacles), 2)) for agent_id in self.players},
             "flag_home":                 np.array(flag_homes),
@@ -3480,19 +3480,21 @@ when gps environment bounds are specified in meters")
         else:
             border_cnt = np.roll(border_cnt, -(border_pt_inds[0] + 1), axis=0)
 
-            contours = []
-            current_cnt = [border_cnt[-1]]
-            n_cnt_border_pts = 1
+            obstacles = []
+            current_obstacle = [border_cnt[-1]]
+            n_obstacle_border_pts = 1
             for i, p in enumerate(border_cnt):
-                current_cnt.append(p)
-                n_cnt_border_pts += self._point_on_border(p)
-                if n_cnt_border_pts == 2:
-                    if len(current_cnt) > 2:
+                current_obstacle.append(p)
+
+                n_obstacle_border_pts += self._point_on_border(p)
+                if n_obstacle_border_pts == 2:
+                    if len(current_obstacle) > 2:
                         # contour start wall
-                        cnt_start_borders = self._point_on_which_border(current_cnt[0])
+                        cnt_start_borders = self._point_on_which_border(current_obstacle[0])
                         if len(cnt_start_borders) == 2:
                             if 3 in cnt_start_borders and 0 in cnt_start_borders:
-                                #moving counterclockwise wall 0 comes after wall 3
+                                #moving counterclockwise, wall 0 comes after wall 3
+                                # (see _point_on_which_border() doc string)
                                 cnt_start_border = 0
                             else:
                                 cnt_start_border = max(cnt_start_borders)
@@ -3500,10 +3502,11 @@ when gps environment bounds are specified in meters")
                             cnt_start_border = cnt_start_borders[0]
 
                         # contour end wall
-                        cnt_end_borders = self._point_on_which_border(current_cnt[-1])
+                        cnt_end_borders = self._point_on_which_border(current_obstacle[-1])
                         if len(cnt_end_borders) == 2:
                             if 3 in cnt_end_borders and 0 in cnt_end_borders:
-                                #moving counterclockwise wall 0 comes after wall 3
+                                #moving counterclockwise, wall 0 comes after wall 3
+                                # (see _point_on_which_border() doc string)
                                 cnt_end_border = 0
                             else:
                                 cnt_end_border = max(cnt_end_borders)
@@ -3519,15 +3522,15 @@ when gps environment bounds are specified in meters")
                                 current_border = (current_border + 1) % 4
 
                             for j in missing_borders:
-                                current_cnt.insert(0, self.env_vertices[j])
+                                current_obstacle.insert(0, self.env_vertices[j])
 
-                        contours.append(np.array(current_cnt))
+                        obstacles.append(np.array(current_obstacle))
 
                     #next border contour
-                    current_cnt = [p]
-                    n_cnt_border_pts = 1
+                    current_obstacle = [p]
+                    n_obstacle_border_pts = 1
 
-            return contours
+            return obstacles
 
     def _point_on_border(self, p):
         """p can be a single point or multiple points"""
@@ -3598,7 +3601,8 @@ when gps environment bounds are specified in meters")
         self.valid_init_poses = valid_init_poses[np.where(
             np.all(
                 (self.agent_radius < valid_init_poses) & (valid_init_poses < (self.env_size - self.agent_radius)), #on-sides
-                axis=-1)
+                axis=-1
+            )
         )[0]]
 
         # Create lists of team-specific on-side init positions
