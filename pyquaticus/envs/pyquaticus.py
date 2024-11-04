@@ -3717,7 +3717,7 @@ when gps environment bounds are specified in meters")
                             (
                                 self.render_lidar_mode == "detection" and
                                 self.state["lidar_labels"][player.id][i] != self.ray_int_label_map["nothing"]
-                                )
+                            )
                         ):
                             draw.line(
                                 self.screen,
