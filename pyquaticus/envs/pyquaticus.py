@@ -1274,6 +1274,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
     def _check_pickup_flags_vectorized(self):
         """Updates player states if they picked up the flag."""
+        for team, agent_inds in self.agent_inds_of_team.items():
+            #note: assumes one flag per team
+            if not self.state["team_has_flag"][int(team)]:
+                flag_dists = np.linalg.norm(self.flags[]
+
         agent_positions = self.state["agent_position"]
         agent_teams = np.concatenate((np.zeros(self.team_size),np.ones(self.team_size)))
 
