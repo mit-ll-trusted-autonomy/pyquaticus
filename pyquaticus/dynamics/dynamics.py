@@ -27,6 +27,19 @@ class Dynamics(RenderingPlayer):
         raise NotImplementedError
 
     def _move_agent(self, desired_speed: float, heading_error: float):
+        """
+        Needs to update (at a minimum)
+
+        - self.prev_pos
+        - self.pos
+        - self.speed
+        - self.heading
+
+        based on
+
+        - desired_speed (m/s)
+        - heading_error (deg)
+        """
 
         raise NotImplementedError
 
@@ -55,10 +68,6 @@ class FixedWing(Dynamics):
         Args:
             desired speed: desired speed, in m/s
             heading_error: heading error, in deg
-
-        Returns:
-            new_speed: current speed, in m/s
-            new_heading: current heading, in degrees east of north
         """
 
         new_speed = clip(desired_speed, self.min_speed, self.max_speed)

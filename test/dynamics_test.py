@@ -188,6 +188,7 @@ def main():
     config["lidar_obs"] = True
     config["render_lidar_mode"] = "detection"
     config["lidar_range"] = 20
+    config["render_traj_mode"] = "traj_history"
 
     # PyQuaticusEnv is a Parallel Petting Zoo Environment
     env = pyquaticus_v0.PyQuaticusEnv(
