@@ -99,9 +99,9 @@ class FixedWing(Dynamics):
             self.player.pos[1] + np.cos(avg_hdg) * avg_speed * self.dt,
         ]
 
+        self.player.prev_pos = self.player.pos
         self.player.pos = np.asarray(new_ag_pos)
         self.player.speed = clip(new_speed, 0.0, self.max_speed)
-        self.player.prev_pos = self.player.pos
         self.player.heading = angle180(new_heading)
 
 
