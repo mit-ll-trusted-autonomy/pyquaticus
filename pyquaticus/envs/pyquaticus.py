@@ -167,6 +167,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                     speed, heading = self._discrete_action_to_speed_relheading(
                         action_dict[player.id]
                     )
+                    # Scale speed to agent's max speed
+                    speed = self.max_speeds[player.id] * speed
                 else:
                     # Make point system the same on both blue and red side
                     if player.team == Team.BLUE_TEAM:
@@ -200,7 +202,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                     ):  #
                         speed = 0.0
                     else:
-                        speed = self.max_speed
+                        speed = self.max_speeds[player.id]
             else:
                 # if no action provided, stop moving
                 speed, heading = 0.0, player.heading
@@ -897,9 +899,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         }  # maps player ids (or names) to player objects
         self.agents = [agent_id for agent_id in self.players]
 
-        self.max_speed = max(
-            [player.dynamics.get_max_speed() for player in self.players.values()]
-        )
+        self.max_speeds = [
+            player.dynamics.get_max_speed() for player in self.players.values()
+        ]
 
         # Agents (player objects) of each team
         self.agents_of_team = {Team.BLUE_TEAM: b_players, Team.RED_TEAM: r_players}
@@ -926,7 +928,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.set_geom_config(config_dict)
 
         # Setup action and observation spaces
-        self.action_map = [[self.max_speed * spd, hdg] for (spd, hdg) in ACTION_MAP]
+        self.action_map = [[spd, hdg] for (spd, hdg) in ACTION_MAP]
         self.action_spaces = {
             agent_id: self.get_agent_action_space() for agent_id in self.players
         }
