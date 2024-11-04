@@ -47,7 +47,6 @@ config_dict_std = {
     # Dynamics parameters
     #
     "action_type": "discrete",  # "discrete" or "continuous"
-    "global_max_speed": 100,
     "oob_speed_frac": 0.5,  # proportion
     "dynamics": "heron",  # dynamics to use for all agents
     # if different dynamics are desired for different agents, provide a list like

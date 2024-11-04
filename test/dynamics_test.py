@@ -184,7 +184,7 @@ def main():
     config["render_agent_ids"] = True
     config["render_traj_mode"] = "traj"
     config["render_traj_cutoff"] = 100
-    config["dynamics"] = ["heron", "heron"]
+    config["dynamics"] = ["drone", "fixed_wing"]
     config["render_saving"] = False
     config["lidar_obs"] = True
     config["render_lidar_mode"] = "detection"

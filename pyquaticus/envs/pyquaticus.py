@@ -897,6 +897,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         }  # maps player ids (or names) to player objects
         self.agents = [agent_id for agent_id in self.players]
 
+        self.max_speed = max(
+            [player.dynamics.get_max_speed() for player in self.players.values()]
+        )
+
         # Agents (player objects) of each team
         self.agents_of_team = {Team.BLUE_TEAM: b_players, Team.RED_TEAM: r_players}
         self.agent_ids_of_team = {
@@ -1820,10 +1824,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.oob_speed_frac = config_dict.get(
             "oob_speed_frac", config_dict_std["oob_speed_frac"]
         )
-        max_speed = config_dict.get(
-            "global_max_speed", config_dict_std["global_max_speed"]
-        )
-
         self.action_type = config_dict.get(
             "action_type", config_dict_std["action_type"]
         )
@@ -1977,7 +1977,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             flag_radius=flag_radius,
             flag_keepout=flag_keepout,
             catch_radius=catch_radius,
-            max_speed=max_speed,
             lidar_range=lidar_range,
         )
 
@@ -3132,7 +3131,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         flag_radius: float,
         flag_keepout: float,
         catch_radius: float,
-        max_speed: float,
         lidar_range: float,
     ):
         if self._is_auto_string(env_bounds) and (
@@ -3910,7 +3908,6 @@ when gps environment bounds are specified in meters"
         self.flag_radius = flag_radius
         self.catch_radius = catch_radius
         self.flag_keepout = flag_keepout
-        self.max_speed = max_speed
 
     def _get_line_intersection(
         self, origin: np.ndarray, vec: np.ndarray, line: np.ndarray

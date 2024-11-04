@@ -12,4 +12,3 @@ _version.py
 *.mp4
 *.avi
 __mapcache__/
-*_aas.py

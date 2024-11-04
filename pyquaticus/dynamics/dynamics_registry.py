@@ -3,7 +3,7 @@ from pyquaticus.dynamics.dynamics import *
 """
 Registry to map string representations of dynamics to their actual classes.
 To add your own dynamics, create a new class that inherits from Dynamics
-and implement _move_agents(), then add it to the registry here
+and implement _move_agents() and get_max_speed(), then add it to the registry here
 
 """
 
