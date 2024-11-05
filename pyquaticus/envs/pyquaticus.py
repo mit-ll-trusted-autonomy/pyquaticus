@@ -1020,7 +1020,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 if self.tag_on_collision:
                     self.state["agent_is_tagged"][i] = 1
                     player.is_tagged = True
-                player.rotate(copy.deepcopy(player.prev_pos))
+                player.rotate()
                 self.state["agent_position"][i] = player.pos
                 self.state["prev_agent_position"][i] = player.prev_pos
                 self.state["agent_spd_hdg"][i] = [player.speed, player.heading]

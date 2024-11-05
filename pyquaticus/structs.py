@@ -59,19 +59,6 @@ class Player:
     cantag_time: float = field(init=False, default=0.0)
     is_tagged: bool = field(init=False, default=False)
 
-    def rotate(self, prev_pos, angle=180):
-        """Method to rotate the player 180"""
-        self.prev_pos = self.pos
-        self.speed = 0
-        self.thrust = 0
-        self.has_flag = False
-        # Rotate 180 degrees
-        self.heading = angle180(self.heading + angle)
-
-        self.pos[0] = prev_pos[0]
-        self.pos[1] = prev_pos[1]
-
-
 @dataclass
 class RenderingPlayer(Player):
     """

@@ -34,11 +34,11 @@ class Dynamics(RenderingPlayer):
 
         raise NotImplementedError
     
-    def rotate(self):
+    def rotate(self, theta=180):
         """
         Set all time-varying state/control values to their default initialization values as in reset().
         Set speed to 0.
-        Rotate heading 180 degrees.
+        Rotate heading theta degrees.
         Place agent at previous position.
         Do not change is_tagged, has_flag, or on_own_side.
         """
@@ -76,6 +76,21 @@ class FixedWing(Dynamics):
         self.min_speed = min_speed
         self.max_speed = max_speed
         self.min_turn_radius = min_turn_radius
+
+    def rotate(self, theta=180):
+        """
+        Set all time-varying state/control values to their default initialization values as in reset().
+        Set speed to 0.
+        Rotate heading theta degrees.
+        Place agent at previous position.
+        Do not change is_tagged, has_flag, or on_own_side.
+        """
+
+        prev_pos = self.prev_pos
+        self.prev_pos = self.pos
+        self.pos = prev_pos
+        self.speed = self.min_speed
+        self.heading = angle180(self.heading + theta)
 
     def get_max_speed(self) -> float:
         return self.max_speed
@@ -137,6 +152,21 @@ class SingleIntegrator(Dynamics):
 
         self.max_speed = max_speed
         self.max_turn_rate = max_turn_rate
+
+    def rotate(self, theta=180):
+        """
+        Set all time-varying state/control values to their default initialization values as in reset().
+        Set speed to 0.
+        Rotate heading theta degrees.
+        Place agent at previous position.
+        Do not change is_tagged, has_flag, or on_own_side.
+        """
+
+        prev_pos = self.prev_pos
+        self.prev_pos = self.pos
+        self.pos = prev_pos
+        self.speed = 0
+        self.heading = angle180(self.heading + theta)
 
     def get_max_speed(self) -> float:
         return self.max_speed
@@ -215,6 +245,23 @@ class LargeUSV(Dynamics):
             "speed": PID(dt=kwargs["dt"], kp=1.0, ki=0.0, kd=0.0, integral_max=0.07),
             "heading": PID(dt=kwargs["dt"], kp=0.35, ki=0.0, kd=0.07, integral_max=0.07),
         }
+
+    def rotate(self, theta=180):
+        """
+        Set all time-varying state/control values to their default initialization values as in reset().
+        Set speed to 0.
+        Rotate heading theta degrees.
+        Place agent at previous position.
+        Do not change is_tagged, has_flag, or on_own_side.
+        """
+
+        prev_pos = self.prev_pos
+        self.prev_pos = self.pos
+        self.pos = prev_pos
+        self.speed = 0
+        self.heading = angle180(self.heading + theta)
+
+        self.thrust = 0
 
     def get_max_speed(self) -> float:
         return self.max_speed
@@ -323,6 +370,23 @@ class Heron(Dynamics):
             "heading": PID(dt=kwargs["dt"], kp=0.35, ki=0.0, kd=0.07, integral_max=0.07),
         }
 
+    def rotate(self, theta=180):
+        """
+        Set all time-varying state/control values to their default initialization values as in reset().
+        Set speed to 0.
+        Rotate heading theta degrees.
+        Place agent at previous position.
+        Do not change is_tagged, has_flag, or on_own_side.
+        """
+
+        prev_pos = self.prev_pos
+        self.prev_pos = self.pos
+        self.pos = prev_pos
+        self.speed = 0
+        self.heading = angle180(self.heading + theta)
+
+        self.thrust = 0
+
     def get_max_speed(self) -> float:
         return self.max_speed
 
@@ -403,6 +467,32 @@ class Drone(Dynamics):
         super().__init__(**kwargs)
 
         self.max_speed = max_speed
+
+        self.pitch = 0
+        self.roll = 0
+        self.yaw = 0
+
+        self.pitch_rate = 0
+        self.roll_rate = 0
+        self.yaw_rate = 0
+
+        self.x_vel = 0
+        self.y_vel = 0
+
+    def rotate(self, theta=180):
+        """
+        Set all time-varying state/control values to their default initialization values as in reset().
+        Set speed to 0.
+        Rotate heading theta degrees.
+        Place agent at previous position.
+        Do not change is_tagged, has_flag, or on_own_side.
+        """
+
+        prev_pos = self.prev_pos
+        self.prev_pos = self.pos
+        self.pos = prev_pos
+        self.speed = 0
+        self.heading = angle180(self.heading + theta)
 
         self.pitch = 0
         self.roll = 0
@@ -543,6 +633,23 @@ class DoubleIntegrator(Dynamics):
         self.max_accel = max_accel
         self.max_turn_rate = max_turn_rate
         self.max_angular_accel = max_angular_accel
+
+        self.turn_rate = 0
+
+    def rotate(self, theta=180):
+        """
+        Set all time-varying state/control values to their default initialization values as in reset().
+        Set speed to 0.
+        Rotate heading theta degrees.
+        Place agent at previous position.
+        Do not change is_tagged, has_flag, or on_own_side.
+        """
+
+        prev_pos = self.prev_pos
+        self.prev_pos = self.pos
+        self.pos = prev_pos
+        self.speed = 0
+        self.heading = angle180(self.heading + theta)
 
         self.turn_rate = 0
 
