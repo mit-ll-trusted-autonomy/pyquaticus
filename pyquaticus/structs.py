@@ -36,11 +36,9 @@ class Player:
     ----------
         id: The ID of the agent (also used as an index)
         team: The team of the agent (red or blue)
-        thrust: The engine thrust
         pos: The position of the agent [x, y]
         speed: The speed of the agent (m / s)
         heading: The heading of the agent (deg), maritime convention: north is 0, east is 90
-        turn_rate: The turn rate of the agent (deg/s)
         prev_pos: The previous position of the agent
         has_flag: Indicator for whether or not the agent has the flag
         on_own_side: Indicator for whether or not the agent is on its own side of the field.
@@ -51,11 +49,9 @@ class Player:
 
     id: Hashable
     team: Team
-    thrust: float = field(init=False, default_factory=float)
     pos: list[float] = field(init=False, default_factory=list)
     speed: float = field(init=False, default_factory=float)
     heading: float = field(init=False, default_factory=float)
-    turn_rate: float = field(init=False, default_factory=float)
     prev_pos: list[float] = field(init=False, default_factory=list)
     has_flag: bool = field(init=False, default=False)
     on_own_side: bool = field(init=False, default=True)
@@ -124,7 +120,7 @@ class RenderingPlayer(Player):
             # Adjust color based on which team
             if self.team == Team.BLUE_TEAM:
                 draw.circle(
-                    self.pygame_agent, (0, 0, 255, 50), (self.render_radius, self.render_radius), self.r
+                    self.pygame_agent, (0, 0, 255, 50), (self.render_radius, self.render_radius), self.render_radius
                 )
                 draw.circle(
                     self.pygame_agent, (0, 0, 255), (self.render_radius, self.render_radius), self.render_radius, width=1
@@ -141,7 +137,7 @@ class RenderingPlayer(Player):
                 )
             else:
                 draw.circle(
-                    self.pygame_agent, (255, 0, 0, 50), (self.render_radius, self.render_radius), self.r
+                    self.pygame_agent, (255, 0, 0, 50), (self.render_radius, self.render_radius), self.render_radius
                 )
                 draw.circle(
                     self.pygame_agent, (255, 0, 0), (self.render_radius, self.render_radius), self.render_radius, width=1

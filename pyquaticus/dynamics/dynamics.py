@@ -25,6 +25,25 @@ class Dynamics(RenderingPlayer):
     def get_max_speed(self) -> float:
 
         raise NotImplementedError
+    
+    def reset(self):
+        """
+        Set all time-varying state/control values to their default initialization values.
+        Do not change pos, speed, heading, is_tagged, has_flag, or on_own_side.
+        """
+
+        raise NotImplementedError
+    
+    def rotate(self):
+        """
+        Set all time-varying state/control values to their default initialization values as in reset().
+        Set speed to 0.
+        Rotate heading 180 degrees.
+        Place agent at previous position.
+        Do not change is_tagged, has_flag, or on_own_side.
+        """
+
+        raise NotImplementedError
 
     def _move_agent(self, desired_speed: float, heading_error: float):
         """
@@ -136,7 +155,6 @@ class SingleIntegrator(Dynamics):
             heading_error / self.dt, -self.max_turn_rate, self.max_turn_rate
         )
         new_heading = self.heading + turn_rate * self.dt
-        new_thrust = desired_speed
 
         # Propagate vehicle position based on new_heading and new_speed
         hdg_rad = np.deg2rad(self.heading)
@@ -190,6 +208,8 @@ class LargeUSV(Dynamics):
         self.turn_rate = turn_rate
         self.max_acc = max_acc
         self.max_dec = max_dec
+
+        self.thrust = 0
 
         self._pid_controllers = {
             "speed": PID(dt=kwargs["dt"], kp=1.0, ki=0.0, kd=0.0, integral_max=0.07),
@@ -295,6 +315,8 @@ class Heron(Dynamics):
         self.turn_rate = turn_rate
         self.max_acc = max_acc
         self.max_dec = max_dec
+
+        self.thrust = 0
 
         self._pid_controllers = {
             "speed": PID(dt=kwargs["dt"], kp=1.0, ki=0.0, kd=0.0, integral_max=0.07),
@@ -521,6 +543,8 @@ class DoubleIntegrator(Dynamics):
         self.max_accel = max_accel
         self.max_turn_rate = max_turn_rate
         self.max_angular_accel = max_angular_accel
+
+        self.turn_rate = 0
 
     def get_max_speed(self) -> float:
         return self.max_speed

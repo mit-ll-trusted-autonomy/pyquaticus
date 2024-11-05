@@ -777,7 +777,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     dt=self.dt,
                     id=i,
                     team=Team.BLUE_TEAM,
-                    r=self.agent_render_radius,
+                    render_radius=self.agent_render_radius,
                     render_mode=render_mode,
                 )
             )
@@ -791,7 +791,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     dt=self.dt,
                     id=i,
                     team=Team.RED_TEAM,
-                    r=self.agent_render_radius,
+                    render_radius=self.agent_render_radius,
                     render_mode=render_mode,
                 )
             )
