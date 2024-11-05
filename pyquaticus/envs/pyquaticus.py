@@ -720,7 +720,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         self.reset_count = 0
         self.current_time = 0
-        self.learning_iteration = 0
 
         self.state = {}
         self.dones = {}
@@ -1208,9 +1207,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
                 # reset picked-up flag (if applicable)
                 if player.has_flag:
+                    #update agent
                     player.has_flag = False
                     self.state['agent_has_flag'][i] = 0
 
+                    #update flag
                     self.flags[other_team_idx].reset()
                     self.state['flag_position'][other_team_idx] = self.flags[other_team_idx].pos
                     self.state['flag_taken'][other_team_idx] = 0
@@ -1243,11 +1244,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # reset picked-up flag (if applicable)
         agent_has_flag_oob = self.state['agent_has_flag'] & agent_oob
         if np.any(agent_has_flag_oob):
-            #agent
+            #update agent
             self.state['agent_has_flag'][agent_oob_inds] = 0
             for i in agent_oob_inds:
                 self.players[self.agents[i]].has_flag = False
-            #flag
+            #update flag
             for team, agent_inds in self.agent_inds_of_team.items():
                 if np.any(agent_has_flag_oob[agent_inds]):
                     #note: assumes two teams, and one flag per team
@@ -1272,15 +1273,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 flag_distance = self.get_distance_between_2_points(player.pos, flag_pos)
 
                 if flag_distance < self.catch_radius:
-                    #agent
+                    #update agent
                     player.has_flag = True
                     self.state['agent_has_flag'][i] = 1
 
-                    #flag
+                    #update flag
                     self.state['flag_taken'][other_team] = 1
                     self.state['team_has_flag'][team] = 1
 
-                    #grabs
+                    #update grabs
                     self.state['grabs'][team] += 1
 
     def _check_flag_pickups_vectorized(self):
@@ -1311,7 +1312,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     #to match the unvectorized version of this function which loops through agents
                     agent_flag_pickup_ind = agent_inds[np.where(agent_flag_pickups)[0][0]]
                     
-                    #update player
+                    #update agent
                     self.players[self.agents[agent_flag_pickup_ind]].has_flag = True
                     self.state['agent_has_flag'][agent_flag_pickup_ind] = 1
 
@@ -1323,11 +1324,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     self.grabs[team_idx] += 1
 
     def _check_agent_made_tag(self):
-        """Updates player states if they tagged another player."""
-
+        """
+        Updates player states if they tagged another player.
+        Note 1: assumes one tag allowed per tagging cooldown recharge.
+        Note 2: assumes two teams, and one flag per team.
+        """
         self.state["agent_made_tag"] = np.asarray([None] * self.num_agents)
         for i, player in enumerate(self.players.values()):
-            # Only continue logic if agent is on its own side, in-bounds, untagged, and its tagging cooldown is recharged.
+            # Only continue logic if agent is on its own side, in-bounds, untagged, and its tagging cooldown is recharged
             if (
                 player.on_own_side and
                 not self.state['agent_oob'][i] and
@@ -1335,7 +1339,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 player.tagging_cooldown == self.tagging_cooldown
             ):
                 for j, other_player in enumerate(self.players.values()):
-                    # Only continue logic if the other agent is NOT on sides and they are not on the same team.
+                    # Only continue logic if the other agent is NOT on sides and they are not on the same team
                     if (
                         not other_player.on_own_side and
                         not other_player.is_tagged
@@ -1345,27 +1349,29 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                             player.pos, other_player.pos
                         )
                         if agent_distance < self.catch_radius:
+                            team_idx = int(player.team)
+                            other_team_idx = int(other_player.team)
+
                             other_player.is_tagged = True
                             self.state['agent_is_tagged'][j] = 1
                             self.state['agent_made_tag'][i] = other_player.id
-                            self.state['tags'][int(other_player.team)] += 1
+                            self.state['tags'][other_team_idx] += 1
 
                             # If we get here, then `player` tagged `other_player` and we need to reset `other_player`
                             if other_player.has_flag:
-                                # If the player with the flag was tagged, the flag also needs to be reset.
-                                if other_player.team == Team.BLUE_TEAM:
-                                    self.state["team_has_flag"][0] = False
-                                else:
-                                    self.state["team_has_flag"][1] = False
-                                self.state["flag_taken"][int(player.team)] = 0
-                                self.state["agent_has_flag"][j] = 0
-                                self.flags[int(player.team)].reset()
-                                self.state["flag_position"][int(player.team)] = np.array(self.flags[int(player.team)].pos)
+                                #update agent
                                 other_player.has_flag = False
+                                self.state['agent_has_flag'][j] = 0
+
+                                #update flag
+                                self.flags[team_idx].reset()
+                                self.state['flag_position'][team_idx] = self.flags[team_idx].pos
+                                self.state['flag_taken'][team_idx] = 0
+                                self.state['team_has_flag'][other_team_idx] = 0
 
                             # Set players tagging cooldown
                             player.tagging_cooldown = 0.0
-                            self.state["agent_tagging_cooldown"][i] = 0.0
+                            self.state['agent_tagging_cooldown'][i] = 0.0
 
                             # Break loop (should not be allowed to tag again during current timestep)
                             break
@@ -1497,10 +1503,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     def get_full_state_info(self):
         """Return the full state."""
         return self.state
-
-    def current_iter_value(self, iter_value):
-        """Returns the learning iteration."""
-        self.learning_iteration = iter_value
 
     def set_config_values(self, config_dict):
         """
