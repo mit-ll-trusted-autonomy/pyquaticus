@@ -47,6 +47,7 @@ class Player:
         tagging_cooldown: reset to 0 after this player tags another agent then counts up to the configured cooldown
         cantag_time: at this timestamp, the player can tag again (Note: only used in PyQuaticusMoosBridge, not regular Pyquaticus)
         is_tagged: True iff this player is currently tagged
+        home: This agent's home location upon a reset
     """
 
     id: Hashable
@@ -62,6 +63,19 @@ class Player:
     tagging_cooldown: float = field(init=False)
     cantag_time: float = field(init=False, default=0.0)
     is_tagged: bool = field(init=False, default=False)
+    home: list[float] = field(init=False, default_factory=list)
+
+    def rotate(self, prev_pos, angle=180):
+        """Method to rotate the player 180"""
+        self.prev_pos = self.pos
+        self.speed = 0
+        self.thrust = 0
+        self.has_flag = False
+        # Rotate 180 degrees
+        self.heading = angle180(self.heading + angle)
+
+        self.pos[0] = prev_pos[0]
+        self.pos[1] = prev_pos[1]
 
 
 @dataclass
@@ -83,15 +97,14 @@ class RenderingPlayer(Player):
         on_own_side: Indicator for whether or not the agent is on its own side of the field.
         tagging_cooldown: reset to 0 after this player tags another agent then counts up to the configured cooldown
         is_tagged: True iff this player is currently tagged
+        home: This agent's home location upon a reset
         #### new fields
         r: Agent radius
-        home: This agent's home location upon a reset
         pygame_agent: The pygame object that is drawn on screen.
     """
 
     r: float
     render_mode: str
-    home: list[float] = field(init=False, default_factory=list)
 
     def __post_init__(self):
         """Called automatically after __init__ to set up pygame object interface."""
@@ -152,32 +165,6 @@ class RenderingPlayer(Player):
 
             # pygame Rect object the same size as pygame_agent Surface
             self.pygame_agent_rect = pygame.Rect((0, 0), (2 * self.r, 2 * self.r))
-
-    def reset(self):
-        """Method to return a player to their original starting position."""
-        self.prev_pos = self.pos
-        self.pos = self.home
-        self.speed = 0
-        if self.team == Team.RED_TEAM:
-            self.heading = 90
-        else:
-            self.heading = -90
-        self.thrust = 0
-        self.is_tagged = False
-        self.has_flag = False
-        self.on_own_side = True
-
-    def rotate(self, prev_pos, angle=180):
-        """Method to rotate the player 180"""
-        self.prev_pos = self.pos
-        self.speed = 0
-        self.thrust = 0
-        self.has_flag = False
-        # Rotate 180 degrees
-        self.heading = angle180(self.heading + angle)
-
-        self.pos[0] = prev_pos[0]
-        self.pos[1] = prev_pos[1]
 
     def render_tagging(self, cooldown_time):
         self.pygame_agent = self.pygame_agent_base.copy()
