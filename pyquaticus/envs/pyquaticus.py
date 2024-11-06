@@ -1383,7 +1383,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         Note 2: assumes two teams, and one flag per team.
         """
         for team, team_agent_inds in self.agent_inds_of_team.items():
-            other_agent_inds = np.setdiff1d(np.arange(), team_agent_inds)
+            other_agent_inds = np.setdiff1d(np.arange(self.num_agents), team_agent_inds)
 
         ####################################################################################
         agent_positions = self.state["agent_position"]
