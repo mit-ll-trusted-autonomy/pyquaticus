@@ -77,6 +77,14 @@ class FixedWing(Dynamics):
         self.max_speed = max_speed
         self.min_turn_radius = min_turn_radius
 
+    def reset(self):
+        """
+        Set all time-varying state/control values to their default initialization values.
+        Do not change pos, speed, heading, is_tagged, has_flag, or on_own_side.
+        """
+
+        pass # Nothing needed here
+
     def rotate(self, theta=180):
         """
         Set all time-varying state/control values to their default initialization values as in reset().
@@ -152,6 +160,14 @@ class SingleIntegrator(Dynamics):
 
         self.max_speed = max_speed
         self.max_turn_rate = max_turn_rate
+
+    def reset(self):
+        """
+        Set all time-varying state/control values to their default initialization values.
+        Do not change pos, speed, heading, is_tagged, has_flag, or on_own_side.
+        """
+
+        pass # Nothing needed here
 
     def rotate(self, theta=180):
         """
@@ -245,6 +261,14 @@ class LargeUSV(Dynamics):
             "speed": PID(dt=kwargs["dt"], kp=1.0, ki=0.0, kd=0.0, integral_max=0.07),
             "heading": PID(dt=kwargs["dt"], kp=0.35, ki=0.0, kd=0.07, integral_max=0.07),
         }
+
+    def reset(self):
+        """
+        Set all time-varying state/control values to their default initialization values.
+        Do not change pos, speed, heading, is_tagged, has_flag, or on_own_side.
+        """
+
+        self.thrust = 0
 
     def rotate(self, theta=180):
         """
@@ -370,6 +394,14 @@ class Heron(Dynamics):
             "heading": PID(dt=kwargs["dt"], kp=0.35, ki=0.0, kd=0.07, integral_max=0.07),
         }
 
+    def reset(self):
+        """
+        Set all time-varying state/control values to their default initialization values.
+        Do not change pos, speed, heading, is_tagged, has_flag, or on_own_side.
+        """
+
+        self.thrust = 0
+
     def rotate(self, theta=180):
         """
         Set all time-varying state/control values to their default initialization values as in reset().
@@ -467,6 +499,23 @@ class Drone(Dynamics):
         super().__init__(**kwargs)
 
         self.max_speed = max_speed
+
+        self.pitch = 0
+        self.roll = 0
+        self.yaw = 0
+
+        self.pitch_rate = 0
+        self.roll_rate = 0
+        self.yaw_rate = 0
+
+        self.x_vel = 0
+        self.y_vel = 0
+
+    def reset(self):
+        """
+        Set all time-varying state/control values to their default initialization values.
+        Do not change pos, speed, heading, is_tagged, has_flag, or on_own_side.
+        """
 
         self.pitch = 0
         self.roll = 0
@@ -633,6 +682,14 @@ class DoubleIntegrator(Dynamics):
         self.max_accel = max_accel
         self.max_turn_rate = max_turn_rate
         self.max_angular_accel = max_angular_accel
+
+        self.turn_rate = 0
+
+    def reset(self):
+        """
+        Set all time-varying state/control values to their default initialization values.
+        Do not change pos, speed, heading, is_tagged, has_flag, or on_own_side.
+        """
 
         self.turn_rate = 0
 
