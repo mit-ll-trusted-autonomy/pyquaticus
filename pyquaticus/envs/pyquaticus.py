@@ -1377,7 +1377,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                             break
 
     def _check_agent_made_tag_vectorized(self):
-        """Updates player states if they tagged another player."""
+        """
+        Updates player states if they tagged another player.
+        Note 1: assumes one tag allowed per tagging cooldown recharge.
+        Note 2: assumes two teams, and one flag per team.
+        """
+        for team, team_agent_inds in self.agent_inds_of_team.items():
+            other_agent_inds = np.setdiff1d(np.arange(), team_agent_inds)
+
+        ####################################################################################
         agent_positions = self.state["agent_position"]
         agent_to_agent_diffs = agent_positions-np.expand_dims(agent_positions,1)
         agent_to_agent_dists = np.linalg.norm(agent_to_agent_diffs,axis=2)
