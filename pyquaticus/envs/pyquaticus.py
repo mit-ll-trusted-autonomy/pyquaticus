@@ -882,6 +882,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.current_time += self.sim_speedup_factor * self.tau
 
         # agent and flag capture checks and more
+        #TODO: re-profile how fast the new vectorized and unvectorized functions run to adjust switchoff point
         self._check_oob_vectorized() if self.team_size >= 40 else self._check_oob()
         self._check_flag_pickups_vectorized() if self.team_size >= 40 else self._check_flag_pickups()
         self._check_agent_made_tag_vectorized() if self.team_size >= 10 else self._check_agent_made_tag()
@@ -1197,35 +1198,35 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 team_idx = int(player.team)
                 other_team_idx = int(not team_idx)
 
-                # set out-of-bounds
+                # Set out-of-bounds
                 self.state['agent_oob'][i] = 1
 
-                # set tag (if applicable)
+                # Set tag (if applicable)
                 if self.tag_on_oob:
                     if not player.is_tagged:
                         self.state['tags'][team_idx] += 1
                         self.state['agent_is_tagged'][i] = 1
                         player.is_tagged = True
 
-                # reset picked-up flag (if applicable)
+                # Reset picked-up flag (if applicable)
                 if player.has_flag:
-                    #update agent
+                    # update agent
                     player.has_flag = False
                     self.state['agent_has_flag'][i] = 0
 
-                    #update flag
+                    # update flag
                     self.flags[other_team_idx].reset()
                     self.state['flag_position'][other_team_idx] = self.flags[other_team_idx].pos
                     self.state['flag_taken'][other_team_idx] = 0
                     self.state['team_has_flag'][team_idx] = 0
 
             else:
-                # set in-bounds
+                # Set in-bounds
                 self.state['agent_oob'][i] = 0
 
     def _check_oob_vectorized(self):
         """Checks if players are out of bounds and updates their states (and any flags in their possesion) accordingly."""
-        # set out-of-bounds
+        # Set out-of-bounds
         agent_poses = self.state['agent_position']
         agent_oob = np.any((agent_poses <= self.agent_radius) | ((self.env_size - self.agent_radius) <= agent_poses), axis=-1)
         self.state['agent_oob'] = agent_oob
@@ -1234,7 +1235,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         agent_oob_inds = np.where(agent_oob)[0]
 
-        # set tag (if applicable)
+        # Set tag (if applicable)
         if self.tag_on_oob:
             for team, agent_inds in self.agent_inds_of_team.items():
                 self.state['tags'][int(team)] += np.sum(agent_oob[agent_inds] & np.logical_not(self.state["agent_is_tagged"][agent_inds]))
@@ -1243,14 +1244,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             for i in agent_oob_inds:
                 self.players[self.agents[i]].is_tagged = True
 
-        # reset picked-up flag (if applicable)
+        # Reset picked-up flag (if applicable)
         agent_has_flag_oob = self.state['agent_has_flag'] & agent_oob
         if np.any(agent_has_flag_oob):
-            #update agent
+            # update agent
             self.state['agent_has_flag'][agent_oob_inds] = 0
             for i in agent_oob_inds:
                 self.players[self.agents[i]].has_flag = False
-            #update flag
+            # update flag
             for team, agent_inds in self.agent_inds_of_team.items():
                 if np.any(agent_has_flag_oob[agent_inds]):
                     #note: assumes two teams, and one flag per team
@@ -1275,15 +1276,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 flag_distance = self.get_distance_between_2_points(player.pos, flag_pos)
 
                 if flag_distance < self.catch_radius:
-                    #update agent
+                    # update agent
                     player.has_flag = True
                     self.state['agent_has_flag'][i] = 1
 
-                    #update flag
+                    # update flag
                     self.state['flag_taken'][other_team] = 1
                     self.state['team_has_flag'][team] = 1
 
-                    #update grabs
+                    # update grabs
                     self.state['grabs'][team] += 1
 
     def _check_flag_pickups_vectorized(self):
@@ -1314,15 +1315,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     #to match the unvectorized version of this function which loops through agents
                     agent_flag_pickup_ind = agent_inds[np.where(agent_flag_pickups)[0][0]]
                     
-                    #update agent
+                    # update agent
                     self.players[self.agents[agent_flag_pickup_ind]].has_flag = True
                     self.state['agent_has_flag'][agent_flag_pickup_ind] = 1
 
-                    #update flags
+                    # update flags
                     self.state["flag_taken"][other_team_idx] = 1
                     self.state["team_has_flag"][team_idx] = 1 
 
-                    #update grabs
+                    # update grabs
                     self.grabs[team_idx] += 1
 
     def _check_agent_made_tag(self):
