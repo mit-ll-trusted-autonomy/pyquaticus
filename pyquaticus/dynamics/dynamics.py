@@ -22,10 +22,12 @@ class Dynamics(RenderingPlayer):
         self.meters_per_mercator_xy = meters_per_mercator_xy
         self.dt = dt
 
+        self.state = {"pos": self.pos, "speed": self.speed, "heading": self.heading}
+
     def get_max_speed(self) -> float:
 
         raise NotImplementedError
-    
+
     def reset(self):
         """
         Set all time-varying state/control values to their default initialization values.
@@ -33,7 +35,7 @@ class Dynamics(RenderingPlayer):
         """
 
         raise NotImplementedError
-    
+
     def rotate(self, theta=180):
         """
         Set all time-varying state/control values to their default initialization values as in reset().
@@ -83,7 +85,7 @@ class FixedWing(Dynamics):
         Do not change pos, speed, heading, is_tagged, has_flag, or on_own_side.
         """
 
-        pass # Nothing needed here
+        pass  # Nothing needed here
 
     def rotate(self, theta=180):
         """
@@ -99,6 +101,10 @@ class FixedWing(Dynamics):
         self.pos = prev_pos
         self.speed = self.min_speed
         self.heading = angle180(self.heading + theta)
+
+        self.state["pos"] = self.pos
+        self.state["speed"] = self.speed
+        self.state["heading"] = self.heading
 
     def get_max_speed(self) -> float:
         return self.max_speed
@@ -122,9 +128,7 @@ class FixedWing(Dynamics):
 
         new_turn_rate = np.rad2deg(new_speed / new_turn_radius)
 
-        new_heading = (
-            self.heading + np.sign(heading_error) * new_turn_rate * self.dt
-        )
+        new_heading = self.heading + np.sign(heading_error) * new_turn_rate * self.dt
 
         # Propagate vehicle position based on new_heading and new_speed
         hdg_rad = np.deg2rad(self.heading)
@@ -146,15 +150,14 @@ class FixedWing(Dynamics):
         self.speed = clip(new_speed, 0.0, self.max_speed)
         self.heading = angle180(new_heading)
 
+        self.state["pos"] = self.pos
+        self.state["speed"] = self.speed
+        self.state["heading"] = self.heading
+
 
 class SingleIntegrator(Dynamics):
 
-    def __init__(
-        self,
-        max_speed: float = 10,
-        max_turn_rate: float = 90,
-        **kwargs
-    ):
+    def __init__(self, max_speed: float = 10, max_turn_rate: float = 90, **kwargs):
 
         super().__init__(**kwargs)
 
@@ -167,7 +170,7 @@ class SingleIntegrator(Dynamics):
         Do not change pos, speed, heading, is_tagged, has_flag, or on_own_side.
         """
 
-        pass # Nothing needed here
+        pass  # Nothing needed here
 
     def rotate(self, theta=180):
         """
@@ -183,6 +186,10 @@ class SingleIntegrator(Dynamics):
         self.pos = prev_pos
         self.speed = 0
         self.heading = angle180(self.heading + theta)
+
+        self.state["pos"] = self.pos
+        self.state["speed"] = self.speed
+        self.state["heading"] = self.heading
 
     def get_max_speed(self) -> float:
         return self.max_speed
@@ -222,6 +229,10 @@ class SingleIntegrator(Dynamics):
         self.speed = clip(new_speed, 0.0, self.max_speed)
         self.heading = angle180(new_heading)
 
+        self.state["pos"] = self.pos
+        self.state["speed"] = self.speed
+        self.state["heading"] = self.heading
+
 
 class LargeUSV(Dynamics):
 
@@ -240,7 +251,7 @@ class LargeUSV(Dynamics):
         turn_rate: float = 50,
         max_acc: float = 0.5,  # meters / s**2
         max_dec: float = 0.5,  # meters / s**2
-        **kwargs
+        **kwargs,
     ):
 
         super().__init__(**kwargs)
@@ -255,11 +266,13 @@ class LargeUSV(Dynamics):
         self.max_acc = max_acc
         self.max_dec = max_dec
 
-        self.thrust = 0
+        self.state["thrust"] = 0
 
         self._pid_controllers = {
             "speed": PID(dt=kwargs["dt"], kp=1.0, ki=0.0, kd=0.0, integral_max=0.07),
-            "heading": PID(dt=kwargs["dt"], kp=0.35, ki=0.0, kd=0.07, integral_max=0.07),
+            "heading": PID(
+                dt=kwargs["dt"], kp=0.35, ki=0.0, kd=0.07, integral_max=0.07
+            ),
         }
 
     def reset(self):
@@ -268,7 +281,7 @@ class LargeUSV(Dynamics):
         Do not change pos, speed, heading, is_tagged, has_flag, or on_own_side.
         """
 
-        self.thrust = 0
+        self.state["thrust"] = 0
 
     def rotate(self, theta=180):
         """
@@ -285,7 +298,10 @@ class LargeUSV(Dynamics):
         self.speed = 0
         self.heading = angle180(self.heading + theta)
 
-        self.thrust = 0
+        self.state["thrust"] = 0
+        self.state["pos"] = self.pos
+        self.state["speed"] = self.speed
+        self.state["heading"] = self.heading
 
     def get_max_speed(self) -> float:
         return self.max_speed
@@ -305,7 +321,7 @@ class LargeUSV(Dynamics):
         desired_speed = self._pid_controllers["speed"](speed_error)
         desired_rudder = self._pid_controllers["heading"](heading_error)
 
-        desired_thrust = self.thrust + self.speed_factor * desired_speed
+        desired_thrust = self.state["thrust"] + self.speed_factor * desired_speed
 
         desired_thrust = clip(desired_thrust, -self.max_thrust, self.max_thrust)
         desired_rudder = clip(desired_rudder, -self.max_rudder, self.max_rudder)
@@ -329,7 +345,7 @@ class LargeUSV(Dynamics):
         if desired_thrust < 0:
             thrust_d_hdg = -thrust_d_hdg
 
-        self.thrust = desired_thrust
+        self.state["thrust"] = desired_thrust
 
         # if not moving, then can't turn
         if (new_speed + self.speed) / 2.0 < 0.5:
@@ -355,6 +371,10 @@ class LargeUSV(Dynamics):
         self.pos = np.asarray(new_ag_pos)
         self.speed = clip(new_speed, 0.0, self.max_speed)
         self.heading = angle180(new_heading)
+
+        self.state["pos"] = self.pos
+        self.state["speed"] = self.speed
+        self.state["heading"] = self.heading
 
 
 class Heron(Dynamics):
@@ -372,7 +392,7 @@ class Heron(Dynamics):
         turn_rate: float = 70,
         max_acc: float = 1,  # meters / s**2
         max_dec: float = 1,  # meters / s**2
-        **kwargs
+        **kwargs,
     ):
 
         super().__init__(**kwargs)
@@ -387,11 +407,13 @@ class Heron(Dynamics):
         self.max_acc = max_acc
         self.max_dec = max_dec
 
-        self.thrust = 0
+        self.state["thrust"] = 0
 
         self._pid_controllers = {
             "speed": PID(dt=kwargs["dt"], kp=1.0, ki=0.0, kd=0.0, integral_max=0.07),
-            "heading": PID(dt=kwargs["dt"], kp=0.35, ki=0.0, kd=0.07, integral_max=0.07),
+            "heading": PID(
+                dt=kwargs["dt"], kp=0.35, ki=0.0, kd=0.07, integral_max=0.07
+            ),
         }
 
     def reset(self):
@@ -400,7 +422,7 @@ class Heron(Dynamics):
         Do not change pos, speed, heading, is_tagged, has_flag, or on_own_side.
         """
 
-        self.thrust = 0
+        self.state["thrust"] = 0
 
     def rotate(self, theta=180):
         """
@@ -417,7 +439,10 @@ class Heron(Dynamics):
         self.speed = 0
         self.heading = angle180(self.heading + theta)
 
-        self.thrust = 0
+        self.state["thrust"] = 0
+        self.state["pos"] = self.pos
+        self.state["speed"] = self.speed
+        self.state["heading"] = self.heading
 
     def get_max_speed(self) -> float:
         return self.max_speed
@@ -437,7 +462,7 @@ class Heron(Dynamics):
         desired_speed = self._pid_controllers["speed"](speed_error)
         desired_rudder = self._pid_controllers["heading"](heading_error)
 
-        desired_thrust = self.thrust + self.speed_factor * desired_speed
+        desired_thrust = self.state["thrust"] + self.speed_factor * desired_speed
 
         desired_thrust = clip(desired_thrust, -self.max_thrust, self.max_thrust)
         desired_rudder = clip(desired_rudder, -self.max_rudder, self.max_rudder)
@@ -461,7 +486,7 @@ class Heron(Dynamics):
         if desired_thrust < 0:
             thrust_d_hdg = -thrust_d_hdg
 
-        self.thrust = desired_thrust
+        self.state["thrust"] = desired_thrust
 
         # if not moving, then can't turn
         if (new_speed + self.speed) / 2.0 < 0.5:
@@ -488,28 +513,29 @@ class Heron(Dynamics):
         self.speed = clip(new_speed, 0.0, self.max_speed)
         self.heading = angle180(new_heading)
 
+        self.state["pos"] = self.pos
+        self.state["speed"] = self.speed
+        self.state["heading"] = self.heading
+
 
 class Drone(Dynamics):
 
-    def __init__(
-        self,
-        max_speed: float = 10,
-        **kwargs
-    ):
+    def __init__(self, max_speed: float = 15, **kwargs):
         super().__init__(**kwargs)
 
         self.max_speed = max_speed
 
-        self.pitch = 0
-        self.roll = 0
-        self.yaw = 0
-
-        self.pitch_rate = 0
-        self.roll_rate = 0
-        self.yaw_rate = 0
-
-        self.x_vel = 0
-        self.y_vel = 0
+        addl_state = {
+            "pitch": 0,
+            "roll": 0,
+            "yaw": 0,
+            "pitch_rate": 0,
+            "roll_rate": 0,
+            "yaw_rate": 0,
+            "x_vel": 0,
+            "y_vel": 0,
+        }
+        self.state.update(addl_state)
 
     def reset(self):
         """
@@ -517,16 +543,17 @@ class Drone(Dynamics):
         Do not change pos, speed, heading, is_tagged, has_flag, or on_own_side.
         """
 
-        self.pitch = 0
-        self.roll = 0
-        self.yaw = 0
-
-        self.pitch_rate = 0
-        self.roll_rate = 0
-        self.yaw_rate = 0
-
-        self.x_vel = 0
-        self.y_vel = 0
+        new_state = {
+            "pitch": 0,
+            "roll": 0,
+            "yaw": 0,
+            "pitch_rate": 0,
+            "roll_rate": 0,
+            "yaw_rate": 0,
+            "x_vel": 0,
+            "y_vel": 0,
+        }
+        self.state.update(new_state)
 
     def rotate(self, theta=180):
         """
@@ -543,16 +570,21 @@ class Drone(Dynamics):
         self.speed = 0
         self.heading = angle180(self.heading + theta)
 
-        self.pitch = 0
-        self.roll = 0
-        self.yaw = 0
+        self.state["pos"] = self.pos
+        self.state["speed"] = self.speed
+        self.state["heading"] = self.heading
 
-        self.pitch_rate = 0
-        self.roll_rate = 0
-        self.yaw_rate = 0
-
-        self.x_vel = 0
-        self.y_vel = 0
+        new_state = {
+            "pitch": 0,
+            "roll": 0,
+            "yaw": 0,
+            "pitch_rate": 0,
+            "roll_rate": 0,
+            "yaw_rate": 0,
+            "x_vel": 0,
+            "y_vel": 0,
+        }
+        self.state.update(new_state)
 
     def get_max_speed(self) -> float:
         return self.max_speed
@@ -592,16 +624,16 @@ class Drone(Dynamics):
         Kd_yaw = 5
 
         # Convert heading error (deg) to desired yaw
-        self.yaw = np.deg2rad(self.heading)
+        self.state["yaw"] = np.deg2rad(self.heading)
         yaw_error = np.deg2rad(heading_error)
-        des_yaw = self.yaw + yaw_error
+        des_yaw = self.state["yaw"] + yaw_error
 
         # Calculate desired acceleration in x and y directions
         des_x_vel = desired_speed * np.sin(des_yaw)
-        cur_x_vel = self.x_vel
+        cur_x_vel = self.state["x_vel"]
         des_x_acc = clip((des_x_vel - cur_x_vel) / self.dt, -10, 10)
         des_y_vel = desired_speed * np.cos(des_yaw)
-        cur_y_vel = self.y_vel
+        cur_y_vel = self.state["y_vel"]
         des_y_acc = clip((des_y_vel - cur_y_vel) / self.dt, -10, 10)
 
         # Placeholders for z for now so that it is easier to add in the future
@@ -620,42 +652,42 @@ class Drone(Dynamics):
             Kp_roll
             * (
                 ((des_x_acc * np.cos(des_yaw) + des_y_acc * np.sin(des_yaw)) / g)
-                - self.roll
+                - self.state["roll"]
             )
-            - Kd_roll * self.roll_rate
+            - Kd_roll * self.state["roll_rate"]
         )
 
         pitch_torque = (
             Kp_pitch
             * (
                 ((des_x_acc * np.sin(des_yaw) - des_y_acc * np.cos(des_yaw)) / g)
-                - self.pitch
+                - self.state["pitch"]
             )
-            - Kd_pitch * self.pitch_rate
+            - Kd_pitch * self.state["pitch_rate"]
         )
 
-        yaw_torque = Kp_yaw * (des_yaw - self.yaw) - Kd_yaw * self.yaw_rate
+        yaw_torque = Kp_yaw * (des_yaw - self.state["yaw"]) - Kd_yaw * self.state["yaw_rate"]
 
         # Get roll, pitch, and yaw rates from torques and moments of inertia
-        self.roll_rate += roll_torque * self.dt / Ixx
-        self.pitch_rate += pitch_torque * self.dt / Iyy
-        self.yaw_rate += yaw_torque * self.dt / Izz
+        self.state["roll_rate"] += roll_torque * self.dt / Ixx
+        self.state["pitch_rate"] += pitch_torque * self.dt / Iyy
+        self.state["yaw_rate"] += yaw_torque * self.dt / Izz
 
         # Propagate roll, pitch, and yaw (and heading for proper rendering)
-        self.roll += self.roll_rate * self.dt
-        self.pitch += self.pitch_rate * self.dt
-        self.yaw += self.yaw_rate * self.dt
-        self.yaw = np.arctan2(np.sin(self.yaw), np.cos(self.yaw))
-        self.heading = np.rad2deg(self.yaw)
+        self.state["roll"] += self.state["roll_rate"] * self.dt
+        self.state["pitch"] += self.state["pitch_rate"] * self.dt
+        self.state["yaw"] += self.state["yaw_rate"] * self.dt
+        self.state["yaw"] = np.arctan2(np.sin(self.state["yaw"]), np.cos(self.state["yaw"]))
+        self.heading = np.rad2deg(self.state["yaw"])
 
         # Transform into world frame to get x, y, and z accelerations, velocities, and positions
-        R = rotation_matrix(self.roll, self.pitch, self.yaw)
+        R = rotation_matrix(self.state["roll"], self.state["pitch"], self.state["yaw"])
         acc = (np.matmul(R, np.array([0, 0, thrust]).T) - np.array([0, 0, m * g]).T) / m
         x_acc = acc[0]
         y_acc = acc[1]
         z_acc = acc[2]
-        self.x_vel = cur_x_vel + x_acc * self.dt
-        self.y_vel = cur_y_vel + y_acc * self.dt
+        self.state["x_vel"] = cur_x_vel + x_acc * self.dt
+        self.state["y_vel"] = cur_y_vel + y_acc * self.dt
         z_vel += z_acc * self.dt
         z_pos += z_vel * self.dt
         x_pos = self.pos[0] + cur_x_vel * self.dt
@@ -664,6 +696,10 @@ class Drone(Dynamics):
         self.prev_pos = self.pos
         self.pos = np.asarray([x_pos, y_pos])
         self.speed = np.sqrt(np.power(cur_x_vel, 2) + np.power(cur_y_vel, 2))
+
+        self.state["pos"] = self.pos
+        self.state["speed"] = self.speed
+        self.state["heading"] = self.heading
 
 
 class DoubleIntegrator(Dynamics):
@@ -674,7 +710,7 @@ class DoubleIntegrator(Dynamics):
         max_accel: float = 1,
         max_turn_rate: float = 90,
         max_angular_accel: float = 180,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -683,7 +719,7 @@ class DoubleIntegrator(Dynamics):
         self.max_turn_rate = max_turn_rate
         self.max_angular_accel = max_angular_accel
 
-        self.turn_rate = 0
+        self.state["turn_rate"] = 0
 
     def reset(self):
         """
@@ -691,7 +727,7 @@ class DoubleIntegrator(Dynamics):
         Do not change pos, speed, heading, is_tagged, has_flag, or on_own_side.
         """
 
-        self.turn_rate = 0
+        self.state["turn_rate"] = 0
 
     def rotate(self, theta=180):
         """
@@ -708,7 +744,10 @@ class DoubleIntegrator(Dynamics):
         self.speed = 0
         self.heading = angle180(self.heading + theta)
 
-        self.turn_rate = 0
+        self.state["turn_rate"] = 0
+        self.state["pos"] = self.pos
+        self.state["speed"] = self.speed
+        self.state["heading"] = self.heading
 
     def get_max_speed(self) -> float:
         return self.max_speed
@@ -726,7 +765,7 @@ class DoubleIntegrator(Dynamics):
         desired_acc = (desired_speed - self.speed) / self.dt
 
         desired_turn_rate = heading_error / self.dt
-        desired_alpha = (desired_turn_rate - self.turn_rate) / self.dt
+        desired_alpha = (desired_turn_rate - self.state["turn_rate"]) / self.dt
 
         desired_acc = clip(desired_acc, -self.max_accel, self.max_accel)
         desired_alpha = clip(
@@ -737,10 +776,10 @@ class DoubleIntegrator(Dynamics):
         new_speed = self.speed + desired_acc * self.dt
         new_speed = clip(new_speed, -self.max_speed, self.max_speed)
 
-        new_turn_rate = self.turn_rate + desired_alpha * self.dt
+        new_turn_rate = self.state["turn_rate"] + desired_alpha * self.dt
         new_turn_rate = clip(new_turn_rate, -self.max_turn_rate, self.max_turn_rate)
 
-        self.turn_rate = new_turn_rate
+        self.state["turn_rate"] = new_turn_rate
         new_heading = self.heading + new_turn_rate * self.dt
 
         # Propagate vehicle position based on new speed and heading
@@ -762,3 +801,7 @@ class DoubleIntegrator(Dynamics):
         self.pos = np.asarray(new_ag_pos)
         self.speed = clip(new_speed, 0.0, self.max_speed)
         self.heading = angle180(new_heading)
+
+        self.state["pos"] = self.pos
+        self.state["speed"] = self.speed
+        self.state["heading"] = self.heading

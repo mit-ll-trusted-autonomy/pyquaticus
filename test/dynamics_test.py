@@ -136,7 +136,7 @@ class KeyTest:
             + K_w * is_key_pressed[K_w]
         )
         blue_action = self.blue_keys_to_action[blue_keys]
-        action_dict[self.blue_agent_id] = blue_action
+        action_dict[self.red_agent_id] = blue_action
 
         if self.policy is not None:
             action_dict[self.red_agent_id] = self.policy.compute_action(
@@ -153,7 +153,7 @@ class KeyTest:
                 + K_UP * is_key_pressed[K_UP]
             )
             red_action = self.red_keys_to_action[red_keys]
-            action_dict[self.red_agent_id] = red_action
+            action_dict[self.blue_agent_id] = red_action
         return action_dict
 
 
@@ -183,12 +183,21 @@ def main():
     config["render_agent_ids"] = True
     config["render_traj_mode"] = "traj"
     config["render_traj_cutoff"] = 100
-    config["dynamics"] = ["large_usv", "drone"]
+    config["dynamics"] = ["large_usv", "large_usv"]
     config["render_saving"] = False
-    config["lidar_obs"] = True
-    config["render_lidar_mode"] = "detection"
-    config["lidar_range"] = 20
-    config["render_traj_mode"] = "traj_history"
+    # config["lidar_obs"] = True
+    # config["render_lidar_mode"] = "detection"
+    # config["lidar_range"] = 20
+    # config["render_traj_mode"] = "traj_history"
+    # config["render_traj_freq"] = 50
+    # config["short_hist_length"] = 4
+    # config["long_hist_length"] = 5
+    # config["long_hist_interval"] = 20
+    # config["render_traj_cutoff"] = 300
+    config["obstacles"] = {
+        "circle": [(4*2, (6*2, 5*2))],
+        "polygon": [((70*2, 10*2), (85*2, 21*2), (83*2, 51*2), (72*2, 35*2))]
+    }
 
     # PyQuaticusEnv is a Parallel Petting Zoo Environment
     env = pyquaticus_v0.PyQuaticusEnv(
