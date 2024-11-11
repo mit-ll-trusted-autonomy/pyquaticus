@@ -65,29 +65,13 @@ eval "$(conda shell.bash hook)"
 ${CONDATYPE} create --prefix=${ENV_NAME} -y python=3.10
 conda activate ${ENV_NAME}
 conda install -y -c conda-forge libstdcxx-ng
-conda env config vars set LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CONDA_PREFIX/lib/
 
 if [[ "$ENVTYPE" == "light" ]]; then
     pip install -e .
 elif [[ "$ENVTYPE" == "full" ]]; then
-    # Note: there is an unresolvable dependency conflict between pettingzoo and ray
-    # Here is an example error message
-    # ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
-    # pettingzoo 1.23.0 requires gymnasium>=0.28.0, but you have gymnasium 0.26.3 which is incompatible.
-    # we ignore that warning and install gymnasium==0.28.1 which works in practice
-    # see
-    #   https://github.com/ray-project/ray/pull/34696
-    #   https://github.com/ray-project/ray/pull/35698
-    # instead we just install ray[rllib]==2.4.0 separately and ignore the warning
-    # this only works because the current version of pip does *not* fail for dependency conflicts with previously installed packages
-    pip install -e .[torch]
-    pip install ray[rllib]==2.4.0
-    pip install gymnasium==0.28.1
+    pip install -e .[torch,ray]
 fi
 
 echo ""
 echo "You may now activate the ${ENV_NAME} environment with: $CONDATYPE activate ${ENV_NAME}"
-echo "Note: if you see an error above about pettingzoo, ray[rllib], and gymnasium dependency conflicts, you may ignore it"
-echo "      there is an unresolvable dependency conflict that does not seem to affect our code"
-echo "      see the comments at the end of this script ($0) for more info"
 
