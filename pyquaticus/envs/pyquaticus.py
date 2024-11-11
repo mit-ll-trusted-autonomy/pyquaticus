@@ -63,6 +63,7 @@ from pyquaticus.utils.pid import PID
 from pyquaticus.utils.utils import (
     angle180,
     clip,
+    closest_line,
     closest_point_on_line,
     vector_to,
     detect_collision,
@@ -74,8 +75,7 @@ from pyquaticus.utils.utils import (
     rc_intersection,
     reflect_vector,
     rot2d,
-    vec_to_mag_heading,
-    intersect_line_rectangle
+    vec_to_mag_heading
 )
 from scipy.ndimage import label
 from shapely import intersection, LineString, Point, Polygon
@@ -367,7 +367,6 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         Developer Note 2: check that variables used here are available to PyQuaticusMoosBridge in pyquaticus_moos_bridge.py
         """
         agent = self.players[agent_id]
-        obs_dict = OrderedDict()
         obs = OrderedDict()
         own_team = agent.team
         other_team = Team.BLUE_TEAM if own_team == Team.RED_TEAM else Team.RED_TEAM
@@ -498,12 +497,10 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                     obs[(entry_name, "tagging_cooldown")] = dif_agent.tagging_cooldown
                     obs[(entry_name, "is_tagged")] = dif_agent.is_tagged
 
-        obs_dict[agent.id] = obs
         if normalize:
-            obs_dict[agent.id] = self.agent_obs_normalizer.normalized(
-                obs_dict[agent.id]
-            )
-        return obs_dict[agent.id]
+            return self.agent_obs_normalizer.normalized(obs)
+        else:
+            return obs
     
     def state_to_global_obs(self, normalize=True):
         """
@@ -654,8 +651,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         red_wall_ray_end = team_flags_midpoint + self.env_diag * (red_wall_vec / np.linalg.norm(red_wall_vec))
         red_wall_ray = LineString((team_flags_midpoint, red_wall_ray_end))
 
-        blue_borders = self._point_on_which_border(intersection(blue_wall_ray, Polygon(self.env_vertices)).coords[1])
-        red_borders = self._point_on_which_border(intersection(red_wall_ray, Polygon(self.env_vertices)).coords[1])
+        blue_borders = self._point_on_which_border(intersection(blue_wall_ray, Polygon(self.env_corners)).coords[1])
+        red_borders = self._point_on_which_border(intersection(red_wall_ray, Polygon(self.env_corners)).coords[1])
 
         if len(blue_borders) == len(red_borders) == 2:
             #blue wall
@@ -968,12 +965,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 _, heading_error = mag_bearing_to(player.pos, flag_home, player.heading)
                 desired_speed = self.config_dict["max_speed"]
             elif self.state["agent_oob"][i]:
-                ## compute the closest point in the env
-                closest_point_x = max(self.agent_radius, min(self.env_size[0]-self.agent_radius, pos_x))
-                closest_point_y = max(self.agent_radius, min(self.env_size[1]-self.agent_radius, pos_y))
-                closest_point = [closest_point_x,closest_point_y]
-                _, heading_error = mag_bearing_to(player.pos, closest_point, player.heading)
-                desired_speed = self.config_dict["max_speed"] * self.oob_speed_frac
+                # compute the closest env edge and steer towards heading perpendicular to edge
+                closest_env_edge_idx = closest_line(player.pos, self.env_edges)
+                edge_vec = np.diff(self.env_edges[closest_env_edge_idx], axis=0)[0]
+                desired_vec = np.array([-edge_vec[1], edge_vec[0]]) #this points inwards because edges are defined ccw
+                _, desired_heading = vec_to_mag_heading(desired_vec)
+                
+                heading_error = angle180((desired_heading - player.heading) % 360)
+                desired_speed = self.oob_speed_frac * self.config_dict['max_speed']
             else:
                 desired_speed, heading_error = action_dict[player.id]
 
@@ -1621,7 +1620,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         max_speed = config_dict.get("max_speed", config_dict_std["max_speed"])
         lidar_range = config_dict.get("lidar_range", config_dict_std["lidar_range"])
 
-        self._build_env_geom(
+        self._build_base_env_geom(
             env_bounds=env_bounds,
             flag_homes=flag_homes,
             scrimmage_coords=scrimmage_coords,
@@ -1642,12 +1641,22 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.config_dict["aquaticus_field_points"][k][0] = self.config_dict["aquaticus_field_points"][k][0]*self.env_size[0]
                 self.config_dict["aquaticus_field_points"][k][1] = self.config_dict["aquaticus_field_points"][k][1]*self.env_size[1]
 
-        # Environment corners
+        # Environment corners and edges
         self.env_ll = np.array([0.0, 0.0])
         self.env_lr = np.array([self.env_size[0], 0.0])
         self.env_ur = np.array(self.env_size)
         self.env_ul = np.array([0.0, self.env_size[1]])
-        self.env_vertices = np.array([self.env_ll, self.env_lr, self.env_ur, self.env_ul])
+        self.env_corners = np.array([self.env_ll, self.env_lr, self.env_ur, self.env_ul])
+        self.env_edges = np.array([
+            [self.env_ll, self.env_lr],
+            [self.env_lr, self.env_ur],
+            [self.env_ur, self.env_ul],
+            [self.env_ul, self.env_ll],
+        ])
+        [*self.env_ll, *self.env_lr],
+                [*self.env_lr, *self.env_ur],
+                [*self.env_ur, *self.env_ul],
+                [*self.env_ul, *self.env_ll]
         # ll = lower left, lr = lower right
         # ul = upper left, ur = upper right
 
@@ -1707,7 +1716,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             # check that render_saving is only True if environment is being rendered
             if self.render_saving:
-                assert self.render_mode is not None, "Render_mode cannot be None to record video."
+                assert self.render_mode is not None, "Render_mode cannot be None to record video or take screenshot."
 
     def set_geom_config(self, config_dict):
         self.n_circle_segments = config_dict.get("n_circle_segments", config_dict_std["n_circle_segments"])
@@ -2575,8 +2584,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         if mag < self.flag_keepout_radius:
                             raise Exception("Flag is too close to scrimmage line.")
 
-                        spawn_line_env_intersection_1 = self._get_polygon_intersection(halfway_point, self.scrimmage_vec, self.env_vertices)[1]
-                        spawn_line_env_intersection_2 = self._get_polygon_intersection(halfway_point, -self.scrimmage_vec, self.env_vertices)[1]
+                        spawn_line_env_intersection_1 = self._get_polygon_intersection(halfway_point, self.scrimmage_vec, self.env_corners)[1]
+                        spawn_line_env_intersection_2 = self._get_polygon_intersection(halfway_point, -self.scrimmage_vec, self.env_corners)[1]
                         spawn_line_mag = np.linalg.norm(spawn_line_env_intersection_1 - spawn_line_env_intersection_2)
                         spawn_line_unit_vec = (spawn_line_env_intersection_2 - spawn_line_env_intersection_1)/spawn_line_mag
 
@@ -2752,7 +2761,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             dist_bearing_to_obstacles[player.id] = player_dists_to_obstacles
         self.state["dist_bearing_to_obstacles"] = dist_bearing_to_obstacles
 
-    def _build_env_geom(
+    def _build_base_env_geom(
         self,
         env_bounds,
         flag_homes,
@@ -2908,7 +2917,7 @@ when gps environment bounds are specified in meters")
             self.env_diag = np.linalg.norm(self.env_size)
 
             #vertices
-            env_bounds_vertices = np.array([
+            env_bounds_corners = np.array([
                 env_bounds[0],
                 (env_bounds[1][0], env_bounds[0][1]),
                 env_bounds[1],
@@ -2963,8 +2972,8 @@ when gps environment bounds are specified in meters")
                 scrim_vec2 = np.array([flags_vec[1], -flags_vec[0]])
                 flags_midpoint = 0.5 * (flag_homes[Team.BLUE_TEAM] + flag_homes[Team.RED_TEAM]) + env_bounds[0]
 
-                scrimmage_coord1 = self._get_polygon_intersection(flags_midpoint, scrim_vec1, env_bounds_vertices)[1]
-                scrimmage_coord2 = self._get_polygon_intersection(flags_midpoint, scrim_vec2, env_bounds_vertices)[1]
+                scrimmage_coord1 = self._get_polygon_intersection(flags_midpoint, scrim_vec1, env_bounds_corners)[1]
+                scrimmage_coord2 = self._get_polygon_intersection(flags_midpoint, scrim_vec2, env_bounds_corners)[1]
                 scrimmage_coords = np.asarray([scrimmage_coord1, scrimmage_coord2]) - env_bounds[0]
             else:
                 if scrimmage_coords_unit == "m":
@@ -3009,7 +3018,7 @@ when gps environment bounds are specified in meters")
 
                 extended_scrimmage_coords = np.array([extended_point_1, extended_point_2])
                 full_scrim_line = LineString(extended_scrimmage_coords)
-                scrim_line_env_intersection = intersection(full_scrim_line, Polygon(env_bounds_vertices))
+                scrim_line_env_intersection = intersection(full_scrim_line, Polygon(env_bounds_corners))
 
                 if (
                     scrim_line_env_intersection.is_empty or
@@ -3125,7 +3134,7 @@ when gps environment bounds are specified in meters")
 
             #environment diagonal and vertices
             self.env_diag = np.linalg.norm(self.env_size)
-            env_bounds_vertices = np.array([
+            env_bounds_corners = np.array([
                 env_bounds[0],
                 (env_bounds[1][0], env_bounds[0][1]),
                 env_bounds[1],
@@ -3167,8 +3176,8 @@ when gps environment bounds are specified in meters")
                 scrim_vec2 = np.array([flags_vec[1], -flags_vec[0]])
                 flags_midpoint = 0.5 * (flag_homes[Team.BLUE_TEAM] + flag_homes[Team.RED_TEAM])
 
-                scrimmage_coord1 = self._get_polygon_intersection(flags_midpoint, scrim_vec1, env_bounds_vertices)[1]
-                scrimmage_coord2 = self._get_polygon_intersection(flags_midpoint, scrim_vec2, env_bounds_vertices)[1]
+                scrimmage_coord1 = self._get_polygon_intersection(flags_midpoint, scrim_vec1, env_bounds_corners)[1]
+                scrimmage_coord2 = self._get_polygon_intersection(flags_midpoint, scrim_vec2, env_bounds_corners)[1]
                 scrimmage_coords = np.asarray([scrimmage_coord1, scrimmage_coord2])
             else:
                 if scrimmage_coords_unit == "ll" or scrimmage_coords_unit == "wm_xy":
@@ -3186,7 +3195,7 @@ when gps environment bounds are specified in meters")
 
                 #env biseciton check
                 full_scrim_line = LineString(scrimmage_coords)
-                scrim_line_env_intersection = intersection(full_scrim_line, Polygon(env_bounds_vertices))
+                scrim_line_env_intersection = intersection(full_scrim_line, Polygon(env_bounds_corners))
 
                 if (
                     scrim_line_env_intersection.is_empty or
@@ -3537,7 +3546,7 @@ when gps environment bounds are specified in meters")
                                 current_border = (current_border + 1) % 4
 
                             for j in missing_borders:
-                                current_obstacle.insert(0, self.env_vertices[j])
+                                current_obstacle.insert(0, self.env_corners[j])
 
                         obstacles.append(np.array(current_obstacle))
 
@@ -3881,43 +3890,53 @@ when gps environment bounds are specified in meters")
     def buffer_to_video(self, recording_compression=False):
         """Convert and save current render buffer as a video"""
         if not self.render_saving:
-            print("Warning: Environment rendering is disabled. Cannot save the video. See the render_saving option in the config.")
+            print("Warning: Environment rendering is disabled. Cannot save the video. See the render_saving option in the config dictionary.")
             print()
-        elif self.render_ctr > 0:
-            video_file_dir = str(pathlib.Path(__file__).resolve().parents[1] / 'videos')
-            if not os.path.isdir(video_file_dir):
-                os.mkdir(video_file_dir)
+        elif self.render_mode is not None:
+            if self.render_ctr > 0:
+                video_file_dir = str(pathlib.Path(__file__).resolve().parents[1] / 'videos')
+                if not os.path.isdir(video_file_dir):
+                    os.mkdir(video_file_dir)
 
-            now = datetime.now() #get date and time
-            video_id = now.strftime("%m-%d-%Y_%H-%M-%S")
+                now = datetime.now() #get date and time
+                video_id = now.strftime("%m-%d-%Y_%H-%M-%S")
+                video_file_name = f"pyquaticus_{video_id}.mp4"
+                video_file_path = os.path.join(video_file_dir, video_file_name)
 
-            video_file_name = f"pyquaticus_{video_id}.mp4"
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                out = cv2.VideoWriter(video_file_path, fourcc, self.render_fps, (self.screen_width, self.screen_height))
+                for img in self.render_buffer:
+                    out.write(cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
 
-            video_file_path = os.path.join(video_file_dir, video_file_name)
-            out = cv2.VideoWriter(video_file_path, fourcc, self.render_fps, (self.screen_width, self.screen_height))
-            for img in self.render_buffer:
-                out.write(cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+                out.release()
 
-            out.release()
+                if recording_compression:
+                    compressed_video_file_name = f"pyquaticus_{video_id}_compressed.mp4"
 
-            if recording_compression:
-                compressed_video_file_name = f"pyquaticus_{video_id}_compressed.mp4"
-
-                compressed_video_file_path = os.path.join(video_file_dir, compressed_video_file_name)
-                subprocess.run(["ffmpeg","-loglevel","error","-i",video_file_path,"-c:v","libx264",compressed_video_file_path])
+                    compressed_video_file_path = os.path.join(video_file_dir, compressed_video_file_name)
+                    subprocess.run([
+                        "ffmpeg",
+                        "-loglevel",
+                        "error",
+                        "-i",
+                        video_file_path,
+                        "-c:v",
+                        "libx264",
+                        compressed_video_file_path
+                    ])
+            else:
+                print("Attempted to save video but render_buffer is empty!")
+                print()
         else:
-            print("Attempted to save video but render_buffer is empty!")
-            print()
+            raise Exception("Envrionment was not rendered. See the render_mode option in the config dictionary.")
 
     def save_screenshot(self):
         """"Save an image of the most recently rendered env."""
 
         if not self.render_saving:
-            print("Warning: Environment rendering is disabled. Cannot save the screenshot. See the render_saving option in the config.")
+            print("Warning: Environment rendering is disabled. Cannot save the screenshot. See the render_saving option in the config dictionary.")
             print()
         elif self.render_mode is not None:
-            # we may not need to check the self.screen here
             image_file_dir = str(pathlib.Path(__file__).resolve().parents[1] / 'screenshots')
             if not os.path.isdir(image_file_dir):
                 os.mkdir(image_file_dir)
@@ -3927,10 +3946,9 @@ when gps environment bounds are specified in meters")
             image_file_name = f"pyquaticus_{image_id}.png"
             image_file_path = os.path.join(image_file_dir, image_file_name)
 
-            cv2.imwrite(image_file_path, cv2.cvtColor(self.render_buffer[self.render_ctr],cv2.COLOR_RGB2BGR))
-
+            cv2.imwrite(image_file_path, cv2.cvtColor(self.render_buffer[self.render_ctr], cv2.COLOR_RGB2BGR))
         else:
-            raise Exception("Envrionment was not rendered. See the render_mode option in the config.")
+            raise Exception("Envrionment was not rendered. See the render_mode option in the config dictionary.")
 
 
     def close(self):

@@ -360,49 +360,46 @@ def detect_collision(
             closest_points = np.where(proj_mag >= mag_AB, geoms[:, 1], closest_points)
 
             #calculate distances to obstacles
-            dists = np.linalg.norm(poses - closest_points, axis=-1)
-            collisions |= np.any(dists <= agent_radius + padding, axis=-1)
+            distances = np.linalg.norm(poses - closest_points, axis=-1)
+            collisions |= np.any(distances <= agent_radius + padding, axis=-1)
     
     if collisions.shape[0] == 1:
         collisions = collisions.item()
 
     return collisions
 
-def intersect_line_rectangle(
-        line_points: np.ndarray,
-        rect_points: np.ndarray
+def closest_line(
+    poses: np.ndarray,
+    lines: np.ndarray
 ):
     """
-    Returns the intersection points of a line and a rectangle.
+    Returns the index of the line closest to each pos in poses.
+
     Args:
-        line_points: np.ndarray of shape (2, 2)
-        rect_points: np.ndarray of shape (1, 4) # [left, right, top, bottom]
-    
-    Returns:
-        np.ndarray of shape (2, 2)
+        poses : 2D pos (or poses)
+        lines : 2D lines (assumes there are multiple) 
     """
+    poses = np.expand_dims(np.asarray(poses).reshape(-1, 2), axis=1)
 
-    s1 = line_points[0]
-    s2 = line_points[1]
-    slope = (s2[1] - s1[1]) / (s2[0] - s1[0])
-    unit_vec = (s2 - s1) / np.linalg.norm(s2 - s1)
+    #determine closest points on all line segments
+    v_AB = np.diff(lines, axis=-2)
+    v_AP = poses - lines[:, 0] #take only first point of segment (but preserve num dimensions)
+    v_AB_AP = np.sum(v_AP * v_AB.squeeze(axis=-2), axis=-1) #dot product
 
-    # Find the intersection points of the line with each side of the rectangle
-    intersections = []
-    for i in range(4):
-        p1 = rect_points[i]
-        p2 = rect_points[(i + 1) % 4]
-        side_slope = (p2[1] - p1[1]) / (p2[0] - p1[0])
+    mag_AB = np.linalg.norm(v_AB, axis=-1)
+    unit_AB = v_AB.squeeze(axis=-2) / mag_AB
+    proj_mag = np.expand_dims(v_AB_AP / mag_AB.squeeze(axis=-1), axis=-1)
+    
+    closest_points = lines[:, 0, :] + proj_mag * unit_AB
+    closest_points = np.where(proj_mag <= 0., lines[:, 0], closest_points)
+    closest_points = np.where(proj_mag >= mag_AB, lines[:, 1], closest_points)
 
-        # Check if the line and the side are parallel
-        if np.isclose(slope, side_slope):
-            continue
+    #calculate distances to lines
+    distances = np.linalg.norm(poses - closest_points, axis=-1)
+    closest_line = np.argmin(distances, axis=-1)
+    
+    if closest_line.shape[0] == 1:
+        closest_line = closest_line.item()
 
-        # Find the intersection point
-        x = (slope * s1[0] - side_slope * p1[0] + p1[1] - s1[1]) / (slope - side_slope)
-        y = slope * (x - s1[0]) + s1[1]
-        intersection = np.array([x, y])
-
-        # Check if the intersection point is on the side
-        if np.all(np.logical_and(np.min(rect_points, axis=0) <= intersection, intersection <= np.max(rect_points, axis=0))):
-            intersections.append(intersection)
+    return closest_line
+    
