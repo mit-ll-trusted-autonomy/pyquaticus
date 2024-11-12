@@ -327,8 +327,11 @@ class LargeUSV(Dynamics):
         # propagate vehicle heading
         raw_d_hdg = desired_rudder * (self.turn_rate / 100) * self.dt
         thrust_d_hdg = raw_d_hdg * (1 + (abs(desired_thrust) - 50) / 50)
-        if desired_thrust < 0:
-            thrust_d_hdg = -thrust_d_hdg
+
+        # eliminated to fix heading error when agent is slowing down and turning
+        
+        # if desired_thrust < 0:
+        #     thrust_d_hdg = -thrust_d_hdg
 
         self.state["thrust"] = desired_thrust
 
@@ -461,8 +464,11 @@ class Heron(Dynamics):
         # propagate vehicle heading
         raw_d_hdg = desired_rudder * (self.turn_rate / 100) * self.dt
         thrust_d_hdg = raw_d_hdg * (1 + (abs(desired_thrust) - 50) / 50)
-        if desired_thrust < 0:
-            thrust_d_hdg = -thrust_d_hdg
+
+        # eliminated to fix heading error when agent is slowing down and turning
+
+        # if desired_thrust < 0:
+        #     thrust_d_hdg = -thrust_d_hdg
 
         self.state["thrust"] = desired_thrust
 
