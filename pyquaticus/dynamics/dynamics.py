@@ -667,8 +667,15 @@ class Drone(Dynamics):
         self.state["y_vel"] = cur_y_vel + y_acc * self.dt
         z_vel += z_acc * self.dt
         z_pos += z_vel * self.dt
-        x_pos = self.pos[0] + cur_x_vel * self.dt
-        y_pos = self.pos[1] + cur_y_vel * self.dt
+
+        avg_x_vel = (cur_x_vel + self.state["x_vel"]) / 2.0
+        avg_y_vel = (cur_y_vel + self.state["y_vel"]) / 2.0
+        if self.gps_env:
+            avg_x_vel = avg_x_vel / self.meters_per_mercator_xy
+            avg_y_vel = avg_y_vel / self.meters_per_mercator_xy
+
+        x_pos = self.pos[0] + avg_x_vel * self.dt
+        y_pos = self.pos[1] + avg_y_vel * self.dt
 
         self.prev_pos = self.pos
         self.pos = np.asarray([x_pos, y_pos])
