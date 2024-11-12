@@ -193,12 +193,9 @@ def main():
     config["default_init"] = False
     config["render_fps"] = 10
     # config["normalize"] = False
-    config["render_saving"] = True
-
-    # PyQuaticusEnv is a Parallel Petting Zoo Environment
-    env = pyquaticus_v0.PyQuaticusEnv(
-        team_size=3, render_mode="human", config_dict=config
-    )
+    
+    #PyQuaticusEnv is a Parallel Petting Zoo Environment
+    env = pyquaticus_v0.PyQuaticusEnv(team_size=3, render_mode='human', config_dict=config)
     # try:
     #     env = pyquaticus_v0.PyQuaticusEnv(team_size=3, render_mode='human', config_dict=config)
     # except Warning as err:
