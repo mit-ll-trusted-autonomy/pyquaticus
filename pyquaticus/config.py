@@ -46,7 +46,7 @@ config_dict_std = {
     "turn_rate":           70,
     "max_acc":              1, # meters / s**2
     "max_dec":              1, # meters / s**2
-    "oob_speed_frac":     0.5, # proportion
+    "oob_speed_frac":    0.75, # proportion
     "action_type": "discrete", # "discrete" or "continuous"
 
     # Simulation parameters

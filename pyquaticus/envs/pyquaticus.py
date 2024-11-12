@@ -966,13 +966,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 desired_speed = self.config_dict["max_speed"]
             elif self.state["agent_oob"][i]:
                 # compute the closest env edge and steer towards heading perpendicular to edge
+                #TODO: figure out why this makes agent jerk control to one side upon going out-of-bounds (at speeds slower than max speed)
                 closest_env_edge_idx = closest_line(player.pos, self.env_edges)
                 edge_vec = np.diff(self.env_edges[closest_env_edge_idx], axis=0)[0]
                 desired_vec = np.array([-edge_vec[1], edge_vec[0]]) #this points inwards because edges are defined ccw
                 _, desired_heading = vec_to_mag_heading(desired_vec)
                 
                 heading_error = angle180((desired_heading - player.heading) % 360)
-                desired_speed = 0.5 * self.config_dict['max_speed'] #TODO: figure out why this makes agent jerk control to one side
+                desired_speed = self.oob_speed_frac * self.config_dict['max_speed']
             else:
                 desired_speed, heading_error = action_dict[player.id]
 
@@ -1199,6 +1200,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 other_team_idx = int(not team_idx)
 
                 # Set out-of-bounds
+                player.oob = True
                 self.state['agent_oob'][i] = 1
 
                 # Set tag (if applicable)
@@ -1222,6 +1224,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             else:
                 # Set in-bounds
+                player.oob = False
                 self.state['agent_oob'][i] = 0
 
     def _check_oob_vectorized(self):
@@ -1229,7 +1232,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # Set out-of-bounds
         agent_poses = self.state['agent_position']
         agent_oob = np.any((agent_poses <= self.agent_radius) | ((self.env_size - self.agent_radius) <= agent_poses), axis=-1)
+
         self.state['agent_oob'] = agent_oob
+        for i, oob in enumerate(agent_oob):
+            self.players[self.agents[i]].oob = oob
+        
         if not np.any(agent_oob):
             return
 
@@ -2493,6 +2500,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             player.on_own_side = self.state["agent_on_sides"][i]
             player.tagging_cooldown = self.state["agent_tagging_cooldown"][i]
             player.is_tagged = self.state["agent_is_tagged"][i]
+            player.oob = self.state["agent_oob"][i]
 
     def _set_flag_attributes_from_state(self):
         for flag in self.flags:
@@ -3769,7 +3777,7 @@ when gps environment bounds are specified in meters")
                                 width=1
                             )
                 #tagging
-                player.render_tagging(self.tagging_cooldown)
+                player.render_tagging_oob(self.tagging_cooldown)
 
                 #heading
                 orientation = Vector2(list(mag_heading_to_vec(1.0, player.heading)))

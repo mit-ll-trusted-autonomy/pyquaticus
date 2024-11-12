@@ -157,6 +157,7 @@ def main():
     config["long_hist_length"] = 5
     config["long_hist_interval"] = 20
     config["render_traj_cutoff"] = 100
+    # config["tag_on_oob"] = True
 
 
     

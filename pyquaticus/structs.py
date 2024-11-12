@@ -59,6 +59,7 @@ class Player:
     tagging_cooldown: float = field(init=False)
     cantag_time: float = field(init=False, default=0.0)
     is_tagged: bool = field(init=False, default=False)
+    oob: bool = field(init=False, default=False)
 
 
 @dataclass
@@ -166,11 +167,19 @@ class RenderingPlayer(Player):
         self.pos[0] = prev_pos[0]
         self.pos[1] = prev_pos[1]
 
-    def render_tagging(self, cooldown_time):
+    def render_tagging_oob(self, cooldown_time):
         self.pygame_agent = self.pygame_agent_base.copy()
 
         # render_is_tagged
-        if self.is_tagged:
+        if self.oob:
+            draw.circle(
+                self.pygame_agent,
+                (255, 255, 0),
+                (self.r, self.r),
+                self.r,
+                width=round(self.r/4),
+            )
+        elif self.is_tagged:
             draw.circle(
                 self.pygame_agent,
                 (0, 255, 0),
