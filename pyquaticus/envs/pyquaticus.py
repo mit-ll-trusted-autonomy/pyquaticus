@@ -1,4 +1,4 @@
-#DISTRIBUTION STATEMENT A. Approved for public release. Distribution is unlimited.
+# DISTRIBUTION STATEMENT A. Approved for public release. Distribution is unlimited.
 #
 # This material is based upon work supported by the Under Secretary of Defense for
 # Research and Engineering under Air Force Contract No. FA8702-15-D-0001. Any opinions,
@@ -54,10 +54,15 @@ from pyquaticus.config import (
     LINE_INTERSECT_TOL,
     lidar_detection_classes,
     LIDAR_DETECTION_CLASS_MAP,
-    MAX_SPEED,
-    POLAR_RADIUS
+    POLAR_RADIUS,
 )
-from pyquaticus.structs import CircleObstacle, Flag, PolygonObstacle, RenderingPlayer, Team
+from pyquaticus.structs import (
+    CircleObstacle,
+    Flag,
+    PolygonObstacle,
+    RenderingPlayer,
+    Team,
+)
 from pyquaticus.utils.obs_utils import ObsNormalizer
 from pyquaticus.utils.pid import PID
 from pyquaticus.utils.utils import (
@@ -80,6 +85,8 @@ from pyquaticus.utils.utils import (
 from scipy.ndimage import label
 from shapely import intersection, LineString, Point, Polygon
 from typing import Optional, Union
+
+from pyquaticus.dynamics.dynamics_registry import dynamics_registry
 
 
 class PyQuaticusEnvBase(ParallelEnv, ABC):
@@ -156,24 +163,45 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                 except:
                     default_action = False
                 if default_action:
-                    speed, heading = self._discrete_action_to_speed_relheading(action_dict[player.id])
+                    speed, heading = self._discrete_action_to_speed_relheading(
+                        action_dict[player.id]
+                    )
+                    # Scale speed to agent's max speed
+                    speed = self.max_speeds[player.id] * speed
                 else:
-                    #Make point system the same on both blue and red side
+                    # Make point system the same on both blue and red side
                     if player.team == Team.BLUE_TEAM:
-                        if 'P' in action_dict[player.id]:
-                            action_dict[player.id] = 'S' + action_dict[player.id][1:]
-                        elif 'S' in action_dict[player.id]:
-                            action_dict[player.id] = 'P' + action_dict[player.id][1:]
-                        if 'X' not in action_dict[player.id] and action_dict[player.id] not in ['SC', 'CC', 'PC']:
-                            action_dict[player.id] += 'X'
-                        elif action_dict[player.id] not in ['SC', 'CC', 'PC']:
+                        if "P" in action_dict[player.id]:
+                            action_dict[player.id] = "S" + action_dict[player.id][1:]
+                        elif "S" in action_dict[player.id]:
+                            action_dict[player.id] = "P" + action_dict[player.id][1:]
+                        if "X" not in action_dict[player.id] and action_dict[
+                            player.id
+                        ] not in ["SC", "CC", "PC"]:
+                            action_dict[player.id] += "X"
+                        elif action_dict[player.id] not in ["SC", "CC", "PC"]:
                             action_dict[player.id] = action_dict[player.id][:-1]
 
-                    _, heading = mag_bearing_to(player.pos, self.config_dict["aquaticus_field_points"][action_dict[player.id]], player.heading)
-                    if -0.3 <= self.get_distance_between_2_points(player.pos, self.config_dict["aquaticus_field_points"][action_dict[player.id]]) <= 0.3: #
+                    _, heading = mag_bearing_to(
+                        player.pos,
+                        self.config_dict["aquaticus_field_points"][
+                            action_dict[player.id]
+                        ],
+                        player.heading,
+                    )
+                    if (
+                        -0.3
+                        <= self.get_distance_between_2_points(
+                            player.pos,
+                            self.config_dict["aquaticus_field_points"][
+                                action_dict[player.id]
+                            ],
+                        )
+                        <= 0.3
+                    ):  #
                         speed = 0.0
                     else:
-                        speed = self.max_speed
+                        speed = self.max_speeds[player.id]
             else:
                 # if no action provided, stop moving
                 speed, heading = 0.0, player.heading
@@ -200,7 +228,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             max_dist_lidar = self.num_lidar_rays * [self.lidar_range]
             min_dist = [0.0]
             max_bool, min_bool = [1.0], [0.0]
-            max_speed, min_speed = [MAX_SPEED], [0.0]
+            max_speed, min_speed = [max(self.max_speeds)], [0.0]
             max_score, min_score = [self.max_score], [0.0]
 
             agent_obs_normalizer.register("scrimmage_line_bearing", max_bearing)
@@ -210,7 +238,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             agent_obs_normalizer.register("team_has_flag", max_bool, min_bool)
             agent_obs_normalizer.register("opponent_has_flag", max_bool, min_bool)
             agent_obs_normalizer.register("on_side", max_bool, min_bool)
-            agent_obs_normalizer.register("tagging_cooldown", [self.tagging_cooldown], [0.0])
+            agent_obs_normalizer.register(  "tagging_cooldown", [self.tagging_cooldown], [0.0])
             agent_obs_normalizer.register("is_tagged", max_bool, min_bool)
             agent_obs_normalizer.register("team_score", max_score, min_score)
             agent_obs_normalizer.register("opponent_score", max_score, min_score)
@@ -221,7 +249,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             max_dist = [self.env_diag]
             min_dist = [0.0]
             max_bool, min_bool = [1.0], [0.0]
-            max_speed, min_speed = [MAX_SPEED], [0.0]
+            max_speed, min_speed = [max(self.max_speeds)], [0.0]
             max_score, min_score = [self.max_score], [0.0]
 
             agent_obs_normalizer.register("opponent_home_bearing", max_bearing)
@@ -241,9 +269,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             agent_obs_normalizer.register("speed", max_speed, min_speed)
             agent_obs_normalizer.register("has_flag", max_bool, min_bool)
             agent_obs_normalizer.register("on_side", max_bool, min_bool)
-            agent_obs_normalizer.register(
-                "tagging_cooldown", [self.tagging_cooldown], [0.0]
-            )
+            agent_obs_normalizer.register("tagging_cooldown", [self.tagging_cooldown], [0.0])
             agent_obs_normalizer.register("is_tagged", max_bool, min_bool)
             agent_obs_normalizer.register("team_score", max_score, min_score)
             agent_obs_normalizer.register("opponent_score", max_score, min_score)
@@ -277,16 +303,16 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         ### Global State Normalizer ###
         max_heading = [180]
         max_bearing = [180]
-        pos_x_max = [self.env_size[0]/2]
-        pos_y_max = [self.env_size[1]/2]
+        pos_x_max = [self.env_size[0] / 2]
+        pos_y_max = [self.env_size[1] / 2]
         max_dist_scrimmage = [self.env_diag]
         min_dist = [0.0]
         max_bool, min_bool = [1.0], [0.0]
-        max_speed, min_speed = [MAX_SPEED], [0.0]
+        max_speed, min_speed = [max(self.max_speeds)], [0.0]
         max_score, min_score = [self.max_score], [0.0]
 
         for player in self.players.values():
-            player_name  = f"player_{player.id}"
+            player_name = f"player_{player.id}"
 
             global_state_normalizer.register((player_name, "player_pos_x"), pos_x_max)
             global_state_normalizer.register((player_name, "player_pos_y"), pos_y_max)
@@ -457,10 +483,10 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             obs["on_side"] = agent.on_own_side
             # Tagging cooldown
             obs["tagging_cooldown"] = agent.tagging_cooldown
-            #Is tagged
+            # Is tagged
             obs["is_tagged"] = agent.is_tagged
 
-            #Team score and Opponent score
+            # Team score and Opponent score
             if agent.team == Team.BLUE_TEAM:
                 obs["team_score"] = self.state["captures"][0]
                 obs["opponent_score"] = self.state["captures"][1]
@@ -726,21 +752,49 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # Set variables from config
         self.set_config_values(config_dict)
 
+        # Set dt (needed for dynamics)
+        if self.render_mode:
+            self.dt = 1 / self.render_fps
+        else:
+            self.dt = self.tau
+
         # Create players, use IDs from [0, (2 * team size) - 1] so their IDs can also be used as indices.
         b_players = []
         r_players = []
 
         for i in range(0, self.num_blue):
             b_players.append(
-                RenderingPlayer(i, Team.BLUE_TEAM, self.agent_render_radius, render_mode)
+                dynamics_registry[self.dynamics[i]](
+                    gps_env=self.gps_env,
+                    meters_per_mercator_xy=getattr(
+                        self, "meters_per_mercator_xy", None
+                    ),
+                    dt=self.dt,
+                    id=i,
+                    team=Team.BLUE_TEAM,
+                    render_radius=self.agent_render_radius,
+                    render_mode=render_mode,
+                )
             )
         for i in range(self.num_blue, self.num_blue + self.num_red):
             r_players.append(
-                RenderingPlayer(i, Team.RED_TEAM, self.agent_render_radius, render_mode)
+                dynamics_registry[self.dynamics[i]](
+                    gps_env=self.gps_env,
+                    meters_per_mercator_xy=getattr(
+                        self, "meters_per_mercator_xy", None
+                    ),
+                    dt=self.dt,
+                    id=i,
+                    team=Team.RED_TEAM,
+                    render_radius=self.agent_render_radius,
+                    render_mode=render_mode,
+                )
             )
 
-        self.players = {player.id: player for player in itertools.chain(b_players, r_players)} #maps player ids (or names) to player objects
+        self.players = {player.id: player for player in itertools.chain(b_players, r_players)}  # maps player ids (or names) to player objects
         self.agents = [agent_id for agent_id in self.players]
+
+        self.max_speeds = [player.get_max_speed() for player in self.players.values()]
 
         # Agents (player objects) of each team
         self.agents_of_team = {Team.BLUE_TEAM: b_players, Team.RED_TEAM: r_players}
@@ -755,19 +809,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             agent_id: np.array([p.id for p in self.agents_of_team[Team(not player.team.value)]]) for agent_id, player in self.players.items()
         }
 
-        # Create a PID controller for each agent
-        if self.render_mode:
-            dt = 1/self.render_fps
-        else:
-            dt = self.tau
-
-        self._pid_controllers = {}
-        for player in self.players.values():
-            self._pid_controllers[player.id] = {
-                "speed": PID(dt=dt, kp=1.0, ki=0.0, kd=0.0, integral_max=0.07),
-                "heading": PID(dt=dt, kp=0.35, ki=0.0, kd=0.07, integral_max=0.07),
-            }
-
         # Create the list of flags that are indexed by self.flags[int(player.team)]
         self.flags = []
         for team in Team:
@@ -779,7 +820,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.set_geom_config(config_dict)
 
         # Setup action and observation spaces
-        self.action_map = [[self.max_speed * spd, hdg] for (spd, hdg) in ACTION_MAP]
+        self.action_map = [[spd, hdg] for (spd, hdg) in ACTION_MAP]
         self.action_spaces = {agent_id: self.get_agent_action_space() for agent_id in self.players}
 
         self.agent_obs_normalizer, self.global_state_normalizer = self._register_state_elements(team_size, len(self.obstacles))
@@ -802,7 +843,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.traj_render_buffer = {}
 
         if self.render_mode:
-            self.create_background_image() #create background pygame surface (for faster rendering)
+            self.create_background_image()  # create background pygame surface (for faster rendering)
 
     def seed(self, seed=None):
         """
@@ -849,7 +890,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             if player.tagging_cooldown != self.tagging_cooldown:
                 # player is still under a cooldown from tagging, advance their cooldown timer, clip at the configured tagging cooldown
                 player.tagging_cooldown = self._min(
-                    (player.tagging_cooldown + self.sim_speedup_factor * self.tau), self.tagging_cooldown
+                    (player.tagging_cooldown + self.sim_speedup_factor * self.tau),
+                    self.tagging_cooldown,
                 )
                 self.state["agent_tagging_cooldown"][i] = player.tagging_cooldown
 
@@ -860,12 +902,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         elif self.action_type == "continuous":
             action_dict = raw_action_dict
         else:
-            raise ValueError(f"action_type must be either 'discrete' or 'continuous'. Got '{self.action_type}' instead.")
+            raise ValueError(
+                f"action_type must be either 'discrete' or 'continuous'. Got '{self.action_type}' instead."
+            )
 
         if self.render_mode:
             for _i in range(self.num_renders_per_step):
                 for _j in range(self.sim_speedup_factor):
-                    self._move_agents(action_dict, 1/self.render_fps)
+                    self._move_agents(action_dict, 1 / self.render_fps)
                 if self.lidar_obs:
                     self._update_lidar()
                 self._render()
@@ -940,7 +984,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         else:
             info = {"global_state": self.state["global_state_hist_buffer"][0]}
 
-
         return obs, rewards, terminated, truncated, info
 
     def _move_agents(self, action_dict, dt):
@@ -953,73 +996,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             pos_y = player.pos[1]
             flag_loc = self.flags[team_idx].home
 
+            # Check if agent is on their own side
             player.on_own_side = self._check_on_sides(player.pos, player.team)
             self.state["agent_on_sides"][i] = player.on_own_side
 
-            # convert desired_speed   and  desired_heading to
-            #         desired_thrust  and  desired_rudder
-            # requested heading is relative so it directly maps to the heading error
-
-            if player.is_tagged:
-                flag_home = self.flags[team_idx].home
-                _, heading_error = mag_bearing_to(player.pos, flag_home, player.heading)
-                desired_speed = self.config_dict["max_speed"]
-            elif self.state["agent_oob"][i]:
-                # compute the closest env edge and steer towards heading perpendicular to edge
-                #TODO: figure out why this makes agent jerk control to one side upon going out-of-bounds (at speeds slower than max speed)
-                closest_env_edge_idx = closest_line(player.pos, self.env_edges)
-                edge_vec = np.diff(self.env_edges[closest_env_edge_idx], axis=0)[0]
-                desired_vec = np.array([-edge_vec[1], edge_vec[0]]) #this points inwards because edges are defined ccw
-                _, desired_heading = vec_to_mag_heading(desired_vec)
-                
-                heading_error = angle180((desired_heading - player.heading) % 360)
-                desired_speed = self.oob_speed_frac * self.config_dict['max_speed']
-            else:
-                desired_speed, heading_error = action_dict[player.id]
-
-            # desired heading is relative to current heading
-            speed_error = desired_speed - player.speed
-            desired_speed = self._pid_controllers[player.id]["speed"](speed_error)
-            desired_rudder = self._pid_controllers[player.id]["heading"](heading_error)
-
-            desired_thrust = player.thrust + self.speed_factor * desired_speed
-
-            desired_thrust = clip(desired_thrust, -self.max_thrust, self.max_thrust)
-            desired_rudder = clip(desired_rudder, -self.max_rudder, self.max_rudder)
-
-            # propagate vehicle speed
-            raw_speed = np.interp(
-                desired_thrust, self.thrust_map[0, :], self.thrust_map[1, :]
-            )
-            new_speed = self._min(
-                raw_speed * 1 - ((abs(desired_rudder) / 100) * self.turn_loss),
-                self.max_speed,
-            )
-            if (new_speed - player.speed) / dt > self.max_acc:
-                new_speed = player.speed + self.max_acc * dt
-            elif (player.speed - new_speed) / dt > self.max_dec:
-                new_speed = player.speed - self.max_dec * dt
-
-            # propagate vehicle heading
-            raw_d_hdg = desired_rudder * (self.turn_rate / 100) * dt
-            thrust_d_hdg = raw_d_hdg * (1 + (abs(desired_thrust) - 50) / 50)
-            if desired_thrust < 0:
-                thrust_d_hdg = -thrust_d_hdg
-
-            # if not moving, then can't turn
-            if (new_speed + player.speed) / 2.0 < 0.5:
-                thrust_d_hdg = 0.0
-            new_heading = angle180(player.heading + thrust_d_hdg)
-
-            vel = mag_heading_to_vec(new_speed, new_heading)
-
             # If the player hits a boundary, return them to their original starting position and skip
             # to the next agent.
-            player_hit_obstacle = detect_collision(
-                np.asarray([pos_x, pos_y]),
-                self.agent_radius,
-                self.obstacle_geoms
-            )
+            player_hit_obstacle = detect_collision(np.asarray([pos_x, pos_y]), self.agent_radius, self.obstacle_geoms)
 
             if player_hit_obstacle:
                 if self.tag_on_collision:
@@ -1032,7 +1015,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     self.flags[other_team_idx].reset()
                     self.state["flag_taken"][other_team_idx] = 0
                     self.state["agent_has_flag"][i] = 0
-                    self.state["flag_locations"][other_team_idx] = np.array(self.flags[other_team_idx].pos)
+                    self.state["flag_position"][other_team_idx] = np.array(self.flags[other_team_idx].pos)
                     player.has_flag = False
 
                     if player.team == Team.RED_TEAM:
@@ -1042,17 +1025,42 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 if self.tag_on_collision:
                     self.state["agent_is_tagged"][i] = 1
                     player.is_tagged = True
-                player.rotate(copy.deepcopy(player.prev_pos))
+                player.rotate()
                 self.state["agent_position"][i] = player.pos
                 self.state["prev_agent_position"][i] = player.prev_pos
                 self.state["agent_speed"][i] = player.speed
                 self.state["agent_heading"][i] = player.heading
                 continue
 
-            # check if agent is in keepout region
-            ag_dis_2_flag = self.get_distance_between_2_points(
-                np.asarray([pos_x, pos_y]), np.asarray(flag_loc)
-            )
+            # If agent is tagged, drive at max speed towards home
+            if player.is_tagged:
+                flag_home = self.flags[team_idx].home
+                _, heading_error = mag_bearing_to(player.pos, flag_home, player.heading)
+                desired_speed = player.get_max_speed()
+
+            # If agent is out of bounds, drive back in bounds at low speed
+            elif self.state["agent_oob"][i]:
+                # compute the closest env edge and steer towards heading perpendicular to edge
+                #TODO: figure out why this makes agent jerk control to one side upon going out-of-bounds (at speeds slower than max speed)
+                closest_env_edge_idx = closest_line(player.pos, self.env_edges)
+                edge_vec = np.diff(self.env_edges[closest_env_edge_idx], axis=0)[0]
+                desired_vec = np.array([-edge_vec[1], edge_vec[0]]) #this points inwards because edges are defined ccw
+                _, desired_heading = vec_to_mag_heading(desired_vec)
+                
+                heading_error = angle180((desired_heading - player.heading) % 360)
+                desired_speed = player.get_max_speed() * self.oob_speed_frac
+
+            # Else get desired speed and heading from action_dict
+            else:
+                desired_speed, heading_error = action_dict[player.id]
+
+            # Move agent
+            player._move_agent(desired_speed, heading_error)
+
+            vel = mag_heading_to_vec(player.speed, player.heading)
+
+            # Check if agent is in keepout region for their own flag
+            ag_dis_2_flag = self.get_distance_between_2_points(np.asarray([pos_x, pos_y]), np.asarray(flag_loc))
             if (
                 ag_dis_2_flag < self.flag_keepout_radius
                 and not self.state["flag_taken"][team_idx]
@@ -1070,39 +1078,22 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
                 crd_ref_angle = get_rot_angle(np.asarray(flag_loc), ag_pos)
                 vel_ref = rot2d(ag_vel, -crd_ref_angle)
-                vel_ref[1] = 0. # convention is that vector pointing from keepout intersection to flag center is y' axis in new reference frame
+                vel_ref[1] = 0.0  # convention is that vector pointing from keepout intersection to flag center is y' axis in new reference frame
 
                 vel = rot2d(vel_ref, crd_ref_angle)
                 pos_x = ag_pos[0]
                 pos_y = ag_pos[1]
+                player.pos = [pos_x, pos_y]
+                speed, heading = vec_to_mag_heading(vel)
+                player.speed = speed
+                player.heading = heading
 
-            if (not self.gps_env and new_speed > 0.1) or (self.gps_env and new_speed/self.meters_per_mercator_xy > 0.1):
-                # only rely on vel if speed is large enough to recover heading
-                new_speed, new_heading = vec_to_mag_heading(vel)
-            # propagate vehicle position
-            hdg_rad = math.radians(player.heading)
-            new_hdg_rad = math.radians(new_heading)
-            avg_speed = (new_speed + player.speed) / 2.0
-            if self.gps_env:
-                avg_speed = avg_speed/self.meters_per_mercator_xy
-            s = math.sin(new_hdg_rad) + math.sin(hdg_rad)
-            c = math.cos(new_hdg_rad) + math.cos(hdg_rad)
-            avg_hdg = math.atan2(s, c)
-            # Note: sine/cos swapped because of the heading / angle difference
-            new_ag_pos = [
-                pos_x + math.sin(avg_hdg) * avg_speed * dt,
-                pos_y + math.cos(avg_hdg) * avg_speed * dt,
-            ]
-
+            # Move flag, if necessary
             if player.has_flag:
-                self.flags[other_team_idx].pos = list(new_ag_pos)
+                self.flags[other_team_idx].pos = player.pos
                 self.state["flag_position"][other_team_idx] = np.array(self.flags[other_team_idx].pos)
-            player.prev_pos = player.pos
-            player.pos = np.asarray(new_ag_pos)
-            player.speed = clip(new_speed, 0.0, self.max_speed)
-            player.heading = angle180(new_heading)
-            player.thrust = desired_thrust
 
+            # Update environment state
             self.state["agent_position"][i] = player.pos
             self.state["prev_agent_position"][i] = player.prev_pos
             self.state["agent_speed"][i] = player.speed
@@ -1125,17 +1116,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         flag_int_seg_mask[flag_seg_inds] = np.repeat(np.logical_not(self.state["flag_taken"]), self.n_circle_segments)
 
         # Translate non-static ray intersection geometries (flags and agents)
-        ray_int_segments[flag_seg_inds] += np.repeat(
-            np.tile(self.state["flag_home"], 2),
-            self.n_circle_segments,
-            axis=0
-        )
+        ray_int_segments[flag_seg_inds] += np.repeat(np.tile(self.state["flag_home"], 2), self.n_circle_segments, axis=0)
         agent_seg_inds = self.seg_label_type_to_inds["agent"]
-        ray_int_segments[agent_seg_inds] += np.repeat(
-            np.tile(self.state["agent_position"], 2),
-            self.n_circle_segments,
-            axis=0
-        )
+        ray_int_segments[agent_seg_inds] += np.repeat(np.tile(self.state["agent_position"], 2), self.n_circle_segments, axis=0)
         ray_int_segments = ray_int_segments.reshape(1, -1, 4)
 
         # Agent rays
@@ -1143,48 +1126,62 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         ray_headings_global = np.deg2rad((heading_angle_conversion(self.state["agent_heading"]).reshape(-1, 1) + self.lidar_ray_headings) % 360)
         ray_vecs = np.array([np.cos(ray_headings_global), np.sin(ray_headings_global)]).transpose(1, 2, 0)
         ray_ends = ray_origins + self.lidar_range * ray_vecs
-        ray_segments = np.concatenate(
-            (np.full(ray_ends.shape, ray_origins), ray_ends),
-            axis=-1
-        )
+        ray_segments = np.concatenate((np.full(ray_ends.shape, ray_origins), ray_ends), axis=-1)
         ray_segments = ray_segments.reshape(self.num_agents, -1, 1, 4)
 
-        #compute ray intersections
-        x1, y1, x2, y2 = ray_segments[..., 0], ray_segments[..., 1], ray_segments[..., 2], ray_segments[..., 3]
-        x3, y3, x4, y4 = ray_int_segments[..., 0], ray_int_segments[..., 1], ray_int_segments[..., 2], ray_int_segments[..., 3]
+        # compute ray intersections
+        x1, y1, x2, y2 = (
+            ray_segments[..., 0],
+            ray_segments[..., 1],
+            ray_segments[..., 2],
+            ray_segments[..., 3],
+        )
+        x3, y3, x4, y4 = (
+            ray_int_segments[..., 0],
+            ray_int_segments[..., 1],
+            ray_int_segments[..., 2],
+            ray_int_segments[..., 3],
+        )
 
-        denom = (x1 - x2)*(y3 - y4) - (y1 - y2)*(x3 - x4)
-        intersect_x = ((x1*y2 - y1*x2)*(x3 - x4) - (x1 - x2)*(x3*y4 - y3*x4)) / denom
-        intersect_y = ((x1*y2 - y1*x2)*(y3 - y4) - (y1 - y2)*(x3*y4 - y3*x4)) / denom
+        denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+        intersect_x = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / denom
+        intersect_y = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4) ) / denom
 
-        #mask invalid intersections (parallel lines, outside of segment bounds, picked up flags, own agent segments)
-        mask = (denom != 0) & \
-            (intersect_x >= np.minimum(x1, x2) - LINE_INTERSECT_TOL) & (intersect_x <= np.maximum(x1, x2) + LINE_INTERSECT_TOL) & \
-            (intersect_y >= np.minimum(y1, y2) - LINE_INTERSECT_TOL) & (intersect_y <= np.maximum(y1, y2) + LINE_INTERSECT_TOL) & \
-            (intersect_x >= np.minimum(x3, x4) - LINE_INTERSECT_TOL) & (intersect_x <= np.maximum(x3, x4) + LINE_INTERSECT_TOL) & \
-            (intersect_y >= np.minimum(y3, y4) - LINE_INTERSECT_TOL) & (intersect_y <= np.maximum(y3, y4) + LINE_INTERSECT_TOL) & \
-            flag_int_seg_mask & self.agent_int_seg_mask
+        # mask invalid intersections (parallel lines, outside of segment bounds, picked up flags, own agent segments)
+        mask = (
+            (denom != 0)
+            & (intersect_x >= np.minimum(x1, x2) - LINE_INTERSECT_TOL)
+            & (intersect_x <= np.maximum(x1, x2) + LINE_INTERSECT_TOL)
+            & (intersect_y >= np.minimum(y1, y2) - LINE_INTERSECT_TOL)
+            & (intersect_y <= np.maximum(y1, y2) + LINE_INTERSECT_TOL)
+            & (intersect_x >= np.minimum(x3, x4) - LINE_INTERSECT_TOL)
+            & (intersect_x <= np.maximum(x3, x4) + LINE_INTERSECT_TOL)
+            & (intersect_y >= np.minimum(y3, y4) - LINE_INTERSECT_TOL)
+            & (intersect_y <= np.maximum(y3, y4) + LINE_INTERSECT_TOL)
+            & flag_int_seg_mask
+            & self.agent_int_seg_mask
+        )
 
-        intersect_x = np.where(mask, intersect_x, -self.env_diag) #a coordinate out of bounds and far away
-        intersect_y = np.where(mask, intersect_y, -self.env_diag) #a coordinate out of bounds and far away
+        intersect_x = np.where(mask, intersect_x, -self.env_diag)  # a coordinate out of bounds and far away
+        intersect_y = np.where(mask, intersect_y, -self.env_diag)  # a coordinate out of bounds and far away
         intersections = np.stack((intersect_x.flatten(), intersect_y.flatten()), axis=-1).reshape(intersect_x.shape + (2,))
 
-        #determine lidar ray readings
+        # determine lidar ray readings
         ray_origins = np.expand_dims(ray_origins, axis=1)
         intersection_dists = np.linalg.norm(intersections - ray_origins, axis=-1)
         ray_int_inds = np.argmin(intersection_dists, axis=-1)
 
         ray_int_labels = self.ray_int_seg_labels[ray_int_inds]
-        ray_intersections = intersections[np.arange(self.num_agents).reshape(-1,1), np.arange(self.num_lidar_rays), ray_int_inds]
-        ray_int_dists = intersection_dists[np.arange(self.num_agents).reshape(-1,1), np.arange(self.num_lidar_rays), ray_int_inds]
+        ray_intersections = intersections[np.arange(self.num_agents).reshape(-1, 1), np.arange(self.num_lidar_rays), ray_int_inds]
+        ray_int_dists = intersection_dists[np.arange(self.num_agents).reshape(-1, 1), np.arange(self.num_lidar_rays), ray_int_inds]
 
-        #correct lidar ray readings for which nothing was detected
+        # correct lidar ray readings for which nothing was detected
         invalid_ray_ints = np.where(np.all(np.logical_not(mask), axis=-1))
         ray_int_labels[invalid_ray_ints] = self.ray_int_label_map["nothing"]
         ray_intersections[invalid_ray_ints] = ray_ends[invalid_ray_ints]
         ray_int_dists[invalid_ray_ints] = self.lidar_range
 
-        #save lidar readings
+        # save lidar readings
         for i, agent_id in enumerate(self.players):
             self.state["lidar_labels"][agent_id] = ray_int_labels[i]
             self.state["lidar_ends"][agent_id] = ray_intersections[i]
@@ -1401,10 +1398,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             other_agent_inds = np.setdiff1d(np.arange(self.num_agents), team_agent_inds)
 
             # Determine which agents can perform a tag
-            team_agent_on_sides = self.state['agent_on_sides'][agent_inds]
-            team_agent_oob = self.state['agent_oob'][agent_inds]
-            team_agent_is_tagged = self.state['agent_is_tagged'][agent_inds]
-            team_agent_tagging_cooldown = self.state['agent_tagging_cooldown'][agent_inds]
+            team_agent_on_sides = self.state['agent_on_sides'][team_agent_inds]
+            team_agent_oob = self.state['agent_oob'][team_agent_inds]
+            team_agent_is_tagged = self.state['agent_is_tagged'][team_agent_inds]
+            team_agent_tagging_cooldown = self.state['agent_tagging_cooldown'][team_agent_inds]
             
             team_agent_cantag = team_agent_on_sides & \
                 np.logical_not(team_agent_oob) & \
@@ -1541,15 +1538,22 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.gps_env = config_dict.get("gps_env", config_dict_std["gps_env"])
         self.topo_contour_eps = config_dict.get("topo_contour_eps", config_dict_std["topo_contour_eps"])
 
-        # MOOS dynamics parameters
-        self.speed_factor = config_dict.get("speed_factor", config_dict_std["speed_factor"])
-        self.thrust_map = config_dict.get("thrust_map", config_dict_std["thrust_map"])
-        self.max_thrust = config_dict.get("max_thrust", config_dict_std["max_thrust"])
-        self.max_rudder = config_dict.get("max_rudder", config_dict_std["max_rudder"])
-        self.turn_loss = config_dict.get("turn_loss", config_dict_std["turn_loss"])
-        self.turn_rate = config_dict.get("turn_rate", config_dict_std["turn_rate"])
-        self.max_acc = config_dict.get("max_acc", config_dict_std["max_acc"])
-        self.max_dec = config_dict.get("max_dec", config_dict_std["max_dec"])
+        # Dynamics parameters
+        self.dynamics = config_dict.get("dynamics", config_dict_std["dynamics"])
+
+        if isinstance(self.dynamics, list):
+            if len(self.dynamics) != self.team_size * 2:
+                raise Warning("Dynamics list incorrect length")
+
+        if not isinstance(self.dynamics, list):
+            self.dynamics = [self.dynamics for i in range(self.team_size * 2)]
+
+        for dynamics in self.dynamics:
+            if dynamics not in dynamics_registry.keys():
+                raise Warning(
+                    f"{dynamics} is not a valid dynamics class. Please check dynamics_registry.py"
+                )
+
         self.oob_speed_frac = config_dict.get("oob_speed_frac", config_dict_std["oob_speed_frac"])
         self.action_type = config_dict.get("action_type", config_dict_std["action_type"])
 
@@ -1588,24 +1592,38 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # agent spawn parameters
         self.default_init = config_dict.get("default_init", config_dict_std["default_init"])
-        
+
         # Miscellaneous parameters
         if config_dict.get("suppress_numpy_warnings", config_dict_std["suppress_numpy_warnings"]):
             # Suppress numpy warnings to avoid printing out extra stuff to the console
             np.seterr(all="ignore")
 
         ### Environment History ###
-        short_hist_buffer_inds = np.arange(0, self.short_hist_length*self.short_hist_interval, self.short_hist_interval)
-        long_hist_buffer_inds = np.arange(0, self.long_hist_length*self.long_hist_interval, self.long_hist_interval)
-        self.hist_buffer_inds = np.unique(np.concatenate((short_hist_buffer_inds, long_hist_buffer_inds))) #indices of history buffer corresponding to history entries
+        short_hist_buffer_inds = np.arange(
+            0,
+            self.short_hist_length * self.short_hist_interval,
+            self.short_hist_interval,
+        )
+        long_hist_buffer_inds = np.arange(
+            0, self.long_hist_length * self.long_hist_interval, self.long_hist_interval
+        )
+        self.hist_buffer_inds = np.unique(
+            np.concatenate((short_hist_buffer_inds, long_hist_buffer_inds))
+        )  # indices of history buffer corresponding to history entries
 
         self.hist_len = len(self.hist_buffer_inds)
         self.hist_buffer_len = self.hist_buffer_inds[-1] + 1
 
-        short_hist_oldest_timestep = self.short_hist_length*self.short_hist_interval - self.short_hist_interval
-        long_hist_oldest_timestep = self.long_hist_length*self.long_hist_interval - self.long_hist_interval
+        short_hist_oldest_timestep = (
+            self.short_hist_length * self.short_hist_interval - self.short_hist_interval
+        )
+        long_hist_oldest_timestep = (
+            self.long_hist_length * self.long_hist_interval - self.long_hist_interval
+        )
         if short_hist_oldest_timestep > long_hist_oldest_timestep:
-            raise Warning(f"The short term history contains older timestep (-{short_hist_oldest_timestep}) than the long term history (-{long_hist_oldest_timestep}).")
+            raise Warning(
+                f"The short term history contains older timestep (-{short_hist_oldest_timestep}) than the long term history (-{long_hist_oldest_timestep})."
+            )
 
         ### Environment Geometry Construction ###
         # Basic environment features
@@ -1624,7 +1642,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         flag_radius = config_dict.get("flag_radius", config_dict_std["flag_radius"])
         flag_keepout_radius = config_dict.get("flag_keepout", config_dict_std["flag_keepout"])
         catch_radius = config_dict.get("catch_radius", config_dict_std["catch_radius"])
-        max_speed = config_dict.get("max_speed", config_dict_std["max_speed"])
+
         lidar_range = config_dict.get("lidar_range", config_dict_std["lidar_range"])
 
         self._build_base_env_geom(
@@ -1638,15 +1656,18 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             flag_radius=flag_radius,
             flag_keepout_radius=flag_keepout_radius,
             catch_radius=catch_radius,
-            max_speed=max_speed,
-            lidar_range=lidar_range
+            lidar_range=lidar_range,
         )
 
         # Scale the aquaticus point field by env size
         if not self.gps_env:
             for k in self.config_dict["aquaticus_field_points"]:
-                self.config_dict["aquaticus_field_points"][k][0] = self.config_dict["aquaticus_field_points"][k][0]*self.env_size[0]
-                self.config_dict["aquaticus_field_points"][k][1] = self.config_dict["aquaticus_field_points"][k][1]*self.env_size[1]
+                self.config_dict["aquaticus_field_points"][k][0] = (
+                    self.config_dict["aquaticus_field_points"][k][0] * self.env_size[0]
+                )
+                self.config_dict["aquaticus_field_points"][k][1] = (
+                    self.config_dict["aquaticus_field_points"][k][1] * self.env_size[1]
+                )
 
         # Environment corners and edges
         self.env_ll = np.array([0.0, 0.0])
@@ -1672,7 +1693,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             arena_buffer = self.arena_buffer_frac * self.env_diag
 
             max_screen_size = get_screen_res()
-            arena_aspect_ratio = (self.env_size[0] + 2*arena_buffer) / (self.env_size[1] + 2*arena_buffer)
+            arena_aspect_ratio = (self.env_size[0] + 2 * arena_buffer) / (self.env_size[1] + 2 * arena_buffer)
             width_based_height = max_screen_size[0] / arena_aspect_ratio
 
             if width_based_height <= max_screen_size[1]:
@@ -1681,25 +1702,21 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 height_based_width = max_screen_size[1] * arena_aspect_ratio
                 max_pygame_screen_width = int(height_based_width)
 
-            self.pixel_size = (self.screen_frac * max_pygame_screen_width) / (self.env_size[0] + 2*arena_buffer)
-            self.screen_width = round(
-                (self.env_size[0] + 2*arena_buffer) * self.pixel_size
-            )
-            self.screen_height = round(
-                (self.env_size[1] + 2*arena_buffer) * self.pixel_size
-            )
+            self.pixel_size = (self.screen_frac * max_pygame_screen_width) / (self.env_size[0] + 2 * arena_buffer)
+            self.screen_width = round((self.env_size[0] + 2 * arena_buffer) * self.pixel_size)
+            self.screen_height = round((self.env_size[1] + 2 * arena_buffer) * self.pixel_size)
 
             # environemnt element sizes in pixels
             self.arena_width, self.arena_height = self.pixel_size * self.env_size
             self.arena_buffer = self.pixel_size * arena_buffer
-            self.boundary_width = 2  #pixels
-            self.a2a_line_width = 5 #pixels
-            self.flag_render_radius = np.clip(self.flag_radius * self.pixel_size, 10, None) #pixels
-            self.agent_render_radius = np.clip(self.agent_radius * self.pixel_size, 15, None) #pixels
+            self.boundary_width = 2  # pixels
+            self.a2a_line_width = 5  # pixels
+            self.flag_render_radius = np.clip(self.flag_radius * self.pixel_size, 10, None)  # pixels
+            self.agent_render_radius = np.clip(self.agent_radius * self.pixel_size, 15, None)  # pixels
 
             # miscellaneous
             self.num_renders_per_step = int(self.render_fps * self.tau)
-            self.render_boundary_rect = True #standard rectangular boundary
+            self.render_boundary_rect = True  # standard rectangular boundary
 
             # check that time between frames (1/render_fps) is not larger than timestep (tau)
             frame_rate_err_msg = (
@@ -1710,12 +1727,16 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             # check that time warp is an integer >= 1
             if self.sim_speedup_factor < 1:
-                print("Warning: sim_speedup_factor must be an integer >= 1! Defaulting to 1.")
+                print(
+                    "Warning: sim_speedup_factor must be an integer >= 1! Defaulting to 1."
+                )
                 self.sim_speedup_factor = 1
 
             if type(self.sim_speedup_factor) != int:
                 self.sim_speedup_factor = int(np.round(self.sim_speedup_factor))
-                print(f"Warning: Converted sim_speedup_factor to integer: {self.sim_speedup_factor}")
+                print(
+                    f"Warning: Converted sim_speedup_factor to integer: {self.sim_speedup_factor}"
+                )
 
             # check that render_saving is only True if environment is being rendered
             if self.render_saving:
@@ -1723,7 +1744,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
     def set_geom_config(self, config_dict):
         self.n_circle_segments = config_dict.get("n_circle_segments", config_dict_std["n_circle_segments"])
-        n_quad_segs = round(self.n_circle_segments/4)
+        n_quad_segs = round(self.n_circle_segments / 4)
 
         # Obstacles
         obstacle_params = config_dict.get("obstacles", config_dict_std["obstacles"])
@@ -1745,16 +1766,24 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 obstacle_params["polygon"].extend(island_contours)
 
         self.obstacles = list()
-        self.obstacle_geoms = dict() #arrays with geometric info for obstacles to be used for vectorized calculations
+        self.obstacle_geoms = (
+            dict()
+        )  # arrays with geometric info for obstacles to be used for vectorized calculations
         if obstacle_params is not None and isinstance(obstacle_params, dict):
             #circle obstacles
             circle_obstacles = obstacle_params.get("circle", None)
             if circle_obstacles is not None and isinstance(circle_obstacles, list):
                 self.obstacle_geoms["circle"] = []
                 for param in circle_obstacles:
-                    self.obstacles.append(CircleObstacle(param[0], (param[1][0], param[1][1])))
-                    self.obstacle_geoms["circle"].append([param[0], param[1][0], param[1][1]])
-                self.obstacle_geoms["circle"] = np.asarray(self.obstacle_geoms["circle"])
+                    self.obstacles.append(
+                        CircleObstacle(param[0], (param[1][0], param[1][1]))
+                    )
+                    self.obstacle_geoms["circle"].append(
+                        [param[0], param[1][0], param[1][1]]
+                    )
+                self.obstacle_geoms["circle"] = np.asarray(
+                    self.obstacle_geoms["circle"]
+                )
             elif circle_obstacles is not None:
                 raise TypeError(f"Expected circle obstacle parameters to be a list of tuples, not {type(circle_obstacles)}")
 
@@ -1766,14 +1795,18 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     converted_param = [(p[0], p[1]) for p in param]
                     self.obstacles.append(PolygonObstacle(converted_param))
                     self.obstacle_geoms["polygon"].extend(
-                        [(p, param[(i+1) % len(param)]) for i, p in enumerate(param)]
+                        [(p, param[(i + 1) % len(param)]) for i, p in enumerate(param)]
                     )
-                self.obstacle_geoms["polygon"] = np.asarray(self.obstacle_geoms["polygon"])
+                self.obstacle_geoms["polygon"] = np.asarray(
+                    self.obstacle_geoms["polygon"]
+                )
             elif poly_obstacle is not None:
                 raise TypeError(f"Expected polygon obstacle parameters to be a list of tuples, not {type(poly_obstacle)}")
 
         elif obstacle_params is not None:
-            raise TypeError(f"Expected obstacle_params to be None or a dict, not {type(obstacle_params)}")
+            raise TypeError(
+                f"Expected obstacle_params to be None or a dict, not {type(obstacle_params)}"
+            )
 
         # Adjust scrimmage line
         if self.gps_env:
@@ -1783,7 +1816,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 (self.env_ll, self.env_lr),
                 (self.env_lr, self.env_ur),
                 (self.env_ur, self.env_ul),
-                (self.env_ul, self.env_ll)
+                (self.env_ul, self.env_ll),
             ]
 
         scrim_ints = []
@@ -1794,13 +1827,21 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 scrim_ints.append(seg_int.coords[0])
 
         scrim_ints = np.asarray(scrim_ints)
-        scrim_int_dists = np.linalg.norm(scrim_ints.reshape(-1, 1, 2) - scrim_ints, axis=-1)
-        scrim_end_inds = np.unravel_index(np.argmax(scrim_int_dists), scrim_int_dists.shape)
+        scrim_int_dists = np.linalg.norm(
+            scrim_ints.reshape(-1, 1, 2) - scrim_ints, axis=-1
+        )
+        scrim_end_inds = np.unravel_index(
+            np.argmax(scrim_int_dists), scrim_int_dists.shape
+        )
         self.scrimmage_coords = scrim_ints[scrim_end_inds, :]
 
         # Ray casting
         if self.lidar_obs:
-            self.lidar_ray_headings = np.linspace(0, (self.num_lidar_rays - 1) * 360 / self.num_lidar_rays, self.num_lidar_rays)
+            self.lidar_ray_headings = np.linspace(
+                0,
+                (self.num_lidar_rays - 1) * 360 / self.num_lidar_rays,
+                self.num_lidar_rays,
+            )
 
             ray_int_label_names = ["nothing", "obstacle"]
             ray_int_label_names.extend([f"flag_{i}" for i, _ in enumerate(self.flags)])
@@ -1834,110 +1875,112 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             ray_int_segments = []
             ray_int_seg_labels = []
-            self.seg_label_type_to_inds = {
-                (label[: label.find("_")] if label[-1].isnumeric() else label): [] for label in ray_int_label_names
-            }
+            self.seg_label_type_to_inds = {(label[: label.find("_")] if label[-1].isnumeric() else label): [] for label in ray_int_label_names}
 
-            #boundaries
-            ray_int_segments.extend([
-                [*self.env_ll, *self.env_lr],
-                [*self.env_lr, *self.env_ur],
-                [*self.env_ur, *self.env_ul],
-                [*self.env_ul, *self.env_ll]
-            ])
+            # boundaries
+            ray_int_segments.extend(
+                [
+                    [*self.env_ll, *self.env_lr],
+                    [*self.env_lr, *self.env_ur],
+                    [*self.env_ur, *self.env_ul],
+                    [*self.env_ul, *self.env_ll],
+                ]
+            )
             ray_int_seg_labels.extend(4 * [self.ray_int_label_map["obstacle"]])
             self.seg_label_type_to_inds["obstacle"].extend(np.arange(4))
 
-            #obstacles
+            # obstacles
             obstacle_segments = [
                 segment.flatten() for obstacle in self.obstacles for segment in self._generate_segments_from_obstacles(obstacle, n_quad_segs) if not self._segment_on_border(segment)
             ]
-            ray_int_seg_labels.extend(
-                len(obstacle_segments) * [self.ray_int_label_map["obstacle"]]
-            )
-            self.seg_label_type_to_inds["obstacle"].extend(
-                np.arange(len(ray_int_segments), len(ray_int_segments) + len(obstacle_segments))
-            )
+            ray_int_seg_labels.extend(len(obstacle_segments) * [self.ray_int_label_map["obstacle"]])
+            self.seg_label_type_to_inds["obstacle"].extend(np.arange(len(ray_int_segments), len(ray_int_segments) + len(obstacle_segments)))
             ray_int_segments.extend(obstacle_segments)
 
-            #flags
+            # flags
             for i, _ in enumerate(self.flags):
-                vertices = list(Point(0., 0.).buffer(self.flag_radius, quad_segs=n_quad_segs).exterior.coords)[:-1] #approximate circle with an octagon
-                segments = [[*vertex, *vertices[(i+1) % len(vertices)]] for i, vertex in enumerate(vertices)]
-                ray_int_seg_labels.extend(
-                    len(segments) * [self.ray_int_label_map[f"flag_{i}"]]
-                )
-                self.seg_label_type_to_inds["flag"].extend(
-                    np.arange(len(ray_int_segments), len(ray_int_segments) + len(segments))
-                )
+                vertices = list(Point(0.0, 0.0).buffer(self.flag_radius, quad_segs=n_quad_segs).exterior.coords)[:-1]  # approximate circle with an octagon
+                segments = [[*vertex, *vertices[(i + 1) % len(vertices)]] for i, vertex in enumerate(vertices)]
+                ray_int_seg_labels.extend(len(segments) * [self.ray_int_label_map[f"flag_{i}"]])
+                self.seg_label_type_to_inds["flag"].extend(np.arange(len(ray_int_segments), len(ray_int_segments) + len(segments)))
                 ray_int_segments.extend(segments)
 
-            #agents
+            # agents
             for agent_id in self.agents:
-                vertices = list(Point(0., 0.).buffer(self.agent_radius, quad_segs=n_quad_segs).exterior.coords)[:-1] #approximate circle with an octagon
-                segments = [[*vertex, *vertices[(i+1) % len(vertices)]] for i, vertex in enumerate(vertices)]
-                ray_int_seg_labels.extend(
-                    len(segments) * [self.ray_int_label_map[f"agent_{agent_id}"]]
-                )
-                self.seg_label_type_to_inds["agent"].extend(
-                    np.arange(len(ray_int_segments), len(ray_int_segments) + len(segments))
-                )
+                vertices = list(Point(0.0, 0.0).buffer(self.agent_radius, quad_segs=n_quad_segs).exterior.coords)[:-1]  # approximate circle with an octagon
+                segments = [[*vertex, *vertices[(i + 1) % len(vertices)]] for i, vertex in enumerate(vertices)]
+                ray_int_seg_labels.extend(len(segments) * [self.ray_int_label_map[f"agent_{agent_id}"]])
+                self.seg_label_type_to_inds["agent"].extend(np.arange(len(ray_int_segments), len(ray_int_segments) + len(segments)))
                 ray_int_segments.extend(segments)
 
-            #arrays
+            # arrays
             self.ray_int_segments = np.array(ray_int_segments)
             self.ray_int_seg_labels = np.array(ray_int_seg_labels)
 
-            #agent ray self intersection mask
+            # agent ray self intersection mask
             agent_int_seg_mask = np.ones((self.num_agents, len(self.ray_int_seg_labels)), dtype=bool)
             agent_seg_inds = self.seg_label_type_to_inds["agent"]
 
             for i in range(self.num_agents):
                 seg_inds_start = i * self.n_circle_segments
-                agent_int_seg_mask[i, agent_seg_inds[seg_inds_start: seg_inds_start + self.n_circle_segments]] = False
+                agent_int_seg_mask[i, agent_seg_inds[seg_inds_start : seg_inds_start + self.n_circle_segments]] = False
 
             self.agent_int_seg_mask = np.expand_dims(agent_int_seg_mask, axis=1)
 
         # Occupancy map
         if self.gps_env:
             self._generate_valid_start_poses(land_mask)
-    
+
     def create_background_image(self):
-        """"Creates pygame surface with static objects for faster rendering."""
-        pygame.font.init() # needed to import pygame fonts
+        """ "Creates pygame surface with static objects for faster rendering."""
+        pygame.font.init()  # needed to import pygame fonts
 
         if self.gps_env:
-            pygame_background_img = pygame.surfarray.make_surface(
-                np.transpose(self.background_img, (1,0,2)) #pygame assumes images are (h, w, 3)
-            )
+            pygame_background_img = pygame.surfarray.make_surface(np.transpose(self.background_img, (1, 0, 2)))  # pygame assumes images are (h, w, 3)
             self.pygame_background_img = pygame.transform.scale(pygame_background_img, (self.screen_width, self.screen_height))
 
             # add attribution text
-            img_attribution_font = pygame.font.SysFont(None, round(0.35*self.arena_buffer))
+            img_attribution_font = pygame.font.SysFont(None, round(0.35 * self.arena_buffer))
             img_attribution_text = img_attribution_font.render(self.background_img_attribution, True, "black")
             img_attribution_text_rect = img_attribution_text.get_rect()
 
-            center_x = self.screen_width - self.arena_buffer - 0.5*img_attribution_text_rect[2] #object is [left,top,width,height]
-            center_y = self.screen_height - 0.5*self.arena_buffer
+            center_x = (self.screen_width - self.arena_buffer - 0.5 * img_attribution_text_rect[2])  # object is [left,top,width,height]
+            center_y = self.screen_height - 0.5 * self.arena_buffer
             img_attribution_text_rect.center = [center_x, center_y]
 
             self.pygame_background_img.blit(img_attribution_text, img_attribution_text_rect)
         else:
             self.pygame_background_img = pygame.Surface((self.screen_width, self.screen_height))
             self.pygame_background_img.fill((255, 255, 255))
-            
+
         # Draw boundary
         draw.line(
-            self.pygame_background_img, (0,0,0), self.env_to_screen(self.env_ul), self.env_to_screen(self.env_ur), width=self.boundary_width
+            self.pygame_background_img,
+            (0, 0, 0),
+            self.env_to_screen(self.env_ul),
+            self.env_to_screen(self.env_ur),
+            width=self.boundary_width,
         )
         draw.line(
-            self.pygame_background_img, (0,0,0), self.env_to_screen(self.env_ll), self.env_to_screen(self.env_lr), width=self.boundary_width
+            self.pygame_background_img,
+            (0, 0, 0),
+            self.env_to_screen(self.env_ll),
+            self.env_to_screen(self.env_lr),
+            width=self.boundary_width,
         )
         draw.line(
-            self.pygame_background_img, (0,0,0), self.env_to_screen(self.env_ul), self.env_to_screen(self.env_ll), width=self.boundary_width
+            self.pygame_background_img,
+            (0, 0, 0),
+            self.env_to_screen(self.env_ul),
+            self.env_to_screen(self.env_ll),
+            width=self.boundary_width,
         )
         draw.line(
-            self.pygame_background_img, (0,0,0), self.env_to_screen(self.env_ur), self.env_to_screen(self.env_lr), width=self.boundary_width
+            self.pygame_background_img,
+            (0, 0, 0),
+            self.env_to_screen(self.env_ur),
+            self.env_to_screen(self.env_lr),
+            width=self.boundary_width,
         )
 
         # Scrimmage line
@@ -1946,7 +1989,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             (128, 128, 128),
             self.env_to_screen(self.scrimmage_coords[0]),
             self.env_to_screen(self.scrimmage_coords[1]),
-            width=self.boundary_width
+            width=self.boundary_width,
         )
 
         # Obstacles
@@ -1956,13 +1999,19 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     draw.circle(
                         self.pygame_background_img,
                         (0, 0, 0),
-                        self.env_to_screen(geoms[i,1:]),
-                        radius=geoms[i,0] * self.pixel_size,
-                        width=self.boundary_width
+                        self.env_to_screen(geoms[i, 1:]),
+                        radius=geoms[i, 0] * self.pixel_size,
+                        width=self.boundary_width,
                     )
-            else: #polygon obstacle
+            else:  # polygon obstacle
                 for i in range(geoms.shape[0]):
-                    draw.line(self.pygame_background_img, (0, 0, 0), self.env_to_screen(geoms[i][0]), self.env_to_screen(geoms[i][1]),width=self.boundary_width)
+                    draw.line(
+                        self.pygame_background_img,
+                        (0, 0, 0),
+                        self.env_to_screen(geoms[i][0]),
+                        self.env_to_screen(geoms[i][1]),
+                        width=self.boundary_width,
+                    )
 
         # Aquaticus field points
         if self.render_field_points and not self.gps_env:
@@ -1971,7 +2020,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     self.pygame_background_img,
                     (128, 0, 128),
                     self.env_to_screen(self.config_dict["aquaticus_field_points"][v]),
-                    radius=5
+                    radius=5,
                 )
 
     def get_distance_between_2_points(self, start: np.ndarray, end: np.ndarray) -> float:
@@ -2051,9 +2100,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # Agents
         self.params[agent.id]["num_players"] = self.num_agents
         self.params[agent.id]["speed"] = agent.speed
-        self.params[agent.id]["tagging_cooldown"] = (
-            not agent.tagging_cooldown >= 10.0
-        )
+        self.params[agent.id]["tagging_cooldown"] = not agent.tagging_cooldown >= 10.0
         self.params[agent.id]["thrust"] = agent.thrust
         self.params[agent.id]["has_flag"] = agent.has_flag
         self.params[agent.id]["on_own_side"] = agent.on_own_side
@@ -2160,7 +2207,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.seed(seed=seed)
 
         if return_info:
-            raise DeprecationWarning("return_info has been deprecated by PettingZoo -- https://github.com/Farama-Foundation/PettingZoo/pull/890")
+            raise DeprecationWarning(
+                "return_info has been deprecated by PettingZoo -- https://github.com/Farama-Foundation/PettingZoo/pull/890"
+            )
 
         if options is not None:
             self.normalize = options.get("normalize", config_dict_std["normalize"])
@@ -2173,11 +2222,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             init_dict = None
 
         if state_dict != None:
-            #reset env from state_dict (a self.state value from a previous episode)
-            #note: state_dict should be produced by the same or equivalent instance
-            #of the Pyquaticus class, otherwise the obervations may be inconsistent
+            # reset env from state_dict (a self.state value from a previous episode)
+            # note: state_dict should be produced by the same or equivalent instance
+            # of the Pyquaticus class, otherwise the obervations may be inconsistent
             if self.reset_count == 0:
-                raise Exception("Resetting from state_dict should only be done for environment that has been previously reset")
+                raise Exception(
+                    "Resetting from state_dict should only be done for environment that has been previously reset"
+                )
             self.state = copy.deepcopy(state_dict)
             self._set_player_attributes_from_state()
             self._set_flag_attributes_from_state()
@@ -2217,7 +2268,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.state["obs_hist_buffer"] = dict()
             self.state["global_state_hist_buffer"] = list()
 
-            #set player and flag attributes
+            # set player and flag attributes
             self._set_player_attributes_from_state()
             self._set_flag_attributes_from_state()
 
@@ -2232,15 +2283,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             #for starting with flag on-sides and state_dict initialization would not start with capture
             #(it would have been detected in the step function checks)
 
-            #team wall orientation
+            # team wall orientation
             self._determine_team_wall_orient()
 
-            #obstacles
+            # obstacles
             self._get_dist_bearing_to_obstacles()
 
-            #lidar
+            # lidar
             if self.lidar_obs:
-                #reset lidar readings
+                # reset lidar readings
                 self.state["lidar_labels"] = dict()
                 self.state["lidar_ends"] = dict()
                 self.state["lidar_distances"] = dict()
@@ -2260,12 +2311,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                             else:
                                 self.obj_ray_detection_states[team][label_idx] = LIDAR_DETECTION_CLASS_MAP["opponent"]
 
-            #observation history
+            # observation history
             reset_obs = {agent_id: self.state_to_obs(agent_id, self.normalize) for agent_id in self.players}
             for agent_id in self.players:
                 self.state["obs_hist_buffer"][agent_id] = np.array(self.hist_buffer_len * [reset_obs[agent_id]])
 
-            #global state history
+            # global state history
             reset_global_state = self.state_to_global_obs(self.normalize)
             self.state["global_state_hist_buffer"] = np.array(self.hist_buffer_len * [reset_global_state])
 
@@ -2279,12 +2330,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if self.render_mode:
             if self.render_saving:
                 max_renders = 1 + ceil(self.max_time / (self.sim_speedup_factor * self.tau)) * self.num_renders_per_step
-                self.render_buffer = []
+                self.render_buffer = np.zeros((max_renders, self.screen_height, self.screen_width, 3))
             if self.render_traj_mode:
                 self.traj_render_buffer = {agent_id: {"traj": [], "agent": [], "history": []} for agent_id in self.players}
 
-            self.render_ctr -= 1 #reset render doesn't count
-            self._render() 
+            self.render_ctr = -1  # reset render doesn't count
+            self._render()
 
         # Observations
         if self.hist_len > 1:
@@ -2299,7 +2350,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 info = {"global_state": self.state["global_state_hist_buffer"][self.hist_buffer_inds]}
             else:
                 info = {"global_state": self.state["global_state_hist_buffer"][0]}
-            
+
             return obs, info
         else:
             return obs
@@ -2416,7 +2467,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 else:
                     heading = init_dict.get('agent_heading').get(agent_id, None)
                     if heading != None:
-                        agent_heading_dict[agent_id] = heading
+                        agent_hdg_dict[agent_id] = heading
 
         ## has_flag, flag_taken, team_has_flag ##
         if "agent_has_flag" in init_dict:
@@ -2642,7 +2693,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 if self.default_init:
                     speed = 0.0
                 else:
-                    speed = self.max_speed * np.random.rand()
+                    speed = self.max_speeds[player.id] * np.random.rand()
                 
                 # save speed
                 agent_spd_dict[player.id] = speed
@@ -2746,10 +2797,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             i_pos = player.pos
             proFlag_pos = self.flags[team_idx].pos
             retFlag_pos = self.flags[int(not team_idx)].pos
-            flag_vecs[player.id]["own_home_dist"] = [
-                proFlag_pos[0] - i_pos[0],
-                proFlag_pos[1] - i_pos[1],
-            ]
+            flag_vecs[player.id]["own_home_dist"] = [proFlag_pos[0] - i_pos[0], proFlag_pos[1] - i_pos[1]]
             flag_vecs[player.id]["opponent_home_dist"] = [
                 retFlag_pos[0] - i_pos[0],
                 retFlag_pos[1] - i_pos[1],
@@ -2764,8 +2812,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             player_pos = player.pos
             player_dists_to_obstacles = list()
             for obstacle in self.obstacles:
-                #TODO: vectorize
-                dist_to_obstacle = obstacle.distance_from(player_pos, radius = self.agent_radius, heading=player.heading)
+                # TODO: vectorize
+                dist_to_obstacle = obstacle.distance_from(player_pos, radius=self.agent_radius, heading=player.heading)
                 player_dists_to_obstacles.append(dist_to_obstacle)
             dist_bearing_to_obstacles[player.id] = player_dists_to_obstacles
         self.state["dist_bearing_to_obstacles"] = dist_bearing_to_obstacles
@@ -2782,14 +2830,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         flag_radius: float,
         flag_keepout_radius: float,
         catch_radius: float,
-        max_speed: float,
-        lidar_range: float
+        lidar_range: float,
     ):
-        if (
-            self._is_auto_string(env_bounds) and
-            (self._is_auto_string(flag_homes[Team.BLUE_TEAM]) or self._is_auto_string(flag_homes[Team.RED_TEAM]))
+        if self._is_auto_string(env_bounds) and (
+            self._is_auto_string(flag_homes[Team.BLUE_TEAM])
+            or self._is_auto_string(flag_homes[Team.RED_TEAM])
         ):
-            raise Exception("Either env_bounds or blue AND red flag homes must be set in config_dict (cannot both be 'auto')")
+            raise Exception(
+                "Either env_bounds or blue AND red flag homes must be set in config_dict (cannot both be 'auto')"
+            )
 
         if self.gps_env:
             ### environment bounds ###
@@ -2802,7 +2851,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         "Flag homes must be specified in aboslute coordinates (lat/long or web mercator xy) to auto-generate gps environment bounds"
                     )
                 elif flag_homes_unit == "ll":
-                    #convert flag poses to web mercator xy
+                    # convert flag poses to web mercator xy
                     flag_home_blue = np.asarray(mt.xy(*flag_home_blue[-1::-1]))
                     flag_home_red = np.asarray(mt.xy(*flag_home_red[-1::-1]))
 
@@ -2811,15 +2860,33 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 flag_unit_vec = flag_vec / flag_distance
                 flag_perp_vec = np.array([-flag_unit_vec[1], flag_unit_vec[0]])
 
-                #assuming default aquaticus field size ratio drawn on web mercator, these bounds will contain it
-                bounds_pt1 =  flag_home_blue + (flag_distance/6) * flag_unit_vec + (flag_distance/3) * flag_perp_vec
-                bounds_pt2 =  flag_home_blue + (flag_distance/6) * flag_unit_vec + (flag_distance/3) * -flag_perp_vec
-                bounds_pt3 =  flag_home_red + (flag_distance/6) * -flag_unit_vec + (flag_distance/3) * flag_perp_vec
-                bounds_pt4 =  flag_home_red + (flag_distance/6) * -flag_unit_vec + (flag_distance/3) * -flag_perp_vec
-                bounds_points = np.array([bounds_pt1, bounds_pt2, bounds_pt3, bounds_pt4])
+                # assuming default aquaticus field size ratio drawn on web mercator, these bounds will contain it
+                bounds_pt1 = (
+                    flag_home_blue
+                    + (flag_distance / 6) * flag_unit_vec
+                    + (flag_distance / 3) * flag_perp_vec
+                )
+                bounds_pt2 = (
+                    flag_home_blue
+                    + (flag_distance / 6) * flag_unit_vec
+                    + (flag_distance / 3) * -flag_perp_vec
+                )
+                bounds_pt3 = (
+                    flag_home_red
+                    + (flag_distance / 6) * -flag_unit_vec
+                    + (flag_distance / 3) * flag_perp_vec
+                )
+                bounds_pt4 = (
+                    flag_home_red
+                    + (flag_distance / 6) * -flag_unit_vec
+                    + (flag_distance / 3) * -flag_perp_vec
+                )
+                bounds_points = np.array(
+                    [bounds_pt1, bounds_pt2, bounds_pt3, bounds_pt4]
+                )
 
-                #environment bounds will be in web mercator xy
-                env_bounds = np.zeros((2,2))
+                # environment bounds will be in web mercator xy
+                env_bounds = np.zeros((2, 2))
                 env_bounds[0][0] = np.min(bounds_points[:, 0])
                 env_bounds[0][1] = np.min(bounds_points[:, 1])
                 env_bounds[1][0] = np.max(bounds_points[:, 0])
@@ -2828,25 +2895,25 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 env_bounds = np.asarray(env_bounds)
 
                 if env_bounds_unit == "m":
-                    #check for exceptions
+                    # check for exceptions
                     if (
-                        self._is_auto_string(flag_homes[Team.BLUE_TEAM]) or
-                        self._is_auto_string(flag_homes[Team.RED_TEAM]) or
-                        flag_homes_unit == "m"
+                        self._is_auto_string(flag_homes[Team.BLUE_TEAM])
+                        or self._is_auto_string(flag_homes[Team.RED_TEAM])
+                        or flag_homes_unit == "m"
                     ):
                         raise Exception(
                             "Flag locations must be specified in aboslute coordinates (lat/long or web mercator xy) \
-when gps environment bounds are specified in meters")
+when gps environment bounds are specified in meters"
+                        )
 
                     if len(env_bounds.shape) == 1:
-                        env_bounds = np.array([
-                            (0., 0.),
-                            env_bounds
-                        ])
-                    if np.any(env_bounds[1] == 0.):
-                        raise Exception("Environment max bounds must be > 0 when specified in meters")
+                        env_bounds = np.array([(0.0, 0.0), env_bounds])
+                    if np.any(env_bounds[1] == 0.0):
+                        raise Exception(
+                            "Environment max bounds must be > 0 when specified in meters"
+                        )
 
-                    #get flag midpoint
+                    # get flag midpoint
                     if flag_homes_unit == "wm_xy":
                         flag_home_blue = np.flip(_sm2ll(*flag_homes[Team.BLUE_TEAM]))
                         flag_home_red = np.flip(_sm2ll(*flag_homes[Team.RED_TEAM]))
@@ -2855,73 +2922,65 @@ when gps environment bounds are specified in meters")
                         lat1=flag_home_blue[0],
                         lon1=flag_home_blue[1],
                         lat2=flag_home_red[0],
-                        lon2=flag_home_red[1]
+                        lon2=flag_home_red[1],
                     )
                     geodict_flag_midpoint = Geodesic.WGS84.Direct(
                         lat1=flag_home_blue[0],
                         lon1=flag_home_blue[1],
-                        azi1=geodict_flags['azi1'],
-                        s12=geodict_flags['s12']/2
+                        azi1=geodict_flags["azi1"],
+                        s12=geodict_flags["s12"] / 2,
                     )
-                    flag_midpoint = (geodict_flag_midpoint['lat2'], geodict_flag_midpoint['lon2'])
+                    flag_midpoint = (
+                        geodict_flag_midpoint["lat2"],
+                        geodict_flag_midpoint["lon2"],
+                    )
 
-                    #vertical bounds
+                    # vertical bounds
                     env_top = Geodesic.WGS84.Direct(
                         lat1=flag_midpoint[0],
                         lon1=flag_midpoint[1],
-                        azi1=0, #degrees
-                        s12=0.5*env_bounds[1][1]
-                    )['lat2']
+                        azi1=0,  # degrees
+                        s12=0.5 * env_bounds[1][1],
+                    )["lat2"]
                     env_bottom = Geodesic.WGS84.Direct(
                         lat1=flag_midpoint[0],
                         lon1=flag_midpoint[1],
-                        azi1=180, #degrees
-                        s12=0.5*env_bounds[1][1]
-                    )['lat2']
+                        azi1=180,  # degrees
+                        s12=0.5 * env_bounds[1][1],
+                    )["lat2"]
 
-                    #horizontal bounds
+                    # horizontal bounds
                     geoc_lat = np.arctan(
-                        (POLAR_RADIUS / EQUATORIAL_RADIUS)**2 * np.tan(np.deg2rad(flag_midpoint[0]))
+                        (POLAR_RADIUS / EQUATORIAL_RADIUS) ** 2
+                        * np.tan(np.deg2rad(flag_midpoint[0]))
                     )
                     small_circle_circum = np.pi * 2 * EQUATORIAL_RADIUS * np.cos(geoc_lat)
-                    env_left = flag_midpoint[1] - 360 * (0.5*env_bounds[1][0] / small_circle_circum)
-                    env_right = flag_midpoint[1] + 360 * (0.5*env_bounds[1][0] / small_circle_circum)
+                    env_left = flag_midpoint[1] - 360 * (0.5 * env_bounds[1][0] / small_circle_circum)
+                    env_right = flag_midpoint[1] + 360 * (0.5 * env_bounds[1][0] / small_circle_circum)
 
                     env_left = angle180(env_left)
                     env_right = angle180(env_right)
 
-                    #convert bounds to web mercator xy
-                    env_bounds = np.array([
-                        mt.xy(env_left, env_bottom),
-                        mt.xy(env_right, env_top)
-                    ])
+                    # convert bounds to web mercator xy
+                    env_bounds = np.array([mt.xy(env_left, env_bottom), mt.xy(env_right, env_top)])
                 elif env_bounds_unit == "ll":
-                    #convert bounds to web mercator xy
-                    wm_xy_bounds = np.array([
-                        mt.xy(*env_bounds[0][-1::-1]),
-                        mt.xy(*env_bounds[1][-1::-1])
-                    ])
+                    # convert bounds to web mercator xy
+                    wm_xy_bounds = np.array([mt.xy(*env_bounds[0][-1::-1]), mt.xy(*env_bounds[1][-1::-1])])
                     left = np.min(wm_xy_bounds[:, 0])
                     bottom = np.min(wm_xy_bounds[:, 1])
                     right = np.max(wm_xy_bounds[:, 0])
                     top = np.max(wm_xy_bounds[:, 1])
-                    env_bounds = np.array([
-                        [left, bottom],
-                        [right, top]
-                    ])
-                else: #web mercator xy
+                    env_bounds = np.array([[left, bottom], [right, top]])
+                else:  # web mercator xy
                     left = np.min(env_bounds[:, 0])
                     bottom = np.min(env_bounds[:, 1])
                     right = np.max(env_bounds[:, 0])
                     top = np.max(env_bounds[:, 1])
-                    env_bounds = np.array([
-                        [left, bottom],
-                        [right, top]
-                    ])
-            #unit
+                    env_bounds = np.array([[left, bottom], [right, top]])
+            # unit
             env_bounds_unit = "wm_xy"
 
-            #environment size
+            # environment size
             self.env_size = np.diff(env_bounds, axis=0)[0]
             self.env_diag = np.linalg.norm(self.env_size)
 
@@ -2934,43 +2993,53 @@ when gps environment bounds are specified in meters")
             ])
 
             ### flags home ###
-            #auto home
-            if self._is_auto_string(flag_homes[Team.BLUE_TEAM]) and self._is_auto_string(flag_homes[Team.RED_TEAM]):
-                flag_homes[Team.BLUE_TEAM] = env_bounds[0] + np.array([7/8*self.env_size[0], 0.5*self.env_size[0]])
-                flag_homes[Team.RED_TEAM] = env_bounds[0] + np.array([1/8*self.env_size[0], 0.5*self.env_size[0]])
-            elif self._is_auto_string(flag_homes[Team.BLUE_TEAM]) or self._is_auto_string(flag_homes[Team.RED_TEAM]):
-                raise Exception("Flag homes should be either all 'auto', or all specified")
+            # auto home
+            if self._is_auto_string(
+                flag_homes[Team.BLUE_TEAM]
+            ) and self._is_auto_string(flag_homes[Team.RED_TEAM]):
+                flag_homes[Team.BLUE_TEAM] = env_bounds[0] + np.array([7 / 8 * self.env_size[0], 0.5 * self.env_size[0]])
+                flag_homes[Team.RED_TEAM] = env_bounds[0] + np.array([1 / 8 * self.env_size[0], 0.5 * self.env_size[0]])
+            elif self._is_auto_string(
+                flag_homes[Team.BLUE_TEAM]
+            ) or self._is_auto_string(flag_homes[Team.RED_TEAM]):
+                raise Exception(
+                    "Flag homes should be either all 'auto', or all specified"
+                )
             else:
                 if flag_homes_unit == "m":
-                    raise Exception("'m' (meters) should only be used to specify flag homes when gps_env is False")
+                    raise Exception(
+                        "'m' (meters) should only be used to specify flag homes when gps_env is False"
+                    )
 
                 flag_homes[Team.BLUE_TEAM] = np.asarray(flag_homes[Team.BLUE_TEAM])
                 flag_homes[Team.RED_TEAM] = np.asarray(flag_homes[Team.RED_TEAM])
 
                 if flag_homes_unit == "ll":
-                    #convert flag poses to web mercator xy
+                    # convert flag poses to web mercator xy
                     flag_homes[Team.BLUE_TEAM] = mt.xy(*flag_homes[Team.BLUE_TEAM][-1::-1])
                     flag_homes[Team.RED_TEAM] = mt.xy(*flag_homes[Team.RED_TEAM][-1::-1])
 
-            #blue flag
-            if (
-                np.any(flag_homes[Team.BLUE_TEAM] <= env_bounds[0]) or
-                np.any(flag_homes[Team.BLUE_TEAM] >= env_bounds[1])
+            # blue flag
+            if np.any(flag_homes[Team.BLUE_TEAM] <= env_bounds[0]) or np.any(
+                flag_homes[Team.BLUE_TEAM] >= env_bounds[1]
             ):
-                raise Exception(f"Blue flag home {flag_homes[Team.BLUE_TEAM]} must fall within (non-inclusive) environment bounds {env_bounds}")
+                raise Exception(
+                    f"Blue flag home {flag_homes[Team.BLUE_TEAM]} must fall within (non-inclusive) environment bounds {env_bounds}"
+                )
 
-            #red flag
-            if (
-                np.any(flag_homes[Team.RED_TEAM] <= env_bounds[0]) or
-                np.any(flag_homes[Team.RED_TEAM] >= env_bounds[1])
+            # red flag
+            if np.any(flag_homes[Team.RED_TEAM] <= env_bounds[0]) or np.any(
+                flag_homes[Team.RED_TEAM] >= env_bounds[1]
             ):
-                raise Exception(f"Red flag home {flag_homes[Team.RED_TEAM]} must fall within (non-inclusive) environment bounds {env_bounds}")
+                raise Exception(
+                    f"Red flag home {flag_homes[Team.RED_TEAM]} must fall within (non-inclusive) environment bounds {env_bounds}"
+                )
 
-            #normalize relative to environment bounds
+            # normalize relative to environment bounds
             flag_homes[Team.BLUE_TEAM] -= env_bounds[0]
             flag_homes[Team.RED_TEAM] -= env_bounds[0]
 
-            #unit
+            # unit
             flag_homes_unit = "wm_xy"
 
             ### scrimmage line ###
@@ -2986,7 +3055,9 @@ when gps environment bounds are specified in meters")
                 scrimmage_coords = np.asarray([scrimmage_coord1, scrimmage_coord2]) - env_bounds[0]
             else:
                 if scrimmage_coords_unit == "m":
-                    raise Exception("'m' (meters) should only be used to specify flag homes when gps_env is False")
+                    raise Exception(
+                        "'m' (meters) should only be used to specify flag homes when gps_env is False"
+                    )
                 elif scrimmage_coords_unit == "wm_xy":
                     pass
                 elif scrimmage_coords_unit == "ll":
@@ -2994,44 +3065,64 @@ when gps environment bounds are specified in meters")
                     scrimmage_coords_2 = mt.xy(*scrimmage_coords[1])
                     scrimmage_coords = np.array([scrimmage_coords_1, scrimmage_coords_2])
                 else:
-                    raise Exception(f"Unit '{scrimmage_coords_unit}' not recognized. Please choose from 'll' or 'wm_xy' for gps environments.")
+                    raise Exception(
+                        f"Unit '{scrimmage_coords_unit}' not recognized. Please choose from 'll' or 'wm_xy' for gps environments."
+                    )
 
                 if np.all(scrimmage_coords[0] == scrimmage_coords[1]):
-                    raise Exception("Scrimmage line must be specified with two DIFFERENT coordinates")
+                    raise Exception(
+                        "Scrimmage line must be specified with two DIFFERENT coordinates"
+                    )
 
-                if scrimmage_coords[0][0] == scrimmage_coords[1][0] and (scrimmage_coords[0][0] == env_bounds[0][0] or scrimmage_coords[0][0] == env_bounds[1][0]):
-                    raise Exception(f"Specified scrimmage line coordinates {scrimmage_coords} cannot lie on the same edge of the env boundary")
-                if scrimmage_coords[0][1] == scrimmage_coords[1][1] and (scrimmage_coords[0][1] == env_bounds[0][1] or scrimmage_coords[0][1] == env_bounds[1][1]):
-                    raise Exception(f"Specified scrimmage line coordinates {scrimmage_coords} cannot lie on the same edge of the env boundary")
+                if scrimmage_coords[0][0] == scrimmage_coords[1][0] and (
+                    scrimmage_coords[0][0] == env_bounds[0][0]
+                    or scrimmage_coords[0][0] == env_bounds[1][0]
+                ):
+                    raise Exception(
+                        f"Specified scrimmage line coordinates {scrimmage_coords} cannot lie on the same edge of the env boundary"
+                    )
+                if scrimmage_coords[0][1] == scrimmage_coords[1][1] and (
+                    scrimmage_coords[0][1] == env_bounds[0][1]
+                    or scrimmage_coords[0][1] == env_bounds[1][1]
+                ):
+                    raise Exception(
+                        f"Specified scrimmage line coordinates {scrimmage_coords} cannot lie on the same edge of the env boundary"
+                    )
 
-                if scrimmage_coords[1][1] == scrimmage_coords[0][1]: # horizontal line
+                if scrimmage_coords[1][1] == scrimmage_coords[0][1]:  # horizontal line
                     extended_point_1 = [env_bounds[0][0] + (env_bounds[0][0] - scrimmage_coords[0][0]), scrimmage_coords[0][1]]
                     extended_point_2 = [env_bounds[1][0] + (env_bounds[1][0] - scrimmage_coords[1][0]), scrimmage_coords[1][1]]
-                elif scrimmage_coords[1][0] == scrimmage_coords[0][0]: # vertical line
+                elif scrimmage_coords[1][0] == scrimmage_coords[0][0]:  # vertical line
                     extended_point_1 = [scrimmage_coords[0][0], env_bounds[0][1] + (env_bounds[0][1] - scrimmage_coords[0][1])]
                     extended_point_2 = [scrimmage_coords[1][0], env_bounds[1][1] + (env_bounds[1][1] - scrimmage_coords[1][1])]
                 else:
-                    scrimmage_slope = (scrimmage_coords[1][1]-scrimmage_coords[0][1])/(scrimmage_coords[1][0]-scrimmage_coords[0][0])
+                    scrimmage_slope = (scrimmage_coords[1][1] - scrimmage_coords[0][1]) / (scrimmage_coords[1][0] - scrimmage_coords[0][0])
 
                     # compute intersection point for the first scrimmage_coord
-                    t_env_bound_x1 = (env_bounds[0][0] -  scrimmage_coords[0][0])*scrimmage_slope
-                    t_env_bound_y1 = (env_bounds[0][1] -  scrimmage_coords[0][1])/scrimmage_slope if scrimmage_slope != 0 else 0
-                    t_env_bound_x2 = (env_bounds[1][0] -  scrimmage_coords[0][0])*scrimmage_slope
-                    t_env_bound_y2 = (env_bounds[1][1] -  scrimmage_coords[0][1])/scrimmage_slope if scrimmage_slope != 0 else 0
-                    t_env_bounds = [t_env_bound_x1,t_env_bound_y1,t_env_bound_x2,t_env_bound_y2]
-                    max_t = max(t_env_bounds)*10
-                    min_t = min(t_env_bounds)*10
+                    t_env_bound_x1 = (env_bounds[0][0] - scrimmage_coords[0][0]) * scrimmage_slope
+                    t_env_bound_y1 = ((env_bounds[0][1] - scrimmage_coords[0][1]) / scrimmage_slope if scrimmage_slope != 0 else 0)
+                    t_env_bound_x2 = (env_bounds[1][0] - scrimmage_coords[0][0]) * scrimmage_slope
+                    t_env_bound_y2 = ((env_bounds[1][1] - scrimmage_coords[0][1]) / scrimmage_slope if scrimmage_slope != 0 else 0)
+                    t_env_bounds = [
+                        t_env_bound_x1,
+                        t_env_bound_y1,
+                        t_env_bound_x2,
+                        t_env_bound_y2,
+                    ]
+                    max_t = max(t_env_bounds) * 10
+                    min_t = min(t_env_bounds) * 10
 
-                    extended_point_1 = scrimmage_coords[0] + np.array([max_t,max_t*scrimmage_slope]) if max_t > 0 else scrimmage_coords[0]
-                    extended_point_2 = scrimmage_coords[0] + np.array([min_t,min_t*scrimmage_slope]) if min_t < 0 else scrimmage_coords[0]
+                    extended_point_1 = (scrimmage_coords[0] + np.array([max_t, max_t * scrimmage_slope]) if max_t > 0 else scrimmage_coords[0])
+                    extended_point_2 = (scrimmage_coords[0] + np.array([min_t, min_t * scrimmage_slope]) if min_t < 0 else scrimmage_coords[0])
 
                 extended_scrimmage_coords = np.array([extended_point_1, extended_point_2])
                 full_scrim_line = LineString(extended_scrimmage_coords)
                 scrim_line_env_intersection = intersection(full_scrim_line, Polygon(env_bounds_corners))
 
                 if (
-                    scrim_line_env_intersection.is_empty or
-                    len(scrim_line_env_intersection.coords) == 1 #only intersects a vertex
+                    scrim_line_env_intersection.is_empty
+                    or len(scrim_line_env_intersection.coords)
+                    == 1  # only intersects a vertex
                 ):
                     raise Exception(
                         f"Specified scrimmage line coordinates {scrimmage_coords} create a line that does not bisect the environment of bounds {env_bounds}"
@@ -3042,34 +3133,74 @@ when gps environment bounds are specified in meters")
                     # intersection points should lie on boundary (if they don't then the line doesn't bisect the env)
                     if not (
                         (
-                            (env_bounds[0][0] <= scrim_line_env_intersection[0][0] <= env_bounds[1][0]) and
-                            ((scrim_line_env_intersection[0][1] == env_bounds[0][1]) or (scrim_line_env_intersection[0][1] == env_bounds[1][1]))
-                            ) or
-                        (
-                            (env_bounds[0][1] <= scrim_line_env_intersection[0][1] <= env_bounds[1][1]) and
-                            ((scrim_line_env_intersection[0][0] == env_bounds[0][0]) or (scrim_line_env_intersection[0][0] == env_bounds[1][0]))
+                            (
+                                env_bounds[0][0]
+                                <= scrim_line_env_intersection[0][0]
+                                <= env_bounds[1][0]
                             )
+                            and (
+                                (scrim_line_env_intersection[0][1] == env_bounds[0][1])
+                                or (
+                                    scrim_line_env_intersection[0][1]
+                                    == env_bounds[1][1]
+                                )
+                            )
+                        )
+                        or (
+                            (
+                                env_bounds[0][1]
+                                <= scrim_line_env_intersection[0][1]
+                                <= env_bounds[1][1]
+                            )
+                            and (
+                                (scrim_line_env_intersection[0][0] == env_bounds[0][0])
+                                or (
+                                    scrim_line_env_intersection[0][0]
+                                    == env_bounds[1][0]
+                                )
+                            )
+                        )
                     ):
                         raise Exception(
                             f"Specified scrimmage line coordinates {scrimmage_coords} create a line that does not bisect the environment of bounds {env_bounds}"
                         )
                     if not (
                         (
-                            (env_bounds[0][0] <= scrim_line_env_intersection[1][0] <= env_bounds[1][0]) and
-                            ((scrim_line_env_intersection[1][1] == env_bounds[0][1]) or (scrim_line_env_intersection[1][1] == env_bounds[1][1]))
-                            ) or
-                        (
-                            (env_bounds[0][1] <= scrim_line_env_intersection[1][1] <= env_bounds[1][1]) and
-                            ((scrim_line_env_intersection[1][0] == env_bounds[0][0]) or (scrim_line_env_intersection[1][0] == env_bounds[1][0]))
+                            (
+                                env_bounds[0][0]
+                                <= scrim_line_env_intersection[1][0]
+                                <= env_bounds[1][0]
                             )
+                            and (
+                                (scrim_line_env_intersection[1][1] == env_bounds[0][1])
+                                or (
+                                    scrim_line_env_intersection[1][1]
+                                    == env_bounds[1][1]
+                                )
+                            )
+                        )
+                        or (
+                            (
+                                env_bounds[0][1]
+                                <= scrim_line_env_intersection[1][1]
+                                <= env_bounds[1][1]
+                            )
+                            and (
+                                (scrim_line_env_intersection[1][0] == env_bounds[0][0])
+                                or (
+                                    scrim_line_env_intersection[1][0]
+                                    == env_bounds[1][0]
+                                )
+                            )
+                        )
                     ):
                         raise Exception(
                             f"Specified scrimmage line coordinates {scrimmage_coords} create a line that does not bisect the environment of bounds {env_bounds}"
                         )
                     scrimmage_coords = scrim_line_env_intersection
-                scrimmage_coords = scrimmage_coords-env_bounds[0]
+                scrimmage_coords = scrimmage_coords - env_bounds[0]
 
-            #unit
+            # unit
             scrimmage_coords_unit = "wm_xy"
 
             ### agent and flag geometries ###
@@ -3082,12 +3213,12 @@ when gps environment bounds are specified in meters")
             else:
                 lat = lat2
 
-            geoc_lat = np.arctan((POLAR_RADIUS / EQUATORIAL_RADIUS)**2 * np.tan(np.deg2rad(lat)))
+            geoc_lat = np.arctan((POLAR_RADIUS / EQUATORIAL_RADIUS) ** 2 * np.tan(np.deg2rad(lat)))
             small_circle_circum = np.pi * 2 * EQUATORIAL_RADIUS * np.cos(geoc_lat)
 
-            #use most warped (squished) horizontal environment border to underestimate the number of
-            #meters per mercator xy, therefore overestimate how close objects are to one another
-            self.meters_per_mercator_xy = small_circle_circum * (lon_diff/360) / self.env_size[0]
+            # use most warped (squished) horizontal environment border to underestimate the number of
+            # meters per mercator xy, therefore overestimate how close objects are to one another
+            self.meters_per_mercator_xy = (small_circle_circum * (lon_diff / 360) / self.env_size[0])
             agent_radius /= self.meters_per_mercator_xy
             flag_radius /= self.meters_per_mercator_xy
             catch_radius /= self.meters_per_mercator_xy
@@ -3097,51 +3228,60 @@ when gps environment bounds are specified in meters")
         else:
             ### environment bounds ###
             if env_bounds_unit != "m":
-                raise Exception("Environment bounds unit must be meters ('m') when gps_env is False")
+                raise Exception(
+                    "Environment bounds unit must be meters ('m') when gps_env is False"
+                )
 
             if self._is_auto_string(env_bounds):
-                if np.any(np.sign([flag_homes[Team.BLUE_TEAM], flag_homes[Team.RED_TEAM]]) == -1):
-                    raise Exception("Flag coordinates must be in the positive quadrant when gps_env is False")
+                if np.any(
+                    np.sign([flag_homes[Team.BLUE_TEAM], flag_homes[Team.RED_TEAM]])
+                    == -1
+                ):
+                    raise Exception(
+                        "Flag coordinates must be in the positive quadrant when gps_env is False"
+                    )
 
-                if np.any(np.sign([flag_homes[Team.BLUE_TEAM], flag_homes[Team.RED_TEAM]]) == 0):
-                    raise Exception("Flag coordinates must not lie on the axes of the positive quadrant when gps_env is False")
+                if np.any(
+                    np.sign([flag_homes[Team.BLUE_TEAM], flag_homes[Team.RED_TEAM]])
+                    == 0
+                ):
+                    raise Exception(
+                        "Flag coordinates must not lie on the axes of the positive quadrant when gps_env is False"
+                    )
 
-                #environment size
+                # environment size
                 flag_xmin = min(flag_homes[Team.BLUE_TEAM][0], flag_homes[Team.RED_TEAM][0])
                 flag_ymin = min(flag_homes[Team.BLUE_TEAM][1], flag_homes[Team.RED_TEAM][1])
 
                 flag_xmax = max(flag_homes[Team.BLUE_TEAM][0], flag_homes[Team.RED_TEAM][0])
                 flag_ymax = max(flag_homes[Team.BLUE_TEAM][1], flag_homes[Team.RED_TEAM][1])
 
-                self.env_size = np.array([
-                    flag_xmax + flag_xmin,
-                    flag_ymax + flag_ymin
-                ])
-                env_bounds = np.array([
-                    (0., 0.),
-                    self.env_size
-                ])
+                self.env_size = np.array([flag_xmax + flag_xmin, flag_ymax + flag_ymin])
+                env_bounds = np.array([(0.0, 0.0), self.env_size])
             else:
                 env_bounds = np.asarray(env_bounds)
 
                 if len(env_bounds.shape) == 1:
-                    if np.any(env_bounds == 0.):
-                        raise Exception("Environment max bounds must be > 0 when specified in meters")
+                    if np.any(env_bounds == 0.0):
+                        raise Exception(
+                            "Environment max bounds must be > 0 when specified in meters"
+                        )
 
-                    #environment size
+                    # environment size
                     self.env_size = env_bounds
-                    env_bounds = np.array([
-                        (0., 0.),
-                        env_bounds
-                    ])
+                    env_bounds = np.array([(0.0, 0.0), env_bounds])
                 else:
-                    if not np.all(env_bounds[0] == 0.):
-                        raise Exception("Environment min bounds must be 0 when specified in meters")
+                    if not np.all(env_bounds[0] == 0.0):
+                        raise Exception(
+                            "Environment min bounds must be 0 when specified in meters"
+                        )
 
-                    if np.any(env_bounds[1] == 0.):
-                        raise Exception("Environment max bounds must be > 0 when specified in meters")
+                    if np.any(env_bounds[1] == 0.0):
+                        raise Exception(
+                            "Environment max bounds must be > 0 when specified in meters"
+                        )
 
-            #environment diagonal and vertices
+            # environment diagonal and vertices
             self.env_diag = np.linalg.norm(self.env_size)
             env_bounds_corners = np.array([
                 env_bounds[0],
@@ -3151,31 +3291,39 @@ when gps environment bounds are specified in meters")
             ])
 
             ### flags home ###
-            #auto home
-            if self._is_auto_string(flag_homes[Team.BLUE_TEAM]) and self._is_auto_string(flag_homes[Team.RED_TEAM]):
+            # auto home
+            if self._is_auto_string(
+                flag_homes[Team.BLUE_TEAM]
+            ) and self._is_auto_string(flag_homes[Team.RED_TEAM]):
                 if flag_homes_unit == "ll" or flag_homes_unit == "wm_xy":
-                    raise Exception("'ll' (Lat/Long) and 'wm_xy' (web mercator xy) units should only be used when gps_env is True")
-                flag_homes[Team.BLUE_TEAM] = np.array([7/8*self.env_size[0], 0.5*self.env_size[1]])
-                flag_homes[Team.RED_TEAM] = np.array([1/8*self.env_size[0], 0.5*self.env_size[1]])
-            elif self._is_auto_string(flag_homes[Team.BLUE_TEAM]) or self._is_auto_string(flag_homes[Team.RED_TEAM]):
+                    raise Exception(
+                        "'ll' (Lat/Long) and 'wm_xy' (web mercator xy) units should only be used when gps_env is True"
+                    )
+                flag_homes[Team.BLUE_TEAM] = np.array([7 / 8 * self.env_size[0], 0.5 * self.env_size[1]])
+                flag_homes[Team.RED_TEAM] = np.array([1 / 8 * self.env_size[0], 0.5 * self.env_size[1]])
+            elif self._is_auto_string(
+                flag_homes[Team.BLUE_TEAM]
+            ) or self._is_auto_string(flag_homes[Team.RED_TEAM]):
                 raise Exception("Flag homes are either all 'auto', or all specified")
             else:
                 flag_homes[Team.BLUE_TEAM] = np.asarray(flag_homes[Team.BLUE_TEAM])
                 flag_homes[Team.RED_TEAM] = np.asarray(flag_homes[Team.RED_TEAM])
 
-            #blue flag
-            if (
-                np.any(flag_homes[Team.BLUE_TEAM] <= env_bounds[0]) or
-                np.any(flag_homes[Team.BLUE_TEAM] >= env_bounds[1])
+            # blue flag
+            if np.any(flag_homes[Team.BLUE_TEAM] <= env_bounds[0]) or np.any(
+                flag_homes[Team.BLUE_TEAM] >= env_bounds[1]
             ):
-                raise Exception(f"Blue flag home {flag_homes[Team.BLUE_TEAM]} must fall within (non-inclusive) environment bounds {env_bounds}")
+                raise Exception(
+                    f"Blue flag home {flag_homes[Team.BLUE_TEAM]} must fall within (non-inclusive) environment bounds {env_bounds}"
+                )
 
-            #red flag
-            if (
-                np.any(flag_homes[Team.RED_TEAM] <= env_bounds[0]) or
-                np.any(flag_homes[Team.RED_TEAM] >= env_bounds[1])
+            # red flag
+            if np.any(flag_homes[Team.RED_TEAM] <= env_bounds[0]) or np.any(
+                flag_homes[Team.RED_TEAM] >= env_bounds[1]
             ):
-                raise Exception(f"Red flag home {flag_homes[Team.RED_TEAM]} must fall within (non-inclusive) environment bounds {env_bounds}")
+                raise Exception(
+                    f"Red flag home {flag_homes[Team.RED_TEAM]} must fall within (non-inclusive) environment bounds {env_bounds}"
+                )
 
             ### scrimmage line ###
             if self._is_auto_string(scrimmage_coords):
@@ -3190,62 +3338,119 @@ when gps environment bounds are specified in meters")
                 scrimmage_coords = np.asarray([scrimmage_coord1, scrimmage_coord2])
             else:
                 if scrimmage_coords_unit == "ll" or scrimmage_coords_unit == "wm_xy":
-                    raise Exception("'ll' (Lat/Long) and 'wm_xy' (web mercator xy) units should only be used when gps_env is True")
+                    raise Exception(
+                        "'ll' (Lat/Long) and 'wm_xy' (web mercator xy) units should only be used when gps_env is True"
+                    )
 
                 scrimmage_coords = np.asarray(scrimmage_coords)
 
                 if np.all(scrimmage_coords[0] == scrimmage_coords[1]):
-                    raise Exception("Scrimmage line must be specified with two DIFFERENT coordinates")
+                    raise Exception(
+                        "Scrimmage line must be specified with two DIFFERENT coordinates"
+                    )
 
-                if scrimmage_coords[0][0] == scrimmage_coords[1][0] and (scrimmage_coords[0][0] == env_bounds[0][0] or scrimmage_coords[0][0] == env_bounds[1][0]):
-                    raise Exception(f"Specified scrimmage line coordinates {scrimmage_coords} cannot lie on the same edge of the env boundary")
-                if scrimmage_coords[0][1] == scrimmage_coords[1][1] and (scrimmage_coords[0][1] == env_bounds[0][1] or scrimmage_coords[0][1] == env_bounds[1][1]):
-                    raise Exception(f"Specified scrimmage line coordinates {scrimmage_coords} cannot lie on the same edge of the env boundary")
+                if scrimmage_coords[0][0] == scrimmage_coords[1][0] and (
+                    scrimmage_coords[0][0] == env_bounds[0][0]
+                    or scrimmage_coords[0][0] == env_bounds[1][0]
+                ):
+                    raise Exception(
+                        f"Specified scrimmage line coordinates {scrimmage_coords} cannot lie on the same edge of the env boundary"
+                    )
+                if scrimmage_coords[0][1] == scrimmage_coords[1][1] and (
+                    scrimmage_coords[0][1] == env_bounds[0][1]
+                    or scrimmage_coords[0][1] == env_bounds[1][1]
+                ):
+                    raise Exception(
+                        f"Specified scrimmage line coordinates {scrimmage_coords} cannot lie on the same edge of the env boundary"
+                    )
 
-                #env biseciton check
+                # env biseciton check
                 full_scrim_line = LineString(scrimmage_coords)
                 scrim_line_env_intersection = intersection(full_scrim_line, Polygon(env_bounds_corners))
 
                 if (
-                    scrim_line_env_intersection.is_empty or
-                    len(scrim_line_env_intersection.coords) == 1 #only intersects a vertex
+                    scrim_line_env_intersection.is_empty
+                    or len(scrim_line_env_intersection.coords)
+                    == 1  # only intersects a vertex
                 ):
                     raise Exception(
                         f"Specified scrimmage line coordinates {scrimmage_coords} create a line that does not bisect the environment of bounds {env_bounds}"
                     )
                 else:
-                    scrim_line_env_intersection = np.array(scrim_line_env_intersection.coords)
+                    scrim_line_env_intersection = np.array(
+                        scrim_line_env_intersection.coords
+                    )
 
                     # intersection points should lie on boundary (if they don't then the line doesn't bisect the env)
                     if not (
                         (
-                            (env_bounds[0][0] <= scrim_line_env_intersection[0][0] <= env_bounds[1][0]) and
-                            ((scrim_line_env_intersection[0][1] == env_bounds[0][1]) or (scrim_line_env_intersection[0][1] == env_bounds[1][1]))
-                            ) or
-                        (
-                            (env_bounds[0][1] <= scrim_line_env_intersection[0][1] <= env_bounds[1][1]) and
-                            ((scrim_line_env_intersection[0][0] == env_bounds[0][0]) or (scrim_line_env_intersection[0][0] == env_bounds[1][0]))
+                            (
+                                env_bounds[0][0]
+                                <= scrim_line_env_intersection[0][0]
+                                <= env_bounds[1][0]
                             )
+                            and (
+                                (scrim_line_env_intersection[0][1] == env_bounds[0][1])
+                                or (
+                                    scrim_line_env_intersection[0][1]
+                                    == env_bounds[1][1]
+                                )
+                            )
+                        )
+                        or (
+                            (
+                                env_bounds[0][1]
+                                <= scrim_line_env_intersection[0][1]
+                                <= env_bounds[1][1]
+                            )
+                            and (
+                                (scrim_line_env_intersection[0][0] == env_bounds[0][0])
+                                or (
+                                    scrim_line_env_intersection[0][0]
+                                    == env_bounds[1][0]
+                                )
+                            )
+                        )
                     ):
                         raise Exception(
                             f"Specified scrimmage line coordinates {scrimmage_coords} create a line that does not bisect the environment of bounds {env_bounds}"
                         )
                     if not (
                         (
-                            (env_bounds[0][0] <= scrim_line_env_intersection[1][0] <= env_bounds[1][0]) and
-                            ((scrim_line_env_intersection[1][1] == env_bounds[0][1]) or (scrim_line_env_intersection[1][1] == env_bounds[1][1]))
-                            ) or
-                        (
-                            (env_bounds[0][1] <= scrim_line_env_intersection[1][1] <= env_bounds[1][1]) and
-                            ((scrim_line_env_intersection[1][0] == env_bounds[0][0]) or (scrim_line_env_intersection[1][0] == env_bounds[1][0]))
+                            (
+                                env_bounds[0][0]
+                                <= scrim_line_env_intersection[1][0]
+                                <= env_bounds[1][0]
                             )
+                            and (
+                                (scrim_line_env_intersection[1][1] == env_bounds[0][1])
+                                or (
+                                    scrim_line_env_intersection[1][1]
+                                    == env_bounds[1][1]
+                                )
+                            )
+                        )
+                        or (
+                            (
+                                env_bounds[0][1]
+                                <= scrim_line_env_intersection[1][1]
+                                <= env_bounds[1][1]
+                            )
+                            and (
+                                (scrim_line_env_intersection[1][0] == env_bounds[0][0])
+                                or (
+                                    scrim_line_env_intersection[1][0]
+                                    == env_bounds[1][0]
+                                )
+                            )
+                        )
                     ):
                         raise Exception(
                             f"Specified scrimmage line coordinates {scrimmage_coords} create a line that does not bisect the environment of bounds {env_bounds}"
                         )
 
         ### Set Attributes ###
-        #environment geometries
+        # environment geometries
         self.env_bounds = env_bounds
         self.env_bounds_unit = env_bounds_unit
 
@@ -3256,7 +3461,7 @@ when gps environment bounds are specified in meters")
         self.scrimmage_coords_unit = scrimmage_coords_unit
         self.scrimmage_vec = scrimmage_coords[1] - scrimmage_coords[0]
 
-        #on sides
+        # on sides
         scrim2blue = self.flag_homes[Team.BLUE_TEAM] - scrimmage_coords[0]
         scrim2red = self.flag_homes[Team.RED_TEAM] - scrimmage_coords[0]
 
@@ -3266,7 +3471,9 @@ when gps environment bounds are specified in meters")
 
         # flag bisection check
         if self.on_sides_sign[Team.BLUE_TEAM] == self.on_sides_sign[Team.RED_TEAM]:
-            raise Exception("The specified flag locations and scrimmage line coordinates are not valid because the scrimmage line does not divide the flag locations")
+            raise Exception(
+                "The specified flag locations and scrimmage line coordinates are not valid because the scrimmage line does not divide the flag locations"
+            )
 
         closest_point_blue_flag_to_scrimmage_line = closest_point_on_line(self.scrimmage_coords[0], self.scrimmage_coords[1], self.flag_homes[Team.BLUE_TEAM])
         closest_point_red_flag_to_scrimmage_line = closest_point_on_line(self.scrimmage_coords[0], self.scrimmage_coords[1], self.flag_homes[Team.RED_TEAM])
@@ -3279,7 +3486,7 @@ when gps environment bounds are specified in meters")
         elif dist_red_flag_to_scrimmage_line < LINE_INTERSECT_TOL:
             raise Exception("The red flag is too close to the scrimmage line.")
 
-        #agent and flag geometries
+        # agent and flag geometries
         if self.lidar_obs:
             self.lidar_range = lidar_range
 
@@ -3287,9 +3494,10 @@ when gps environment bounds are specified in meters")
         self.flag_radius = flag_radius
         self.catch_radius = catch_radius
         self.flag_keepout_radius = flag_keepout_radius
-        self.max_speed = max_speed
 
-    def _get_line_intersection(self, origin: np.ndarray, vec: np.ndarray, line: np.ndarray):
+    def _get_line_intersection(
+        self, origin: np.ndarray, vec: np.ndarray, line: np.ndarray
+    ):
         """
         origin: a point within the environment (not on environment bounds)
         """
@@ -3302,7 +3510,9 @@ when gps environment bounds are specified in meters")
         else:
             return np.asarray(inter.coords[0])
 
-    def _get_polygon_intersection(self, origin: np.ndarray, vec: np.ndarray, polygon: np.ndarray):
+    def _get_polygon_intersection(
+        self, origin: np.ndarray, vec: np.ndarray, polygon: np.ndarray
+    ):
         """
         origin: a point within the environment (not on environment bounds)
         """
@@ -3333,50 +3543,69 @@ when gps environment bounds are specified in meters")
 
     def _get_topo_geom(self):
         ### Environment Map Retrieval and Caching ###
-        map_caching_dir = str(pathlib.Path(__file__).resolve().parents[1] / '__mapcache__')
+        map_caching_dir = str(pathlib.Path(__file__).resolve().parents[1] / "__mapcache__")
         if not os.path.isdir(map_caching_dir):
             os.mkdir(map_caching_dir)
 
         lon1, lat1 = np.round(_sm2ll(*self.env_bounds[0]), 7)
         lon2, lat2 = np.round(_sm2ll(*self.env_bounds[1]), 7)
 
-        map_cache_path = os.path.join(map_caching_dir, f'tile@(({lat1},{lon1}), ({lat2},{lon2})).pkl')
+        map_cache_path = os.path.join(map_caching_dir, f"tile@(({lat1},{lon1}), ({lat2},{lon2})).pkl")
 
         if os.path.exists(map_cache_path):
-            #load cached environment map(s)
-            with open(map_cache_path, 'rb') as f:
+            # load cached environment map(s)
+            with open(map_cache_path, "rb") as f:
                 map_cache = pickle.load(f)
 
             topo_img = map_cache["topographical_image"]
             self.background_img = map_cache["render_image"]
             self.background_img_attribution = map_cache["attribution"]
         else:
-            #retrieve maps from tile provider
-            topo_tile_source = cx.providers.CartoDB.DarkMatterNoLabels #DO NOT CHANGE!
-            render_tile_source = cx.providers.CartoDB.Voyager #DO NOT CHANGE!
-            self.background_img_attribution = render_tile_source.get('attribution')
+            # retrieve maps from tile provider
+            topo_tile_source = cx.providers.CartoDB.DarkMatterNoLabels  # DO NOT CHANGE!
+            render_tile_source = cx.providers.CartoDB.Voyager  # DO NOT CHANGE!
+            self.background_img_attribution = render_tile_source.get("attribution")
 
             render_tile_bounds = self.env_bounds + self.arena_buffer_frac * np.asarray([[-self.env_diag], [self.env_diag]])
 
             topo_tile, topo_ext = cx.bounds2img(
-                *self.env_bounds.flatten(), zoom='auto', source=topo_tile_source, ll=False,
-                wait=0, max_retries=2, n_connections=1, use_cache=False, zoom_adjust=None
+                *self.env_bounds.flatten(),
+                zoom="auto",
+                source=topo_tile_source,
+                ll=False,
+                wait=0,
+                max_retries=2,
+                n_connections=1,
+                use_cache=False,
+                zoom_adjust=None,
             )
             render_tile, render_ext = cx.bounds2img(
-                *render_tile_bounds.flatten(), zoom='auto', source=render_tile_source, ll=False,
-                wait=0, max_retries=2, n_connections=1, use_cache=False, zoom_adjust=None
+                *render_tile_bounds.flatten(),
+                zoom="auto",
+                source=render_tile_source,
+                ll=False,
+                wait=0,
+                max_retries=2,
+                n_connections=1,
+                use_cache=False,
+                zoom_adjust=None,
             )
 
-            topo_img = self._crop_tiles(topo_tile[:,:,:-1], topo_ext, *self.env_bounds.flatten(), ll=False)
-            self.background_img = self._crop_tiles(render_tile[:,:,:-1], render_ext, *render_tile_bounds.flatten(), ll=False)
+            topo_img = self._crop_tiles(topo_tile[:, :, :-1], topo_ext, *self.env_bounds.flatten(), ll=False)
+            self.background_img = self._crop_tiles(
+                render_tile[:, :, :-1],
+                render_ext,
+                *render_tile_bounds.flatten(),
+                ll=False,
+            )
 
-            #cache maps
+            # cache maps
             map_cache = {
                 "topographical_image": topo_img,
                 "render_image": self.background_img,
-                "attribution": self.background_img_attribution
+                "attribution": self.background_img_attribution,
             }
-            with open(map_cache_path, 'wb') as f:
+            with open(map_cache_path, "wb") as f:
                 pickle.dump(map_cache, f)
 
         ### Topology Construction ###
@@ -3388,38 +3617,33 @@ when gps environment bounds are specified in meters")
 
         water_pixel_color = topo_img[water_pixel_y, water_pixel_x]
         mask = np.all(topo_img == water_pixel_color, axis=-1)
-        water_connectivity = np.array(
-            [[0, 1, 0],
-             [1, 1, 1],
-             [0, 1, 0]]
-        )
+        water_connectivity = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]])
         labeled_mask, _ = label(mask, structure=water_connectivity)
         target_label = labeled_mask[water_pixel_y, water_pixel_x]
 
         grayscale_topo_img = cv2.cvtColor(topo_img, cv2.COLOR_RGB2GRAY)
         water_pixel_color_gray = grayscale_topo_img[water_pixel_y, water_pixel_x]
 
-        land_mask = (
-            (labeled_mask == target_label) +
-            (water_pixel_color_gray <= grayscale_topo_img) * (grayscale_topo_img <= water_pixel_color_gray + 2)
-        )
+        land_mask = (labeled_mask == target_label) + (
+            water_pixel_color_gray <= grayscale_topo_img
+        ) * (grayscale_topo_img <= water_pixel_color_gray + 2)
 
-        #water contours
-        land_mask_binary = 255*land_mask.astype(np.uint8)
+        # water contours
+        land_mask_binary = 255 * land_mask.astype(np.uint8)
         water_contours, _ = cv2.findContours(land_mask_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        #https://docs.opencv.org/4.10.0/d4/d73/tutorial_py_contours_begin.html
-        #https://docs.opencv.org/4.x/d9/d8b/tutorial_py_contours_hierarchy.html
+        # https://docs.opencv.org/4.10.0/d4/d73/tutorial_py_contours_begin.html
+        # https://docs.opencv.org/4.x/d9/d8b/tutorial_py_contours_hierarchy.html
 
         border_contour = max(water_contours, key=cv2.contourArea)
-        #TODO: check if this is just the environment bounds, then non-convex approximation will go to the largest island
+        # TODO: check if this is just the environment bounds, then non-convex approximation will go to the largest island
         border_land_mask = cv2.drawContours(np.zeros_like(land_mask_binary), [border_contour], -1, 255, -1)
 
-        #island contours
+        # island contours
         water_mask = np.logical_not(land_mask)
-        island_binary = 255*(border_land_mask * water_mask).astype(np.uint8)
+        island_binary = 255 * (border_land_mask * water_mask).astype(np.uint8)
         island_contours, _ = cv2.findContours(island_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        #approximate outer contour (border land)
+        # approximate outer contour (border land)
         eps = self.topo_contour_eps * cv2.arcLength(border_contour, True)
         border_cnt_approx = cv2.approxPolyDP(border_contour, eps, True)
 
@@ -3430,7 +3654,7 @@ when gps environment bounds are specified in meters")
         target_water_label = labeled_border_land_mask_approx[water_pixel_y, water_pixel_x]
         border_land_mask_approx = labeled_border_land_mask_approx == target_water_label
 
-        #approximate island contours
+        # approximate island contours
         island_cnts_approx = []
         for i, cnt in enumerate(island_contours):
             if cnt.shape[0] != 1:
@@ -3439,12 +3663,12 @@ when gps environment bounds are specified in meters")
                 cvx_hull = cv2.convexHull(cnt_approx)
                 island_cnts_approx.append(cvx_hull)
 
-        island_mask_approx = cv2.drawContours(255*np.ones_like(island_binary), island_cnts_approx, -1, 0, -1) #convex island masks
+        island_mask_approx = cv2.drawContours(255 * np.ones_like(island_binary), island_cnts_approx, -1, 0, -1)  # convex island masks
 
-        #final approximate land mask
-        land_mask_approx = border_land_mask_approx * island_mask_approx/255
+        # final approximate land mask
+        land_mask_approx = border_land_mask_approx * island_mask_approx / 255
 
-        #squeeze contours
+        # squeeze contours
         border_cnt = self._img2env_coords(border_cnt_approx.squeeze(), topo_img.shape)
         island_cnts = [self._img2env_coords(cnt.squeeze(), topo_img.shape) for cnt in island_cnts_approx]
 
@@ -3468,7 +3692,7 @@ when gps environment bounds are specified in meters")
             [Optional. Default: True] If True, `w`, `s`, `e`, `n` are
             assumed to be lon/lat as opposed to Spherical Mercator.
         """
-        #convert lat/lon bounds to Web Mercator XY (EPSG:3857)
+        # convert lat/lon bounds to Web Mercator XY (EPSG:3857)
         if ll:
             left, bottom = mt.xy(w, s)
             right, top = mt.xy(e, n)
@@ -3476,7 +3700,7 @@ when gps environment bounds are specified in meters")
             left, bottom = w, s
             right, top = e, n
 
-        #determine crop
+        # determine crop
         X_size = ext[1] - ext[0]
         Y_size = ext[3] - ext[2]
 
@@ -3489,19 +3713,15 @@ when gps environment bounds are specified in meters")
         crop_start_y = ceil(img_size_y * (ext[2] - top) / Y_size)
         crop_end_y = ceil(img_size_y * (ext[2] - bottom) / Y_size) - 1
 
-        #crop image
-        cropped_img = img[
-            crop_start_y : crop_end_y,
-            crop_start_x : crop_end_x,
-            :
-        ]
+        # crop image
+        cropped_img = img[crop_start_y:crop_end_y, crop_start_x:crop_end_x, :]
 
         return cropped_img
 
     def _img2env_coords(self, cnt, image_shape):
-        cnt = cnt.astype(float) #convert contour array to float64 so as not to lose precision
-        cnt[:, 0] =  self.env_size[0] * cnt[:, 0] / (image_shape[1] - 1)
-        cnt[:, 1] =  self.env_size[1] * (1 - cnt[:, 1] / (image_shape[0] - 1))
+        cnt = cnt.astype(float) # convert contour array to float64 so as not to lose precision
+        cnt[:, 0] = self.env_size[0] * cnt[:, 0] / (image_shape[1] - 1)
+        cnt[:, 1] = self.env_size[1] * (1 - cnt[:, 1] / (image_shape[0] - 1))
 
         return cnt
 
@@ -3573,7 +3793,7 @@ when gps environment bounds are specified in meters")
     def _point_on_which_border(self, p):
         """
         p can be a single point or multiple points
-        
+
         Wall convention:
          _____________ 3 _____________
         |                             |
@@ -3586,7 +3806,7 @@ when gps environment bounds are specified in meters")
 
         """
         p = np.asarray(p)
-        p_borders_bool = np.concatenate((p==0, p==self.env_size), axis=-1)
+        p_borders_bool = np.concatenate((p == 0, p == self.env_size), axis=-1)
 
         if p_borders_bool.ndim == 1:
             p_borders = np.where(p_borders_bool)[0]
@@ -3597,20 +3817,19 @@ when gps environment bounds are specified in meters")
 
     def _segment_on_border(self, segment):
         p1_borders, p2_borders = self._point_on_which_border(segment)
-        same_border = len(np.intersect1d(p1_borders, p2_borders, assume_unique=True)) > 0
-        
-        return same_border
+        same_border = (len(np.intersect1d(p1_borders, p2_borders, assume_unique=True)) > 0)
 
+        return same_border
 
     def _generate_segments_from_obstacles(self, obstacle, n_quad_segs):
         if isinstance(obstacle, PolygonObstacle):
             vertices = obstacle.anchor_points
-        else: #CircleObstacle
+        else:  # CircleObstacle
             radius = obstacle.radius
             center = obstacle.center_point
-            vertices = list(Point(*center).buffer(radius, quad_segs=n_quad_segs).exterior.coords)[:-1] #approximate circle with an octagon
+            vertices = list(Point(*center).buffer(radius, quad_segs=n_quad_segs).exterior.coords)[:-1] # approximate circle with an octagon
 
-        segments = [[vertex, vertices[(i+1) % len(vertices)]] for i, vertex in enumerate(vertices)]
+        segments = [[vertex, vertices[(i + 1) % len(vertices)]] for i, vertex in enumerate(vertices)]
 
         return np.asarray(segments)
 
@@ -3621,7 +3840,7 @@ when gps environment bounds are specified in meters")
 
         # Get coordinates of water pixels in environment units
         water_coords = np.flip(np.column_stack(np.where(land_mask)), axis=-1)
-        water_coords[:, 1] = land_mask.shape[0] - water_coords[:, 1] #adjust y-coords to go from bottom to top
+        water_coords[:, 1] = (land_mask.shape[0] - water_coords[:, 1])  # adjust y-coords to go from bottom to top
         water_coords_env = (water_coords + 0.5) * [x_scale, y_scale]
 
         # Create a list of valid positions
@@ -3662,14 +3881,14 @@ when gps environment bounds are specified in meters")
             pygame.init()
 
             if self.render_mode:
-                self.agent_font = pygame.font.SysFont(None, int(2*self.agent_render_radius))
+                self.agent_font = pygame.font.SysFont(None, int(2 * self.agent_render_radius))
 
                 if self.render_mode == "human":
                     pygame.display.set_caption("Capture The Flag")
                     self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
                     self.isopen = True
                 elif self.render_mode == "rgb_array":
-                    self.screen = pygame.Surface((self.screen_width, self.screen_height))            
+                    self.screen = pygame.Surface((self.screen_width, self.screen_height))
             else:
                 raise Exception(
                     f"Sorry, render modes other than f{self.metadata['render_modes']} are not supported"
@@ -3719,32 +3938,36 @@ when gps environment bounds are specified in meters")
 
         # Trajectories
         if self.render_traj_mode:
-            #traj
+            # traj
             if self.render_traj_mode.startswith("traj"):
-                for i in range(1, len(self.traj_render_buffer[self.agents[0]]['traj']) + 1):
+                for i in range(1, len(self.traj_render_buffer[self.agents[0]]["traj"]) + 1):
                     for player in self.players.values():
                         color = "blue" if player.team == Team.BLUE_TEAM else "red"
                         draw.circle(
                             self.screen,
                             color,
-                            self.traj_render_buffer[player.id]['traj'][-i],
+                            self.traj_render_buffer[player.id]["traj"][-i],
                             radius=2,
-                            width=0
+                            width=0,
                         )
-            #agent
+            # agent
             if self.render_traj_mode.endswith("agent"):
-                for i in range(1, len(self.traj_render_buffer[self.agents[0]]['agent']) + 1):
+                for i in range(1, len(self.traj_render_buffer[self.agents[0]]["agent"]) + 1):
                     for agent_id in self.players:
-                        prev_rot_blit_pos, prev_agent_surf = self.traj_render_buffer[agent_id]['agent'][-i]
+                        prev_rot_blit_pos, prev_agent_surf = self.traj_render_buffer[agent_id]["agent"][-i]
                         prev_agent_surf.set_alpha(self.render_transparency_alpha)
                         self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
-            #history
+            # history
             elif self.render_traj_mode.endswith("history"):
-                for i in reversed(self.hist_buffer_inds[1:] - 1): #current state of agent is not included in history buffer
+                for i in reversed( self.hist_buffer_inds[1:] - 1):  # current state of agent is not included in history buffer
                     for agent_id in self.players:
-                        if i < len(self.traj_render_buffer[agent_id]['history']):
-                            prev_rot_blit_pos, prev_agent_surf = self.traj_render_buffer[agent_id]['history'][i]
-                            render_tranparency = 255 - ((255 - self.render_transparency_alpha) * (i+1) / (self.hist_buffer_len-1))
+                        if i < len(self.traj_render_buffer[agent_id]["history"]):
+                            prev_rot_blit_pos, prev_agent_surf = self.traj_render_buffer[agent_id]["history"][i]
+                            render_tranparency = 255 - (
+                                (255 - self.render_transparency_alpha)
+                                * (i + 1)
+                                / (self.hist_buffer_len - 1)
+                            )
                             prev_agent_surf.set_alpha(render_tranparency)
                             self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
 
@@ -3757,7 +3980,7 @@ when gps environment bounds are specified in meters")
             for player in teams_players:
                 blit_pos = self.env_to_screen(player.pos)
 
-                #lidar
+                # lidar
                 if self.lidar_obs and self.render_lidar_mode:
                     ray_headings_global = np.deg2rad((heading_angle_conversion(player.heading) + self.lidar_ray_headings) % 360)
                     ray_vecs = np.array([np.cos(ray_headings_global), np.sin(ray_headings_global)]).T
@@ -3775,30 +3998,30 @@ when gps environment bounds are specified in meters")
                                 color,
                                 self.env_to_screen(lidar_starts[i]),
                                 self.env_to_screen(self.state["lidar_ends"][player.id][i]),
-                                width=1
+                                width=1,
                             )
                 #tagging
                 player.render_tagging_oob(self.tagging_cooldown)
 
-                #heading
+                # heading
                 orientation = Vector2(list(mag_heading_to_vec(1.0, player.heading)))
                 ref_angle = -orientation.angle_to(self.PYGAME_UP)
 
-                #transform position to pygame coordinates
+                # transform position to pygame coordinates
                 rotated_surface = rotozoom(player.pygame_agent, ref_angle, 1.0)
                 rotated_surface_size = np.array(rotated_surface.get_size())
-                rotated_blit_pos = blit_pos - 0.5*rotated_surface_size
+                rotated_blit_pos = blit_pos - 0.5 * rotated_surface_size
 
-                #flag pickup
+                # flag pickup
                 if player.has_flag:
                     draw.circle(
                         rotated_surface,
                         opp_color,
-                        0.5*rotated_surface_size,
-                        radius=0.55*self.agent_render_radius
+                        0.5 * rotated_surface_size,
+                        radius=0.55 * self.agent_render_radius,
                     )
 
-                #agent id
+                # agent id
                 if self.render_ids:
                     if self.gps_env:
                         font_color = "white"
@@ -3807,68 +4030,80 @@ when gps environment bounds are specified in meters")
 
                     player_number_label = self.agent_font.render(str(player.id), True, font_color)
                     player_number_label_rect = player_number_label.get_rect()
-                    player_number_label_rect.center = (0.5*rotated_surface_size[0],0.52*rotated_surface_size[1]) # Using 0.52 for the y-coordinate because it looks nicer than 0.5
+                    player_number_label_rect.center = (0.5 * rotated_surface_size[0], 0.52 * rotated_surface_size[1]) # Using 0.52 for the y-coordinate because it looks nicer than 0.5
                     rotated_surface.blit(player_number_label, player_number_label_rect)
 
-                #blit agent onto screen
+                # blit agent onto screen
                 self.screen.blit(rotated_surface, rotated_blit_pos)
 
-                #save agent surface for trajectory rendering
+                # save agent surface for trajectory rendering
                 if (
-                    self.render_traj_mode and
-                    self.render_ctr % self.num_renders_per_step == 0
+                    self.render_traj_mode
+                    and self.render_ctr % self.num_renders_per_step == 0
                 ):
-                    #add traj/ agent render data
+                    # add traj/ agent render data
                     if self.render_traj_mode.startswith("traj"):
-                        self.traj_render_buffer[player.id]['traj'].insert(0, blit_pos)
+                        self.traj_render_buffer[player.id]["traj"].insert(0, blit_pos)
 
                     if (
-                        self.render_traj_mode.endswith("agent") and
-                        (self.render_ctr / self.num_renders_per_step) % self.render_traj_freq == 0
+                        self.render_traj_mode.endswith("agent")
+                        and (self.render_ctr / self.num_renders_per_step)
+                        % self.render_traj_freq
+                        == 0
                     ):
-                        self.traj_render_buffer[player.id]['agent'].insert(0, (rotated_blit_pos, rotated_surface))
+                        self.traj_render_buffer[player.id]["agent"].insert(0, (rotated_blit_pos, rotated_surface))
 
                     elif (
-                        self.render_traj_mode.endswith("history") and
-                        self.render_ctr % self.num_renders_per_step == 0
+                        self.render_traj_mode.endswith("history")
+                        and self.render_ctr % self.num_renders_per_step == 0
                     ):
-                        self.traj_render_buffer[player.id]['history'].insert(0, (rotated_blit_pos, rotated_surface))
+                        self.traj_render_buffer[player.id]["history"].insert(0, (rotated_blit_pos, rotated_surface))
 
-                    #truncate traj
+                    # truncate traj
                     if self.render_traj_cutoff is not None:
-                        agent_render_cutoff = (
-                            floor(self.render_traj_cutoff / self.render_traj_freq) +
+                        agent_render_cutoff = floor(
+                            self.render_traj_cutoff / self.render_traj_freq
+                        ) + (
                             (
-                                (
-                                    (self.render_ctr / self.num_renders_per_step) % self.render_traj_freq +
-                                    self.render_traj_freq * floor(self.render_traj_cutoff / self.render_traj_freq)
-                                ) <= self.render_traj_cutoff
+                                (self.render_ctr / self.num_renders_per_step)
+                                % self.render_traj_freq
+                                + self.render_traj_freq
+                                * floor(self.render_traj_cutoff / self.render_traj_freq)
                             )
+                            <= self.render_traj_cutoff
                         )
-                        self.traj_render_buffer[player.id]['traj'] = self.traj_render_buffer[player.id]['traj'][ :self.render_traj_cutoff]
-                        self.traj_render_buffer[player.id]['agent'] = self.traj_render_buffer[player.id]['agent'][ :agent_render_cutoff]
+                        self.traj_render_buffer[player.id]["traj"] = self.traj_render_buffer[player.id]["traj"][: self.render_traj_cutoff]
+                        self.traj_render_buffer[player.id]["agent"] = self.traj_render_buffer[player.id]["agent"][:agent_render_cutoff]
 
-                    self.traj_render_buffer[player.id]['history'] = self.traj_render_buffer[player.id]['history'][: self.hist_buffer_len]
+                    self.traj_render_buffer[player.id]["history"] = self.traj_render_buffer[player.id]["history"][: self.hist_buffer_len]
 
         # Agent-to-agent distances
         for blue_player in self.agents_of_team[Team.BLUE_TEAM]:
-            if not blue_player.is_tagged or (blue_player.is_tagged and blue_player.on_own_side):
+            if not blue_player.is_tagged or (
+                blue_player.is_tagged and blue_player.on_own_side
+            ):
                 for red_player in self.agents_of_team[Team.RED_TEAM]:
-                    if not red_player.is_tagged or (red_player.is_tagged and red_player.on_own_side):
+                    if not red_player.is_tagged or (
+                        red_player.is_tagged and red_player.on_own_side
+                    ):
                         blue_player_pos = np.asarray(blue_player.pos)
                         red_player_pos = np.asarray(red_player.pos)
                         a2a_dis = np.linalg.norm(blue_player_pos - red_player_pos)
-                        if a2a_dis <= 2*self.catch_radius:
-                            hsv_hue = (a2a_dis - self.catch_radius) / (2*self.catch_radius - self.catch_radius)
+                        if a2a_dis <= 2 * self.catch_radius:
+                            hsv_hue = (a2a_dis - self.catch_radius) / (
+                                2 * self.catch_radius - self.catch_radius
+                            )
                             hsv_hue = 0.33 * np.clip(hsv_hue, 0, 1)
-                            line_color = tuple(255 * np.asarray(colorsys.hsv_to_rgb(hsv_hue, 0.9, 0.9)))
+                            line_color = tuple(
+                                255 * np.asarray(colorsys.hsv_to_rgb(hsv_hue, 0.9, 0.9))
+                            )
 
                             draw.line(
                                 self.screen,
                                 line_color,
                                 self.env_to_screen(blue_player_pos),
                                 self.env_to_screen(red_player_pos),
-                                width=self.a2a_line_width
+                                width=self.a2a_line_width,
                             )
 
         # Render
@@ -3879,12 +4114,7 @@ when gps environment bounds are specified in meters")
 
         # Record
         if self.render_saving:
-            self.render_buffer.append(
-                np.transpose(
-                    np.array(pygame.surfarray.pixels3d(self.screen)),
-                    axes=(1, 0, 2)
-                )
-            )
+            self.render_buffer[self.render_ctr + 1] = np.transpose(np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2))
 
         # Update counter
         self.render_ctr += 1
@@ -3940,7 +4170,7 @@ when gps environment bounds are specified in meters")
             raise Exception("Envrionment was not rendered. See the render_mode option in the config dictionary.")
 
     def save_screenshot(self):
-        """"Save an image of the most recently rendered env."""
+        """ "Save an image of the most recently rendered env."""
 
         if not self.render_saving:
             print("Warning: Environment rendering is disabled. Cannot save the screenshot. See the render_saving option in the config dictionary.")
@@ -3950,7 +4180,7 @@ when gps environment bounds are specified in meters")
             if not os.path.isdir(image_file_dir):
                 os.mkdir(image_file_dir)
 
-            now = datetime.now() #get date and time
+            now = datetime.now()  # get date and time
             image_id = now.strftime("%m-%d-%Y_%H-%M-%S")
             image_file_name = f"pyquaticus_{image_id}.png"
             image_file_path = os.path.join(image_file_dir, image_file_name)
@@ -3966,7 +4196,7 @@ when gps environment bounds are specified in meters")
             pygame.quit()
             self.isopen = False
 
-    def _min(self, a, b) -> bool:
+    def _min(self, a, b):
         """Convenience method for determining a minimum value. The standard `min()` takes much longer to run."""
         if a < b:
             return a
@@ -3990,7 +4220,9 @@ when gps environment bounds are specified in meters")
 
         if not self.lidar_obs:
             # Obstacle Distance/Bearing
-            for i, obstacle in enumerate(self.state["dist_bearing_to_obstacles"][agent_id]):
+            for i, obstacle in enumerate(
+                self.state["dist_bearing_to_obstacles"][agent_id]
+            ):
                 orig_obs[f"obstacle_{i}_distance"] = obstacle[0]
                 orig_obs[f"obstacle_{i}_bearing"] = obstacle[1]
 

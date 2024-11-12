@@ -108,6 +108,11 @@ class KeyTest:
             k = list(terminated.keys())
             if terminated[k[0]] == True or truncated[k[0]] == True:
                 break
+            # for k in terminated:
+            #     if terminated[k] == True or truncated[k] == True:
+            #         # time.sleep(1.0)
+            #         # self.env.reset()
+            #         break
 
     def process_event(self, quittable):
 
@@ -131,7 +136,7 @@ class KeyTest:
             + K_w * is_key_pressed[K_w]
         )
         blue_action = self.blue_keys_to_action[blue_keys]
-        action_dict[self.blue_agent_id] = blue_action
+        action_dict[self.red_agent_id] = blue_action
 
         if self.policy is not None:
             action_dict[self.red_agent_id] = self.policy.compute_action(
@@ -148,7 +153,7 @@ class KeyTest:
                 + K_UP * is_key_pressed[K_UP]
             )
             red_action = self.red_keys_to_action[red_keys]
-            action_dict[self.red_agent_id] = red_action
+            action_dict[self.blue_agent_id] = red_action
         return action_dict
 
 
@@ -170,37 +175,39 @@ def main():
     # reward_config = {0:reward.sparse, 1:reward.sparse}
 
     config = copy.deepcopy(pyquaticus.config.config_dict_std)
-    config["gps_env"] = True
-    config["env_bounds"] = "auto"
-    config["blue_flag_home"] = (42.352229714597705, -70.99992567997114)
-    config["red_flag_home"] = (42.32710627259394, -70.96739585043458)
-    config["flag_homes_unit"] = "ll"
-    config["sim_speedup_factor"] = 50
-    config["max_time"] = 500.0
-    config["lidar_obs"] = True
-    config["num_lidar_rays"] = 100
-    config["lidar_range"] = 1000
-    config["render_agent_ids"] = True
-    config["render_lidar_mode"] = "detection"
-    # config["render_traj_mode"] = "traj_agent"
-    # config["render_traj_freq"] = 50
-    # config["render_traj_cutoff"] = 100
-    # config["render_saving"] = True
-    config["default_init"] = False
-    config["render_fps"] = 10
+    config["sim_speedup_factor"] = 1
     # config["normalize"] = False
-    
-    #PyQuaticusEnv is a Parallel Petting Zoo Environment
-    env = pyquaticus_v0.PyQuaticusEnv(team_size=3, render_mode='human', config_dict=config)
-    # try:
-    #     env = pyquaticus_v0.PyQuaticusEnv(team_size=3, render_mode='human', config_dict=config)
-    # except Warning as err:
-    #     ...
+    config["max_time"] = 200.0
+    config["tau"] = 0.1
+    config["sim_speedup_factor"] = 3
+    config["render_agent_ids"] = True
+    config["render_traj_mode"] = "traj"
+    config["render_traj_cutoff"] = 100
+    config["dynamics"] = ["large_usv", "heron"]
+    config["render_saving"] = False
+    # config["lidar_obs"] = True
+    # config["render_lidar_mode"] = "detection"
+    # config["lidar_range"] = 20
+    # config["render_traj_mode"] = "traj_history"
+    # config["render_traj_freq"] = 50
+    # config["short_hist_length"] = 4
+    # config["long_hist_length"] = 5
+    # config["long_hist_interval"] = 20
+    # config["render_traj_cutoff"] = 300
+    config["obstacles"] = {
+        "circle": [(4*2, (6*2, 5*2))],
+        "polygon": [((70*2, 10*2), (85*2, 21*2), (83*2, 51*2), (72*2, 35*2))]
+    }
+
+    # PyQuaticusEnv is a Parallel Petting Zoo Environment
+    env = pyquaticus_v0.PyQuaticusEnv(
+        render_mode="human", team_size=1, config_dict=config
+    )
     red_policy = args.red_policy
 
     kt = KeyTest(env, red_policy)
     kt.begin()
-    env.buffer_to_video()
+    # env.buffer_to_video()
     env.close()
 
 
