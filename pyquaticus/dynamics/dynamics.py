@@ -22,7 +22,7 @@ class Dynamics(RenderingPlayer):
         self.meters_per_mercator_xy = meters_per_mercator_xy
         self.dt = dt
 
-        self.state = {"pos": self.pos, "speed": self.speed, "heading": self.heading}
+        self.state = {}
 
     def get_max_speed(self) -> float:
 
@@ -102,9 +102,6 @@ class FixedWing(Dynamics):
         self.speed = self.min_speed
         self.heading = angle180(self.heading + theta)
 
-        self.state["pos"] = self.pos
-        self.state["speed"] = self.speed
-        self.state["heading"] = self.heading
 
     def get_max_speed(self) -> float:
         return self.max_speed
@@ -150,9 +147,6 @@ class FixedWing(Dynamics):
         self.speed = clip(new_speed, 0.0, self.max_speed)
         self.heading = angle180(new_heading)
 
-        self.state["pos"] = self.pos
-        self.state["speed"] = self.speed
-        self.state["heading"] = self.heading
 
 
 class SingleIntegrator(Dynamics):
@@ -187,9 +181,6 @@ class SingleIntegrator(Dynamics):
         self.speed = 0
         self.heading = angle180(self.heading + theta)
 
-        self.state["pos"] = self.pos
-        self.state["speed"] = self.speed
-        self.state["heading"] = self.heading
 
     def get_max_speed(self) -> float:
         return self.max_speed
@@ -229,9 +220,6 @@ class SingleIntegrator(Dynamics):
         self.speed = clip(new_speed, 0.0, self.max_speed)
         self.heading = angle180(new_heading)
 
-        self.state["pos"] = self.pos
-        self.state["speed"] = self.speed
-        self.state["heading"] = self.heading
 
 
 class LargeUSV(Dynamics):
@@ -299,9 +287,6 @@ class LargeUSV(Dynamics):
         self.heading = angle180(self.heading + theta)
 
         self.state["thrust"] = 0
-        self.state["pos"] = self.pos
-        self.state["speed"] = self.speed
-        self.state["heading"] = self.heading
 
     def get_max_speed(self) -> float:
         return self.max_speed
@@ -371,10 +356,6 @@ class LargeUSV(Dynamics):
         self.pos = np.asarray(new_ag_pos)
         self.speed = clip(new_speed, 0.0, self.max_speed)
         self.heading = angle180(new_heading)
-
-        self.state["pos"] = self.pos
-        self.state["speed"] = self.speed
-        self.state["heading"] = self.heading
 
 
 class Heron(Dynamics):
@@ -440,9 +421,6 @@ class Heron(Dynamics):
         self.heading = angle180(self.heading + theta)
 
         self.state["thrust"] = 0
-        self.state["pos"] = self.pos
-        self.state["speed"] = self.speed
-        self.state["heading"] = self.heading
 
     def get_max_speed(self) -> float:
         return self.max_speed
@@ -513,9 +491,6 @@ class Heron(Dynamics):
         self.speed = clip(new_speed, 0.0, self.max_speed)
         self.heading = angle180(new_heading)
 
-        self.state["pos"] = self.pos
-        self.state["speed"] = self.speed
-        self.state["heading"] = self.heading
 
 
 class Drone(Dynamics):
@@ -569,10 +544,6 @@ class Drone(Dynamics):
         self.pos = prev_pos
         self.speed = 0
         self.heading = angle180(self.heading + theta)
-
-        self.state["pos"] = self.pos
-        self.state["speed"] = self.speed
-        self.state["heading"] = self.heading
 
         new_state = {
             "pitch": 0,
@@ -697,9 +668,6 @@ class Drone(Dynamics):
         self.pos = np.asarray([x_pos, y_pos])
         self.speed = np.sqrt(np.power(cur_x_vel, 2) + np.power(cur_y_vel, 2))
 
-        self.state["pos"] = self.pos
-        self.state["speed"] = self.speed
-        self.state["heading"] = self.heading
 
 
 class DoubleIntegrator(Dynamics):
@@ -745,9 +713,6 @@ class DoubleIntegrator(Dynamics):
         self.heading = angle180(self.heading + theta)
 
         self.state["turn_rate"] = 0
-        self.state["pos"] = self.pos
-        self.state["speed"] = self.speed
-        self.state["heading"] = self.heading
 
     def get_max_speed(self) -> float:
         return self.max_speed
@@ -802,6 +767,3 @@ class DoubleIntegrator(Dynamics):
         self.speed = clip(new_speed, 0.0, self.max_speed)
         self.heading = angle180(new_heading)
 
-        self.state["pos"] = self.pos
-        self.state["speed"] = self.speed
-        self.state["heading"] = self.heading
