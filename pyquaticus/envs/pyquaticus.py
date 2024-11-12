@@ -1727,17 +1727,18 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Obstacles
         obstacle_params = config_dict.get("obstacles", config_dict_std["obstacles"])
-        border_contour = None
 
         if self.gps_env:
             border_contour, island_contours, land_mask = self._get_topo_geom()
 
-            if border_contour is not None:
-                border_obstacles = self._border_contour_to_border_obstacles(border_contour)
+            #border
+            border_obstacles = self._border_contour_to_border_obstacles(border_contour)
+            if len(border_obstacles) > 0:
                 if obstacle_params is None:
                     obstacle_params = {"polygon": []}
                 obstacle_params["polygon"].extend(border_obstacles)
 
+            #islands
             if len(island_contours) > 0:
                 if obstacle_params is None:
                     obstacle_params = {"polygon": []}
@@ -1775,15 +1776,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             raise TypeError(f"Expected obstacle_params to be None or a dict, not {type(obstacle_params)}")
 
         # Adjust scrimmage line
-        if border_contour is None:
+        if self.gps_env:
+            scrim_int_segs = [(p, border_contour[(i+1) % len(border_contour)]) for i, p in enumerate(border_contour)]
+        else:
             scrim_int_segs = [
                 (self.env_ll, self.env_lr),
                 (self.env_lr, self.env_ur),
                 (self.env_ur, self.env_ul),
                 (self.env_ul, self.env_ll)
             ]
-        else:
-            scrim_int_segs = [(p, border_contour[(i+1) % len(border_contour)]) for i, p in enumerate(border_contour)]
 
         scrim_ints = []
         scrim_seg = LineString(self.scrimmage_coords)
