@@ -520,7 +520,7 @@ class Heron(Dynamics):
 
 class Drone(Dynamics):
 
-    def __init__(self, max_speed: float = 15, **kwargs):
+    def __init__(self, max_speed: float = 10, **kwargs):
         super().__init__(**kwargs)
 
         self.max_speed = max_speed
@@ -651,7 +651,7 @@ class Drone(Dynamics):
         roll_torque = (
             Kp_roll
             * (
-                ((des_x_acc * np.cos(des_yaw) + des_y_acc * np.sin(des_yaw)) / g)
+                ((des_x_acc * np.cos(self.state["yaw"]) + des_y_acc * np.sin(self.state["yaw"])) / g)
                 - self.state["roll"]
             )
             - Kd_roll * self.state["roll_rate"]
@@ -660,7 +660,7 @@ class Drone(Dynamics):
         pitch_torque = (
             Kp_pitch
             * (
-                ((des_x_acc * np.sin(des_yaw) - des_y_acc * np.cos(des_yaw)) / g)
+                ((des_x_acc * np.sin(self.state["yaw"]) - des_y_acc * np.cos(self.state["yaw"])) / g)
                 - self.state["pitch"]
             )
             - Kd_pitch * self.state["pitch_rate"]

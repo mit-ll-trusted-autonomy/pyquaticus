@@ -9,7 +9,6 @@ from pyquaticus.base_policies.base_combined import Heuristic_CTF_Agent
 from pyquaticus.envs.pyquaticus import Team
 from collections import OrderedDict
 from pyquaticus.config import config_dict_std, ACTION_MAP
-from pyquaticus.config_aas import config_dict_aas
 
 config = config_dict_std
 config["gps_env"] = True
@@ -24,9 +23,9 @@ config["dynamics_dict"] = {
     0: "heron",
     1: "large_usv",
     2: "si",
-    3: "fixed_wing",
-    4: "fixed_wing",
-    5: "fixed_wing",
+    3: "drone",
+    4: "drone",
+    5: "drone",
 }
 
 
