@@ -1083,7 +1083,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 vel = rot2d(vel_ref, crd_ref_angle)
                 pos_x = ag_pos[0]
                 pos_y = ag_pos[1]
-                player.pos = [pos_x, pos_y]
+                player.pos = np.asarray([pos_x, pos_y])
                 speed, heading = vec_to_mag_heading(vel)
                 player.speed = speed
                 player.heading = heading
