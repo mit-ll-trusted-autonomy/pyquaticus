@@ -272,6 +272,9 @@ class BaseDefender(BaseAgentPolicy):
                 enemy_loc = self.rb_to_rect(self.opp_team_pos_dict[closest_enemy])
 
             if not self.opp_team_has_flag:
+                # If flag is closest point on line, then unit_def_flag is NaN,
+                # which causes agent to stop (act_index is never updated from 16)
+                # Is this the desired behavior?
                 defend_pt = self.closest_point_on_line(
                     self.my_flag_loc, enemy_loc, [0, 0]
                 )

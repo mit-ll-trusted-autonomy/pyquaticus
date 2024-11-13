@@ -14,7 +14,8 @@ config_dict = config_dict_std
 config_dict["max_time"] = 600.0
 config_dict["max_score"] = 100
 config_dict["render_agent_ids"] = True
-config_dict["dynamics"] = ["si", "si", "si", "drone"]
+config_dict["dynamics"] = ["si", "si", "si", "si"]
+config_dict["sim_speedup_factor"] = 3
 
 env = pyquaticus_v0.PyQuaticusEnv(team_size=2, config_dict=config_dict,render_mode='human')
 term_g = {0:False,1:False}
@@ -26,11 +27,10 @@ temp_captures = env.state["captures"]
 temp_grabs = env.state["grabs"]
 temp_tags = env.state["tags"]
 
-H_one = Heuristic_CTF_Agent(2, Team.RED_TEAM, mode="hard")
-H_two = Heuristic_CTF_Agent(3, Team.RED_TEAM, mode="hard")
-
-R_one = Heuristic_CTF_Agent(0, Team.BLUE_TEAM, mode="hard")
-R_two = Heuristic_CTF_Agent(1, Team.BLUE_TEAM, mode="hard")
+H_one = BaseDefender(2, Team.RED_TEAM, mode="hard")
+H_two = BaseDefender(3, Team.RED_TEAM, mode="hard")
+R_one = BaseAttacker(0, Team.BLUE_TEAM, mode="easy")
+R_two = BaseAttacker(1, Team.BLUE_TEAM, mode="easy")
 step = 0
 while True:
     new_obs = {}
