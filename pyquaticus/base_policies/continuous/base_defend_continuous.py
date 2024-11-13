@@ -84,10 +84,10 @@ class BaseDefenderContinuous(BaseAgentPolicy):
 
         Returns
         -------
-            action: The action index describing which speed/heading combo to use (assumes
-            discrete action values from `ctf-gym.envs.pyquaticus.ACTION_MAP`)
+            desired_speed: m/s
+            heading_error: deg
         """
-        desired_speed = 10
+        desired_speed = 50
 
         my_obs = self.update_state(obs)
 
@@ -107,7 +107,6 @@ class BaseDefenderContinuous(BaseAgentPolicy):
             else:
                 ag_vect = np.multiply(-1.0, my_flag_vec)
 
-            desired_speed = 5
             # Convert the vector to a heading, and then pick the best discrete action to perform
             try:
                 heading_error = self.angle180(self.vec_to_heading(ag_vect))

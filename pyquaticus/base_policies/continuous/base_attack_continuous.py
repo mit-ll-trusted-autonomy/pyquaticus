@@ -69,15 +69,15 @@ class BaseAttackerContinuous(BaseAgentPolicy):
 
         Returns
         -------
-            desired_speed: normalized from 0 to 1
+            desired_speed: m/s
             heading_error: deg
         """
         my_obs = self.update_state(obs)
 
-        if self.mode == "easy":
+        # Some big speed hard-coded so that every agent drives at max speed
+        desired_speed = 50
 
-            # Always drive at 75% speed
-            desired_speed = 5
+        if self.mode == "easy":
 
             # If I or someone on my team has the flag, go back home
             if self.has_flag or self.my_team_has_flag:
@@ -106,9 +106,6 @@ class BaseAttackerContinuous(BaseAgentPolicy):
             heading_error = 0
 
         elif self.mode == "medium":
-
-            # Always drive at 75% speed
-            desired_speed = 5
 
             # If I or someone on my team has the flag, return to my side.
             if self.has_flag or self.my_team_has_flag:
@@ -142,6 +139,7 @@ class BaseAttackerContinuous(BaseAgentPolicy):
                 heading_error = 0
 
         elif self.mode == "hard":
+
             # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid
             if my_obs["wall_0_distance"] < 10 and (-90 < my_obs["wall_0_bearing"] < 90):
                 wall_0_unit_vec = self.rb_to_rect(
@@ -236,7 +234,6 @@ class BaseAttackerContinuous(BaseAgentPolicy):
                 else:
                     my_action = np.multiply(1.25, goal_vect) + avoid_vect
 
-            desired_speed = 2
             # Convert the vector to a heading, and then pick the best discrete action to perform
             try:
                 heading_error = self.angle180(self.vec_to_heading(my_action))

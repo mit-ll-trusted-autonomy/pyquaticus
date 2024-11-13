@@ -8,6 +8,7 @@ from pyquaticus.base_policies.base_defend import BaseDefender
 from pyquaticus.base_policies.base_combined import Heuristic_CTF_Agent
 from pyquaticus.base_policies.continuous.base_attack_continuous import BaseAttackerContinuous
 from pyquaticus.base_policies.continuous.base_defend_continuous import BaseDefenderContinuous
+from pyquaticus.base_policies.continuous.base_combined_continuous import Heuristic_CTF_Agent_Continuous
 from pyquaticus.envs.pyquaticus import Team
 from collections import OrderedDict
 from pyquaticus.config import config_dict_std, ACTION_MAP
@@ -16,7 +17,7 @@ config_dict = config_dict_std
 config_dict["max_time"] = 600.0
 config_dict["max_score"] = 100
 config_dict["render_agent_ids"] = True
-config_dict["dynamics"] = ["si", "si", "si", "si"]
+config_dict["dynamics"] = "drone"
 config_dict["action_type"] = "continuous"
 config_dict["sim_speedup_factor"] = 3
 config_dict["tau"] = 0.05
@@ -33,10 +34,10 @@ temp_grabs = env.state["grabs"]
 temp_tags = env.state["tags"]
 
 H_one = BaseDefenderContinuous(2, Team.RED_TEAM, mode="easy")
-H_two = BaseDefenderContinuous(3, Team.RED_TEAM, mode="hard")
+H_two = BaseDefenderContinuous(3, Team.RED_TEAM, mode="easy")
 
-R_one = BaseAttackerContinuous(0, Team.BLUE_TEAM, mode="hard")
-R_two = BaseAttackerContinuous(1, Team.BLUE_TEAM, mode="easy")
+R_one = Heuristic_CTF_Agent_Continuous(0, Team.BLUE_TEAM, mode="hard")
+R_two = Heuristic_CTF_Agent_Continuous(1, Team.BLUE_TEAM, mode="hard")
 step = 0
 while True:
     new_obs = {}
