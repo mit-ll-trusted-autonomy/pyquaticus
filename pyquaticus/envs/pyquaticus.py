@@ -1058,7 +1058,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 vel_ref[1] = 0.0  # convention is that vector pointing from keepout intersection to flag center is y' axis in new reference frame
 
                 vel = rot2d(vel_ref, crd_ref_angle)
+<<<<<<< HEAD
                 player.pos = ag_pos
+=======
+                pos_x = ag_pos[0]
+                pos_y = ag_pos[1]
+                player.pos = np.asarray([pos_x, pos_y])
+>>>>>>> d5e34e4c0d2d5f9a7b3f6edea26b5e759993a603
                 speed, heading = vec_to_mag_heading(vel)
                 player.speed = speed
                 player.heading = heading
