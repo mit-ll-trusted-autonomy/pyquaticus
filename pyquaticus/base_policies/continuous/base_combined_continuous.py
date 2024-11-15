@@ -28,7 +28,7 @@ from pyquaticus.base_policies.continuous.base_defend_continuous import BaseDefen
 from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import config_dict_std, Team
 
-modes = {"easy", "medium", "hard"}
+modes = {"easy", "medium", "hard", "nothing"}
 
 
 class Heuristic_CTF_Agent_Continuous(BaseAgentPolicy):
@@ -119,6 +119,9 @@ class Heuristic_CTF_Agent_Continuous(BaseAgentPolicy):
         # Default no_op action in case somehow none of the below actions are triggered.
         desired_speed = 0
         heading_error = 0
+
+        if self.mode == "nothing":
+            return desired_speed, heading_error
 
         if self.mode == "easy":
             # Opp is close - needs to defend:
