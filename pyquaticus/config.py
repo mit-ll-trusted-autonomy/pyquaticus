@@ -14,7 +14,7 @@ config_dict_std = {
 
     # Geometry parameters
     "gps_env":             False,  # option to use a real world location for the game
-    "env_bounds": [320.0, 160.0],  # meters [xmax, ymax], lat/lon [(south, west), (north, east)], web mercator xy [(xmin, ymin), (xmax, ymax)], or "auto"
+    "env_bounds":  [160.0, 80.0],  # meters [xmax, ymax], lat/lon [(south, west), (north, east)], web mercator xy [(xmin, ymin), (xmax, ymax)], or "auto"
     "env_bounds_unit":       "m",  # "m" (meters), "wm_xy" (web mercator xy), "ll" (lat/lon)
     "blue_flag_home":     "auto",  # coordinates (lat, lon), list of coordinates, or "auto"
     "red_flag_home":      "auto",  # coordinates (lat, lon), list of coordinates, or "auto"
