@@ -26,7 +26,6 @@ class Team(Enum):
     def __repr__(self):
         return f"{self.name}({self.value})"
 
-
 @dataclass
 class Player:
     """
@@ -45,6 +44,7 @@ class Player:
         tagging_cooldown: reset to 0 after this player tags another agent then counts up to the configured cooldown
         cantag_time: at this timestamp, the player can tag again (Note: only used in PyQuaticusMoosBridge, not regular Pyquaticus)
         is_tagged: True iff this player is currently tagged
+        oob: Indicator for whether or not this player is out-of-bounds
     """
 
     id: Hashable
@@ -70,7 +70,6 @@ class RenderingPlayer(Player):
         #### inherited from Player
         id: The ID of the agent (also used as an index)
         team: The team of the agent (red or blue)
-        thrust: The engine thrust
         pos: The position of the agent [x, y]
         speed: The speed of the agent (m / s)
         heading: The heading of the agent (deg), maritime convention: north is 0, east is 90
@@ -78,7 +77,9 @@ class RenderingPlayer(Player):
         has_flag: Indicator for whether or not the agent has the flag
         on_own_side: Indicator for whether or not the agent is on its own side of the field.
         tagging_cooldown: reset to 0 after this player tags another agent then counts up to the configured cooldown
+        cantag_time: at this timestamp, the player can tag again (Note: only used in PyQuaticusMoosBridge, not regular Pyquaticus)
         is_tagged: True iff this player is currently tagged
+        oob: Indicator for whether or not this player is out-of-bounds
         #### new fields
         render_radius: Agent radius for rendering (pixels)
         pygame_agent: The pygame object that is drawn on screen.
@@ -100,45 +101,49 @@ class RenderingPlayer(Player):
                 self.render_radius + self.render_radius * np.sqrt(2) / 2 - 1,
                 self.render_radius + self.render_radius * np.sqrt(2) / 2 - 1,
             )
-            center_vertex = (self.render_radius, 1.25 * self.render_radius)
+            center_vertex = (self.render_radius, 1.25*self.render_radius)
 
             # Create the actual object
-            self.pygame_agent = Surface((2 * self.render_radius, 2 * self.render_radius), SRCALPHA)
+            self.pygame_agent = Surface((2*self.render_radius, 2*self.render_radius), SRCALPHA)
 
             # Adjust color based on which team
             if self.team == Team.BLUE_TEAM:
                 draw.circle(
-                    self.pygame_agent, (0, 0, 255, 50), (self.render_radius, self.render_radius), self.render_radius
+                    self.pygame_agent,
+                    (0, 0, 255, 50),
+                    (self.render_radius, self.render_radius),
+                    self.render_radius
                 )
                 draw.circle(
-                    self.pygame_agent, (0, 0, 255), (self.render_radius, self.render_radius), self.render_radius, width=1
+                    self.pygame_agent,
+                    (0, 0, 255),
+                    (self.render_radius, self.render_radius),
+                    self.render_radius,
+                    width=1
                 )
                 draw.polygon(
                     self.pygame_agent,
                     (0, 0, 255),
-                    (
-                        top_vertex,
-                        left_vertex,
-                        center_vertex,
-                        right_vertex,
-                    ),
+                    (top_vertex, left_vertex, center_vertex, right_vertex),
                 )
             else:
                 draw.circle(
-                    self.pygame_agent, (255, 0, 0, 50), (self.render_radius, self.render_radius), self.render_radius
+                    self.pygame_agent,
+                    (255, 0, 0, 50),
+                    (self.render_radius, self.render_radius),
+                    self.render_radius
                 )
                 draw.circle(
-                    self.pygame_agent, (255, 0, 0), (self.render_radius, self.render_radius), self.render_radius, width=1
+                    self.pygame_agent,
+                    (255, 0, 0),
+                    (self.render_radius, self.render_radius),
+                    self.render_radius,
+                    width=1
                 )
                 draw.polygon(
                     self.pygame_agent,
                     (255, 0, 0),
-                    (
-                        top_vertex,
-                        left_vertex,
-                        center_vertex,
-                        right_vertex,
-                    ),
+                    (top_vertex, left_vertex, center_vertex, right_vertex),
                 )
 
             # make a copy of pygame agent with nothing extra drawn on it
@@ -146,10 +151,6 @@ class RenderingPlayer(Player):
 
             # pygame Rect object the same size as pygame_agent Surface
             self.pygame_agent_rect = pygame.Rect((0, 0), (2*self.render_radius, 2*self.render_radius))
-
-
-        
-        
 
     def render_tagging_oob(self, cooldown_time):
         self.pygame_agent = self.pygame_agent_base.copy()
@@ -187,7 +188,6 @@ class RenderingPlayer(Player):
                 end_angle,
                 round(self.render_radius / 4),
             )
-
 
 @dataclass
 class Flag:
