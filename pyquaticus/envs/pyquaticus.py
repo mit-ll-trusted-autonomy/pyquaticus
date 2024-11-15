@@ -2215,12 +2215,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             # set player and flag attributes
             self._set_player_attributes_from_state()
             self._set_flag_attributes_from_state()
-
-            self.state["agent_dynamics"] = np.array([{}] * self.num_agents)
-            for i, player in enumerate(self.players.values()):
-                #reset agent-specific dynamics (not common to all agents)
-                player.reset()
-                self.state['agent_dynamics'][i] = player.state
+            for player in self.players.values():
+                player.reset() #reset agent-specific dynamics (not common to all agents)
+            
+            self.state['agent_dynamics'] = np.array([player.state for player in self.players.values()])
 
             #run event checks
             self._check_flag_pickups_vectorized() if self.team_size >= 40 else self._check_flag_pickups()
