@@ -4,10 +4,10 @@ import numpy as np
 
 ### Constants ###
 EQUATORIAL_RADIUS = 6378137.0  # meters (https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html)
+POLAR_RADIUS = 6356752.0 # meters (https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html)
+EQUATORIAL_SEMICIRCLE = 20037508.342789244 # meters 
 
 LINE_INTERSECT_TOL = 1e-9
-
-POLAR_RADIUS = 6356752.0 # meters (https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html)
 
 ### Standard Configuration Dictionary ###
 config_dict_std = {

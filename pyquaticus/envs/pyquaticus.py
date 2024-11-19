@@ -81,7 +81,8 @@ from pyquaticus.utils.utils import (
     rc_intersection,
     reflect_vector,
     rot2d,
-    vec_to_mag_heading
+    vec_to_mag_heading,
+    wrap_mercator_x
 )
 from scipy.ndimage import label
 from shapely import intersection, LineString, Point, Polygon
@@ -1761,12 +1762,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if self.gps_env:
             scrim_int_segs = [(p, border_contour[(i+1) % len(border_contour)]) for i, p in enumerate(border_contour)]
         else:
-            scrim_int_segs = [
-                (self.env_ll, self.env_lr),
-                (self.env_lr, self.env_ur),
-                (self.env_ur, self.env_ul),
-                (self.env_ul, self.env_ll),
-            ]
+            scrim_int_segs = self.env_edges
 
         scrim_ints = []
         scrim_seg = LineString(self.scrimmage_coords)
@@ -1828,12 +1824,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             # boundaries
             ray_int_segments.extend(
-                [
-                    [*self.env_ll, *self.env_lr],
-                    [*self.env_lr, *self.env_ur],
-                    [*self.env_ur, *self.env_ul],
-                    [*self.env_ul, *self.env_ll],
-                ]
+                [[*self.env_ll, *self.env_lr],
+                 [*self.env_lr, *self.env_ur],
+                 [*self.env_ur, *self.env_ul],
+                 [*self.env_ul, *self.env_ll]]
             )
             ray_int_seg_labels.extend(4 * [self.ray_int_label_map["obstacle"]])
             self.seg_label_type_to_inds["obstacle"].extend(np.arange(4))
@@ -2386,10 +2380,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     if pos != None:
                         if agent_pos_unit == "ll":
                             pos = mt.xy(pos[1], pos[0])
-                            pos -= self.env_bounds[0]
-                        elif agent_pos_unit == "wm_xy":
-                            pos -= self.env_bounds[0]
-                        
+
+                        pos = wrap_mercator_x(pos - self.env_bounds[0])
                         agent_pos_dict[agent_id] = pos
 
             # speed
@@ -2783,6 +2775,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         catch_radius: float,
         lidar_range: float,
     ):
+        #### Basic Checks ####
+        ### auto env_bounds and flag_homes ###
         if self._is_auto_string(env_bounds) and (
             self._is_auto_string(flag_homes[Team.BLUE_TEAM])
             or self._is_auto_string(flag_homes[Team.RED_TEAM])
@@ -2790,6 +2784,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             raise Exception(
                 "Either env_bounds or blue AND red flag homes must be set in config_dict (cannot both be 'auto')"
             )
+        ### flag_homes ###
 
         if self.gps_env:
             ### environment bounds ###
@@ -2806,6 +2801,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     flag_home_blue = np.asarray(mt.xy(*flag_home_blue[-1::-1]))
                     flag_home_red = np.asarray(mt.xy(*flag_home_red[-1::-1]))
 
+                # flag_vec = wrap_mercator_x(flag_home_blue - flag_home_red)
                 flag_vec = flag_home_blue - flag_home_red
                 flag_distance = np.linalg.norm(flag_vec)
                 flag_unit_vec = flag_vec / flag_distance
@@ -2816,14 +2812,25 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 bounds_pt2 =  flag_home_blue + (flag_distance/6) * flag_unit_vec + (flag_distance/3) * -flag_perp_vec
                 bounds_pt3 =  flag_home_red + (flag_distance/6) * -flag_unit_vec + (flag_distance/3) * flag_perp_vec
                 bounds_pt4 =  flag_home_red + (flag_distance/6) * -flag_unit_vec + (flag_distance/3) * -flag_perp_vec
-                bounds_points = np.array([bounds_pt1, bounds_pt2, bounds_pt3, bounds_pt4])
+                bounds_points = wrap_mercator_x([bounds_pt1, bounds_pt2, bounds_pt3, bounds_pt4])
+                print(bounds_points)
 
                 # environment bounds will be in web mercator xy
                 env_bounds = np.zeros((2, 2))
-                env_bounds[0][0] = np.min(bounds_points[:, 0])
-                env_bounds[0][1] = np.min(bounds_points[:, 1])
-                env_bounds[1][0] = np.max(bounds_points[:, 0])
-                env_bounds[1][1] = np.max(bounds_points[:, 1])
+
+                x_bounds = np.unique(bounds_points[:, 0])
+                print(x_bounds)
+                # if wrap_mercator_x(x_bounds[1] - x_bounds[0], x_only=True) > 0:
+                #     env_bounds[0][0] = x_bounds[0] #left x bound
+                #     env_bounds[1][0] = x_bounds[1] #right y bound
+                # else:
+                #     env_bounds[0][0] = x_bounds[1] #left y bound
+                #     env_bounds[1][0] = x_bounds[0] #right y bound
+                env_bounds[0][0] = np.min(bounds_points[:, 0]) #lower y bound
+                env_bounds[1][0] = np.max(bounds_points[:, 0]) #upper y bound
+
+                env_bounds[0][1] = np.min(bounds_points[:, 1]) #lower y bound
+                env_bounds[1][1] = np.max(bounds_points[:, 1]) #upper y bound
             else:
                 env_bounds = np.asarray(env_bounds)
 
@@ -2844,6 +2851,11 @@ when gps environment bounds are specified in meters"
                             (0.0, 0.0),
                             env_bounds
                         ])
+                    else:
+                        raise Exception(
+                            "Environment bounds in meters should be given as [xmax, ymax]"
+                        )
+
                     if np.any(env_bounds[1] == 0.0):
                         raise Exception(
                             "Environment max bounds must be > 0 when specified in meters"
@@ -2901,49 +2913,67 @@ when gps environment bounds are specified in meters"
                         mt.xy(env_left, env_bottom),
                         mt.xy(env_right, env_top)
                     ])
-                elif env_bounds_unit == "ll":
+                else:
+                    # check for exceptions
+                    if np.any(env_bounds[0] == env_bounds[1]):
+                        raise Exception(
+                            f"The specified environment bounds {env_bounds} form an environment of zero area."
+                        )
+
                     # convert bounds to web mercator xy
-                    wm_xy_bounds = np.array([
-                        mt.xy(*env_bounds[0][-1::-1]),
-                        mt.xy(*env_bounds[1][-1::-1])
-                    ])
-                    left = np.min(wm_xy_bounds[:, 0])
-                    bottom = np.min(wm_xy_bounds[:, 1])
-                    right = np.max(wm_xy_bounds[:, 0])
-                    top = np.max(wm_xy_bounds[:, 1])
-                    env_bounds = np.array([
-                        [left, bottom],
-                        [right, top]
-                    ])
-                else:  # web mercator xy
-                    left = np.min(env_bounds[:, 0])
-                    bottom = np.min(env_bounds[:, 1])
-                    right = np.max(env_bounds[:, 0])
-                    top = np.max(env_bounds[:, 1])
-                    env_bounds = np.array([
-                        [left, bottom],
-                        [right, top]
-                    ])
+                    if env_bounds_unit == "ll":
+                        wm_xy_bounds = np.array([
+                            mt.xy(*env_bounds[0][-1::-1]),
+                            mt.xy(*env_bounds[1][-1::-1])
+                        ])
+                    else: #web mercator xy
+                        wm_xy_bounds = np.array(env_bounds) #make a copy to avoid overwriting
+
+                    # determine corners
+                    if wrap_mercator_x(wm_xy_bounds[1, 0] - wm_xy_bounds[0, 0], x_only=True) > 0:
+                        env_bounds[0][0] = wm_xy_bounds[0, 0] #left x bound
+                        env_bounds[1][0] = wm_xy_bounds[1, 0] #right y bound
+                    else:
+                        env_bounds[0][0] = wm_xy_bounds[1, 0] #left y bound
+                        env_bounds[1][0] = wm_xy_bounds[0, 0] #right y bound
+
+                    env_bounds[0][1] = np.min(wm_xy_bounds[:, 1]) #lower y bound
+                    env_bounds[1][1] = np.max(wm_xy_bounds[:, 1]) #upper y bound
+                    
             # unit
             env_bounds_unit = "wm_xy"
 
-            # environment size
-            self.env_size = np.diff(env_bounds, axis=0)[0]
+            # environment size, diagonal, corners, and edges
+            self.env_size = wrap_mercator_x(np.diff(env_bounds, axis=0)[0])
             self.env_diag = np.linalg.norm(self.env_size)
 
-            #vertices
-            env_bounds_corners = np.array([
-                env_bounds[0],
-                (env_bounds[1][0], env_bounds[0][1]),
-                env_bounds[1],
-                (env_bounds[0][0], env_bounds[1][1])
+            self.env_ll = np.array([0.0, 0.0])              #ll = lower left
+            self.env_lr = np.array([self.env_size[0], 0.0]) #lr = lower right
+            self.env_ur = np.array(self.env_size)           #ur = upper right
+            self.env_ul = np.array([0.0, self.env_size[1]]) #ul = upper left
+
+            self.env_corners = np.array([
+                self.env_ll,
+                self.env_lr,
+                self.env_ur,
+                self.env_ul
+            ])
+            self.env_edges = np.array([
+                [self.env_ll, self.env_lr],
+                [self.env_lr, self.env_ur],
+                [self.env_ur, self.env_ul],
+                [self.env_ul, self.env_ll],
             ])
 
             ### flags home ###
             # auto home
             if self._is_auto_string(flag_homes[Team.BLUE_TEAM]) and self._is_auto_string(flag_homes[Team.RED_TEAM]):
-                flag_homes[Team.BLUE_TEAM] = env_bounds[0] + np.array([7 / 8 * self.env_size[0], 0.5 * self.env_size[0]])
-                flag_homes[Team.RED_TEAM] = env_bounds[0] + np.array([1 / 8 * self.env_size[0], 0.5 * self.env_size[0]])
+                flag_homes[Team.BLUE_TEAM] = wrap_mercator_x(
+                    env_bounds[0] + np.array([7/8 * self.env_size[0], 0.5 * self.env_size[0]])
+                )
+                flag_homes[Team.RED_TEAM] = wrap_mercator_x(
+                    env_bounds[0] + np.array([1/8 * self.env_size[0], 0.5 * self.env_size[0]])
+                )
             elif self._is_auto_string(flag_homes[Team.BLUE_TEAM]) or self._is_auto_string(flag_homes[Team.RED_TEAM]):
                 raise Exception("Flag homes should be either all 'auto', or all specified")
             else:
@@ -2977,8 +3007,8 @@ when gps environment bounds are specified in meters"
                 )
 
             # normalize relative to environment bounds
-            flag_homes[Team.BLUE_TEAM] -= env_bounds[0]
-            flag_homes[Team.RED_TEAM] -= env_bounds[0]
+            flag_homes[Team.BLUE_TEAM] = wrap_mercator_x(flag_homes[Team.BLUE_TEAM] - env_bounds[0])
+            flag_homes[Team.RED_TEAM] = wrap_mercator_x(flag_homes[Team.RED_TEAM] - env_bounds[0])
 
             # unit
             flag_homes_unit = "wm_xy"
@@ -2989,12 +3019,13 @@ when gps environment bounds are specified in meters"
 
                 scrim_vec1 = np.array([-flags_vec[1], flags_vec[0]])
                 scrim_vec2 = np.array([flags_vec[1], -flags_vec[0]])
-                flags_midpoint = 0.5 * (flag_homes[Team.BLUE_TEAM] + flag_homes[Team.RED_TEAM]) + env_bounds[0]
+                flags_midpoint = 0.5 * (flag_homes[Team.BLUE_TEAM] + flag_homes[Team.RED_TEAM])
 
-                scrimmage_coord1 = self._get_polygon_intersection(flags_midpoint, scrim_vec1, env_bounds_corners)[1]
-                scrimmage_coord2 = self._get_polygon_intersection(flags_midpoint, scrim_vec2, env_bounds_corners)[1]
-                scrimmage_coords = np.asarray([scrimmage_coord1, scrimmage_coord2]) - env_bounds[0]
+                scrimmage_coord1 = self._get_polygon_intersection(flags_midpoint, scrim_vec1, self.env_corners)[1]
+                scrimmage_coord2 = self._get_polygon_intersection(flags_midpoint, scrim_vec2, self.env_corners)[1]
+                scrimmage_coords = np.asarray([scrimmage_coord1, scrimmage_coord2])
             else:
+                # check and convert units if necessary
                 if scrimmage_coords_unit == "m":
                     raise Exception(
                         "'m' (meters) should only be used to specify flag homes when gps_env is False"
@@ -3010,40 +3041,45 @@ when gps environment bounds are specified in meters"
                         f"Unit '{scrimmage_coords_unit}' not recognized. Please choose from 'll' or 'wm_xy' for gps environments."
                     )
 
+                # check for exceptions
                 if np.all(scrimmage_coords[0] == scrimmage_coords[1]):
                     raise Exception(
                         "Scrimmage line must be specified with two DIFFERENT coordinates"
                     )
-
                 if scrimmage_coords[0][0] == scrimmage_coords[1][0] and (
                     scrimmage_coords[0][0] == env_bounds[0][0] or
                     scrimmage_coords[0][0] == env_bounds[1][0]
                 ):
                     raise Exception(
-                        f"Specified scrimmage line coordinates {scrimmage_coords} cannot lie on the same edge of the env boundary"
+                        f"Specified scrimmage line coordinates {scrimmage_coords} lie on the same vertical edge of the env boundary."
                     )
                 if scrimmage_coords[0][1] == scrimmage_coords[1][1] and (
                     scrimmage_coords[0][1] == env_bounds[0][1] or
                     scrimmage_coords[0][1] == env_bounds[1][1]
                 ):
                     raise Exception(
-                        f"Specified scrimmage line coordinates {scrimmage_coords} cannot lie on the same edge of the env boundary"
+                        f"Specified scrimmage line coordinates {scrimmage_coords} lie on the same horizontal edge of the env boundary."
                     )
 
+                # normalize relative to environment bounds
+                scrimmage_coords_wm_xy = copy.deepcopy(scrimmage_coords)
+                scrimmage_coords = wrap_mercator_x(scrimmage_coords - env_bounds[0])
+
+                # extend scrimmage line if necessary to fully divide environment
                 if scrimmage_coords[1][1] == scrimmage_coords[0][1]:  # horizontal line
-                    extended_point_1 = [env_bounds[0][0] + (env_bounds[0][0] - scrimmage_coords[0][0]), scrimmage_coords[0][1]]
-                    extended_point_2 = [env_bounds[1][0] + (env_bounds[1][0] - scrimmage_coords[1][0]), scrimmage_coords[1][1]]
+                    extended_point_1 = [-scrimmage_coords[0][0], scrimmage_coords[0][1]]
+                    extended_point_2 = [self.env_size[0] + (self.env_size[0] - scrimmage_coords[1][0]), scrimmage_coords[1][1]]
                 elif scrimmage_coords[1][0] == scrimmage_coords[0][0]:  # vertical line
-                    extended_point_1 = [scrimmage_coords[0][0], env_bounds[0][1] + (env_bounds[0][1] - scrimmage_coords[0][1])]
-                    extended_point_2 = [scrimmage_coords[1][0], env_bounds[1][1] + (env_bounds[1][1] - scrimmage_coords[1][1])]
+                    extended_point_1 = [scrimmage_coords[0][0], -scrimmage_coords[0][1]]
+                    extended_point_2 = [scrimmage_coords[1][0], self.env_size[1] + (self.env_size[1] - scrimmage_coords[1][1])]
                 else:
                     scrimmage_slope = (scrimmage_coords[1][1] - scrimmage_coords[0][1]) / (scrimmage_coords[1][0] - scrimmage_coords[0][0])
 
                     # compute intersection point for the first scrimmage_coord
-                    t_env_bound_x1 = (env_bounds[0][0] - scrimmage_coords[0][0]) * scrimmage_slope
-                    t_env_bound_y1 = ((env_bounds[0][1] - scrimmage_coords[0][1]) / scrimmage_slope if scrimmage_slope != 0 else 0)
-                    t_env_bound_x2 = (env_bounds[1][0] - scrimmage_coords[0][0]) * scrimmage_slope
-                    t_env_bound_y2 = ((env_bounds[1][1] - scrimmage_coords[0][1]) / scrimmage_slope if scrimmage_slope != 0 else 0)
+                    t_env_bound_x1 = -scrimmage_coords[0][0] * scrimmage_slope
+                    t_env_bound_y1 = (-scrimmage_coords[0][1] / scrimmage_slope if scrimmage_slope != 0 else 0)
+                    t_env_bound_x2 = (self.env_size[0] - scrimmage_coords[0][0]) * scrimmage_slope
+                    t_env_bound_y2 = ((self.env_size[1] - scrimmage_coords[0][1]) / scrimmage_slope if scrimmage_slope != 0 else 0)
                     t_env_bounds = [t_env_bound_x1, t_env_bound_y1, t_env_bound_x2, t_env_bound_y2]
                     max_t = max(t_env_bounds) * 10
                     min_t = min(t_env_bounds) * 10
@@ -3053,14 +3089,14 @@ when gps environment bounds are specified in meters"
 
                 extended_scrimmage_coords = np.array([extended_point_1, extended_point_2])
                 full_scrim_line = LineString(extended_scrimmage_coords)
-                scrim_line_env_intersection = intersection(full_scrim_line, Polygon(env_bounds_corners))
+                scrim_line_env_intersection = intersection(full_scrim_line, Polygon(self.env_corners))
 
                 if (
                     scrim_line_env_intersection.is_empty or
                     len(scrim_line_env_intersection.coords) == 1 #only intersects a vertex
                 ):
                     raise Exception(
-                        f"Specified scrimmage line coordinates {scrimmage_coords} create a line that does not bisect the environment of bounds {env_bounds}"
+                        f"Specified scrimmage line coordinates {scrimmage_coords_wm_xy} create a line that does not bisect the environment of bounds {env_bounds}"
                     )
                 else:
                     scrim_line_env_intersection = np.array(scrim_line_env_intersection.coords)
@@ -3068,32 +3104,32 @@ when gps environment bounds are specified in meters"
                     # intersection points should lie on boundary (if they don't then the line doesn't bisect the env)
                     if not (
                         (
-                            (env_bounds[0][0] <= scrim_line_env_intersection[0][0] <= env_bounds[1][0]) and
-                            ((scrim_line_env_intersection[0][1] == env_bounds[0][1]) or (scrim_line_env_intersection[0][1] == env_bounds[1][1]))
+                            (0 <= scrim_line_env_intersection[0][0] <= self.env_size[0]) and
+                            ((scrim_line_env_intersection[0][1] == 0) or (scrim_line_env_intersection[0][1] == self.env_size[1]))
                             ) or
                         (
-                            (env_bounds[0][1] <= scrim_line_env_intersection[0][1] <= env_bounds[1][1]) and
-                            ((scrim_line_env_intersection[0][0] == env_bounds[0][0]) or (scrim_line_env_intersection[0][0] == env_bounds[1][0]))
+                            (0 <= scrim_line_env_intersection[0][1] <= self.env_size[1]) and
+                            ((scrim_line_env_intersection[0][0] == 0) or (scrim_line_env_intersection[0][0] == self.env_size[0]))
                             )
                     ):
                         raise Exception(
-                            f"Specified scrimmage line coordinates {scrimmage_coords} create a line that does not bisect the environment of bounds {env_bounds}"
+                            f"Specified scrimmage line coordinates {scrimmage_coords_wm_xy} create a line that does not bisect the environment of bounds {env_bounds}"
                         )
                     if not (
                         (
-                            (env_bounds[0][0] <= scrim_line_env_intersection[1][0] <= env_bounds[1][0]) and
-                            ((scrim_line_env_intersection[1][1] == env_bounds[0][1]) or (scrim_line_env_intersection[1][1] == env_bounds[1][1]))
+                            (0 <= scrim_line_env_intersection[1][0] <= self.env_size[0]) and
+                            ((scrim_line_env_intersection[1][1] == 0) or (scrim_line_env_intersection[1][1] == self.env_size[1]))
                             ) or
                         (
-                            (env_bounds[0][1] <= scrim_line_env_intersection[1][1] <= env_bounds[1][1]) and
-                            ((scrim_line_env_intersection[1][0] == env_bounds[0][0]) or (scrim_line_env_intersection[1][0] == env_bounds[1][0]))
+                            (0 <= scrim_line_env_intersection[1][1] <= self.env_size[1]) and
+                            ((scrim_line_env_intersection[1][0] == 0) or (scrim_line_env_intersection[1][0] == self.env_size[0]))
                             )
                     ):
                         raise Exception(
-                            f"Specified scrimmage line coordinates {scrimmage_coords} create a line that does not bisect the environment of bounds {env_bounds}"
+                            f"Specified scrimmage line coordinates {scrimmage_coords_wm_xy} create a line that does not bisect the environment of bounds {env_bounds}"
                         )
+
                     scrimmage_coords = scrim_line_env_intersection
-                scrimmage_coords = scrimmage_coords - env_bounds[0]
 
             # unit
             scrimmage_coords_unit = "wm_xy"
@@ -3158,19 +3194,29 @@ when gps environment bounds are specified in meters"
                         env_bounds
                     ])
                 else:
-                    if not np.all(env_bounds[0] == 0.0):
-                        raise Exception("Environment min bounds must be 0 when specified in meters")
+                    raise Exception(
+                            "Environment bounds in meters should be given as [xmax, ymax]"
+                        )
 
-                    if np.any(env_bounds[1] == 0.0):
-                        raise Exception("Environment max bounds must be > 0 when specified in meters")
-
-            # environment diagonal and vertices
+            # environment diagonal, corners, and edges
             self.env_diag = np.linalg.norm(self.env_size)
-            env_bounds_corners = np.array([
-                env_bounds[0],
-                (env_bounds[1][0], env_bounds[0][1]),
-                env_bounds[1],
-                (env_bounds[0][0], env_bounds[1][1])
+
+            self.env_ll = np.array([0.0, 0.0])              #ll = lower left
+            self.env_lr = np.array([self.env_size[0], 0.0]) #lr = lower right
+            self.env_ur = np.array(self.env_size)           #ur = upper right
+            self.env_ul = np.array([0.0, self.env_size[1]]) #ul = upper left
+
+            self.env_corners = np.array([
+                self.env_ll,
+                self.env_lr,
+                self.env_ur,
+                self.env_ul
+            ])
+            self.env_edges = np.array([
+                [self.env_ll, self.env_lr],
+                [self.env_lr, self.env_ur],
+                [self.env_ur, self.env_ul],
+                [self.env_ul, self.env_ll],
             ])
 
             ### flags home ###
@@ -3214,8 +3260,8 @@ when gps environment bounds are specified in meters"
                 scrim_vec2 = np.array([flags_vec[1], -flags_vec[0]])
                 flags_midpoint = 0.5 * (flag_homes[Team.BLUE_TEAM] + flag_homes[Team.RED_TEAM])
 
-                scrimmage_coord1 = self._get_polygon_intersection(flags_midpoint, scrim_vec1, env_bounds_corners)[1]
-                scrimmage_coord2 = self._get_polygon_intersection(flags_midpoint, scrim_vec2, env_bounds_corners)[1]
+                scrimmage_coord1 = self._get_polygon_intersection(flags_midpoint, scrim_vec1, self.env_corners)[1]
+                scrimmage_coord2 = self._get_polygon_intersection(flags_midpoint, scrim_vec2, self.env_corners)[1]
                 scrimmage_coords = np.asarray([scrimmage_coord1, scrimmage_coord2])
             else:
                 if scrimmage_coords_unit == "ll" or scrimmage_coords_unit == "wm_xy":
@@ -3246,7 +3292,7 @@ when gps environment bounds are specified in meters"
 
                 # env biseciton check
                 full_scrim_line = LineString(scrimmage_coords)
-                scrim_line_env_intersection = intersection(full_scrim_line, Polygon(env_bounds_corners))
+                scrim_line_env_intersection = intersection(full_scrim_line, Polygon(self.env_corners))
 
                 if (
                     scrim_line_env_intersection.is_empty or
