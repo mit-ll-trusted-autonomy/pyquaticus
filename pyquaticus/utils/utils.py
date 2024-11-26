@@ -23,7 +23,7 @@ import math
 import numpy as np
 import pygame
 
-from pyquaticus.config import EQUATORIAL_SEMICIRCLE
+from pyquaticus.config import EPSG_3857_EXT_X
 from numpy.linalg import norm
 
 
@@ -315,12 +315,12 @@ def angle180(deg):
 def wrap_mercator_x(wm, x_only:bool = False) -> np.ndarray:
     """
     Wrap web mercator x (horizontal) location or measurement to
-    fall within [-EQUATORIAL_SEMICIRCLE, EQUATORIAL_SEMICIRCLE].
+    fall within [-EPSG_3857_EXT_X, EPSG_3857_EXT_X].
 
     Args:
-        wm: the angle (heading) in degrees
+        wm: the web mercator position or measurement
 
-    Note: when converting vectors, assumes that the shortest
+    Note: when converting measurements, assumes that the shortest
     x distance between two points on web mercator is desired
     (will not exceed a difference in longitude of 180 degrees).
     """
@@ -329,13 +329,36 @@ def wrap_mercator_x(wm, x_only:bool = False) -> np.ndarray:
     else:
         wm = np.asarray(wm).reshape(-1, 2)
 
-    over = wm[:, 0] > EQUATORIAL_SEMICIRCLE
+    over = wm[:, 0] > EPSG_3857_EXT_X
     while np.any(over):
-        wm[np.where(over)[0], 0] -= 2 * EQUATORIAL_SEMICIRCLE
+        wm[np.where(over)[0], 0] -= 2*EPSG_3857_EXT_X
+        over = wm[:, 0] > EPSG_3857_EXT_X
 
-    under = wm[:, 0] < -EQUATORIAL_SEMICIRCLE
+    under = wm[:, 0] < -EPSG_3857_EXT_X
     while np.any(under):
-        wm[np.where(under)[0], 0] += 2 * EQUATORIAL_SEMICIRCLE
+        wm[np.where(under)[0], 0] += 2*EPSG_3857_EXT_X
+        under = wm[:, 0] < -EPSG_3857_EXT_X
+
+    return wm.squeeze()
+
+def wrap_mercator_x_dist(wm, x_only:bool = False) -> np.ndarray:
+    """
+    Wrap web mercator x (horizontal) measurement
+    to fall within [0, 2*EPSG_3857_EXT_X].
+
+    Args:
+        wm: the web mercator measurement
+
+    Note: assumes that the measurement is from west to east, and
+    therefore will be normalized to [0, 2*EPSG_3857_EXT_X].
+    """
+    if x_only:
+        wm = np.asarray(wm, dtype=float).reshape(-1, 1)
+    else:
+        wm = np.asarray(wm, dtype=float).reshape(-1, 2)
+
+    under = np.where(wm[:, 0] < 0)[0]
+    wm[under, 0] += 2*EPSG_3857_EXT_X
 
     return wm.squeeze()
 

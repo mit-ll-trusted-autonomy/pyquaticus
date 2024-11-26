@@ -5,7 +5,9 @@ import numpy as np
 ### Constants ###
 EQUATORIAL_RADIUS = 6378137.0  # meters (https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html)
 POLAR_RADIUS = 6356752.0 # meters (https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html)
-EQUATORIAL_SEMICIRCLE = 20037508.342789244 # meters 
+
+EPSG_3857_EXT_X = np.pi * EQUATORIAL_RADIUS # meters (https://epsg.io/3857)
+EPSG_3857_EXT_Y = 20048966.104014594 # meters (https://epsg.io/3857)
 
 LINE_INTERSECT_TOL = 1e-9
 
