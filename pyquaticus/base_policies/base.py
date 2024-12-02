@@ -35,9 +35,9 @@ class BaseAgentPolicy:
     def __init__(self, agent_id: int, team: Team, suppress_numpy_warnings=True):
         self.id = agent_id
         if isinstance(team, str):
-            if team == 'red':
+            if team == "red":
                 team = Team.RED_TEAM
-            elif team == 'blue':
+            elif team == "blue":
                 team = Team.BLUE_TEAM
             else:
                 raise ValueError(f"Got unknown team: {team}")
@@ -67,13 +67,15 @@ class BaseAgentPolicy:
         """
         pass
 
-    def update_state(self, obs):
+    def update_state(self, global_state):
         """
         Method to convert the observation space into one more relative to the
         agent.
 
+        REQUIRES UNNORMALIZED GLOBAL STATE
+
         Args:
-            obs: The observation from the gym
+            global_state: The global state from the gym (info["global_state"])
 
         Returns
         -------
@@ -82,7 +84,7 @@ class BaseAgentPolicy:
 
         """
         self.opp_team_pos = []
-        self.opp_team_pos_dict = {} #for labeling by agent_id
+        self.opp_team_pos_dict = {}  # for labeling by agent_id
         self.my_team_pos = []
         self.opp_team_tag = []
         self.my_team_tag = []
@@ -92,38 +94,61 @@ class BaseAgentPolicy:
         my_team_ids = set()
 
         # Copy this agents state from the observation
-        my_obs = obs[self.id]
-        self.speed = my_obs["speed"]
-        self.on_sides = my_obs["on_side"]
-        self.has_flag = my_obs["has_flag"]
-        self.tagging_cooldown = my_obs["tagging_cooldown"]
-        self.is_tagged = my_obs["is_tagged"]
+        id = self.id
+        self.pos = np.asarray(
+            (
+                global_state[(f"player_{id}", "player_pos_x")],
+                global_state[(f"player_{id}", "player_pos_y")],
+            )
+        )
+        self.heading = global_state[(f"player_{id}", "player_heading")]
+        self.speed = global_state[(f"player_{id}", "player_speed")]
+        self.on_sides = global_state[(f"player_{id}", "player_on_side")]
+        self.has_flag = global_state[(f"player_{id}", "player_has_flag")]
+        self.tagging_cooldown = global_state[
+            (f"player_{id}", "player_tagging_cooldown")
+        ]
+        self.is_tagged = global_state[(f"player_{id}", "player_is_tagged")]
 
         # Calculate the rectangular coordinates for the flags location relative to the agent.
-        self.my_flag_distance = my_obs["own_home_distance"]
-        self.my_flag_bearing = my_obs["own_home_bearing"]
-        self.my_flag_loc = (
-            my_obs["own_home_distance"]
-            * np.cos(np.deg2rad(my_obs["own_home_bearing"])),
-            my_obs["own_home_distance"]
-            * np.sin(np.deg2rad(my_obs["own_home_bearing"])),
-        )
+        if self.team == Team.BLUE_TEAM:
+            self.my_flag_loc = np.asarray(
+                (
+                    global_state["blue_flag_home_x"],
+                    global_state["blue_flag_home_y"],
+                )
+            )
+            self.my_flag_distance = np.linalg.norm(self.my_flag_loc - self.pos)
+            self.my_flag_bearing = self.angle180(self.vec_to_heading(self.my_flag_loc - self.pos) - self.heading) # relative bearing
 
-        self.opp_flag_distance = my_obs["opponent_home_distance"]
-        self.opp_flag_bearing = my_obs["opponent_home_bearing"]
-        self.opp_flag_loc = (
-            my_obs["opponent_home_distance"]
-            * np.cos(np.deg2rad(my_obs["opponent_home_bearing"])),
-            my_obs["opponent_home_distance"]
-            * np.sin(np.deg2rad(my_obs["opponent_home_bearing"])),
-        )
+            self.opp_flag_loc = np.asarray(
+                (
+                    global_state["red_flag_home_x"],
+                    global_state["red_flag_home_y"],
+                )
+            )
+            self.opp_flag_distance = np.linalg.norm(self.opp_flag_loc - self.pos)
+            self.opp_flag_bearing = self.angle180(self.vec_to_heading(self.opp_flag_loc - self.pos) - self.heading) # relative bearing
 
-        self.home = (
-            my_obs["own_home_distance"]
-            * np.cos(np.deg2rad(my_obs["own_home_bearing"])),
-            my_obs["own_home_distance"]
-            * np.sin(np.deg2rad(my_obs["own_home_bearing"])),
-        )
+        else:
+            self.my_flag_loc = np.asarray(
+                (
+                    global_state["red_flag_home_x"],
+                    global_state["red_flag_home_y"],
+                )
+            )
+            self.my_flag_distance = np.linalg.norm(self.my_flag_loc - self.pos)
+            self.my_flag_bearing = self.angle180(self.vec_to_heading(self.my_flag_loc - self.pos) - self.heading) # relative bearing
+
+            self.opp_flag_loc = np.asarray(
+                (
+                    global_state["blue_flag_home_x"],
+                    global_state["blue_flag_home_y"],
+                )
+            )
+            self.opp_flag_distance = np.linalg.norm(self.opp_flag_loc - self.pos)
+            self.opp_flag_bearing = self.angle180(self.vec_to_heading(self.opp_flag_loc - self.pos) - self.heading) # relative bearing
+
 
         # Copy the polar positions of each agent, separated by team and get their tag status
         # Update flag positions if picked up
@@ -135,12 +160,13 @@ class BaseAgentPolicy:
                         (my_obs[(k[0], "distance")], my_obs[(k[0], "bearing")])
                     )
                     self.opp_team_pos_dict[k[0]] = (
-                        (my_obs[(k[0], "distance")], my_obs[(k[0], "bearing")])
+                        my_obs[(k[0], "distance")],
+                        my_obs[(k[0], "bearing")],
                     )
                     self.opp_team_has_flag = (
                         self.opp_team_has_flag or my_obs[k[0], "has_flag"]
                     )
-                    #update own flag position if flag has been picked up
+                    # update own flag position if flag has been picked up
                     if my_obs[k[0], "has_flag"]:
                         self.my_flag_distance = my_obs[(k[0], "distance")]
                         self.my_flag_bearing = my_obs[(k[0], "bearing")]
@@ -150,9 +176,7 @@ class BaseAgentPolicy:
                             my_obs[(k[0], "distance")]
                             * np.sin(np.deg2rad(my_obs[(k[0], "bearing")])),
                         )
-                    self.opp_team_tag.append(
-                        my_obs[(k[0], "is_tagged")]
-                    )
+                    self.opp_team_tag.append(my_obs[(k[0], "is_tagged")])
                 elif k[0].find("teammate_") != -1 and k[0] not in my_team_ids:
                     my_team_ids.add(k[0])
                     self.my_team_pos.append(
@@ -161,7 +185,7 @@ class BaseAgentPolicy:
                     self.my_team_has_flag = (
                         self.my_team_has_flag or my_obs[(k[0], "has_flag")]
                     )
-                    #update opponent flag position if flag has been picked up by teammate
+                    # update opponent flag position if flag has been picked up by teammate
                     if my_obs[k[0], "has_flag"]:
                         self.opp_flag_distance = my_obs[(k[0], "distance")]
                         self.opp_flag_bearing = my_obs[(k[0], "bearing")]
@@ -171,15 +195,13 @@ class BaseAgentPolicy:
                             my_obs[(k[0], "distance")]
                             * np.sin(np.deg2rad(my_obs[(k[0], "bearing")])),
                         )
-                    self.my_team_tag.append(
-                        my_obs[(k[0], "is_tagged")]
-                    )
+                    self.my_team_tag.append(my_obs[(k[0], "is_tagged")])
 
-            #update opponent flag position if flag has been picked up by agent
+            # update opponent flag position if flag has been picked up by agent
             if self.has_flag:
-                self.opp_flag_distance = 0.
-                self.opp_flag_bearing = 0.
-                self.opp_flag_loc = (0., 0.)
+                self.opp_flag_distance = 0.0
+                self.opp_flag_bearing = 0.0
+                self.opp_flag_loc = self.pos
 
         return my_obs
 

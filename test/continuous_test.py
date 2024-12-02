@@ -20,7 +20,8 @@ config_dict["max_time"] = 600.0
 config_dict["max_score"] = 100
 config_dict["render_agent_ids"] = True
 config_dict["dynamics"] = "heron"
-config_dict["action_type"] = "continuous"
+# config_dict["action_type"] = "continuous"
+config_dict["lidar_obs"] = True 
 config_dict["sim_speedup_factor"] = 3
 config_dict["tau"] = 0.05
 # config_dict["catch_radius"] = 1
@@ -30,26 +31,30 @@ term_g = {0:False,1:False}
 truncated_g = {0:False,1:False}
 term = term_g
 trunc = truncated_g
-obs = env.reset()
+obs, info = env.reset()
 temp_captures = env.state["captures"]
 temp_grabs = env.state["grabs"]
 temp_tags = env.state["tags"]
 
-H_one = WaypointFollowerContinuous(2, Team.RED_TEAM, wps=[np.array([50, 0]), np.array([75, 25]), np.array([50, 50])])
-H_two = BaseDefenderContinuous(3, Team.RED_TEAM, mode="nothing")
+H_one = BaseAttacker(2, Team.RED_TEAM, mode="easy")
+H_two = BaseDefender(3, Team.RED_TEAM, mode="easy")
 
-R_one = WaypointFollowerContinuous(0, Team.BLUE_TEAM, wps=[np.array([100, 0]), np.array([125, 25]), np.array([100, 50])])
-R_two = Heuristic_CTF_Agent_Continuous(1, Team.BLUE_TEAM, mode="nothing")
+R_one = BaseAttacker(0, Team.BLUE_TEAM, mode="medium")
+R_two = BaseDefender(1, Team.BLUE_TEAM, mode="medium")
 step = 0
 while True:
     new_obs = {}
     for k in obs:
         new_obs[k] = env.agent_obs_normalizer.unnormalized(obs[k])
 
-    two = H_one.compute_action(new_obs)
-    three = H_two.compute_action(new_obs)
-    zero = R_one.compute_action(new_obs)
-    one = R_two.compute_action(new_obs)
+    global_state = env.global_state_normalizer.unnormalized(info["global_state"])
+
+    print(global_state)
+
+    two = H_one.compute_action(global_state)
+    three = H_two.compute_action(global_state)
+    zero = R_one.compute_action(global_state)
+    one = R_two.compute_action(global_state)
 
     
     obs, reward, term, trunc, info = env.step({0:zero,1:one, 2:two, 3:three})

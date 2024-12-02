@@ -2289,16 +2289,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             obs = {agent_id: self.state["obs_hist_buffer"][agent_id][0] for agent_id in self.players}
 
         # Return
-        if return_info:
             # Info
-            if self.hist_len > 1:
-                info = {"global_state": self.state["global_state_hist_buffer"][self.hist_buffer_inds]}
-            else:
-                info = {"global_state": self.state["global_state_hist_buffer"][0]}
-
-            return obs, info
+        if self.hist_len > 1:
+            info = {"global_state": self.state["global_state_hist_buffer"][self.hist_buffer_inds]}
         else:
-            return obs
+            info = {"global_state": self.state["global_state_hist_buffer"][0]}
+
+        return obs, info
 
     def _set_state_from_init_dict(self, init_dict: dict):
         """
