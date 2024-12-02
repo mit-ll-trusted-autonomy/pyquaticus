@@ -49,7 +49,7 @@ while True:
 
     global_state = env.global_state_normalizer.unnormalized(info["global_state"])
 
-    print(global_state)
+    # print(global_state)
 
     two = H_one.compute_action(global_state)
     three = H_two.compute_action(global_state)

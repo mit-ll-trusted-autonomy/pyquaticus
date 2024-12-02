@@ -37,7 +37,12 @@ class BaseAttacker(BaseAgentPolicy):
     """This is a Policy class that contains logic for capturing the flag."""
 
     def __init__(
-        self, agent_id: int, team=Team.RED_TEAM, mode="easy", using_pyquaticus=True
+        self,
+        agent_id: int,
+        team: Team = Team.RED_TEAM,
+        mode: str = "easy",
+        continuous: bool = False,
+        using_pyquaticus: bool = True,
     ):
         super().__init__(agent_id, team)
         if mode not in modes:
@@ -46,10 +51,12 @@ class BaseAttacker(BaseAgentPolicy):
 
         if team not in Team:
             raise AttributeError(f"Invalid team {team}")
+        
+        self.continuous = continuous
 
         self.using_pyquaticus = using_pyquaticus
         self.competition_easy = [15, 6, 50, 35]
-        self.goal = 'SC'
+        self.goal = "SC"
 
     def set_mode(self, mode: str):
         """Sets difficulty mode."""
@@ -74,69 +81,109 @@ class BaseAttacker(BaseAgentPolicy):
         """
         my_obs = self.update_state(obs)
 
+        # TODO: Fix this
+        # Some big speed hard-coded so that every agent drives at max speed
+        desired_speed = 50
+
         if self.mode == "easy":
+
             # If I or someone on my team has the flag, go back home
             if self.has_flag or self.my_team_has_flag:
                 goal_vect = self.bearing_to_vec(my_obs["own_home_bearing"])
+
             # Otherwise go get the opponents flag
             else:
                 goal_vect = self.bearing_to_vec(self.opp_flag_bearing)
 
             # Convert the vector to a heading, and then pick the best discrete action to perform
             try:
-                act_heading = self.angle180(self.vec_to_heading(goal_vect))
+                heading_error = self.angle180(self.vec_to_heading(goal_vect))
 
-                if 1 >= act_heading >= -1:
-                    act_index = 12
-                elif act_heading < -1:
-                    act_index = 14
-                elif act_heading > 1:
-                    act_index = 10
+                if self.continuous:
+                    if np.isnan(heading_error):
+                        heading_error = 0
+
+                    if np.abs(heading_error) < 5:
+                        heading_error = 0
+
+                    return (desired_speed, heading_error)
+
                 else:
-                    # Should only happen if the act_heading is somehow NAN
-                    act_index = 12
+                    if 1 >= heading_error >= -1:
+                        return 12
+                    elif heading_error < -1:
+                        return 14
+                    elif heading_error > 1:
+                        return 10
+                    else:
+                        # Should only happen if the act_heading is somehow NAN
+                        return 12
             except:
                 # If there is an error converting the vector to a heading, just go straight
-                act_index = 12
+                if self.continuous:
+                    return (desired_speed, 0)
+                else:
+                    return 12
 
-        elif self.mode=="nothing":
-            act_index = -1
-
-        elif self.mode=="competition_easy":
-            if self.team == Team.RED_TEAM:
-                estimated_position = [my_obs["wall_1_distance"], my_obs["wall_0_distance"]]   
+        elif self.mode == "nothing":
+            if self.continuous:
+                return (0, 0)
             else:
-                estimated_position = [my_obs["wall_3_distance"], my_obs["wall_2_distance"]]
+                return -1
+
+        elif self.mode == "competition_easy":
+            if self.team == Team.RED_TEAM:
+                estimated_position = [
+                    my_obs["wall_1_distance"],
+                    my_obs["wall_0_distance"],
+                ]
+            else:
+                estimated_position = [
+                    my_obs["wall_3_distance"],
+                    my_obs["wall_2_distance"],
+                ]
             value = self.goal
 
             if self.team == Team.BLUE_TEAM:
-                if 'P' in self.goal:
-                    value = 'S' + value[1:]
-                elif 'S' in self.goal:
-                    value = 'P' + value[1:]
-                if 'X' not in self.goal and self.goal not in ['SC', 'CC', 'PC']:
-                    value += 'X'
-                elif self.goal not in ['SC', 'CC', 'PC']:
+                if "P" in self.goal:
+                    value = "S" + value[1:]
+                elif "S" in self.goal:
+                    value = "P" + value[1:]
+                if "X" not in self.goal and self.goal not in ["SC", "CC", "PC"]:
+                    value += "X"
+                elif self.goal not in ["SC", "CC", "PC"]:
                     value = value[:-1]
             if my_obs["is_tagged"]:
-                self.goal = 'SC'
+                self.goal = "SC"
 
-            if -2.5 <= self.get_distance_between_2_points(estimated_position, config_dict_std["aquaticus_field_points"][value]) <= 2.5:
-                
-                if self.goal == 'SC':
-                    self.goal = 'CFX'
-                elif self.goal == 'CFX':
-                    self.goal = 'PC'
-                elif self.goal == 'PC':
-                    self.goal = 'CF'
-                elif self.goal == 'CF':
-                    self.goal = 'SC'
-            if self.goal == 'CF' and -6 <= self.get_distance_between_2_points(estimated_position, config_dict_std["aquaticus_field_points"][value]) <= 6:
-                self.goal = 'SC'
+            if (
+                -2.5
+                <= self.get_distance_between_2_points(
+                    estimated_position, config_dict_std["aquaticus_field_points"][value]
+                )
+                <= 2.5
+            ):
+
+                if self.goal == "SC":
+                    self.goal = "CFX"
+                elif self.goal == "CFX":
+                    self.goal = "PC"
+                elif self.goal == "PC":
+                    self.goal = "CF"
+                elif self.goal == "CF":
+                    self.goal = "SC"
+            if (
+                self.goal == "CF"
+                and -6
+                <= self.get_distance_between_2_points(
+                    estimated_position, config_dict_std["aquaticus_field_points"][value]
+                )
+                <= 6
+            ):
+                self.goal = "SC"
             return self.goal
         elif self.mode == "medium":
-            
-           
+
             # If I or someone on my team has the flag, return to my side.
             if self.has_flag or self.my_team_has_flag:
                 # Weighted to follow goal more than avoiding others
@@ -156,19 +203,33 @@ class BaseAttacker(BaseAgentPolicy):
 
             # Convert the heading to a discrete action to follow
             try:
-                act_heading = self.angle180(self.vec_to_heading(my_action))
+                heading_error = self.angle180(self.vec_to_heading(my_action))
 
-                if 1 >= act_heading >= -1:
-                    act_index = 12
-                elif act_heading < -1:
-                    act_index = 14
-                elif act_heading > 1:
-                    act_index = 10
+                if self.continuous:
+                    if np.isnan(heading_error):
+                        heading_error = 0
+
+                    if np.abs(heading_error) < 5:
+                        heading_error = 0
+
+                    return (desired_speed, heading_error)
+
                 else:
-                    # Should only happen if the act_heading is somehow NAN
-                    act_index = 12
+                    if 1 >= heading_error >= -1:
+                        return 12
+                    elif heading_error < -1:
+                        return 14
+                    elif heading_error > 1:
+                        return 10
+                    else:
+                        # Should only happen if the act_heading is somehow NAN
+                        return 12
             except:
-                act_index = 12
+                # If there is an error converting the vector to a heading, just go straight
+                if self.continuous:
+                    return (desired_speed, 0)
+                else:
+                    return 12
 
         elif self.mode == "competition_medium":
             # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid
@@ -220,7 +281,7 @@ class BaseAttacker(BaseAgentPolicy):
             # Increase the avoidance threshold to start avoiding when farther away
             avoid_thresh = 60.0
             # If I have the flag, go back to my side
-            if self.has_flag :
+            if self.has_flag:
                 goal_vect = np.multiply(
                     1.25, self.bearing_to_vec(my_obs["own_home_bearing"])
                 )
@@ -235,7 +296,14 @@ class BaseAttacker(BaseAgentPolicy):
                 avoid_vect = self.get_avoid_vect(
                     self.opp_team_pos, avoid_threshold=avoid_thresh
                 )
-                if ((not np.any(goal_vect + (avoid_vect))) or (np.allclose(np.abs(np.abs(goal_vect) - np.abs(avoid_vect)), np.zeros(np.array(goal_vect).shape), atol = 1e-01, rtol=1e-02))):
+                if (not np.any(goal_vect + (avoid_vect))) or (
+                    np.allclose(
+                        np.abs(np.abs(goal_vect) - np.abs(avoid_vect)),
+                        np.zeros(np.array(goal_vect).shape),
+                        atol=1e-01,
+                        rtol=1e-02,
+                    )
+                ):
                     # Special case where a player is closely in line with the goal
                     # vector such that the calculated avoid vector nearly negates the
                     # action (the player is in a spot that causes the agent to just go
@@ -248,21 +316,25 @@ class BaseAttacker(BaseAgentPolicy):
                     # Some bias towards teh bottom boundary to force it to stick with a
                     # direction.
                     if top_dist > 1.25 * bottom_dist:
-                        my_action = self.rb_to_rect((top_dist, my_obs["wall_0_bearing"]))
+                        my_action = self.rb_to_rect(
+                            (top_dist, my_obs["wall_0_bearing"])
+                        )
                     else:
-                        my_action = self.rb_to_rect((bottom_dist, my_obs["wall_2_bearing"]))
+                        my_action = self.rb_to_rect(
+                            (bottom_dist, my_obs["wall_2_bearing"])
+                        )
                 else:
                     my_action = np.multiply(1.25, goal_vect) + avoid_vect
 
             # Try to convert the heading to a discrete action
             try:
-                act_heading = self.angle180(self.vec_to_heading(my_action))
+                heading_error = self.angle180(self.vec_to_heading(my_action))
                 # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
-                if 1 >= act_heading >= -1:
+                if 1 >= heading_error >= -1:
                     act_index = 4
-                elif act_heading < -1:
+                elif heading_error < -1:
                     act_index = 6
-                elif act_heading > 1:
+                elif heading_error > 1:
                     act_index = 2
                 else:
                     # Should only happen if the act_heading is somehow NAN
@@ -335,7 +407,14 @@ class BaseAttacker(BaseAgentPolicy):
                 avoid_vect = self.get_avoid_vect(
                     self.opp_team_pos, avoid_threshold=avoid_thresh
                 )
-                if ((not np.any(goal_vect + (avoid_vect))) or (np.allclose(np.abs(np.abs(goal_vect) - np.abs(avoid_vect)), np.zeros(np.array(goal_vect).shape), atol = 1e-01, rtol=1e-02))):
+                if (not np.any(goal_vect + (avoid_vect))) or (
+                    np.allclose(
+                        np.abs(np.abs(goal_vect) - np.abs(avoid_vect)),
+                        np.zeros(np.array(goal_vect).shape),
+                        atol=1e-01,
+                        rtol=1e-02,
+                    )
+                ):
                     # Special case where a player is closely in line with the goal
                     # vector such that the calculated avoid vector nearly negates the
                     # action (the player is in a spot that causes the agent to just go
@@ -348,26 +427,45 @@ class BaseAttacker(BaseAgentPolicy):
                     # Some bias towards teh bottom boundary to force it to stick with a
                     # direction.
                     if top_dist > 1.25 * bottom_dist:
-                        my_action = self.rb_to_rect((top_dist, my_obs["wall_0_bearing"]))
+                        my_action = self.rb_to_rect(
+                            (top_dist, my_obs["wall_0_bearing"])
+                        )
                     else:
-                        my_action = self.rb_to_rect((bottom_dist, my_obs["wall_2_bearing"]))
+                        my_action = self.rb_to_rect(
+                            (bottom_dist, my_obs["wall_2_bearing"])
+                        )
                 else:
                     my_action = np.multiply(1.25, goal_vect) + avoid_vect
 
             # Try to convert the heading to a discrete action
             try:
-                act_heading = self.angle180(self.vec_to_heading(my_action))
+                heading_error = self.angle180(self.vec_to_heading(my_action))
                 # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
-                if 1 >= act_heading >= -1:
-                    act_index = 4
-                elif act_heading < -1:
-                    act_index = 6
-                elif act_heading > 1:
-                    act_index = 2
+                # TODO: Look at this
+                if self.continuous:
+                    if np.isnan(heading_error):
+                        heading_error = 0
+
+                    if np.abs(heading_error) < 5:
+                        heading_error = 0
+
+                    return (desired_speed, heading_error)
+
                 else:
-                    # Should only happen if the act_heading is somehow NAN
-                    act_index = 4
+                    if 1 >= heading_error >= -1:
+                        return 4
+                    elif heading_error < -1:
+                        return 6
+                    elif heading_error > 1:
+                        return 2
+                    else:
+                        # Should only happen if the act_heading is somehow NAN
+                        return 4
             except:
-                act_index = 4
+                # If there is an error converting the vector to a heading, just go straight
+                if self.continuous:
+                    return (desired_speed, 0)
+                else:
+                    return 4
 
         return act_index
