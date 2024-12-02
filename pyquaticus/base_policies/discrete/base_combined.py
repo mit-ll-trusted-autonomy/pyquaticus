@@ -21,8 +21,8 @@
 
 import numpy as np
 
-import pyquaticus.base_policies.base_attack as attack_policy
-import pyquaticus.base_policies.base_defend as defend_policy
+import pyquaticus.base_policies.discrete.base_attack as attack_policy
+import pyquaticus.base_policies.discrete.base_defend as defend_policy
 from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import config_dict_std, Team
 

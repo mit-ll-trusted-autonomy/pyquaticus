@@ -21,9 +21,9 @@
 
 from collections import OrderedDict
 from ray.rllib.policy.policy import PolicySpec, Policy
-from pyquaticus.base_policies.base_attack import BaseAttacker
-from pyquaticus.base_policies.base_defend import BaseDefender
-from pyquaticus.base_policies.base_combined import Heuristic_CTF_Agent
+from pyquaticus.base_policies.discrete.base_attack import BaseAttacker
+from pyquaticus.base_policies.discrete.base_defend import BaseDefender
+from pyquaticus.base_policies.discrete.base_combined import Heuristic_CTF_Agent
 from pyquaticus.utils.obs_utils import ObsNormalizer
 import numpy as np
 import pyquaticus.envs.pyquaticus as pyq

@@ -26,9 +26,9 @@ from pygame import KEYDOWN, QUIT, K_ESCAPE
 import sys
 from pyquaticus.config import get_std_config, ACTION_MAP
 from pyquaticus.envs.pyquaticus import Team
-from pyquaticus.base_policies.base_combined import Heuristic_CTF_Agent
-from pyquaticus.base_policies.base_attack import BaseAttacker
-from pyquaticus.base_policies.base_defend import BaseDefender
+from pyquaticus.base_policies.discrete.base_combined import Heuristic_CTF_Agent
+from pyquaticus.base_policies.discrete.base_attack import BaseAttacker
+from pyquaticus.base_policies.discrete.base_defend import BaseDefender
 from pyquaticus import pyquaticus_v0
 from pygame import QUIT, KEYDOWN, K_ESCAPE, K_LEFT, K_UP, K_RIGHT
 from collections import OrderedDict

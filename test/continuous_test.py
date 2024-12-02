@@ -3,9 +3,9 @@ import os
 import os.path
 import pyquaticus
 from pyquaticus import pyquaticus_v0
-from pyquaticus.base_policies.base_attack import BaseAttacker
-from pyquaticus.base_policies.base_defend import BaseDefender
-from pyquaticus.base_policies.base_combined import Heuristic_CTF_Agent
+from pyquaticus.base_policies.discrete.base_attack import BaseAttacker
+from pyquaticus.base_policies.discrete.base_defend import BaseDefender
+from pyquaticus.base_policies.discrete.base_combined import Heuristic_CTF_Agent
 from pyquaticus.base_policies.continuous.base_attack_continuous import BaseAttackerContinuous
 from pyquaticus.base_policies.continuous.base_defend_continuous import BaseDefenderContinuous
 from pyquaticus.base_policies.continuous.base_combined_continuous import Heuristic_CTF_Agent_Continuous
@@ -35,10 +35,10 @@ temp_captures = env.state["captures"]
 temp_grabs = env.state["grabs"]
 temp_tags = env.state["tags"]
 
-H_one = WaypointFollowerContinuous(2, Team.RED_TEAM, wps=[np.array([100, 0]), np.array([150, 50]), np.array([100, 100])])
+H_one = WaypointFollowerContinuous(2, Team.RED_TEAM, wps=[np.array([50, 0]), np.array([75, 25]), np.array([50, 50])])
 H_two = BaseDefenderContinuous(3, Team.RED_TEAM, mode="nothing")
 
-R_one = WaypointFollowerContinuous(0, Team.BLUE_TEAM, wps=[np.array([200, 0]), np.array([250, 50]), np.array([200, 100])])
+R_one = WaypointFollowerContinuous(0, Team.BLUE_TEAM, wps=[np.array([100, 0]), np.array([125, 25]), np.array([100, 50])])
 R_two = Heuristic_CTF_Agent_Continuous(1, Team.BLUE_TEAM, mode="nothing")
 step = 0
 while True:
