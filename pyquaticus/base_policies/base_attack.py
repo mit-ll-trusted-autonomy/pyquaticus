@@ -39,7 +39,7 @@ class BaseAttacker(BaseAgentPolicy):
     def __init__(
         self,
         agent_id: int,
-        team: Team = Team.RED_TEAM,
+        team: Team,
         mode: str = "easy",
         continuous: bool = False,
         using_pyquaticus: bool = True,
@@ -51,7 +51,7 @@ class BaseAttacker(BaseAgentPolicy):
 
         if team not in Team:
             raise AttributeError(f"Invalid team {team}")
-        
+
         self.continuous = continuous
 
         self.using_pyquaticus = using_pyquaticus

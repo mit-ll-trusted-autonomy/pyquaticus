@@ -6,9 +6,6 @@ from pyquaticus import pyquaticus_v0
 from pyquaticus.base_policies.base_attack import BaseAttacker
 from pyquaticus.base_policies.base_defend import BaseDefender
 from pyquaticus.base_policies.base_combined import Heuristic_CTF_Agent
-from pyquaticus.base_policies.base_attack_continuous import BaseAttackerContinuous
-from pyquaticus.base_policies.base_defend_continuous import BaseDefenderContinuous
-from pyquaticus.base_policies.base_combined_continuous import Heuristic_CTF_Agent_Continuous
 from pyquaticus.base_policies.wp_follower_continuous import WaypointFollowerContinuous
 from pyquaticus.envs.pyquaticus import Team
 from collections import OrderedDict
