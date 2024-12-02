@@ -106,9 +106,9 @@ def get_patrol_policy(
             DOWN = 3
 
         # patrol location
-        ideal_x = x_frac * env.world_size[0]
-        y_lower = y_low_frac * env.world_size[1]
-        y_upper = y_high_frac * env.world_size[1]
+        ideal_x = x_frac * env.env_size[0]
+        y_lower = y_low_frac * env.env_size[1]
+        y_upper = y_high_frac * env.env_size[1]
 
         def __init__(self, observation_space, action_space, config):
             NoWeightsPolicy.__init__(self, observation_space, action_space, config)
@@ -239,8 +239,8 @@ def get_tagger_policy(
         # Give more room to blue agents before being chased
         scrimmage = env.scrimmage * (1 + scrimmage_offset)
         # x_mid is set closer to flag to leave room for opponent to attack
-        x_mid = x_frac * env.world_size[0]
-        y_mid = y_frac * env.world_size[1]
+        x_mid = x_frac * env.env_size[0]
+        y_mid = y_frac * env.env_size[1]
 
         def __init__(self, observation_space, action_space, config):
             NoWeightsPolicy.__init__(self, observation_space, action_space, config)
