@@ -1,6 +1,6 @@
 # external imports
-from pyquaticus.base_policies.discrete.base_attack import BaseAttacker
-from pyquaticus.base_policies.discrete.base_defend import BaseDefender
+from pyquaticus.base_policies.base_attack import BaseAttacker
+from pyquaticus.base_policies.base_defend import BaseDefender
 from pyquaticus.envs.pyquaticus import Team
 
 # internal imports

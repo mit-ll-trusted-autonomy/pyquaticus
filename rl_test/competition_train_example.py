@@ -31,7 +31,7 @@ from ray.rllib.algorithms.ppo import PPOTF2Policy, PPOConfig
 from ray.rllib.policy.policy import PolicySpec, Policy
 import os
 import pyquaticus.utils.rewards as rew
-from pyquaticus.base_policies.discrete.base_policies import DefendGen, AttackGen
+from pyquaticus.base_policies.base_policies import DefendGen, AttackGen
 
 
 class RandPolicy(Policy):
