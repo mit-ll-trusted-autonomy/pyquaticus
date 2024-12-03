@@ -89,7 +89,7 @@ class BaseAttacker(BaseAgentPolicy):
 
             # If I or someone on my team has the flag, go back home
             if self.has_flag or self.my_team_has_flag:
-                goal_vect = self.bearing_to_vec(my_obs["own_home_bearing"])
+                goal_vect = self.bearing_to_vec(self.own_home_bearing)
 
             # Otherwise go get the opponents flag
             else:

@@ -45,6 +45,8 @@ class BaseDefender(BaseAgentPolicy):
         if mode not in modes:
             raise ValueError(f"mode {mode} not in set of valid modes {modes}")
         self.mode = mode
+
+        self.continuous = continuous
         self.flag_keepout = flag_keepout
         self.catch_radius = catch_radius
         self.using_pyquaticus = using_pyquaticus

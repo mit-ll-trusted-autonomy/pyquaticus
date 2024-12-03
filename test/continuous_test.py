@@ -19,7 +19,7 @@ config_dict["render_agent_ids"] = True
 config_dict["dynamics"] = "heron"
 # config_dict["action_type"] = "continuous"
 config_dict["lidar_obs"] = True 
-config_dict["sim_speedup_factor"] = 1
+config_dict["sim_speedup_factor"] = 2
 config_dict["tau"] = 0.05
 # config_dict["catch_radius"] = 1
 
@@ -33,11 +33,11 @@ temp_captures = env.state["captures"]
 temp_grabs = env.state["grabs"]
 temp_tags = env.state["tags"]
 
-H_one = BaseAttacker(2, Team.RED_TEAM, mode="easy")
-H_two = BaseAttacker(3, Team.RED_TEAM, mode="easy")
+H_one = BaseAttacker(2, Team.RED_TEAM, mode="easy", continuous=False)
+H_two = BaseAttacker(3, Team.RED_TEAM, mode="easy", continuous=False)
 
-R_one = BaseDefender(0, Team.BLUE_TEAM, mode="easy")
-R_two = BaseDefender(1, Team.BLUE_TEAM, mode="easy")
+R_one = BaseDefender(0, Team.BLUE_TEAM, mode="easy", continuous=False)
+R_two = BaseDefender(1, Team.BLUE_TEAM, mode="easy", continuous=False)
 step = 0
 while True:
     new_obs = {}

@@ -130,6 +130,7 @@ class BaseAgentPolicy:
                 )  # convert to maritime standard for heading
                 - self.heading
             )  # relative bearing
+            self.own_home_bearing = self.my_flag_bearing
             self.opp_flag_loc = (
                 np.asarray(
                     (
@@ -163,7 +164,7 @@ class BaseAgentPolicy:
                 )  # convert to maritime standard for heading
                 - self.heading
             )  # relative bearing
-
+            self.own_home_bearing = self.my_flag_bearing
             self.opp_flag_loc = (
                 np.asarray(
                     (
