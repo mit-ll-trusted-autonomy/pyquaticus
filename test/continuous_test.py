@@ -19,7 +19,7 @@ config_dict["render_agent_ids"] = True
 config_dict["dynamics"] = "heron"
 # config_dict["action_type"] = "continuous"
 config_dict["lidar_obs"] = True 
-config_dict["sim_speedup_factor"] = 2
+config_dict["sim_speedup_factor"] = 4
 config_dict["tau"] = 0.05
 # config_dict["catch_radius"] = 1
 
@@ -29,15 +29,12 @@ truncated_g = {0:False,1:False}
 term = term_g
 trunc = truncated_g
 obs, info = env.reset()
-temp_captures = env.state["captures"]
-temp_grabs = env.state["grabs"]
-temp_tags = env.state["tags"]
 
-H_one = BaseAttacker(2, Team.RED_TEAM, mode="easy", continuous=False)
-H_two = BaseAttacker(3, Team.RED_TEAM, mode="easy", continuous=False)
+H_one = BaseAttacker(2, Team.RED_TEAM, 3, [0, 1], mode="hard", continuous=False)
+H_two = BaseAttacker(3, Team.RED_TEAM, 2, [0, 1], mode="hard", continuous=False)
 
-R_one = BaseDefender(0, Team.BLUE_TEAM, mode="easy", continuous=False)
-R_two = BaseDefender(1, Team.BLUE_TEAM, mode="easy", continuous=False)
+R_one = BaseDefender(0, Team.BLUE_TEAM, 1, [2, 3], mode="hard", continuous=False)
+R_two = BaseDefender(1, Team.BLUE_TEAM, 0, [2, 3], mode="hard", continuous=False)
 step = 0
 while True:
     new_obs = {}
@@ -60,11 +57,5 @@ while True:
     step += 1
     if term[k[0]] == True or trunc[k[0]]==True:
         break
-for i in range(len(env.state["captures"])):
-    temp_captures[i] += env.state["captures"][i]
-for i in range(len(env.state["grabs"])):
-    temp_grabs[i] += env.state["grabs"][i]
-for i in range(len(env.state["tags"])):
-    temp_tags[i] += env.state["tags"][i]
 
 env.close()

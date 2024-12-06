@@ -24,13 +24,22 @@ import numpy as np
 from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import config_dict_std, Team
 
+from typing import Union
+
+
 class WaypointFollowerContinuous(BaseAgentPolicy):
     """This is a Policy class that contains logic for capturing the flag."""
 
     def __init__(
-        self, agent_id: int, team=Team.RED_TEAM, capture_radius: float = 20, wps: list[np.ndarray] = []
+        self,
+        agent_id: int,
+        teammate_ids: Union[list[int], int, None],
+        opponent_ids: Union[list[int], int, None],
+        team=Team.RED_TEAM,
+        capture_radius: float = 20,
+        wps: list[np.ndarray] = [],
     ):
-        super().__init__(agent_id, team)
+        super().__init__(agent_id, team, teammate_ids, opponent_ids)
 
         self.capture_radius = capture_radius
 
@@ -56,7 +65,6 @@ class WaypointFollowerContinuous(BaseAgentPolicy):
         """
         my_obs = self.update_state(obs)
 
-
         # Some big speed hard-coded so that every agent drives at max speed
         desired_speed = 50
         heading_error = 0
@@ -75,7 +83,7 @@ class WaypointFollowerContinuous(BaseAgentPolicy):
         heading_error = self.angle180(desired_heading - heading)
 
         return 4, heading_error
-    
+
     def update_wps(self, pos: np.ndarray):
 
         if len(self.wps) == 0:
@@ -83,7 +91,6 @@ class WaypointFollowerContinuous(BaseAgentPolicy):
         elif np.linalg.norm(self.wps[0] - pos) <= self.capture_radius:
             self.wps.pop(0)
 
-    
     def get_pos_heading(self, my_obs):
         if self.team == Team.RED_TEAM:
             x = my_obs["wall_1_distance"]
@@ -95,4 +102,3 @@ class WaypointFollowerContinuous(BaseAgentPolicy):
             heading = -my_obs["wall_0_bearing"]
 
         return np.array([x, y]), heading
-

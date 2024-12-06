@@ -24,6 +24,8 @@ import numpy as np
 from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import config_dict_std, Team
 
+from typing import Union
+
 modes = {"nothing", "easy", "medium", "hard", "competition_easy", "competition_medium"}
 """
 Difficulty modes for the policy, each one has different behavior. 
@@ -40,11 +42,13 @@ class BaseAttacker(BaseAgentPolicy):
         self,
         agent_id: int,
         team: Team,
+        teammate_ids: Union[list[int], int, None],
+        opponent_ids: Union[list[int], int, None],
         mode: str = "easy",
         continuous: bool = False,
         using_pyquaticus: bool = True,
     ):
-        super().__init__(agent_id, team)
+        super().__init__(agent_id, team, teammate_ids, opponent_ids)
         if mode not in modes:
             raise AttributeError(f"Invalid mode {mode}")
         self.mode = mode
@@ -133,15 +137,15 @@ class BaseAttacker(BaseAgentPolicy):
 
         elif self.mode == "competition_easy":
             if self.team == Team.RED_TEAM:
-                estimated_position = [
+                estimated_position = np.asarray([
                     my_obs["wall_1_distance"],
                     my_obs["wall_0_distance"],
-                ]
+                ])
             else:
-                estimated_position = [
+                estimated_position = np.asarray([
                     my_obs["wall_3_distance"],
                     my_obs["wall_2_distance"],
-                ]
+                ])
             value = self.goal
 
             if self.team == Team.BLUE_TEAM:
@@ -186,9 +190,10 @@ class BaseAttacker(BaseAgentPolicy):
 
             # If I or someone on my team has the flag, return to my side.
             if self.has_flag or self.my_team_has_flag:
+
                 # Weighted to follow goal more than avoiding others
                 goal_vect = np.multiply(
-                    2.00, self.bearing_to_vec(my_obs["own_home_bearing"])
+                    2.00, self.bearing_to_vec(self.own_home_bearing)
                 )
                 avoid_vect = self.get_avoid_vect(self.opp_team_pos)
                 my_action = goal_vect + avoid_vect
@@ -468,4 +473,8 @@ class BaseAttacker(BaseAgentPolicy):
                 else:
                     return 4
 
-        return act_index
+        else:
+            if self.continuous:
+                return (0, 0)
+            else:
+                return -1

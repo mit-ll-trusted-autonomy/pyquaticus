@@ -25,6 +25,8 @@ import numpy as np
 
 from pyquaticus.envs.pyquaticus import Team
 
+from typing import Any, Union
+
 
 class BaseAgentPolicy:
     """
@@ -32,7 +34,7 @@ class BaseAgentPolicy:
     the observation space.
     """
 
-    def __init__(self, agent_id: int, team: Team, suppress_numpy_warnings=True):
+    def __init__(self, agent_id: int, team: Team, teammate_ids: Union[list[int], int, None], opponent_ids: Union[list[int], int, None], suppress_numpy_warnings=True):
         self.id = agent_id
         if isinstance(team, str):
             if team == "red":
@@ -42,6 +44,17 @@ class BaseAgentPolicy:
             else:
                 raise ValueError(f"Got unknown team: {team}")
         self.team = team
+
+        # Make sure own id is not in teammate_ids
+        if teammate_ids == self.id:
+            teammate_ids = None
+        if isinstance(teammate_ids, list):
+            for id in teammate_ids:
+                if id == self.id:
+                    teammate_ids.remove(id)
+                    
+        self.teammate_ids = teammate_ids
+        self.opponent_ids = opponent_ids
         self.speed = 0.0
         self.has_flag = False
         self.on_sides = False
@@ -50,7 +63,7 @@ class BaseAgentPolicy:
         if suppress_numpy_warnings:
             np.seterr(all="ignore")
 
-    def compute_action(self, obs):
+    def compute_action(self, obs) -> Any:
         """
         **THIS FUNCTION REQUIRES UNNORMALIZED OBSERVATIONS**.
 
@@ -260,6 +273,8 @@ class BaseAgentPolicy:
                 self.opp_flag_bearing = 0.0
                 self.opp_flag_loc = np.asarray((0.0, 0.0))
 
+            # Get wall distances and bearings
+
         return global_state
 
     def angle180(self, deg):
@@ -278,7 +293,7 @@ class BaseAgentPolicy:
     def bearing_to_vec(self, heading):
         return [np.cos(np.deg2rad(heading)), np.sin(np.deg2rad(heading))]
 
-    def rb_to_rect(self, point: tuple[float, float]) -> tuple[float, float]:
+    def rb_to_rect(self, point: tuple[float, float]) -> np.ndarray:
         """Returns the rectangular coordinates of polar point `point`."""
         dist = point[0]
         bearing = point[1]
@@ -322,14 +337,14 @@ class BaseAgentPolicy:
 
         return final_avoid_unit_vect
 
-    def unit_vect_between_points(self, start: np.array, end: np.array):
+    def unit_vect_between_points(self, start: np.ndarray, end: np.ndarray):
         """Calculates the unit vector between two rectangular points."""
         norm = self.get_distance_between_2_points(start, end)
         vect = np.asarray((end[0] - start[0], end[1] - start[1]))
         unit_vect = np.divide(vect, norm)
         return unit_vect
 
-    def gaussian_unit_vect_between_points(self, start: np.array, end: np.array):
+    def gaussian_unit_vect_between_points(self, start: np.ndarray, end: np.ndarray):
         """Calculates the gaussian unit vector between points."""
         noisy_end_x = np.random.normal(end[0], 5)
         noisy_end_y = np.random.normal(end[1], 5)
@@ -353,28 +368,28 @@ class BaseAgentPolicy:
         dist_sq = r_ab_sq - 2 * ra * rb * np.cos(np.deg2rad(tb - ta))
         return np.sqrt(dist_sq)
 
-    def get_distance_between_2_points(self, start: np.array, end: np.array) -> float:
+    def get_distance_between_2_points(self, start: np.ndarray, end: np.ndarray):
         """Calculates the distance between two rectagular points."""
-        return np.linalg.norm(np.asarray(start) - np.asarray(end))
+        return np.linalg.norm(start - end)
 
-    def get_nearest_opponent_2_flag(self, opp_poses, own_flag):
-        """
-        Iterate over agent positions, returning the distance of the closest
-        agent to the flag and their position.
+    # def get_nearest_opponent_2_flag(self, opp_poses, own_flag):
+    #     """
+    #     Iterate over agent positions, returning the distance of the closest
+    #     agent to the flag and their position.
 
-        Args:
-            opp_poses: List of opponents positions (rectangular coords)
-            own_flag: Flag location (rectangular coords)
-        """
-        min_dist = np.max(self.env_size) * 2.0
+    #     Args:
+    #         opp_poses: List of opponents positions (rectangular coords)
+    #         own_flag: Flag location (rectangular coords)
+    #     """
+    #     min_dist = np.max(self.env_size) * 2.0
 
-        for ag in opp_poses:
-            opp_flag_dist = self.get_distance_between_2_points(ag, own_flag)
-            if opp_flag_dist < min_dist:
-                min_dist = opp_flag_dist
-                nearest_pose = ag
+    #     for ag in opp_poses:
+    #         opp_flag_dist = self.get_distance_between_2_points(ag, own_flag)
+    #         if opp_flag_dist < min_dist:
+    #             min_dist = opp_flag_dist
+    #             nearest_pose = ag
 
-        return min_dist, nearest_pose
+    #     return min_dist, nearest_pose
 
     def closest_point_on_line(self, A, B, P):
         """
@@ -404,4 +419,4 @@ class BaseAgentPolicy:
         elif proj_dist >= len_AB:
             return B
         else:
-            return [A[0] + (unit_AB[0] * proj_dist), A[1] + (unit_AB[1] * proj_dist)]
+            return np.asarray([A[0] + (unit_AB[0] * proj_dist), A[1] + (unit_AB[1] * proj_dist)])

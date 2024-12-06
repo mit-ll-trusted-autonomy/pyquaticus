@@ -24,6 +24,8 @@ import numpy as np
 from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import config_dict_std, Team
 
+from typing import Union
+
 modes = {"nothing", "easy", "medium", "hard", "competition_easy", "competition_medium"}
 
 
@@ -34,13 +36,15 @@ class BaseDefender(BaseAgentPolicy):
         self,
         agent_id: int,
         team: Team,
+        teammate_ids: Union[list[int], int, None],
+        opponent_ids: Union[list[int], int, None],
         mode: str = "easy",
         continuous: bool = False,
         flag_keepout: float = 10.0,
         catch_radius: float = config_dict_std["catch_radius"],
         using_pyquaticus: bool = True,
     ):
-        super().__init__(agent_id, team)
+        super().__init__(agent_id, team, teammate_ids, opponent_ids)
 
         if mode not in modes:
             raise ValueError(f"mode {mode} not in set of valid modes {modes}")
@@ -62,18 +66,6 @@ class BaseDefender(BaseAgentPolicy):
         if mode not in modes:
             raise ValueError(f"mode {mode} not in set of valid modes {modes}")
         self.mode = mode
-
-    def get_distance_between_2_points(self, start: np.array, end: np.array) -> float:
-        """
-        Convenience method for returning distance between two points.
-
-        Args:
-            start: Starting position to measure from
-            end: Point to measure to
-        Returns:
-            The distance between `start` and `end`
-        """
-        return np.linalg.norm(np.asarray(start) - np.asarray(end))
 
     def compute_action(self, obs):
         """
@@ -146,15 +138,15 @@ class BaseDefender(BaseAgentPolicy):
 
         elif self.mode == "competition_easy":
             if self.team == Team.RED_TEAM:
-                estimated_position = [
+                estimated_position = np.asarray([
                     my_obs["wall_1_distance"],
                     my_obs["wall_0_distance"],
-                ]
+                ])
             else:
-                estimated_position = [
+                estimated_position = np.asarray([
                     my_obs["wall_3_distance"],
                     my_obs["wall_2_distance"],
-                ]
+                ])
             value = self.goal
 
             if self.team == Team.BLUE_TEAM:
@@ -187,6 +179,7 @@ class BaseDefender(BaseAgentPolicy):
             min_enemy_distance = 1000.00
             enemy_dis_dict = {}
             closest_enemy = None
+            enemy_loc = None
             for enem, pos in self.opp_team_pos_dict.items():
                 enemy_dis_dict[enem] = pos[0]
                 if (
@@ -205,15 +198,15 @@ class BaseDefender(BaseAgentPolicy):
                 ag_vect = enemy_loc
             else:
                 if self.team == Team.RED_TEAM:
-                    estimated_position = [
+                    estimated_position = np.asarray([
                         my_obs["wall_1_distance"],
                         my_obs["wall_0_distance"],
-                    ]
+                    ])
                 else:
-                    estimated_position = [
+                    estimated_position = np.asarray([
                         my_obs["wall_3_distance"],
                         my_obs["wall_2_distance"],
-                    ]
+                    ])
                 point = "CH" if self.team == Team.RED_TEAM else "CHX"
                 if (
                     -2.5
@@ -338,6 +331,7 @@ class BaseDefender(BaseAgentPolicy):
             min_enemy_distance = 1000.00
             enemy_dis_dict = {}
             closest_enemy = None
+            enemy_loc = np.asarray((0, 0))
             for enem, pos in self.opp_team_pos_dict.items():
                 enemy_dis_dict[enem] = pos[0]
                 if pos[0] < min_enemy_distance and not my_obs[(enem, "is_tagged")]:

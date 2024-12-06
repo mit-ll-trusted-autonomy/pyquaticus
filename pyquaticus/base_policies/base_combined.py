@@ -149,7 +149,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
 
         return action
 
-    def update_state(self, obs):
+    def update_state(self, global_state):
         """
         Method to convert the observation space into one more relative to the
         agent.
@@ -158,7 +158,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             obs: The observation from the gym
 
         """
-        my_obs = super().update_state(obs)
+        my_obs = super().update_state(global_state)
 
         # Initialize the scrimmage line as the mid point between the two flags
         if self.scrimmage is None:
