@@ -26,6 +26,8 @@ import pyquaticus.base_policies.base_defend as defend_policy
 from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import config_dict_std, Team
 
+from typing import Union
+
 modes = {"easy", "medium", "hard"}
 
 
@@ -36,13 +38,15 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         self,
         agent_id: int,
         team: Team,
+        teammate_ids: Union[list[int], int, None],
+        opponent_ids: Union[list[int], int, None],
         mode="easy",
         flag_keepout=10.0,
         catch_radius=config_dict_std["catch_radius"],
         using_pyquaticus=True,
         defensiveness=20.0,
     ):
-        super().__init__(agent_id, team)
+        super().__init__(agent_id, team, teammate_ids, opponent_ids)
 
         if mode not in modes:
             raise ValueError(f"mode {mode} not a valid mode out of {modes}")
@@ -55,11 +59,13 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         self.using_pyquaticus = using_pyquaticus
         self.id = agent_id
         self.base_attacker = attack_policy.BaseAttacker(
-            self.id, team, mode=mode, using_pyquaticus=using_pyquaticus
+            self.id, team, teammate_ids, opponent_ids, mode=mode, using_pyquaticus=using_pyquaticus
         )
         self.base_defender = defend_policy.BaseDefender(
             self.id,
             team,
+            teammate_ids,
+            opponent_ids,
             mode=mode,
             using_pyquaticus=using_pyquaticus,
             catch_radius=catch_radius,
