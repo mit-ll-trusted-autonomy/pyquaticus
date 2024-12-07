@@ -1659,10 +1659,20 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.PYGAME_UP = Vector2((0.0, 1.0))
 
             # pygame screen size
-            arena_buffer = self.arena_buffer_frac * self.env_diag
+            arena_buffer = np.full((2,2), self.arena_buffer_frac * self.env_diag) #matches self.env_bounds [(left, bottom), (right, top)]
+
+            if self.gps_env:
+                #clip horizontal buffers if necessary
+                render_area_width = self.env_size[0] + np.sum(arena_buffer[:, 0])
+                if render_area_width > 2*EPSG_3857_EXT_X:
+                    arena_buffer[:, 0] = (2*EPSG_3857_EXT_X - self.env_size[0]) / 2
+
+                #clip vertical buffers if necessary
+                arena_buffer[0][1] = min(arena_buffer[0][1], np.abs(-EPSG_3857_EXT_Y - self.env_bounds[0][1]))
+                arena_buffer[1][1] = min(arena_buffer[1][1], np.abs(EPSG_3857_EXT_Y - self.env_bounds[1][1]))
 
             max_screen_size = get_screen_res()
-            arena_aspect_ratio = (self.env_size[0] + 2 * arena_buffer) / (self.env_size[1] + 2 * arena_buffer)
+            arena_aspect_ratio = (self.env_size[0] + np.sum(arena_buffer[:, 0])) / (self.env_size[1] + np.sum(arena_buffer[:, 1]))
             width_based_height = max_screen_size[0] / arena_aspect_ratio
 
             if width_based_height <= max_screen_size[1]:
@@ -1671,9 +1681,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 height_based_width = max_screen_size[1] * arena_aspect_ratio
                 max_pygame_screen_width = int(height_based_width)
 
-            self.pixel_size = (self.screen_frac * max_pygame_screen_width) / (self.env_size[0] + 2 * arena_buffer)
-            self.screen_width = round((self.env_size[0] + 2 * arena_buffer) * self.pixel_size)
-            self.screen_height = round((self.env_size[1] + 2 * arena_buffer) * self.pixel_size)
+            self.pixel_size = (self.screen_frac * max_pygame_screen_width) / (self.env_size[0] + np.sum(arena_buffer[:, 0]))
+            self.screen_width = round((self.env_size[0] + np.sum(arena_buffer[:, 0])) * self.pixel_size)
+            self.screen_height = round((self.env_size[1] + np.sum(arena_buffer[:, 1])) * self.pixel_size)
 
             # environemnt element sizes in pixels
             self.arena_width, self.arena_height = self.pixel_size * self.env_size
@@ -1882,16 +1892,24 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         pygame.font.init()  # needed to import pygame fonts
 
         if self.gps_env:
-            pygame_background_img = pygame.surfarray.make_surface(np.transpose(self.background_img, (1, 0, 2)))  # pygame assumes images are (h, w, 3)
+            pygame_background_img = pygame.surfarray.make_surface(np.transpose(self.background_img, (1, 0, 2))) #pygame assumes images are (h, w, 3)
             self.pygame_background_img = pygame.transform.scale(pygame_background_img, (self.screen_width, self.screen_height))
 
             # add attribution text
-            img_attribution_font = pygame.font.SysFont(None, round(0.35 * self.arena_buffer))
+            img_attribution_font_size = max(8, round(0.35 * np.max(self.arena_buffer)))
+            img_attribution_font = pygame.font.SysFont(None, img_attribution_font_size)
             img_attribution_text = img_attribution_font.render(self.background_img_attribution, True, "black")
             img_attribution_text_rect = img_attribution_text.get_rect()
 
-            center_x = (self.screen_width - self.arena_buffer - 0.5 * img_attribution_text_rect[2])  # object is [left,top,width,height]
-            center_y = self.screen_height - 0.5 * self.arena_buffer
+            center_x = self.screen_width - (self.arena_buffer[1][0] + 2*self.boundary_width + 0.5*img_attribution_text_rect.w)
+
+            if img_attribution_text_rect.h < self.arena_buffer[0][1]:
+                center_y = self.screen_height - 0.5*self.arena_buffer[0][1]
+            elif img_attribution_text_rect.h < self.arena_buffer[1][1]:
+                center_y = 0.5*self.arena_buffer[1][1]
+            else:
+                center_y = self.screen_height - (self.arena_buffer[0][1] + 2*self.boundary_width 0.5*img_attribution_text_rect.h)
+
             img_attribution_text_rect.center = [center_x, center_y]
 
             self.pygame_background_img.blit(img_attribution_text, img_attribution_text_rect)
@@ -2796,7 +2814,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
                 if flag_homes_unit == "m":
                     raise Exception(
-                        "Flag homes must be specified in aboslute coordinates (lat/long or web mercator xy) to auto-generate gps environment bounds"
+                        "Flag homes must be specified in aboslute coordinates (lat/long or web mercator xy) to auto-generate gps environment bounds."
                     )
                 elif flag_homes_unit == "ll":
                     # convert flag poses to web mercator xy
@@ -2805,10 +2823,17 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
                 flag_vec = wrap_mercator_x(flag_home_blue - flag_home_red)
                 flag_distance = np.linalg.norm(flag_vec)
+
+                if flag_distance == 0:
+                    raise Exception(
+                        "Flag homes of opposite teams cannot be in the same location."
+                    )
+
                 flag_unit_vec = flag_vec / flag_distance
                 flag_perp_vec = np.array([-flag_unit_vec[1], flag_unit_vec[0]])
 
                 # assuming default aquaticus field size ratio drawn on web mercator, these bounds will contain it
+                #TODO: add check to make sure we don't wrap more than once around the world based on the x values of these vectors we are adding
                 bounds_pt1 = flag_home_blue + (flag_distance/6) * flag_unit_vec + (flag_distance/3) * flag_perp_vec
                 bounds_pt2 = flag_home_blue + (flag_distance/6) * flag_unit_vec + (flag_distance/3) * -flag_perp_vec
                 bounds_pt3 = flag_home_red + (flag_distance/6) * -flag_unit_vec + (flag_distance/3) * flag_perp_vec
@@ -2816,22 +2841,40 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 bounds_points = wrap_mercator_x([bounds_pt1, bounds_pt2, bounds_pt3, bounds_pt4])
 
                 # determine bounds
+                if np.sign(flag_vec[0]) == 1:
+                    # blue flag on right
+                    if np.sign(flag_vec[1]) == 1:
+                        xmin = bounds_points[2][0]
+                        xmax = bounds_points[1][0]
+                    elif np.sign(flag_vec[1]) == -1:
+                        xmin = bounds_points[3][0]
+                        xmax = bounds_points[0][0]
+                    else:
+                        xmin = bounds_points[2][0]
+                        xmax = bounds_points[0][0]
+                elif np.sign(flag_vec[0]) == -1:
+                    # red flag on right
+                    if np.sign(flag_vec[1]) == 1:
+                        xmin = bounds_points[0][0]
+                        xmax = bounds_points[3][0]
+                    elif np.sign(flag_vec[1]) == -1:
+                        xmin = bounds_points[1][0]
+                        xmax = bounds_points[2][0]
+                    else:
+                        xmin = bounds_points[0][0]
+                        xmax = bounds_points[2][0]
+                else:
+                    # blue flag x == red flag x
+                    if np.sign(flag_vec[1]) == 1:
+                        #blue flag on top
+                        xmin = bounds_points[0][0]
+                        xmax = bounds_points[1][0]
+                    else:
+                        #red flag on top
+                        xmin = bounds_points[1][0]
+                        xmax = bounds_points[0][0]
+
                 env_bounds = np.zeros((2, 2))
-                bounds_points_x = np.unique(bounds_points[:, 0])
-
-                xmin = None
-                xmax = None
-                for i, x in enumerate(bounds_points_x):
-                    x_vecs = wrap_mercator_x(x - np.delete(bounds_points_x, i), x_only=True)
-                    if np.all(x_vecs < 0):
-                        xmin = x
-                        break
-                for i, x in enumerate(bounds_points_x):
-                    x_vecs = wrap_mercator_x(x - np.delete(bounds_points_x, i), x_only=True)
-                    if np.all(x_vecs > 0):
-                        xmax = x
-                        break
-
                 env_bounds[0][0] = xmin #left x bound
                 env_bounds[1][0] = xmax #right y bound
                 env_bounds[0][1] = np.min(bounds_points[:, 1]) #lower y bound
@@ -2919,6 +2962,9 @@ when gps environment bounds are specified in meters"
                         mt.xy(env_right, env_top)
                     ])
                 else:
+                    # reshape to group by min and max bounds
+                    env_bounds = env_bounds.reshape((2,2))
+
                     # check for exceptions
                     if np.any(env_bounds[0] == env_bounds[1]):
                         raise Exception(
@@ -3487,7 +3533,7 @@ when gps environment bounds are specified in meters"
 
             #rendering tile (for pygame background)
             render_tile_bounds = wrap_mercator_x(
-                self.env_bounds + self.arena_buffer_frac * np.asarray([[-self.env_diag], [self.env_diag]])
+                self.env_bounds + self.arena_buffer * np.array([[-1], [1]])
             )
 
             render_tile, render_ext = cx.bounds2img(
@@ -4018,8 +4064,8 @@ when gps environment bounds are specified in meters"
 
     def env_to_screen(self, pos):
         screen_pos = self.pixel_size * np.asarray(pos)
-        screen_pos[0] += self.arena_buffer
-        screen_pos[1] = self.arena_height - screen_pos[1] + self.arena_buffer
+        screen_pos[0] += self.arena_buffer[0][0]
+        screen_pos[1] = self.arena_height - screen_pos[1] + self.arena_buffer[1][1]
 
         return screen_pos
 
