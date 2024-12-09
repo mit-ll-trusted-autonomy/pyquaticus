@@ -28,7 +28,7 @@ from pyquaticus.envs.pyquaticus import config_dict_std, Team
 
 from typing import Union
 
-modes = {"easy", "medium", "hard"}
+modes = {"easy", "medium", "hard", "nothing"}
 
 
 class Heuristic_CTF_Agent(BaseAgentPolicy):
@@ -128,6 +128,13 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         # Update the state based on this observation
         global_state = self.update_state(global_state)
 
+        if self.mode == "nothing":
+            if self.continuous:
+                return (0, 0)
+            else:
+                return -1
+
+
         if self.mode == "easy":
             # Opp is close - needs to defend:
             if self.is_close_to_flag() and False in self.opp_team_tag:
@@ -185,6 +192,9 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         Randomly compute an action that steers the agent to it's own side of the field and sometimes
         towards its flag.
         """
+        if self.scrimmage is None:
+            raise RuntimeWarning("Must call update_state() before trying to get an action.")
+        
         if np.random.random() < 0.25:
             span_len = self.scrimmage
             goal_vec = [np.random.random() * span_len, 0]
@@ -288,6 +298,9 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             True if the center of mass of the opposing team is within
             ``threshold`` units of the flag, False otherwise
         """
+        if self.opp_team_density is None:
+            raise RuntimeWarning("Must call update_state() before trying to get an action.")
+        
         dist_to_flag = self.get_distance_between_2_points(
             self.opp_team_density[0], self.my_flag_loc
         )
@@ -305,6 +318,10 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             True if the center of mass of the opposing team is further than
             ``threshold`` units of the flag, False otherwise
         """
+
+        if self.opp_team_density is None:
+            raise RuntimeWarning("Must call update_state() before trying to get an action.")
+        
         dist_to_flag = self.get_distance_between_2_points(
             self.opp_team_density[0], self.my_flag_loc
         )

@@ -27,16 +27,17 @@ from pyquaticus.envs.pyquaticus import config_dict_std, Team
 from typing import Union
 
 
-class WaypointFollowerContinuous(BaseAgentPolicy):
+class WaypointFollower(BaseAgentPolicy):
     """This is a Policy class that contains logic for capturing the flag."""
 
     def __init__(
         self,
         agent_id: int,
+        team: Team,
         teammate_ids: Union[list[int], int, None],
         opponent_ids: Union[list[int], int, None],
-        team=Team.RED_TEAM,
-        capture_radius: float = 20,
+        continuous: bool = False,
+        capture_radius: float = 1,
         wps: list[np.ndarray] = [],
     ):
         super().__init__(agent_id, team, teammate_ids, opponent_ids)
@@ -45,12 +46,14 @@ class WaypointFollowerContinuous(BaseAgentPolicy):
 
         self.wps = wps
 
+        self.continuous = continuous
+
         if team not in Team:
             raise AttributeError(f"Invalid team {team}")
 
-    def compute_action(self, obs):
+    def compute_action(self, global_state):
         """
-        **THIS FUNCTION REQUIRES UNNORMALIZED OBSERVATIONS**.
+        **THIS FUNCTION REQUIRES UNNORMALIZED GLOBAL STATE**.
 
         Compute an action for the given position. This function uses observations
         of both teams.
@@ -63,26 +66,46 @@ class WaypointFollowerContinuous(BaseAgentPolicy):
             desired_speed: m/s
             heading_error: deg
         """
-        my_obs = self.update_state(obs)
+        global_state = self.update_state(global_state)
 
         # Some big speed hard-coded so that every agent drives at max speed
         desired_speed = 50
         heading_error = 0
 
-        pos, heading = self.get_pos_heading(my_obs)
-
-        self.update_wps(pos)
+        self.update_wps(self.pos)
 
         if len(self.wps) == 0:
-            return 0, 0
+            if self.continuous:
+                return 0, 0
+            else:
+                return -1
 
-        pos_err = self.wps[0] - pos
+        pos_err = self.wps[0] - self.pos
 
         desired_heading = self.angle180(-1 * self.vec_to_heading(pos_err) + 90)
 
-        heading_error = self.angle180(desired_heading - heading)
+        heading_error = self.angle180(desired_heading - self.heading)
 
-        return 4, heading_error
+        if self.continuous:
+            if np.isnan(heading_error):
+                heading_error = 0
+
+            if np.abs(heading_error) < 5:
+                heading_error = 0
+
+            return (desired_speed, heading_error)
+
+        else:
+            if 1 >= heading_error >= -1:
+                return 12
+            elif heading_error < -1:
+                return 14
+            elif heading_error > 1:
+                return 10
+            else:
+                # Should only happen if the act_heading is somehow NAN
+                return 12
+
 
     def update_wps(self, pos: np.ndarray):
 
@@ -91,14 +114,7 @@ class WaypointFollowerContinuous(BaseAgentPolicy):
         elif np.linalg.norm(self.wps[0] - pos) <= self.capture_radius:
             self.wps.pop(0)
 
-    def get_pos_heading(self, my_obs):
-        if self.team == Team.RED_TEAM:
-            x = my_obs["wall_1_distance"]
-            y = my_obs["wall_0_distance"]
-            heading = -my_obs["wall_2_bearing"]
-        else:
-            x = my_obs["wall_3_distance"]
-            y = my_obs["wall_2_distance"]
-            heading = -my_obs["wall_0_bearing"]
+    def rrt(self, wp: np.ndarray, min_dist: float = 5, max_dist: float = 10, max_iter: int = 1000):
+        pass
 
-        return np.array([x, y]), heading
+
