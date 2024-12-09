@@ -472,11 +472,11 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.boundary_ur = np.asarray(self._moos_config.boundary_ur, dtype=np.float32)
         self.boundary_ll = np.asarray(self._moos_config.boundary_ll, dtype=np.float32)
         self.boundary_lr = np.asarray(self._moos_config.boundary_lr, dtype=np.float32)
-        self.world_size  = np.array([np.linalg.norm(self.boundary_lr - self.boundary_ll),
+        self.env_size  = np.array([np.linalg.norm(self.boundary_lr - self.boundary_ll),
                                      np.linalg.norm(self.boundary_ul - self.boundary_ll)])
         
         # save the horizontal location of scrimmage line (relative to world/ playing field)
-        self.scrimmage = 0.5*self.world_size[0]
+        self.scrimmage = 0.5*self.env_size[0]
         
         if self.timewarp is not None:
             self._moos_config.moos_timewarp = self.timewarp
