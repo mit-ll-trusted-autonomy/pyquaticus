@@ -1908,7 +1908,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             elif img_attribution_text_rect.h < self.arena_buffer[1][1]:
                 center_y = 0.5*self.arena_buffer[1][1]
             else:
-                center_y = self.screen_height - (self.arena_buffer[0][1] + 2*self.boundary_width 0.5*img_attribution_text_rect.h)
+                center_y = self.screen_height - (self.arena_buffer[0][1] + 2*self.boundary_width + 0.5*img_attribution_text_rect.h)
 
             img_attribution_text_rect.center = [center_x, center_y]
 

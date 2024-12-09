@@ -30,11 +30,11 @@ term = term_g
 trunc = truncated_g
 obs, info = env.reset()
 
-H_one = BaseAttacker(2, Team.RED_TEAM, 3, [0, 1], mode="hard", continuous=False)
-H_two = BaseAttacker(3, Team.RED_TEAM, 2, [0, 1], mode="hard", continuous=False)
+H_one = BaseAttacker(2, Team.RED_TEAM, 3, [0, 1], mode="easy", continuous=False)
+H_two = BaseAttacker(3, Team.RED_TEAM, 2, [0, 1], mode="easy", continuous=False)
 
-R_one = BaseDefender(0, Team.BLUE_TEAM, 1, [2, 3], mode="hard", continuous=False)
-R_two = BaseDefender(1, Team.BLUE_TEAM, 0, [2, 3], mode="hard", continuous=False)
+R_one = BaseDefender(0, Team.BLUE_TEAM, 1, [2, 3], mode="medium", continuous=False)
+R_two = BaseDefender(1, Team.BLUE_TEAM, 0, [2, 3], mode="medium", continuous=False)
 step = 0
 while True:
     new_obs = {}
