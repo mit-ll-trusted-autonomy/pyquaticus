@@ -341,7 +341,7 @@ class BaseDefender(BaseAgentPolicy):
 
             if closest_enemy == None:
                 min_enemy_distance = min(enemy_dis_dict.values())
-                closest_enemy = min(enemy_dis_dict, key=enemy_dis_dict.get)
+                closest_enemy = min(enemy_dis_dict, key=enemy_dis_dict.__getitem__)
                 enemy_loc = self.rb_to_rect(self.opp_team_pos_dict[closest_enemy])
 
             if not self.opp_team_has_flag:

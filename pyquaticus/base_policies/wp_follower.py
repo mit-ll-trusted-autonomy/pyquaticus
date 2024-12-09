@@ -114,7 +114,6 @@ class WaypointFollower(BaseAgentPolicy):
         elif np.linalg.norm(self.wps[0] - pos) <= self.capture_radius:
             self.wps.pop(0)
 
-    def rrt(self, wp: np.ndarray, min_dist: float = 5, max_dist: float = 10, max_iter: int = 1000):
-        pass
+
 
 
