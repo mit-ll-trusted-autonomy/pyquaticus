@@ -134,7 +134,6 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             else:
                 return -1
 
-
         if self.mode == "easy":
             # Opp is close - needs to defend:
             if self.is_close_to_flag() and False in self.opp_team_tag:
@@ -193,8 +192,10 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         towards its flag.
         """
         if self.scrimmage is None:
-            raise RuntimeWarning("Must call update_state() before trying to get an action.")
-        
+            raise RuntimeWarning(
+                "Must call update_state() before trying to get an action."
+            )
+
         if np.random.random() < 0.25:
             span_len = self.scrimmage
             goal_vec = [np.random.random() * span_len, 0]
@@ -228,14 +229,13 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             heading_error = self.angle180(self.vec_to_heading(direction))
 
             if self.continuous:
-                    if np.isnan(heading_error):
-                        heading_error = 0
+                if np.isnan(heading_error):
+                    heading_error = 0
 
-                    if np.abs(heading_error) < 5:
-                        heading_error = 0
+                if np.abs(heading_error) < 5:
+                    heading_error = 0
 
-                    return (desired_speed, heading_error)
-
+                return (desired_speed, heading_error)
 
             else:
                 if self.mode != "hard":
@@ -253,13 +253,12 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
                         return 6
                     elif heading_error > 1:
                         return 2
-        except:
+        except Exception:
             # Drive straights
             if self.continuous:
                 return (desired_speed, 0)
             else:
                 return 4
-
 
     def get_team_density(self, friendly_positions, enemy_positions):
         """This function returns the center of mass and varience of all the agents in the team."""
@@ -299,8 +298,10 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             ``threshold`` units of the flag, False otherwise
         """
         if self.opp_team_density is None:
-            raise RuntimeWarning("Must call update_state() before trying to get an action.")
-        
+            raise RuntimeWarning(
+                "Must call update_state() before trying to get an action."
+            )
+
         dist_to_flag = self.get_distance_between_2_points(
             self.opp_team_density[0], self.my_flag_loc
         )
@@ -320,8 +321,10 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         """
 
         if self.opp_team_density is None:
-            raise RuntimeWarning("Must call update_state() before trying to get an action.")
-        
+            raise RuntimeWarning(
+                "Must call update_state() before trying to get an action."
+            )
+
         dist_to_flag = self.get_distance_between_2_points(
             self.opp_team_density[0], self.my_flag_loc
         )

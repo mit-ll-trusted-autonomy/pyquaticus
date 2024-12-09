@@ -28,7 +28,7 @@ from typing import Union
 
 modes = {"nothing", "easy", "medium", "hard", "competition_easy", "competition_medium"}
 """
-Difficulty modes for the policy, each one has different behavior. 
+Difficulty modes for the policy, each one has different behavior.
 'easy' = Easy Attacker - Go straight to goal
 'medium' = Medium Attacker - Go to goal and avoid others
 'hard' = Hard Attacker - Not Implemented, but plan to goal smartly
@@ -122,7 +122,7 @@ class BaseAttacker(BaseAgentPolicy):
                     else:
                         # Should only happen if the act_heading is somehow NAN
                         return 12
-            except:
+            except Exception:
                 # If there is an error converting the vector to a heading, just go straight
                 if self.continuous:
                     return (desired_speed, 0)
@@ -137,15 +137,19 @@ class BaseAttacker(BaseAgentPolicy):
 
         elif self.mode == "competition_easy":
             if self.team == Team.RED_TEAM:
-                estimated_position = np.asarray([
-                    global_state["wall_1_distance"],
-                    global_state["wall_0_distance"],
-                ])
+                estimated_position = np.asarray(
+                    [
+                        global_state["wall_1_distance"],
+                        global_state["wall_0_distance"],
+                    ]
+                )
             else:
-                estimated_position = np.asarray([
-                    global_state["wall_3_distance"],
-                    global_state["wall_2_distance"],
-                ])
+                estimated_position = np.asarray(
+                    [
+                        global_state["wall_3_distance"],
+                        global_state["wall_2_distance"],
+                    ]
+                )
             value = self.goal
 
             if self.team == Team.BLUE_TEAM:
@@ -229,7 +233,7 @@ class BaseAttacker(BaseAgentPolicy):
                     else:
                         # Should only happen if the act_heading is somehow NAN
                         return 12
-            except:
+            except Exception:
                 # If there is an error converting the vector to a heading, just go straight
                 if self.continuous:
                     return (desired_speed, 0)
@@ -238,7 +242,9 @@ class BaseAttacker(BaseAgentPolicy):
 
         elif self.mode == "competition_medium":
             # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid
-            if global_state["wall_0_distance"] < 10 and (-90 < global_state["wall_0_bearing"] < 90):
+            if global_state["wall_0_distance"] < 10 and (
+                -90 < global_state["wall_0_bearing"] < 90
+            ):
                 wall_0_unit_vec = self.rb_to_rect(
                     (global_state["wall_0_distance"], global_state["wall_0_bearing"])
                 )
@@ -260,7 +266,9 @@ class BaseAttacker(BaseAgentPolicy):
                         global_state["wall_2_distance"] * wall_2_unit_vec[1],
                     )
                 )
-            if global_state["wall_1_distance"] < 10 and (-90 < global_state["wall_1_bearing"] < 90):
+            if global_state["wall_1_distance"] < 10 and (
+                -90 < global_state["wall_1_bearing"] < 90
+            ):
                 wall_1_unit_vec = self.rb_to_rect(
                     (global_state["wall_1_distance"], global_state["wall_1_bearing"])
                 )
@@ -336,20 +344,22 @@ class BaseAttacker(BaseAgentPolicy):
                 heading_error = self.angle180(self.vec_to_heading(my_action))
                 # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
                 if 1 >= heading_error >= -1:
-                    act_index = 4
+                    return 4
                 elif heading_error < -1:
-                    act_index = 6
+                    return 6
                 elif heading_error > 1:
-                    act_index = 2
+                    return 2
                 else:
                     # Should only happen if the act_heading is somehow NAN
-                    act_index = 4
-            except:
-                act_index = 4
+                    return 4
+            except Exception:
+                return 4
 
         elif self.mode == "hard":
             # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid
-            if global_state["wall_0_distance"] < 10 and (-90 < global_state["wall_0_bearing"] < 90):
+            if global_state["wall_0_distance"] < 10 and (
+                -90 < global_state["wall_0_bearing"] < 90
+            ):
                 wall_0_unit_vec = self.rb_to_rect(
                     (global_state["wall_0_distance"], global_state["wall_0_bearing"])
                 )
@@ -371,7 +381,9 @@ class BaseAttacker(BaseAgentPolicy):
                         global_state["wall_2_distance"] * wall_2_unit_vec[1],
                     )
                 )
-            if global_state["wall_1_distance"] < 10 and (-90 < global_state["wall_1_bearing"] < 90):
+            if global_state["wall_1_distance"] < 10 and (
+                -90 < global_state["wall_1_bearing"] < 90
+            ):
                 wall_1_unit_vec = self.rb_to_rect(
                     (global_state["wall_1_distance"], global_state["wall_1_bearing"])
                 )
@@ -466,7 +478,7 @@ class BaseAttacker(BaseAgentPolicy):
                     else:
                         # Should only happen if the act_heading is somehow NAN
                         return 4
-            except:
+            except Exception:
                 # If there is an error converting the vector to a heading, just go straight
                 if self.continuous:
                     return (desired_speed, 0)

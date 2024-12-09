@@ -22,7 +22,7 @@
 import numpy as np
 
 from pyquaticus.base_policies.base import BaseAgentPolicy
-from pyquaticus.envs.pyquaticus import config_dict_std, Team
+from pyquaticus.envs.pyquaticus import Team
 
 from typing import Union
 
@@ -106,14 +106,9 @@ class WaypointFollower(BaseAgentPolicy):
                 # Should only happen if the act_heading is somehow NAN
                 return 12
 
-
     def update_wps(self, pos: np.ndarray):
 
         if len(self.wps) == 0:
             return
         elif np.linalg.norm(self.wps[0] - pos) <= self.capture_radius:
             self.wps.pop(0)
-
-
-
-

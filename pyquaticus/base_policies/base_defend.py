@@ -123,7 +123,7 @@ class BaseDefender(BaseAgentPolicy):
                     else:
                         # Should only happen if the act_heading is somehow NAN
                         return 12
-            except:
+            except Exception:
                 # If there is an error converting the vector to a heading, just go straight
                 if self.continuous:
                     return (desired_speed, 0)
@@ -138,15 +138,19 @@ class BaseDefender(BaseAgentPolicy):
 
         elif self.mode == "competition_easy":
             if self.team == Team.RED_TEAM:
-                estimated_position = np.asarray([
-                    global_state["wall_1_distance"],
-                    global_state["wall_0_distance"],
-                ])
+                estimated_position = np.asarray(
+                    [
+                        global_state["wall_1_distance"],
+                        global_state["wall_0_distance"],
+                    ]
+                )
             else:
-                estimated_position = np.asarray([
-                    global_state["wall_3_distance"],
-                    global_state["wall_2_distance"],
-                ])
+                estimated_position = np.asarray(
+                    [
+                        global_state["wall_3_distance"],
+                        global_state["wall_2_distance"],
+                    ]
+                )
             value = self.goal
 
             if self.team == Team.BLUE_TEAM:
@@ -194,19 +198,23 @@ class BaseDefender(BaseAgentPolicy):
             if self.opp_team_has_flag:
                 # If the blue team has the flag, chase them
                 ag_vect = my_flag_vec
-            elif not closest_enemy == None:
+            elif closest_enemy is not None:
                 ag_vect = enemy_loc
             else:
                 if self.team == Team.RED_TEAM:
-                    estimated_position = np.asarray([
-                        global_state["wall_1_distance"],
-                        global_state["wall_0_distance"],
-                    ])
+                    estimated_position = np.asarray(
+                        [
+                            global_state["wall_1_distance"],
+                            global_state["wall_0_distance"],
+                        ]
+                    )
                 else:
-                    estimated_position = np.asarray([
-                        global_state["wall_3_distance"],
-                        global_state["wall_2_distance"],
-                    ])
+                    estimated_position = np.asarray(
+                        [
+                            global_state["wall_3_distance"],
+                            global_state["wall_2_distance"],
+                        ]
+                    )
                 point = "CH" if self.team == Team.RED_TEAM else "CHX"
                 if (
                     -2.5
@@ -227,7 +235,7 @@ class BaseDefender(BaseAgentPolicy):
                     act_index = 6
                 elif act_heading > 1:
                     act_index = 2
-            except:
+            except Exception:
                 act_index = 4
 
         elif self.mode == "medium":
@@ -270,7 +278,7 @@ class BaseDefender(BaseAgentPolicy):
                     else:
                         # Should only happen if the act_heading is somehow NAN
                         return 12
-            except:
+            except Exception:
                 # If there is an error converting the vector to a heading, just go straight
                 if self.continuous:
                     return (desired_speed, 0)
@@ -280,7 +288,9 @@ class BaseDefender(BaseAgentPolicy):
         elif self.mode == "hard":
             # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid
             wall_pos = []
-            if global_state["wall_0_distance"] < 7 and (-90 < global_state["wall_0_bearing"] < 90):
+            if global_state["wall_0_distance"] < 7 and (
+                -90 < global_state["wall_0_bearing"] < 90
+            ):
                 wall_0_unit_vec = self.rb_to_rect(
                     (global_state["wall_0_distance"], global_state["wall_0_bearing"])
                 )
@@ -302,7 +312,9 @@ class BaseDefender(BaseAgentPolicy):
                         global_state["wall_2_distance"] * wall_2_unit_vec[1],
                     )
                 )
-            if global_state["wall_1_distance"] < 7 and (-90 < global_state["wall_1_bearing"] < 90):
+            if global_state["wall_1_distance"] < 7 and (
+                -90 < global_state["wall_1_bearing"] < 90
+            ):
                 wall_1_unit_vec = self.rb_to_rect(
                     (global_state["wall_1_distance"], global_state["wall_1_bearing"])
                 )
@@ -334,12 +346,15 @@ class BaseDefender(BaseAgentPolicy):
             enemy_loc = np.asarray((0, 0))
             for enem, pos in self.opp_team_pos_dict.items():
                 enemy_dis_dict[enem] = pos[0]
-                if pos[0] < min_enemy_distance and not global_state[(enem, "is_tagged")]:
+                if (
+                    pos[0] < min_enemy_distance
+                    and not global_state[(enem, "is_tagged")]
+                ):
                     min_enemy_distance = pos[0]
                     closest_enemy = enem
                     enemy_loc = self.rb_to_rect(pos)
 
-            if closest_enemy == None:
+            if closest_enemy is None:
                 min_enemy_distance = min(enemy_dis_dict.values())
                 closest_enemy = min(enemy_dis_dict, key=enemy_dis_dict.__getitem__)
                 enemy_loc = self.rb_to_rect(self.opp_team_pos_dict[closest_enemy])
@@ -409,7 +424,7 @@ class BaseDefender(BaseAgentPolicy):
                     else:
                         # Should only happen if the act_heading is somehow NAN
                         return 4
-            except:
+            except Exception:
                 # If there is an error converting the vector to a heading, just go straight
                 if self.continuous:
                     return (desired_speed, 0)

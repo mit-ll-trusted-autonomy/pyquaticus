@@ -19,8 +19,6 @@
 
 # SPDX-License-Identifier: BSD-3-Clause
 
-import math
-
 import numpy as np
 
 from pyquaticus.envs.pyquaticus import Team
@@ -298,7 +296,7 @@ class BaseAgentPolicy:
 
     def vec_to_heading(self, vec):
         """Converts a vector to a magnitude and heading (deg)."""
-        angle = math.degrees(math.atan2(vec[1], vec[0]))
+        angle = np.degrees(np.arctan2(vec[1], vec[0]))
         return self.angle180(angle)
 
     def bearing_to_vec(self, heading):
