@@ -68,7 +68,7 @@ class BaseAttacker(BaseAgentPolicy):
             raise ValueError(f"Invalid mode {mode}")
         self.mode = mode
 
-    def compute_action(self, obs):
+    def compute_action(self, global_state):
         """
         **THIS FUNCTION REQUIRES UNNORMALIZED OBSERVATIONS**.
 
@@ -83,7 +83,7 @@ class BaseAttacker(BaseAgentPolicy):
             action: The action index describing which speed/heading combo to use (assumes
             discrete action values from `ctf-gym.envs.pyquaticus.ACTION_MAP`)
         """
-        my_obs = self.update_state(obs)
+        global_state = self.update_state(global_state)
 
         # TODO: Fix this
         # Some big speed hard-coded so that every agent drives at max speed
@@ -138,13 +138,13 @@ class BaseAttacker(BaseAgentPolicy):
         elif self.mode == "competition_easy":
             if self.team == Team.RED_TEAM:
                 estimated_position = np.asarray([
-                    my_obs["wall_1_distance"],
-                    my_obs["wall_0_distance"],
+                    global_state["wall_1_distance"],
+                    global_state["wall_0_distance"],
                 ])
             else:
                 estimated_position = np.asarray([
-                    my_obs["wall_3_distance"],
-                    my_obs["wall_2_distance"],
+                    global_state["wall_3_distance"],
+                    global_state["wall_2_distance"],
                 ])
             value = self.goal
 
@@ -157,7 +157,7 @@ class BaseAttacker(BaseAgentPolicy):
                     value += "X"
                 elif self.goal not in ["SC", "CC", "PC"]:
                     value = value[:-1]
-            if my_obs["is_tagged"]:
+            if global_state["is_tagged"]:
                 self.goal = "SC"
 
             if (
@@ -238,48 +238,48 @@ class BaseAttacker(BaseAgentPolicy):
 
         elif self.mode == "competition_medium":
             # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid
-            if my_obs["wall_0_distance"] < 10 and (-90 < my_obs["wall_0_bearing"] < 90):
+            if global_state["wall_0_distance"] < 10 and (-90 < global_state["wall_0_bearing"] < 90):
                 wall_0_unit_vec = self.rb_to_rect(
-                    (my_obs["wall_0_distance"], my_obs["wall_0_bearing"])
+                    (global_state["wall_0_distance"], global_state["wall_0_bearing"])
                 )
                 self.opp_team_pos.append(
                     (
-                        my_obs["wall_0_distance"] * wall_0_unit_vec[0],
-                        my_obs["wall_0_distance"] * wall_0_unit_vec[1],
+                        global_state["wall_0_distance"] * wall_0_unit_vec[0],
+                        global_state["wall_0_distance"] * wall_0_unit_vec[1],
                     )
                 )
-            elif my_obs["wall_2_distance"] < 10 and (
-                -90 < my_obs["wall_2_bearing"] < 90
+            elif global_state["wall_2_distance"] < 10 and (
+                -90 < global_state["wall_2_bearing"] < 90
             ):
                 wall_2_unit_vec = self.rb_to_rect(
-                    (my_obs["wall_2_distance"], my_obs["wall_2_bearing"])
+                    (global_state["wall_2_distance"], global_state["wall_2_bearing"])
                 )
                 self.opp_team_pos.append(
                     (
-                        my_obs["wall_2_distance"] * wall_2_unit_vec[0],
-                        my_obs["wall_2_distance"] * wall_2_unit_vec[1],
+                        global_state["wall_2_distance"] * wall_2_unit_vec[0],
+                        global_state["wall_2_distance"] * wall_2_unit_vec[1],
                     )
                 )
-            if my_obs["wall_1_distance"] < 10 and (-90 < my_obs["wall_1_bearing"] < 90):
+            if global_state["wall_1_distance"] < 10 and (-90 < global_state["wall_1_bearing"] < 90):
                 wall_1_unit_vec = self.rb_to_rect(
-                    (my_obs["wall_1_distance"], my_obs["wall_1_bearing"])
+                    (global_state["wall_1_distance"], global_state["wall_1_bearing"])
                 )
                 self.opp_team_pos.append(
                     (
-                        my_obs["wall_1_distance"] * wall_1_unit_vec[0],
-                        my_obs["wall_1_distance"] * wall_1_unit_vec[1],
+                        global_state["wall_1_distance"] * wall_1_unit_vec[0],
+                        global_state["wall_1_distance"] * wall_1_unit_vec[1],
                     )
                 )
-            elif my_obs["wall_3_distance"] < 10 and (
-                -90 < my_obs["wall_3_bearing"] < 90
+            elif global_state["wall_3_distance"] < 10 and (
+                -90 < global_state["wall_3_bearing"] < 90
             ):
                 wall_3_unit_vec = self.rb_to_rect(
-                    (my_obs["wall_3_distance"], my_obs["wall_3_bearing"])
+                    (global_state["wall_3_distance"], global_state["wall_3_bearing"])
                 )
                 self.opp_team_pos.append(
                     (
-                        my_obs["wall_3_distance"] * wall_3_unit_vec[0],
-                        my_obs["wall_3_distance"] * wall_3_unit_vec[1],
+                        global_state["wall_3_distance"] * wall_3_unit_vec[0],
+                        global_state["wall_3_distance"] * wall_3_unit_vec[1],
                     )
                 )
 
@@ -288,7 +288,7 @@ class BaseAttacker(BaseAgentPolicy):
             # If I have the flag, go back to my side
             if self.has_flag:
                 goal_vect = np.multiply(
-                    1.25, self.bearing_to_vec(my_obs["own_home_bearing"])
+                    1.25, self.bearing_to_vec(global_state["own_home_bearing"])
                 )
                 avoid_vect = self.get_avoid_vect(
                     self.opp_team_pos, avoid_threshold=avoid_thresh
@@ -315,18 +315,18 @@ class BaseAttacker(BaseAgentPolicy):
                     # straight into them). In this case just start going towards the top
                     # or bottom boundary, whichever is farthest.
 
-                    top_dist = my_obs["wall_0_distance"]
-                    bottom_dist = my_obs["wall_2_distance"]
+                    top_dist = global_state["wall_0_distance"]
+                    bottom_dist = global_state["wall_2_distance"]
 
                     # Some bias towards teh bottom boundary to force it to stick with a
                     # direction.
                     if top_dist > 1.25 * bottom_dist:
                         my_action = self.rb_to_rect(
-                            (top_dist, my_obs["wall_0_bearing"])
+                            (top_dist, global_state["wall_0_bearing"])
                         )
                     else:
                         my_action = self.rb_to_rect(
-                            (bottom_dist, my_obs["wall_2_bearing"])
+                            (bottom_dist, global_state["wall_2_bearing"])
                         )
                 else:
                     my_action = np.multiply(1.25, goal_vect) + avoid_vect
@@ -349,48 +349,48 @@ class BaseAttacker(BaseAgentPolicy):
 
         elif self.mode == "hard":
             # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid
-            if my_obs["wall_0_distance"] < 10 and (-90 < my_obs["wall_0_bearing"] < 90):
+            if global_state["wall_0_distance"] < 10 and (-90 < global_state["wall_0_bearing"] < 90):
                 wall_0_unit_vec = self.rb_to_rect(
-                    (my_obs["wall_0_distance"], my_obs["wall_0_bearing"])
+                    (global_state["wall_0_distance"], global_state["wall_0_bearing"])
                 )
                 self.opp_team_pos.append(
                     (
-                        my_obs["wall_0_distance"] * wall_0_unit_vec[0],
-                        my_obs["wall_0_distance"] * wall_0_unit_vec[1],
+                        global_state["wall_0_distance"] * wall_0_unit_vec[0],
+                        global_state["wall_0_distance"] * wall_0_unit_vec[1],
                     )
                 )
-            elif my_obs["wall_2_distance"] < 10 and (
-                -90 < my_obs["wall_2_bearing"] < 90
+            elif global_state["wall_2_distance"] < 10 and (
+                -90 < global_state["wall_2_bearing"] < 90
             ):
                 wall_2_unit_vec = self.rb_to_rect(
-                    (my_obs["wall_2_distance"], my_obs["wall_2_bearing"])
+                    (global_state["wall_2_distance"], global_state["wall_2_bearing"])
                 )
                 self.opp_team_pos.append(
                     (
-                        my_obs["wall_2_distance"] * wall_2_unit_vec[0],
-                        my_obs["wall_2_distance"] * wall_2_unit_vec[1],
+                        global_state["wall_2_distance"] * wall_2_unit_vec[0],
+                        global_state["wall_2_distance"] * wall_2_unit_vec[1],
                     )
                 )
-            if my_obs["wall_1_distance"] < 10 and (-90 < my_obs["wall_1_bearing"] < 90):
+            if global_state["wall_1_distance"] < 10 and (-90 < global_state["wall_1_bearing"] < 90):
                 wall_1_unit_vec = self.rb_to_rect(
-                    (my_obs["wall_1_distance"], my_obs["wall_1_bearing"])
+                    (global_state["wall_1_distance"], global_state["wall_1_bearing"])
                 )
                 self.opp_team_pos.append(
                     (
-                        my_obs["wall_1_distance"] * wall_1_unit_vec[0],
-                        my_obs["wall_1_distance"] * wall_1_unit_vec[1],
+                        global_state["wall_1_distance"] * wall_1_unit_vec[0],
+                        global_state["wall_1_distance"] * wall_1_unit_vec[1],
                     )
                 )
-            elif my_obs["wall_3_distance"] < 10 and (
-                -90 < my_obs["wall_3_bearing"] < 90
+            elif global_state["wall_3_distance"] < 10 and (
+                -90 < global_state["wall_3_bearing"] < 90
             ):
                 wall_3_unit_vec = self.rb_to_rect(
-                    (my_obs["wall_3_distance"], my_obs["wall_3_bearing"])
+                    (global_state["wall_3_distance"], global_state["wall_3_bearing"])
                 )
                 self.opp_team_pos.append(
                     (
-                        my_obs["wall_3_distance"] * wall_3_unit_vec[0],
-                        my_obs["wall_3_distance"] * wall_3_unit_vec[1],
+                        global_state["wall_3_distance"] * wall_3_unit_vec[0],
+                        global_state["wall_3_distance"] * wall_3_unit_vec[1],
                     )
                 )
 
@@ -399,7 +399,7 @@ class BaseAttacker(BaseAgentPolicy):
             # If I or someone on my team has the flag, go back to my side
             if self.has_flag or self.my_team_has_flag:
                 goal_vect = np.multiply(
-                    1.25, self.bearing_to_vec(my_obs["own_home_bearing"])
+                    1.25, self.bearing_to_vec(global_state["own_home_bearing"])
                 )
                 avoid_vect = self.get_avoid_vect(
                     self.opp_team_pos, avoid_threshold=avoid_thresh
@@ -426,18 +426,18 @@ class BaseAttacker(BaseAgentPolicy):
                     # straight into them). In this case just start going towards the top
                     # or bottom boundary, whichever is farthest.
 
-                    top_dist = my_obs["wall_0_distance"]
-                    bottom_dist = my_obs["wall_2_distance"]
+                    top_dist = global_state["wall_0_distance"]
+                    bottom_dist = global_state["wall_2_distance"]
 
                     # Some bias towards teh bottom boundary to force it to stick with a
                     # direction.
                     if top_dist > 1.25 * bottom_dist:
                         my_action = self.rb_to_rect(
-                            (top_dist, my_obs["wall_0_bearing"])
+                            (top_dist, global_state["wall_0_bearing"])
                         )
                     else:
                         my_action = self.rb_to_rect(
-                            (bottom_dist, my_obs["wall_2_bearing"])
+                            (bottom_dist, global_state["wall_2_bearing"])
                         )
                 else:
                     my_action = np.multiply(1.25, goal_vect) + avoid_vect

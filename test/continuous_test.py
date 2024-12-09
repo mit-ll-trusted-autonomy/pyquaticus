@@ -17,24 +17,20 @@ config_dict["max_time"] = 600.0
 config_dict["max_score"] = 100
 config_dict["render_agent_ids"] = True
 config_dict["dynamics"] = "heron"
-# config_dict["action_type"] = "continuous"
+config_dict["action_type"] = "continuous"
 config_dict["lidar_obs"] = True 
 config_dict["sim_speedup_factor"] = 4
 config_dict["tau"] = 0.05
 # config_dict["catch_radius"] = 1
 
 env = pyquaticus_v0.PyQuaticusEnv(team_size=2, config_dict=config_dict,render_mode='human')
-term_g = {0:False,1:False}
-truncated_g = {0:False,1:False}
-term = term_g
-trunc = truncated_g
 obs, info = env.reset()
 
-H_one = BaseAttacker(2, Team.RED_TEAM, 3, [0, 1], mode="easy", continuous=False)
-H_two = BaseAttacker(3, Team.RED_TEAM, 2, [0, 1], mode="easy", continuous=False)
+H_one = Heuristic_CTF_Agent(2, Team.RED_TEAM, 3, [0, 1], mode="medium", continuous=True)
+H_two = BaseAttacker(3, Team.RED_TEAM, 2, [0, 1], mode="medium", continuous=True)
 
-R_one = BaseDefender(0, Team.BLUE_TEAM, 1, [2, 3], mode="medium", continuous=False)
-R_two = BaseDefender(1, Team.BLUE_TEAM, 0, [2, 3], mode="medium", continuous=False)
+R_one = BaseDefender(0, Team.BLUE_TEAM, 1, [2, 3], mode="nothing", continuous=True)
+R_two = Heuristic_CTF_Agent(1, Team.BLUE_TEAM, 0, [2, 3], mode="medium", continuous=True)
 step = 0
 while True:
     new_obs = {}

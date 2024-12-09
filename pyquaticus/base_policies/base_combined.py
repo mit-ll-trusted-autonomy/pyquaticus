@@ -41,6 +41,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         teammate_ids: Union[list[int], int, None],
         opponent_ids: Union[list[int], int, None],
         mode="easy",
+        continuous: bool = False,
         flag_keepout=10.0,
         catch_radius=config_dict_std["catch_radius"],
         using_pyquaticus=True,
@@ -58,18 +59,26 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         self.defensiveness = defensiveness
         self.using_pyquaticus = using_pyquaticus
         self.id = agent_id
+        self.continuous = continuous
         self.base_attacker = attack_policy.BaseAttacker(
-            self.id, team, teammate_ids, opponent_ids, mode=mode, using_pyquaticus=using_pyquaticus
+            self.id,
+            team,
+            teammate_ids,
+            opponent_ids,
+            mode,
+            continuous,
+            using_pyquaticus,
         )
         self.base_defender = defend_policy.BaseDefender(
             self.id,
             team,
             teammate_ids,
             opponent_ids,
-            mode=mode,
-            using_pyquaticus=using_pyquaticus,
-            catch_radius=catch_radius,
-            flag_keepout=flag_keepout,
+            mode,
+            continuous,
+            flag_keepout,
+            catch_radius,
+            using_pyquaticus,
         )
         self.scrimmage = None
 
@@ -100,9 +109,9 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             raise ValueError(f"Invalid mode {mode}")
         self.mode = mode
 
-    def compute_action(self, obs):
+    def compute_action(self, global_state):
         """
-        **THIS FUNCTION REQUIRES UNNORMALIZED OBSERVATIONS**.
+        **THIS FUNCTION REQUIRES UNNORMALIZED GLOBAL STATE**.
 
         Upates the state of the agent using the observation `obs` and then computes
         an action to take based on the new state.
@@ -117,43 +126,38 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
 
         """
         # Update the state based on this observation
-        my_obs = self.update_state(obs)
-
-        # Default no_op action in case somehow none of the below actions are triggered.
-        action = 16
+        global_state = self.update_state(global_state)
 
         if self.mode == "easy":
             # Opp is close - needs to defend:
             if self.is_close_to_flag() and False in self.opp_team_tag:
-                action = self.base_defender.compute_action(obs)
+                return self.base_defender.compute_action(global_state)
 
             # Opp on defensive - needs to attack
             else:
-                action = self.base_attacker.compute_action(obs)
+                return self.base_attacker.compute_action(global_state)
 
         else:
             # If I have the flag, just bring it back to base
             if self.has_flag:
-                action = self.base_attacker.compute_action(obs)
+                return self.base_attacker.compute_action(global_state)
 
             elif self.opp_team_has_flag:
-                action = self.base_defender.compute_action(obs)
+                return self.base_defender.compute_action(global_state)
 
             # Opp is close - go on defensive
             elif self.is_close_to_flag() and (False in self.opp_team_tag):
-                action = self.base_defender.compute_action(obs)
+                return self.base_defender.compute_action(global_state)
 
             # Opp on defensive - needs to attack
             elif self.is_far_from_flag():
-                action = self.base_attacker.compute_action(obs)
+                return self.base_attacker.compute_action(global_state)
 
             else:
                 if self.mode == "hard":
-                    action = self.base_attacker.compute_action(obs)
+                    return self.base_attacker.compute_action(global_state)
                 else:
-                    action = self.random_defense_action(self.opp_team_pos, my_obs)
-
-        return action
+                    return self.random_defense_action(self.opp_team_pos)
 
     def update_state(self, global_state):
         """
@@ -164,7 +168,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             obs: The observation from the gym
 
         """
-        my_obs = super().update_state(global_state)
+        global_state = super().update_state(global_state)
 
         # Initialize the scrimmage line as the mid point between the two flags
         if self.scrimmage is None:
@@ -174,9 +178,9 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             self.my_team_pos, self.opp_team_pos
         )
 
-        return my_obs
+        return global_state
 
-    def random_defense_action(self, enem_positions, my_obs):
+    def random_defense_action(self, enem_positions):
         """
         Randomly compute an action that steers the agent to it's own side of the field and sometimes
         towards its flag.
@@ -206,31 +210,46 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
                 self.opp_team_pos, avoid_threshold=15
             )
 
-        act_index = 16
+        # TODO: Fix this
+        # Some big speed hard-coded so that every agent drives at max speed
+        desired_speed = 50
 
         try:
-            act_heading = self.angle180(self.vec_to_heading(direction))
+            heading_error = self.angle180(self.vec_to_heading(direction))
 
-            if self.mode != "hard":
-                if 1 >= act_heading >= -1:
-                    act_index = 12
-                elif act_heading < -1:
-                    act_index = 14
-                elif act_heading > 1:
-                    act_index = 10
+            if self.continuous:
+                    if np.isnan(heading_error):
+                        heading_error = 0
+
+                    if np.abs(heading_error) < 5:
+                        heading_error = 0
+
+                    return (desired_speed, heading_error)
+
+
             else:
-                # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
-                if 1 >= act_heading >= -1:
-                    act_index = 4
-                elif act_heading < -1:
-                    act_index = 6
-                elif act_heading > 1:
-                    act_index = 2
+                if self.mode != "hard":
+                    if 1 >= heading_error >= -1:
+                        return 12
+                    elif heading_error < -1:
+                        return 14
+                    elif heading_error > 1:
+                        return 10
+                else:
+                    # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
+                    if 1 >= heading_error >= -1:
+                        return 4
+                    elif heading_error < -1:
+                        return 6
+                    elif heading_error > 1:
+                        return 2
         except:
-            # print(f'Failed to convert vector to heading')
-            act_index = 4
+            # Drive straights
+            if self.continuous:
+                return (desired_speed, 0)
+            else:
+                return 4
 
-        return act_index
 
     def get_team_density(self, friendly_positions, enemy_positions):
         """This function returns the center of mass and varience of all the agents in the team."""

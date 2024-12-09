@@ -76,7 +76,7 @@ class BaseAgentPolicy:
         if suppress_numpy_warnings:
             np.seterr(all="ignore")
 
-    def compute_action(self, obs) -> Any:
+    def compute_action(self, global_state) -> Any:
         """
         **THIS FUNCTION REQUIRES UNNORMALIZED OBSERVATIONS**.
 

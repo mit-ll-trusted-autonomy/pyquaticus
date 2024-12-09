@@ -67,7 +67,7 @@ class BaseDefender(BaseAgentPolicy):
             raise ValueError(f"mode {mode} not in set of valid modes {modes}")
         self.mode = mode
 
-    def compute_action(self, obs):
+    def compute_action(self, global_state):
         """
         **THIS FUNCTION REQUIRES UNNORMALIZED OBSERVATIONS**.
 
@@ -82,7 +82,7 @@ class BaseDefender(BaseAgentPolicy):
             action: The action index describing which speed/heading combo to use (assumes
             discrete action values from `ctf-gym.envs.pyquaticus.ACTION_MAP`)
         """
-        my_obs = self.update_state(obs)
+        global_state = self.update_state(global_state)
 
         # TODO: Fix this
         # Some big speed hard-coded so that every agent drives at max speed
@@ -139,13 +139,13 @@ class BaseDefender(BaseAgentPolicy):
         elif self.mode == "competition_easy":
             if self.team == Team.RED_TEAM:
                 estimated_position = np.asarray([
-                    my_obs["wall_1_distance"],
-                    my_obs["wall_0_distance"],
+                    global_state["wall_1_distance"],
+                    global_state["wall_0_distance"],
                 ])
             else:
                 estimated_position = np.asarray([
-                    my_obs["wall_3_distance"],
-                    my_obs["wall_2_distance"],
+                    global_state["wall_3_distance"],
+                    global_state["wall_2_distance"],
                 ])
             value = self.goal
 
@@ -158,7 +158,7 @@ class BaseDefender(BaseAgentPolicy):
                     value += "X"
                 elif self.goal not in ["SC", "CC", "PC"]:
                     value = value[:-1]
-            if my_obs["is_tagged"]:
+            if global_state["is_tagged"]:
                 self.goal = "SC"
             if (
                 -2.5
@@ -184,8 +184,8 @@ class BaseDefender(BaseAgentPolicy):
                 enemy_dis_dict[enem] = pos[0]
                 if (
                     pos[0] < min_enemy_distance
-                    and not my_obs[(enem, "is_tagged")]
-                    and my_obs[(enem, "on_side")] == 0
+                    and not global_state[(enem, "is_tagged")]
+                    and global_state[(enem, "on_side")] == 0
                 ):
                     min_enemy_distance = pos[0]
                     closest_enemy = enem
@@ -199,13 +199,13 @@ class BaseDefender(BaseAgentPolicy):
             else:
                 if self.team == Team.RED_TEAM:
                     estimated_position = np.asarray([
-                        my_obs["wall_1_distance"],
-                        my_obs["wall_0_distance"],
+                        global_state["wall_1_distance"],
+                        global_state["wall_0_distance"],
                     ])
                 else:
                     estimated_position = np.asarray([
-                        my_obs["wall_3_distance"],
-                        my_obs["wall_2_distance"],
+                        global_state["wall_3_distance"],
+                        global_state["wall_2_distance"],
                     ])
                 point = "CH" if self.team == Team.RED_TEAM else "CHX"
                 if (
@@ -280,48 +280,48 @@ class BaseDefender(BaseAgentPolicy):
         elif self.mode == "hard":
             # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid
             wall_pos = []
-            if my_obs["wall_0_distance"] < 7 and (-90 < my_obs["wall_0_bearing"] < 90):
+            if global_state["wall_0_distance"] < 7 and (-90 < global_state["wall_0_bearing"] < 90):
                 wall_0_unit_vec = self.rb_to_rect(
-                    (my_obs["wall_0_distance"], my_obs["wall_0_bearing"])
+                    (global_state["wall_0_distance"], global_state["wall_0_bearing"])
                 )
                 wall_pos.append(
                     (
-                        my_obs["wall_0_distance"] * wall_0_unit_vec[0],
-                        my_obs["wall_0_distance"] * wall_0_unit_vec[1],
+                        global_state["wall_0_distance"] * wall_0_unit_vec[0],
+                        global_state["wall_0_distance"] * wall_0_unit_vec[1],
                     )
                 )
-            elif my_obs["wall_2_distance"] < 7 and (
-                -90 < my_obs["wall_2_bearing"] < 90
+            elif global_state["wall_2_distance"] < 7 and (
+                -90 < global_state["wall_2_bearing"] < 90
             ):
                 wall_2_unit_vec = self.rb_to_rect(
-                    (my_obs["wall_2_distance"], my_obs["wall_2_bearing"])
+                    (global_state["wall_2_distance"], global_state["wall_2_bearing"])
                 )
                 wall_pos.append(
                     (
-                        my_obs["wall_2_distance"] * wall_2_unit_vec[0],
-                        my_obs["wall_2_distance"] * wall_2_unit_vec[1],
+                        global_state["wall_2_distance"] * wall_2_unit_vec[0],
+                        global_state["wall_2_distance"] * wall_2_unit_vec[1],
                     )
                 )
-            if my_obs["wall_1_distance"] < 7 and (-90 < my_obs["wall_1_bearing"] < 90):
+            if global_state["wall_1_distance"] < 7 and (-90 < global_state["wall_1_bearing"] < 90):
                 wall_1_unit_vec = self.rb_to_rect(
-                    (my_obs["wall_1_distance"], my_obs["wall_1_bearing"])
+                    (global_state["wall_1_distance"], global_state["wall_1_bearing"])
                 )
                 wall_pos.append(
                     (
-                        my_obs["wall_1_distance"] * wall_1_unit_vec[0],
-                        my_obs["wall_1_distance"] * wall_1_unit_vec[1],
+                        global_state["wall_1_distance"] * wall_1_unit_vec[0],
+                        global_state["wall_1_distance"] * wall_1_unit_vec[1],
                     )
                 )
-            elif my_obs["wall_3_distance"] < 7 and (
-                -90 < my_obs["wall_3_bearing"] < 90
+            elif global_state["wall_3_distance"] < 7 and (
+                -90 < global_state["wall_3_bearing"] < 90
             ):
                 wall_3_unit_vec = self.rb_to_rect(
-                    (my_obs["wall_3_distance"], my_obs["wall_3_bearing"])
+                    (global_state["wall_3_distance"], global_state["wall_3_bearing"])
                 )
                 wall_pos.append(
                     (
-                        my_obs["wall_3_distance"] * wall_3_unit_vec[0],
-                        my_obs["wall_3_distance"] * wall_3_unit_vec[1],
+                        global_state["wall_3_distance"] * wall_3_unit_vec[0],
+                        global_state["wall_3_distance"] * wall_3_unit_vec[1],
                     )
                 )
 
@@ -334,7 +334,7 @@ class BaseDefender(BaseAgentPolicy):
             enemy_loc = np.asarray((0, 0))
             for enem, pos in self.opp_team_pos_dict.items():
                 enemy_dis_dict[enem] = pos[0]
-                if pos[0] < min_enemy_distance and not my_obs[(enem, "is_tagged")]:
+                if pos[0] < min_enemy_distance and not global_state[(enem, "is_tagged")]:
                     min_enemy_distance = pos[0]
                     closest_enemy = enem
                     enemy_loc = self.rb_to_rect(pos)
@@ -363,11 +363,11 @@ class BaseDefender(BaseAgentPolicy):
 
                 if (
                     enemy_dist_2_flag > defense_perim
-                    or my_obs[(closest_enemy, "is_tagged")]
+                    or global_state[(closest_enemy, "is_tagged")]
                 ):
                     if (
                         defend_pt_flag_dist > defense_perim
-                        or my_obs[(closest_enemy, "is_tagged")]
+                        or global_state[(closest_enemy, "is_tagged")]
                     ):
                         guide_pt = [
                             self.my_flag_loc[0] + (unit_def_flag[0] * defense_perim),
