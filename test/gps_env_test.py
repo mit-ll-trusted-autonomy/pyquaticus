@@ -137,35 +137,34 @@ def main():
     #reward_config = {0:reward.sparse, 1:reward.sparse}
 
     config = copy.deepcopy(pyquaticus.config.config_dict_std)
-    config["obstacles"] = {
-        "circle": [(4, (6, 5))],
-        "polygon": [((70, 10), (85, 21), (83, 51), (72, 35))]
-    }
-    config["sim_speedup_factor"] = 8
-    # config["normalize"] = False
-    config["max_time"] = 1000
+    config["gps_env"] = True
+    # config["env_bounds"] = ((-1, 179), (1, -179))
+    # config["env_bounds_unit"] = "ll"
+    config["env_bounds"] = "auto"
+    config["blue_flag_home"] = (42.352229714597705, -70.99992567997114)
+    config["red_flag_home"] = (42.32710627259394, -70.96739585043458)
+    config["flag_homes_unit"] = "ll"
+    config["sim_speedup_factor"] = 50
+    config["max_time"] = 10_000
     config["lidar_obs"] = True
     config["num_lidar_rays"] = 100
-    config["lidar_range"] = 20
-    config["render_lidar_mode"] = "detection"
+    config["lidar_range"] = 1000
     config["render_agent_ids"] = True
-    config["render_traj_mode"] = "traj_history"
+    config["render_lidar_mode"] = "detection"
+    # config["render_traj_mode"] = "traj_agent"
     config["render_traj_freq"] = 50
-    config["max_speed"] = 1.5
-    config["short_hist_length"] = 4
-    config["short_hist_interval"] = 5
-    config["long_hist_length"] = 5
-    config["long_hist_interval"] = 20
     config["render_traj_cutoff"] = 100
-    # config["tag_on_oob"] = True
-
-
+    # config["render_saving"] = True
+    config["default_init"] = False
+    # config["render_fps"] = 10
+    # config["normalize"] = False
     
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
-    try:
-        env = pyquaticus_v0.PyQuaticusEnv(render_mode='human', team_size=1, config_dict=config)
-    except Warning as err:
-        ...
+    env = pyquaticus_v0.PyQuaticusEnv(team_size=3, render_mode='human', config_dict=config)
+    # try:
+    #     env = pyquaticus_v0.PyQuaticusEnv(team_size=3, render_mode='human', config_dict=config)
+    # except Warning as err:
+    #     ...
     red_policy = args.red_policy
 
     kt = KeyTest(env, red_policy)

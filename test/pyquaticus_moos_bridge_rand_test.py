@@ -8,6 +8,8 @@ from pyquaticus.moos.pyquaticus_moos_bridge import PyQuaticusMoosBridge
 from pyquaticus.moos.config import FieldReaderConfig
 
 if __name__ == "__main__":
+    print("Warning: This script requires MOOS to be set up, which must be installed separately")
+    
     parser = argparse.ArgumentParser(description="Run the MOOS bridge for a given mission")
     parser.add_argument("mission_dir", help="The path to the mission directory")
     args = parser.parse_args()
