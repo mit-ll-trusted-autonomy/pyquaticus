@@ -2,12 +2,13 @@ from attr import dataclass
 import numpy as np
 from typing import Union
 import matplotlib.pyplot as plt
+from typing import SupportsFloat
 
 
 @dataclass
 class Point:
     pos: np.ndarray
-    cost: float = 0
+    cost: float = 0.0
     parent: Union["Point", None] = None
 
 
@@ -81,39 +82,65 @@ def point_in_polygons(point: np.ndarray, polys: np.ndarray) -> bool:
     return False
 
 
-def rrt(
+def rrt_star(
     start: np.ndarray,
     goal: np.ndarray,
     obstacles: Union[np.ndarray, None],
     area: np.ndarray,
-    num_iters: int = 1000,
+    num_iters: int = 100,
 ) -> Union[list[Point], None]:
 
     points = [Point(start, 0, None)]
     goal_point = Point(goal, 0, None)
     for i in range(num_iters):
-        rand_point = get_random_point(area, obstacles)
-        nearest = get_nearest(rand_point, points)
-        rand_point.parent = nearest
-        points.append(rand_point)
-        if dist(rand_point, goal_point) < 1:
-            return points
-    return None
+        new_point = get_random_point(area, obstacles)
+        nearest = get_nearest(new_point, points)
+        new_point.parent = nearest
+        new_point.cost = nearest.cost + dist(new_point, nearest)
+        near_points = get_near(new_point, points, 10)
+        choose_parent(new_point, near_points)
+        rewire(new_point, near_points)
+        points.append(new_point)
+
+    return points
+
+
+def get_near(point: Point, points: list[Point], radius: float) -> list[Point]:
+    near_points = []
+    for p in points:
+        if dist(point, p) <= radius:
+            near_points.append(p)
+    return near_points
+
+
+def choose_parent(point: Point, parents: list[Point]):
+    for parent in parents:
+        if parent.cost + dist(parent, point) < point.cost:
+            point.cost = parent.cost + dist(parent, point)
+            point.parent = parent
+
+
+def rewire(potential_parent: Point, near_points: list[Point]):
+    for point in near_points:
+        if potential_parent.cost + dist(potential_parent, point) < point.cost:
+            point.cost = potential_parent.cost + dist(potential_parent, point)
+            point.parent = potential_parent
 
 
 def draw_result(points: list[Point], area: np.ndarray, obstacles: Union[np.ndarray, None]):
     fig, ax = plt.subplots()
     for point in points:
+        print(f"point {point} parent {point.parent}")
         if point.parent is not None:
             ax.plot([point.pos[0], point.parent.pos[0]], [point.pos[1], point.parent.pos[1]], "b")
-    for point in points:
-        ax.plot(point.pos[0], point.pos[1], "ko")
+        else:
+            print(f"point {point} has no parent")
+    # for point in points:
+    #     ax.plot(point.pos[0], point.pos[1], "ko")
     if obstacles is not None:
         for obstacle in obstacles:
-            print(obstacle)
             for i in range(obstacle.shape[0]):
                 seg = obstacle[(i - 1, i), :]
-                print(seg)
                 ax.plot(seg[:, 0], seg[:, 1], "r")
     plt.show()
 
@@ -141,8 +168,8 @@ def get_random_point(area: np.ndarray, obstacles: Union[np.ndarray, None]) -> Po
     return Point(point)
 
 
-def dist(p1: Point, p2: Point):
-    return np.linalg.norm(p1.pos - p2.pos)
+def dist(p1: Point, p2: Point) -> float:
+    return float(np.linalg.norm(p1.pos - p2.pos))
 
 
 if __name__ == "__main__":
@@ -173,6 +200,6 @@ if __name__ == "__main__":
     end = np.array((10, 10))
     obstacles = np.array((((5, 5), (5, 6), (6, 6), (6, 5)), ((1, 1), (1, 2), (2, 2), (2, 1))))
     area = np.array(((-1, -1), (11, 11)))
-    tree = rrt(start, end, obstacles, area)
+    tree = rrt_star(start, end, obstacles, area)
     if tree is not None:
         draw_result(tree, area, obstacles)
