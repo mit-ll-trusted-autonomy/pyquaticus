@@ -7,17 +7,16 @@ LINE_INTERSECT_TOL = 1e-9
 
 def point_in_polygon(point: np.ndarray, seglist: Union[np.ndarray, None]) -> bool:
     """
-    Determines if a point is in a polygon
+    Determines if a point is inside (or on the edges/vertices) of a polygon
 
     Args:
-        point (np.ndarray): (x, y)
-        poly (np.ndarray): ((x1, y1), (x2, y2), ... , (xn, yn))
+        point (np.ndarray): [x, y]
+        seglist (np.ndarray): array of shape (n, 2, 2) for an n-sided polygon
+        where seglist[i] = [[x1, y1], [x2, y2]] for the i-th edge of the polygon 
 
     Returns:
         bool: True if the point is inside the polygon
     """
-
-    # TODO: Misses points on edges
 
     point = point.reshape((2))
 
@@ -36,14 +35,22 @@ def point_in_polygon(point: np.ndarray, seglist: Union[np.ndarray, None]) -> boo
         seglist[:, 1, 1],
     )
 
+    # Only need to check one of the points in each segment
+    # because every point will show up once in each position
     on_vertex = (y1 == y2) & (x1 == x2)
 
     if np.any(on_vertex):
         return True
 
     denom = y3 - y2
-
     intersect_x = ((y1 - y2) * (x3 - x2) / denom) + x2
+
+    # DOES NOT DETECT HORIZONTAL EDGE!!
+    
+    on_edge = (x1 == intersect_x)
+
+    if np.any(on_edge):
+        return True
 
     # Check if test point's y value lies between segment's y values
     # (or equal to the segment's lowest y value)
@@ -128,46 +135,46 @@ def intersect(seg: np.ndarray, seglist: Union[np.ndarray, None]):
 
 if __name__ == "__main__":
 
-    # point = np.array((0, 1))
-    # # Square
-    # poly = np.array(((0, 0), (0, 1), (1, 1), (1, 0)))
-    # # Diamond
-    # # poly = np.array(((-1, 0), (0, 1), (1, 0), (0, -1)))
-    # seglist = []
-    # for i in range(len(poly)):
-    #     seglist.append(poly[(i-1, i), :])
-    # seglist = np.array(seglist)
-    # print(point_in_polygon(point, seglist))
+    point = np.array((0.5, 0))
+    # Square
+    poly = np.array(((0, 0), (0, 1), (1, 1), (1, 0)))
+    # Diamond
+    # poly = np.array(((-1, 0), (0, 1), (1, 0), (0, -1)))
+    seglist = []
+    for i in range(len(poly)):
+        seglist.append(poly[(i-1, i), :])
+    seglist = np.array(seglist)
+    print(point_in_polygon(point, seglist))
 
-    import time
-    import matplotlib.pyplot as plt
+    # import time
+    # import matplotlib.pyplot as plt
 
-    num_sides = []
-    poly_times = []
-    int_times = []
+    # num_sides = []
+    # poly_times = []
+    # int_times = []
 
-    for i in range(3, 30000, 1000):
-        point = np.random.uniform(0, 100, (1, 2))
-        poly = np.random.uniform(0, 100, (i, 2))
-        seglist = []
-        for i in range(len(poly)):
-            seglist.append(poly[(i-1, i), :])
-        seglist = np.array(seglist)
+    # for i in range(3, 30000, 1000):
+    #     point = np.random.uniform(0, 100, (1, 2))
+    #     poly = np.random.uniform(0, 100, (i, 2))
+    #     seglist = []
+    #     for i in range(len(poly)):
+    #         seglist.append(poly[(i-1, i), :])
+    #     seglist = np.array(seglist)
 
-        start_time = time.time()
-        point_in_polygon(point, seglist)
-        end_time = time.time()
-        num_sides.append(i)
-        poly_times.append(end_time - start_time)
+    #     start_time = time.time()
+    #     point_in_polygon(point, seglist)
+    #     end_time = time.time()
+    #     num_sides.append(i)
+    #     poly_times.append(end_time - start_time)
 
-        seg = np.random.uniform(0, 100, (2, 2))
-        segs = np.random.uniform(0, 100, (i, 2, 2))
+    #     seg = np.random.uniform(0, 100, (2, 2))
+    #     segs = np.random.uniform(0, 100, (i, 2, 2))
 
-        start_time = time.time()
-        intersect(seg, segs)
-        end_time = time.time()
-        int_times.append(end_time - start_time)
-    fig, ax = plt.subplots()
-    ax.scatter(num_sides, poly_times, c="r")
-    ax.scatter(num_sides, int_times, c="b")
-    plt.show()
+    #     start_time = time.time()
+    #     intersect(seg, segs)
+    #     end_time = time.time()
+    #     int_times.append(end_time - start_time)
+    # fig, ax = plt.subplots()
+    # ax.scatter(num_sides, poly_times, c="r")
+    # ax.scatter(num_sides, int_times, c="b")
+    # plt.show()
