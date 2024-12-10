@@ -21,7 +21,7 @@ config_dict["dynamics"] = "heron"
 config_dict["lidar_obs"] = True
 config_dict["sim_speedup_factor"] = 4
 config_dict["tau"] = 0.05
-config_dict["normalize"] = True
+config_dict["normalize"] = False
 # config_dict["catch_radius"] = 1
 
 env = pyquaticus_v0.PyQuaticusEnv(team_size=2, config_dict=config_dict, render_mode='human')

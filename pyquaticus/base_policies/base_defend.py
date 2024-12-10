@@ -87,7 +87,11 @@ class BaseDefender(BaseAgentPolicy):
         """
         self.update_state(obs, info)
 
-        global_state = self.state_normalizer.unnormalized(info["global_state"])
+        global_state = info["global_state"]
+
+        # Unnormalize state, if necessary
+        if not isinstance(global_state, dict):
+            global_state = self.state_normalizer.unnormalized(global_state)
 
         # TODO: Fix this
         # Some big speed hard-coded so that every agent drives at max speed
