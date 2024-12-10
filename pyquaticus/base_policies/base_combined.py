@@ -25,6 +25,7 @@ import pyquaticus.base_policies.base_attack as attack_policy
 import pyquaticus.base_policies.base_defend as defend_policy
 from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import config_dict_std, Team
+from pyquaticus.utils.obs_utils import ObsNormalizer
 
 from typing import Union
 
@@ -40,6 +41,8 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         team: Team,
         teammate_ids: Union[list[int], int, None],
         opponent_ids: Union[list[int], int, None],
+        obs_normalizer: ObsNormalizer,
+        state_normalizer: ObsNormalizer,
         mode="easy",
         continuous: bool = False,
         flag_keepout=10.0,
@@ -47,7 +50,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         using_pyquaticus=True,
         defensiveness=20.0,
     ):
-        super().__init__(agent_id, team, teammate_ids, opponent_ids)
+        super().__init__(agent_id, team, teammate_ids, opponent_ids, obs_normalizer, state_normalizer)
 
         if mode not in modes:
             raise ValueError(f"mode {mode} not a valid mode out of {modes}")
@@ -65,6 +68,8 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             team,
             teammate_ids,
             opponent_ids,
+            obs_normalizer,
+            state_normalizer,
             mode,
             continuous,
             using_pyquaticus,
@@ -74,6 +79,8 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             team,
             teammate_ids,
             opponent_ids,
+            obs_normalizer,
+            state_normalizer,
             mode,
             continuous,
             flag_keepout,
@@ -109,7 +116,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             raise ValueError(f"Invalid mode {mode}")
         self.mode = mode
 
-    def compute_action(self, global_state):
+    def compute_action(self, obs, info):
         """
         **THIS FUNCTION REQUIRES UNNORMALIZED GLOBAL STATE**.
 
@@ -126,7 +133,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
 
         """
         # Update the state based on this observation
-        global_state = self.update_state(global_state)
+        self.update_state(obs, info)
 
         if self.mode == "nothing":
             if self.continuous:
@@ -137,35 +144,35 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         if self.mode == "easy":
             # Opp is close - needs to defend:
             if self.is_close_to_flag() and False in self.opp_team_tag:
-                return self.base_defender.compute_action(global_state)
+                return self.base_defender.compute_action(obs, info)
 
             # Opp on defensive - needs to attack
             else:
-                return self.base_attacker.compute_action(global_state)
+                return self.base_attacker.compute_action(obs, info)
 
         else:
             # If I have the flag, just bring it back to base
             if self.has_flag:
-                return self.base_attacker.compute_action(global_state)
+                return self.base_attacker.compute_action(obs, info)
 
             elif self.opp_team_has_flag:
-                return self.base_defender.compute_action(global_state)
+                return self.base_defender.compute_action(obs, info)
 
             # Opp is close - go on defensive
             elif self.is_close_to_flag() and (False in self.opp_team_tag):
-                return self.base_defender.compute_action(global_state)
+                return self.base_defender.compute_action(obs, info)
 
             # Opp on defensive - needs to attack
             elif self.is_far_from_flag():
-                return self.base_attacker.compute_action(global_state)
+                return self.base_attacker.compute_action(obs, info)
 
             else:
                 if self.mode == "hard":
-                    return self.base_attacker.compute_action(global_state)
+                    return self.base_attacker.compute_action(obs, info)
                 else:
                     return self.random_defense_action(self.opp_team_pos)
 
-    def update_state(self, global_state):
+    def update_state(self, obs, info):
         """
         Method to convert the observation space into one more relative to the
         agent.
@@ -174,7 +181,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             obs: The observation from the gym
 
         """
-        global_state = super().update_state(global_state)
+        super().update_state(obs, info)
 
         # Initialize the scrimmage line as the mid point between the two flags
         if self.scrimmage is None:
@@ -183,8 +190,6 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         self.my_team_density, self.opp_team_density = self.get_team_density(
             self.my_team_pos, self.opp_team_pos
         )
-
-        return global_state
 
     def random_defense_action(self, enem_positions):
         """

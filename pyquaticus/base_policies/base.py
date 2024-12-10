@@ -22,6 +22,7 @@
 import numpy as np
 
 from pyquaticus.envs.pyquaticus import Team
+from pyquaticus.utils.obs_utils import ObsNormalizer
 
 from typing import Any, Union
 
@@ -38,9 +39,13 @@ class BaseAgentPolicy:
         team: Team,
         teammate_ids: Union[list[int], int, None],
         opponent_ids: Union[list[int], int, None],
+        obs_normalizer: ObsNormalizer,
+        state_normalizer: ObsNormalizer,
         suppress_numpy_warnings=True,
     ):
         self.id = agent_id
+        self.obs_normalizer = obs_normalizer
+        self.state_normalizer = state_normalizer
         if isinstance(team, str):
             if team == "red":
                 team = Team.RED_TEAM
@@ -74,39 +79,37 @@ class BaseAgentPolicy:
         if suppress_numpy_warnings:
             np.seterr(all="ignore")
 
-    def compute_action(self, global_state) -> Any:
+    def compute_action(self, obs, info) -> Any:
         """
-        **THIS FUNCTION REQUIRES UNNORMALIZED OBSERVATIONS**.
-
         Compute an action for the given position. This function uses observations
         of both teams.
 
         Args:
-            obs: Unnormalized observation from the gym
+            obs: observation from gym
+            info: info from gym
 
-        Returns
-        -------
+        Returns:
             action: The action index describing which speed/heading combo to use (assumes
             discrete action values from `ctf-gym.envs.pyquaticus.ACTION_MAP`)
         """
         pass
 
-    def update_state(self, global_state):
+    def update_state(self, obs, info) -> None:
         """
-        Method to convert the observation space into one more relative to the
+        Method to convert the gym obs and info into data more relative to the
         agent.
 
-        REQUIRES UNNORMALIZED GLOBAL STATE
-
         Args:
-            global_state: The global state from the gym (info["global_state"])
-
-        Returns
-        -------
-            This agents observation from the environment (out of the list of
-            observations for every agent)
-
+            obs: observation from gym
+            info: info from gym
         """
+
+        global_state = info["global_state"]
+
+        # Unnormalize state, if necessary
+        if not isinstance(global_state, dict):
+            global_state = self.state_normalizer.unnormalized(global_state)
+
         self.opp_team_pos = []
         self.opp_team_pos_dict = {}  # for labeling by agent_id
         self.opp_team_rect_pos = []
@@ -284,8 +287,6 @@ class BaseAgentPolicy:
 
             # Get wall distances and bearings
 
-        return global_state
-
     def angle180(self, deg):
         """Rotates an angle to be between -180 and +180 degrees."""
         while deg > 180:
@@ -302,7 +303,7 @@ class BaseAgentPolicy:
     def bearing_to_vec(self, heading):
         return [np.cos(np.deg2rad(heading)), np.sin(np.deg2rad(heading))]
 
-    def rb_to_rect(self, point: tuple[float, float]) -> np.ndarray:
+    def rb_to_rect(self, point: np.ndarray) -> np.ndarray:
         """Returns the rectangular coordinates of polar point `point`."""
         dist = point[0]
         bearing = point[1]

@@ -51,7 +51,7 @@ class RandPolicy(Policy):
                         info_batch=None,
                         episodes=None,
                         **kwargs):
-        
+
         return [self.action_space.sample() for _ in obs_batch], [], {}
 
     def get_weights(self):
@@ -91,19 +91,19 @@ class NoOp(Policy):
 
     def set_weights(self, weights):
         pass
-    
-def AttackGen(agentid, team, mode, team_size, obs_normalizer):
+
+
+def AttackGen(agentid, team, teammate_ids, opponent_ids, obs_normalizer, state_normalizer, mode, continuous, team_size):
 
     class AttackPolicy(Policy):
         """
         Creates an attacker policy
         """
 
-        policy = None
         def __init__(self, observation_space, action_space, config):
             Policy.__init__(self, observation_space, action_space, config)
-            self.policy = BaseAttacker(agentid, team, mode=mode)
-            self.action_dict = OrderedDict([(p, 16) for p in range(2*team_size)])
+            self.policy = BaseAttacker(agentid, team, teammate_ids, opponent_ids, obs_normalizer, state_normalizer, mode=mode, continuous=continuous)
+            self.action_dict = {}
 
         def compute_actions(self,
                             obs_batch,
@@ -113,20 +113,15 @@ def AttackGen(agentid, team, mode, team_size, obs_normalizer):
                             info_batch=None,
                             episodes=None,
                             **kwargs):
-            
-            # Iterate over all observations in obs_batch
-            for obs in obs_batch:
 
-                # Unnormalize and unpack numpy arrays to create a new dictionary
-                new_obs_dict = OrderedDict()
-                for key, value in obs_normalizer.unnormalized(obs).items():
-                    if isinstance(value, np.ndarray) and value.size == 1:
-                        new_obs_dict[key] = value.item()  # Unpack single-value numpy arrays
-                    else:
-                        new_obs_dict[key] = value  # Keep original value
+            if info_batch is None:
+                raise Warning("Warning: Base policy requires info as well as obs")
+
+            # Iterate over all observations in obs_batch
+            for i in range(len(obs_batch)):
 
                 # Compute action and add it to the action dictionary
-                self.action_dict[agentid] = self.policy.compute_action({agentid : new_obs_dict})
+                self.action_dict[agentid] = self.policy.compute_action(obs_batch[i], info_batch[i])
 
             return [self.action_dict[agentid]], [], {}
 
@@ -138,19 +133,20 @@ def AttackGen(agentid, team, mode, team_size, obs_normalizer):
 
         def set_weights(self, weights):
             pass
-        
+
     return AttackPolicy
 
-def DefendGen(agentid, team, mode, team_size, obs_normalizer):
+
+def DefendGen(agentid, team, teammate_ids, opponent_ids, obs_normalizer, state_normalizer, mode, continuous, team_size):
     class DefendPolicy(Policy):
         """
         Creates a defender policy
         """
-        policy = None
+
         def __init__(self, observation_space, action_space, config):
             Policy.__init__(self, observation_space, action_space, config)
-            self.policy = BaseDefender(agentid, team, mode=mode)
-            self.action_dict = OrderedDict([(p, 16) for p in range(2*team_size)])
+            self.policy = BaseDefender(agentid, team, teammate_ids, opponent_ids, obs_normalizer, state_normalizer, mode=mode, continuous=continuous)
+            self.action_dict = {}
 
         def compute_actions(self,
                             obs_batch,
@@ -160,19 +156,15 @@ def DefendGen(agentid, team, mode, team_size, obs_normalizer):
                             info_batch=None,
                             episodes=None,
                             **kwargs):
-            # Iterate over all observations in obs_batch
-            for obs in obs_batch:
 
-                # Unnormalize and unpack numpy arrays to create a new dictionary
-                new_obs_dict = OrderedDict()
-                for key, value in obs_normalizer.unnormalized(obs).items():
-                    if isinstance(value, np.ndarray) and value.size == 1:
-                        new_obs_dict[key] = value.item()  # Unpack single-value numpy arrays
-                    else:
-                        new_obs_dict[key] = value  # Keep original value
+            if info_batch is None:
+                raise Warning("Warning: Base policy requires info as well as obs")
+
+            # Iterate over all observations in obs_batch
+            for i in range(len(obs_batch)):
 
                 # Compute action and add it to the action dictionary
-                self.action_dict[agentid] = self.policy.compute_action({agentid : new_obs_dict})
+                self.action_dict[agentid] = self.policy.compute_action(obs_batch[i], info_batch[i])
 
             return [self.action_dict[agentid]], [], {}
 
@@ -186,16 +178,17 @@ def DefendGen(agentid, team, mode, team_size, obs_normalizer):
             pass
     return DefendPolicy
 
-def CombinedGen(agentid, team, mode, team_size, obs_normalizer):
+
+def CombinedGen(agentid, team, teammate_ids, opponent_ids, obs_normalizer, state_normalizer, mode, continuous, team_size):
     class CombinedPolicy(Policy):
         """
         Creates a combined (attacker and defender) policy
         """
-        policy = None
+
         def __init__(self, observation_space, action_space, config):
             Policy.__init__(self, observation_space, action_space, config)
-            self.policy = Heuristic_CTF_Agent(agentid, team, mode=mode)
-            self.action_dict = OrderedDict([(p, 16) for p in range(2*team_size)])
+            self.policy = Heuristic_CTF_Agent(agentid, team, teammate_ids, opponent_ids, obs_normalizer, state_normalizer, mode=mode, continuous=continuous)
+            self.action_dict = {}
 
         def compute_actions(self,
                             obs_batch,
@@ -204,19 +197,15 @@ def CombinedGen(agentid, team, mode, team_size, obs_normalizer):
                             prev_reward_batch=None,
                             info_batch=None,
                             episodes=None,
-                            **kwargs): # Iterate over all observations in obs_batch
-            for obs in obs_batch:
+                            **kwargs):  # Iterate over all observations in obs_batch
+            if info_batch is None:
+                raise Warning("Warning: Base policy requires info as well as obs")
 
-                # Unnormalize and unpack numpy arrays to create a new dictionary
-                new_obs_dict = OrderedDict()
-                for key, value in obs_normalizer.unnormalized(obs).items():
-                    if isinstance(value, np.ndarray) and value.size == 1:
-                        new_obs_dict[key] = value.item()  # Unpack single-value numpy arrays
-                    else:
-                        new_obs_dict[key] = value  # Keep original value
+            # Iterate over all observations in obs_batch
+            for i in range(len(obs_batch)):
 
                 # Compute action and add it to the action dictionary
-                self.action_dict[agentid] = self.policy.compute_action({agentid : new_obs_dict})
+                self.action_dict[agentid] = self.policy.compute_action(obs_batch[i], info_batch[i])
 
             return [self.action_dict[agentid]], [], {}
 

@@ -1,6 +1,7 @@
 from attr import dataclass
 import numpy as np
 from typing import Union
+import matplotlib.pyplot as plt
 
 
 @dataclass
@@ -80,13 +81,13 @@ def point_in_polygons(point: np.ndarray, polys: np.ndarray) -> bool:
     return False
 
 
-def rrt_star(
+def rrt(
     start: np.ndarray,
     goal: np.ndarray,
     obstacles: Union[np.ndarray, None],
     area: np.ndarray,
     num_iters: int = 1000,
-):
+) -> Union[list[Point], None]:
 
     points = [Point(start, 0, None)]
     goal_point = Point(goal, 0, None)
@@ -97,6 +98,24 @@ def rrt_star(
         points.append(rand_point)
         if dist(rand_point, goal_point) < 1:
             return points
+    return None
+
+
+def draw_result(points: list[Point], area: np.ndarray, obstacles: Union[np.ndarray, None]):
+    fig, ax = plt.subplots()
+    for point in points:
+        if point.parent is not None:
+            ax.plot([point.pos[0], point.parent.pos[0]], [point.pos[1], point.parent.pos[1]], "b")
+    for point in points:
+        ax.plot(point.pos[0], point.pos[1], "ko")
+    if obstacles is not None:
+        for obstacle in obstacles:
+            print(obstacle)
+            for i in range(obstacle.shape[0]):
+                seg = obstacle[(i - 1, i), :]
+                print(seg)
+                ax.plot(seg[:, 0], seg[:, 1], "r")
+    plt.show()
 
 
 def get_nearest(point: Point, points: list[Point]):
@@ -152,7 +171,8 @@ if __name__ == "__main__":
     # print(point_in_polygon(point, poly))
     start = np.array((0, 0))
     end = np.array((10, 10))
-    obstacles = None
+    obstacles = np.array((((5, 5), (5, 6), (6, 6), (6, 5)), ((1, 1), (1, 2), (2, 2), (2, 1))))
     area = np.array(((-1, -1), (11, 11)))
-    print(rrt_star(start, end, obstacles, area))
-
+    tree = rrt(start, end, obstacles, area)
+    if tree is not None:
+        draw_result(tree, area, obstacles)

@@ -23,6 +23,7 @@ import numpy as np
 
 from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import config_dict_std, Team
+from pyquaticus.utils.obs_utils import ObsNormalizer
 
 from typing import Union
 
@@ -38,13 +39,15 @@ class BaseDefender(BaseAgentPolicy):
         team: Team,
         teammate_ids: Union[list[int], int, None],
         opponent_ids: Union[list[int], int, None],
+        obs_normalizer: ObsNormalizer,
+        state_normalizer: ObsNormalizer,
         mode: str = "easy",
         continuous: bool = False,
         flag_keepout: float = 10.0,
         catch_radius: float = config_dict_std["catch_radius"],
         using_pyquaticus: bool = True,
     ):
-        super().__init__(agent_id, team, teammate_ids, opponent_ids)
+        super().__init__(agent_id, team, teammate_ids, opponent_ids, obs_normalizer, state_normalizer)
 
         if mode not in modes:
             raise ValueError(f"mode {mode} not in set of valid modes {modes}")
@@ -67,7 +70,7 @@ class BaseDefender(BaseAgentPolicy):
             raise ValueError(f"mode {mode} not in set of valid modes {modes}")
         self.mode = mode
 
-    def compute_action(self, global_state):
+    def compute_action(self, obs, info):
         """
         **THIS FUNCTION REQUIRES UNNORMALIZED OBSERVATIONS**.
 
@@ -82,7 +85,9 @@ class BaseDefender(BaseAgentPolicy):
             action: The action index describing which speed/heading combo to use (assumes
             discrete action values from `ctf-gym.envs.pyquaticus.ACTION_MAP`)
         """
-        global_state = self.update_state(global_state)
+        self.update_state(obs, info)
+
+        global_state = self.state_normalizer.unnormalized(info["global_state"])
 
         # TODO: Fix this
         # Some big speed hard-coded so that every agent drives at max speed
@@ -292,7 +297,7 @@ class BaseDefender(BaseAgentPolicy):
                 -90 < global_state["wall_0_bearing"] < 90
             ):
                 wall_0_unit_vec = self.rb_to_rect(
-                    (global_state["wall_0_distance"], global_state["wall_0_bearing"])
+                    np.array((global_state["wall_0_distance"], global_state["wall_0_bearing"]))
                 )
                 wall_pos.append(
                     (
@@ -304,7 +309,7 @@ class BaseDefender(BaseAgentPolicy):
                 -90 < global_state["wall_2_bearing"] < 90
             ):
                 wall_2_unit_vec = self.rb_to_rect(
-                    (global_state["wall_2_distance"], global_state["wall_2_bearing"])
+                    np.array((global_state["wall_2_distance"], global_state["wall_2_bearing"]))
                 )
                 wall_pos.append(
                     (
@@ -316,7 +321,7 @@ class BaseDefender(BaseAgentPolicy):
                 -90 < global_state["wall_1_bearing"] < 90
             ):
                 wall_1_unit_vec = self.rb_to_rect(
-                    (global_state["wall_1_distance"], global_state["wall_1_bearing"])
+                    np.array((global_state["wall_1_distance"], global_state["wall_1_bearing"]))
                 )
                 wall_pos.append(
                     (
@@ -328,7 +333,7 @@ class BaseDefender(BaseAgentPolicy):
                 -90 < global_state["wall_3_bearing"] < 90
             ):
                 wall_3_unit_vec = self.rb_to_rect(
-                    (global_state["wall_3_distance"], global_state["wall_3_bearing"])
+                    np.array((global_state["wall_3_distance"], global_state["wall_3_bearing"]))
                 )
                 wall_pos.append(
                     (
