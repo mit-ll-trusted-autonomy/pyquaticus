@@ -2922,9 +2922,12 @@ when gps environment bounds are specified in meters"
                         )
 
                     # get flag midpoint
+                    flag_home_blue = np.asarray(flag_homes[Team.BLUE_TEAM])
+                    flag_home_red = np.asarray(flag_homes[Team.RED_TEAM])
+
                     if flag_homes_unit == "wm_xy":
-                        flag_home_blue = np.flip(_sm2ll(*flag_homes[Team.BLUE_TEAM]))
-                        flag_home_red = np.flip(_sm2ll(*flag_homes[Team.RED_TEAM]))
+                        flag_home_blue = np.flip(_sm2ll(*flag_home_blue))
+                        flag_home_red = np.flip(_sm2ll(*flag_home_red))
 
                     geodict_flags = Geodesic.WGS84.Inverse(
                         lat1=flag_home_blue[0],
@@ -3591,13 +3594,9 @@ when gps environment bounds are specified in meters"
                 #combine tiles to cross 180 longitude
                 topo_img = np.hstack((topo_img_1, topo_img_2))
 
-                import matplotlib.pyplot as plt
-                plt.imshow(topo_img)
-                plt.show()
-
             # rendering tile (for pygame background)
             render_tile_bounds = wrap_mercator_x(
-                self.env_bounds + self.arena_buffer * np.array([[-1], [1]])
+                self.env_bounds + (self.arena_buffer / self.pixel_size) * np.array([[-1], [1]])
             )
 
             if render_tile_bounds[0][0] < render_tile_bounds[1][0]:
@@ -3620,9 +3619,57 @@ when gps environment bounds are specified in meters"
                 )
             else:
                 #tile 1
+                render_tile_1, render_ext_1 = cx.bounds2img(
+                    w=render_tile_bounds[0][0],
+                    s=render_tile_bounds[0][1],
+                    e=EPSG_3857_EXT_X, #180 longitude from the west
+                    n=render_tile_bounds[1][1],
+                    zoom="auto",
+                    source=render_tile_source,
+                    ll=False,
+                    wait=0,
+                    max_retries=2,
+                    n_connections=1,
+                    use_cache=False,
+                    zoom_adjust=None,
+                )
+                background_img_1 = self._crop_tiles(
+                    render_tile_1[:, :, :-1],
+                    render_ext_1,
+                    w=render_tile_bounds[0][0],
+                    s=render_tile_bounds[0][1],
+                    e=EPSG_3857_EXT_X, #180 longitude from the west
+                    n=render_tile_bounds[1][1],
+                    ll=False
+                )
+
                 #tile 2
+                render_tile_2, render_ext_2 = cx.bounds2img(
+                    w=-EPSG_3857_EXT_X, #180 longitude from the east
+                    s=render_tile_bounds[0][1],
+                    e=render_tile_bounds[1][0],
+                    n=render_tile_bounds[1][1],
+                    zoom="auto",
+                    source=render_tile_source,
+                    ll=False,
+                    wait=0,
+                    max_retries=2,
+                    n_connections=1,
+                    use_cache=False,
+                    zoom_adjust=None,
+                )
+                background_img_2 = self._crop_tiles(
+                    render_tile_2[:, :, :-1],
+                    render_ext_2,
+                    w=-EPSG_3857_EXT_X, #180 longitude from the east
+                    s=render_tile_bounds[0][1],
+                    e=render_tile_bounds[1][0],
+                    n=render_tile_bounds[1][1],
+                    ll=False
+                )
+
                 #combine tiles to cross 180 longitude
-                pass
+                self.background_img = np.hstack((background_img_1, background_img_2))
 
             # cache maps
             map_cache = {
@@ -3643,14 +3690,15 @@ when gps environment bounds are specified in meters"
             np.floor(topo_img.shape[1] * (flag_water_xs / self.env_size[0])),
             None,
             topo_img.shape[1] - 1
-        )
+        ).astype(int)
+
         flag_water_ys = np.clip(
             np.floor(topo_img.shape[0] * (1 - flag_water_ys / self.env_size[1])),
             None,
             topo_img.shape[0] - 1
-        )
+        ).astype(int)
 
-        flag_water_pixel_colors = tomo_img[flag_water_xs, flag_water_ys]
+        flag_water_pixel_colors = topo_img[flag_water_xs, flag_water_ys]
         for flag_water_pixel_color in flag_water_pixel_colors: 
             if not (
                 np.all(flag_water_pixel_color == 38) or # DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
