@@ -3,6 +3,7 @@ import numpy as np
 from typing import Union
 
 LINE_INTERSECT_TOL = 1e-9
+# LINE_INTERSECT_TOL = 2
 
 
 def point_in_polygon(point: np.ndarray, seglist: Union[np.ndarray, None]) -> bool:
@@ -12,7 +13,7 @@ def point_in_polygon(point: np.ndarray, seglist: Union[np.ndarray, None]) -> boo
     Args:
         point (np.ndarray): [x, y]
         seglist (np.ndarray): array of shape (n, 2, 2) for an n-sided polygon
-        where seglist[i] = [[x1, y1], [x2, y2]] for the i-th edge of the polygon 
+        where seglist[i] = [[x1, y1], [x2, y2]] for the i-th edge of the polygon
 
     Returns:
         bool: True if the point is inside the polygon
@@ -45,9 +46,7 @@ def point_in_polygon(point: np.ndarray, seglist: Union[np.ndarray, None]) -> boo
     denom = y3 - y2
     intersect_x = ((y1 - y2) * (x3 - x2) / denom) + x2
 
-    # DOES NOT DETECT HORIZONTAL EDGE!!
-    
-    on_edge = (x1 == intersect_x)
+    on_edge = (x1 == intersect_x) | (denom == 0 & ((x1 < x2) != (x1 < x3)))
 
     if np.any(on_edge):
         return True
@@ -66,7 +65,7 @@ def point_in_polygon(point: np.ndarray, seglist: Union[np.ndarray, None]) -> boo
     #                 \
     #                  0---
     #
-    intersect = (((y1 < y2) != (y1 < y3)) & (x1 <= intersect_x))
+    intersect = (((y1 < y2) != (y1 < y3)) & (x1 <= intersect_x + LINE_INTERSECT_TOL))
 
     return bool(np.count_nonzero(intersect) % 2)
 
@@ -75,7 +74,11 @@ def point_in_polygons(point: np.ndarray, polys: np.ndarray) -> bool:
     point = point.reshape((2))
     polys = polys.reshape((polys.shape[0], -1, 2))
     for poly in polys:
-        if point_in_polygon(point, poly):
+        seglist = []
+        for i in range(len(poly)):
+            seglist.append(poly[(i-1, i), :])
+        seglist = np.array(seglist)
+        if point_in_polygon(point, seglist):
             return True
     return False
 
@@ -96,12 +99,13 @@ def intersect(seg: np.ndarray, seglist: Union[np.ndarray, None]):
     if seglist is None:
         return False
     seglist = seglist.reshape((-1, 2, 2))
+    seg = seg.reshape((-1, 2, 2))
     # compute ray intersections
     x1, y1, x2, y2 = (
-        seg[0, 0],
-        seg[0, 1],
-        seg[1, 0],
-        seg[1, 1],
+        seg[:, 0, 0].reshape((-1, 1)),
+        seg[:, 0, 1].reshape((-1, 1)),
+        seg[:, 1, 0].reshape((-1, 1)),
+        seg[:, 1, 1].reshape((-1, 1)),
     )
     x3, y3, x4, y4 = (
         seglist[:, 0, 0],
@@ -130,21 +134,24 @@ def intersect(seg: np.ndarray, seglist: Union[np.ndarray, None]):
         & (intersect_y <= np.maximum(y3, y4) + LINE_INTERSECT_TOL)
     )
 
-    return np.any(intersect)
+    return np.any(intersect, axis=1)
 
 
 if __name__ == "__main__":
 
-    point = np.array((0.5, 0))
+    point = np.array((0, 0))
+    segs = np.array((((0, -40), (0, 0)), ((4, 4), (5, 5))))
     # Square
-    poly = np.array(((0, 0), (0, 1), (1, 1), (1, 0)))
+    # poly = np.array(((0, 0), (0, 1), (1, 1), (1, 0)))
+    shape = np.array(((20, 15), (50, -5), (45, -15), (25, -5), (20, -15), (25, -25), (20, -35), (10, -15)))
     # Diamond
     # poly = np.array(((-1, 0), (0, 1), (1, 0), (0, -1)))
     seglist = []
-    for i in range(len(poly)):
-        seglist.append(poly[(i-1, i), :])
+    for i in range(len(shape)):
+        seglist.append(shape[(i-1, i), :])
     seglist = np.array(seglist)
     print(point_in_polygon(point, seglist))
+    # print(intersect(segs[0], seglist))
 
     # import time
     # import matplotlib.pyplot as plt
@@ -153,7 +160,7 @@ if __name__ == "__main__":
     # poly_times = []
     # int_times = []
 
-    # for i in range(3, 30000, 1000):
+    # for i in range(3, 300000, 10000):
     #     point = np.random.uniform(0, 100, (1, 2))
     #     poly = np.random.uniform(0, 100, (i, 2))
     #     seglist = []

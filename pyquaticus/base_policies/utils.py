@@ -2,7 +2,8 @@ from attr import dataclass
 import numpy as np
 from typing import Union
 import matplotlib.pyplot as plt
-from pyquaticus.base_policies.intersect_utils import point_in_polygons, intersect
+from pyquaticus.base_policies.intersect_utils import point_in_polygon, point_in_polygons, intersect
+import time
 
 
 @dataclass
@@ -17,11 +18,14 @@ def rrt_star(
     goal: np.ndarray,
     obstacles: Union[np.ndarray, None],
     area: np.ndarray,
+    max_step_size: float = 2,
     num_iters: int = 1000,
-) -> Union[list[Point], None]:
+) -> list[Point]:
 
     points = [Point(start, 0, None)]
     seglist = None
+
+    # Generate array of obstacle segments
     if obstacles is not None:
         seglist = []
         for obstacle in obstacles:
@@ -29,26 +33,50 @@ def rrt_star(
                 seglist.append(obstacle[(i - 1, i), :])
         seglist = np.array(seglist)
 
+    sample_time = 0
+    find_near_time = 0
+    choose_parent_time = 0
+    rewire_time = 0
     for i in range(num_iters):
-        new_point = get_random_point(area, obstacles)
-        nearest = get_nearest(new_point, points, seglist)
-        if nearest is None:
-            continue
+        t0 = time.time()
+        new_point, nearest = get_random_point(
+            area, obstacles, seglist, points, max_step_size
+        )
         new_point.parent = nearest
         new_point.cost = nearest.cost + dist(new_point, nearest)
-        near_points = get_near(new_point, points, 1, seglist)
+        t1 = time.time()
+        near_points = get_near(new_point, points, max_step_size, seglist)
+        t2 = time.time()
         choose_parent(new_point, near_points)
+        t3 = time.time()
         rewire(new_point, near_points)
+        t4 = time.time()
         points.append(new_point)
+        sample_time += t1 - t0
+        find_near_time += t2 - t1
+        choose_parent_time += t3 - t2
+        rewire_time += t4 - t3
 
+    print(f"Time spent sampling: {sample_time:.2f}")
+    print(f"Time spend finding near nodes: {find_near_time:.2f}")
+    print(f"Time spent choosing parent: {choose_parent_time:.2f}")
+    print(f"Time spent rewiring: {rewire_time:.2f}")
     return points
 
 
-def get_near(point: Point, points: list[Point], radius: float, seglist: Union[np.ndarray, None]) -> list[Point]:
+def get_near(
+    point: Point, points: list[Point], radius: float, seglist: Union[np.ndarray, None]
+) -> list[Point]:
+    seg_array = np.array([np.array([p.pos, point.pos]) for p in points])
+    dist_array = np.linalg.norm(seg_array[:, 0, :] - seg_array[:, 1, :], axis=1)
+    int_array = intersect(seg_array, seglist)
+
+    near_array = (dist_array <= radius) & (np.logical_not(int_array))
     near_points = []
-    for p in points:
-        if (dist(point, p) <= radius) and not intersect(np.array([point.pos, p.pos]), seglist):
-            near_points.append(p)
+    for i in range(len(points)):
+        if near_array[i]:
+            near_points.append(points[i])
+
     return near_points
 
 
@@ -66,11 +94,17 @@ def rewire(potential_parent: Point, near_points: list[Point]):
             point.parent = potential_parent
 
 
-def draw_result(points: list[Point], area: np.ndarray, obstacles: Union[np.ndarray, None]):
+def draw_result(
+    points: list[Point], obstacles: Union[np.ndarray, None]
+):
     fig, ax = plt.subplots()
     for point in points:
         if point.parent is not None:
-            ax.plot([point.pos[0], point.parent.pos[0]], [point.pos[1], point.parent.pos[1]], "b")
+            ax.plot(
+                [point.pos[0], point.parent.pos[0]],
+                [point.pos[1], point.parent.pos[1]],
+                "b",
+            )
     # for point in points:
     #     ax.plot(point.pos[0], point.pos[1], "ko")
     if obstacles is not None:
@@ -81,22 +115,32 @@ def draw_result(points: list[Point], area: np.ndarray, obstacles: Union[np.ndarr
     plt.show()
 
 
-def get_nearest(point: Point, points: list[Point], seglist: Union[np.ndarray, None]) -> Union[Point, None]:
+def get_nearest(
+    point: Point, points: list[Point], seglist: Union[np.ndarray, None]
+) -> Union[Point, None]:
     if seglist is None:
         return min(points, key=lambda p: dist(p, point))
-    min_dist = np.inf
-    min_point = None
-    for p in points:
-        if not intersect(np.array([point.pos, p.pos]), seglist):
-            if dist(p, point) < min_dist:
-                min_dist = dist(p, point)
-                min_point = p
-    return min_point
+    seg_array = np.array([np.array([p.pos, point.pos]) for p in points])
+    dist_array = np.linalg.norm(seg_array[:, 0, :] - seg_array[:, 1, :], axis=1)
+    int_array = intersect(seg_array, seglist)
+
+    if np.all(int_array):
+        return None
+
+    min_index = np.argmin(dist_array + np.max(dist_array) * int_array)
+
+    return points[min_index]
 
 
-def get_random_point(area: np.ndarray, obstacles: Union[np.ndarray, None]) -> Point:
+def get_random_point(
+    area: np.ndarray,
+    obstacles: Union[np.ndarray, None],
+    seglist: Union[np.ndarray, None],
+    points: list[Point],
+    max_step_size: float,
+) -> tuple[Point, Point]:
     """
-    Gets a random point that is not in any of the obstacles.
+    Gets a random point (and its nearest neighbor) that is not in any of the obstacles.
 
     Args:
         area (np.ndarray): ((xmin, ymin), (xmax, ymax))
@@ -106,11 +150,34 @@ def get_random_point(area: np.ndarray, obstacles: Union[np.ndarray, None]) -> Po
         Point: point not in obstacles
     """
     if obstacles is None:
-        return Point(np.random.uniform(area[0], area[1], (2)))
-    point = np.random.uniform(area[0], area[1], (2))
-    while point_in_polygons(point, obstacles):
-        point = np.random.uniform(area[0], area[1], (2))
-    return Point(point)
+        rand_point = Point(np.random.uniform(area[0], area[1], (2)))
+        nearest = get_nearest(rand_point, points, seglist)
+        assert nearest is not None
+        new_point = bound(rand_point, nearest, max_step_size)
+        return new_point, nearest
+
+    rand_point = Point(np.random.uniform(area[0], area[1], (2)))
+    nearest = get_nearest(rand_point, points, seglist)
+    while nearest is None:
+        rand_point = Point(np.random.uniform(area[0], area[1], (2)))
+        nearest = get_nearest(rand_point, points, seglist)
+    new_point = bound(rand_point, nearest, max_step_size)
+    while point_in_polygons(new_point.pos, obstacles):
+        rand_point = Point(np.random.uniform(area[0], area[1], (2)))
+        nearest = get_nearest(rand_point, points, seglist)
+        while nearest is None:
+            rand_point = Point(np.random.uniform(area[0], area[1], (2)))
+            nearest = get_nearest(rand_point, points, seglist)
+        new_point = bound(rand_point, nearest, max_step_size)
+    return new_point, nearest
+
+
+def bound(to_point: Point, from_point: Point, max_step_size):
+    vector = to_point.pos - from_point.pos
+    if np.linalg.norm(vector) > max_step_size:
+        vector = vector * max_step_size / np.linalg.norm(vector)
+        to_point.pos = from_point.pos + vector
+    return to_point
 
 
 def dist(p1: Point, p2: Point) -> float:
@@ -119,10 +186,14 @@ def dist(p1: Point, p2: Point) -> float:
 
 if __name__ == "__main__":
 
-    start = np.array((0, 0))
+    start = np.array((40, -30))
+    # start = np.array((0, 0))
     end = np.array((10, 10))
-    obstacles = np.array((((4, 4), (4, 7), (7, 7), (7, 4)), ((1, 1), (1, 5), (5, 5), (5, 1))))
-    area = np.array(((-1, -1), (11, 11)))
-    tree = rrt_star(start, end, obstacles, area)
-    if tree is not None:
-        draw_result(tree, area, obstacles)
+    # obstacles = np.array(
+    #     (((4, 4), (4, 7), (7, 7), (7, 4)), ((1, 1), (1, 5), (5, 5), (5, 1)))
+    # )
+    obstacles = np.array([((20, 15), (50, -5), (45, -15), (25, -5), (20, -15), (25, -25), (20, -35), (10, -15))])
+    # area = np.array(((-1, -1), (11, 11)))
+    area = np.array([[-80.0, -40.0], [80.0, 40.0]])
+    tree = rrt_star(start, end, obstacles, area, 10, 1000)
+    draw_result(tree, obstacles)
