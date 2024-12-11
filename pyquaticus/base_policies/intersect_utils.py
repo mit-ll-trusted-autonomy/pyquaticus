@@ -83,6 +83,15 @@ def point_in_polygons(point: np.ndarray, polys: np.ndarray) -> bool:
     return False
 
 
+def point_in_polygons_new(point: np.ndarray, seglists: np.ndarray) -> bool:
+    point = point.reshape((2))
+    seglists = seglists.reshape((seglists.shape[0], seglists.shape[1], -1, 2))
+    for seglist in seglists:
+        if point_in_polygon(point, seglist):
+            return True
+    return False
+
+
 def intersect(seg: np.ndarray, seglist: Union[np.ndarray, None]):
     """
     Determines if a segment intersects any of the segments in an array of segments
@@ -139,49 +148,50 @@ def intersect(seg: np.ndarray, seglist: Union[np.ndarray, None]):
 
 if __name__ == "__main__":
 
-    point = np.array((0, 0))
-    segs = np.array((((0, -40), (0, 0)), ((4, 4), (5, 5))))
-    # Square
-    # poly = np.array(((0, 0), (0, 1), (1, 1), (1, 0)))
-    shape = np.array(((20, 15), (50, -5), (45, -15), (25, -5), (20, -15), (25, -25), (20, -35), (10, -15)))
-    # Diamond
-    # poly = np.array(((-1, 0), (0, 1), (1, 0), (0, -1)))
-    seglist = []
-    for i in range(len(shape)):
-        seglist.append(shape[(i-1, i), :])
-    seglist = np.array(seglist)
-    print(point_in_polygon(point, seglist))
+    # point = np.array((0, 0))
+    # segs = np.array((((0, -40), (0, 0)), ((4, 4), (5, 5))))
+    # # Square
+    # # poly = np.array(((0, 0), (0, 1), (1, 1), (1, 0)))
+    # shape = np.array(((20, 15), (50, -5), (45, -15), (25, -5), (20, -15), (25, -25), (20, -35), (10, -15)))
+    # # Diamond
+    # # poly = np.array(((-1, 0), (0, 1), (1, 0), (0, -1)))
+    # seglist = []
+    # for i in range(len(shape)):
+    #     seglist.append(shape[(i-1, i), :])
+    # seglist = np.array(seglist)
+    # print(point_in_polygon(point, seglist))
     # print(intersect(segs[0], seglist))
 
-    # import time
-    # import matplotlib.pyplot as plt
+    import time
+    import matplotlib.pyplot as plt
 
-    # num_sides = []
-    # poly_times = []
-    # int_times = []
+    num_polys = []
+    times = []
+    new_times = []
 
-    # for i in range(3, 300000, 10000):
-    #     point = np.random.uniform(0, 100, (1, 2))
-    #     poly = np.random.uniform(0, 100, (i, 2))
-    #     seglist = []
-    #     for i in range(len(poly)):
-    #         seglist.append(poly[(i-1, i), :])
-    #     seglist = np.array(seglist)
+    for j in range(1, 300, 10):
+        point = np.random.uniform(0, 100, (1, 2))
+        polys = np.random.uniform(0, 100, (j, 3, 2))
+        seglists = []
+        for poly in polys:
+            seglist = []
+            for i in range(len(poly)):
+                seglist.append(poly[(i-1, i), :])
+            seglists.append(seglist)
+        seglists = np.array(seglists)
 
-    #     start_time = time.time()
-    #     point_in_polygon(point, seglist)
-    #     end_time = time.time()
-    #     num_sides.append(i)
-    #     poly_times.append(end_time - start_time)
+        start_time = time.time()
+        point_in_polygons(point, polys)
+        end_time = time.time()
+        times.append(end_time - start_time)
+        start_time = time.time()
+        point_in_polygons_new(point, seglists)
+        end_time = time.time()
+        num_polys.append(j)
+        new_times.append(end_time - start_time)
 
-    #     seg = np.random.uniform(0, 100, (2, 2))
-    #     segs = np.random.uniform(0, 100, (i, 2, 2))
 
-    #     start_time = time.time()
-    #     intersect(seg, segs)
-    #     end_time = time.time()
-    #     int_times.append(end_time - start_time)
-    # fig, ax = plt.subplots()
-    # ax.scatter(num_sides, poly_times, c="r")
-    # ax.scatter(num_sides, int_times, c="b")
-    # plt.show()
+    fig, ax = plt.subplots()
+    ax.scatter(num_polys, times, c="b")
+    ax.scatter(num_polys, new_times, c="r")
+    plt.show()
