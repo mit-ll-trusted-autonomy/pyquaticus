@@ -614,9 +614,6 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             agent_obs_space = self.agent_obs_normalizer.normalized_space
         else:
             agent_obs_space = self.agent_obs_normalizer.unnormalized_space
-            raise Warning(
-                "Unnormalized observation space has not been thoroughly tested"
-            )
         return agent_obs_space
 
     def get_agent_action_space(self):
