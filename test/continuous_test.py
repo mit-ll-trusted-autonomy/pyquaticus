@@ -23,16 +23,24 @@ config_dict["sim_speedup_factor"] = 4
 config_dict["tau"] = 0.05
 config_dict["normalize"] = False
 # config_dict["catch_radius"] = 1
+config_dict["obstacles"] = {
+        "polygon": [((100, 55), (130, 35), (125, 25), (105, 35), (100, 25), (105, 15), (100, 5), (90, 25))]
+    }
 
 env = pyquaticus_v0.PyQuaticusEnv(team_size=2, config_dict=config_dict, render_mode='human')
 
 obs, info = env.reset()
 
-H_one = BaseAttacker(2, Team.RED_TEAM, 3, [0, 1], env.agent_obs_normalizer, env.global_state_normalizer, mode="easy", continuous=False)
-H_two = BaseDefender(3, Team.RED_TEAM, 2, [0, 1], env.agent_obs_normalizer, env.global_state_normalizer, mode="medium", continuous=False)
+H_one = BaseAttacker(2, Team.RED_TEAM, 3, [0, 1], env.agent_obs_normalizer, env.global_state_normalizer, mode="nothing", continuous=False)
+H_two = BaseDefender(3, Team.RED_TEAM, 2, [0, 1], env.agent_obs_normalizer, env.global_state_normalizer, mode="nothing", continuous=False)
 
-R_one = Heuristic_CTF_Agent(0, Team.BLUE_TEAM, 1, [2, 3], env.agent_obs_normalizer, env.global_state_normalizer, mode="easy", continuous=False)
+R_one = WaypointFollower(0, Team.BLUE_TEAM, 1, [2, 3], env.agent_obs_normalizer, env.global_state_normalizer, continuous=False, capture_radius=5)
 R_two = BaseAttacker(1, Team.BLUE_TEAM, 0, [2, 3], env.agent_obs_normalizer, env.global_state_normalizer, mode="nothing", continuous=False)
+
+R_one.update_state(obs, info)
+obstacles = np.array([((20, 15), (50, -5), (45, -15), (25, -5), (20, -15), (25, -25), (20, -35), (10, -15))])
+
+R_one.plan(np.array([0, 0]), obstacles, np.array([[-80.0, -40.0], [80.0, 40.0]]), 5, 1000)
 
 while True:
     # print(global_state)

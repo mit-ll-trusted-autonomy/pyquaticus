@@ -23,6 +23,8 @@ import numpy as np
 
 from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import Team
+from pyquaticus.utils.obs_utils import ObsNormalizer
+from pyquaticus.base_policies.utils import rrt_star, draw_result
 
 from typing import Union
 
@@ -36,11 +38,13 @@ class WaypointFollower(BaseAgentPolicy):
         team: Team,
         teammate_ids: Union[list[int], int, None],
         opponent_ids: Union[list[int], int, None],
+        obs_normalizer: ObsNormalizer,
+        state_normalizer: ObsNormalizer,
         continuous: bool = False,
         capture_radius: float = 1,
         wps: list[np.ndarray] = [],
     ):
-        super().__init__(agent_id, team, teammate_ids, opponent_ids)
+        super().__init__(agent_id, team, teammate_ids, opponent_ids, obs_normalizer, state_normalizer)
 
         self.capture_radius = capture_radius
 
@@ -51,7 +55,7 @@ class WaypointFollower(BaseAgentPolicy):
         if team not in Team:
             raise AttributeError(f"Invalid team {team}")
 
-    def compute_action(self, global_state):
+    def compute_action(self, obs, info):
         """
         **THIS FUNCTION REQUIRES UNNORMALIZED GLOBAL STATE**.
 
@@ -66,7 +70,7 @@ class WaypointFollower(BaseAgentPolicy):
             desired_speed: m/s
             heading_error: deg
         """
-        global_state = self.update_state(global_state)
+        self.update_state(obs, info)
 
         # Some big speed hard-coded so that every agent drives at max speed
         desired_speed = 50
@@ -112,3 +116,26 @@ class WaypointFollower(BaseAgentPolicy):
             return
         elif np.linalg.norm(self.wps[0] - pos) <= self.capture_radius:
             self.wps.pop(0)
+
+    def set_wps(self, wps: list[np.ndarray]):
+        self.wps = wps
+
+    def plan(self, wp: np.ndarray, obstacles: Union[np.ndarray, None], area: np.ndarray, max_step_size: float = 2, num_iters: int = 1000):
+        tree = rrt_star(self.pos, wp, obstacles, area, max_step_size, num_iters)
+        draw_result(tree, obstacles)
+        possible_points = []
+        for point in tree:
+            if np.linalg.norm(point.pos - wp) <= self.capture_radius:
+                possible_points.append(point)
+        min_cost = possible_points[0].cost
+        min_point = possible_points[0]
+        for point in possible_points:
+            if point.cost < min_cost:
+                min_cost = point.cost
+                min_point = point
+        wps = [min_point.pos]
+        while min_point.parent is not None:
+            wps.insert(0, min_point.parent.pos)
+            min_point = min_point.parent
+
+        self.wps = wps
