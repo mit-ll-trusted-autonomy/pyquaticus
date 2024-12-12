@@ -2,11 +2,8 @@ from re import L
 import numpy as np
 from typing import Union
 
-LINE_INTERSECT_TOL = 1e-9
-# LINE_INTERSECT_TOL = 2
 
-
-def point_in_polygon(point: np.ndarray, seglist: Union[np.ndarray, None]) -> bool:
+def point_in_polygon(point: np.ndarray, seglist: Union[np.ndarray, None], radius: float = 1e-9) -> bool:
     """
     Determines if a point is inside (or on the edges/vertices) of a polygon
 
@@ -38,7 +35,7 @@ def point_in_polygon(point: np.ndarray, seglist: Union[np.ndarray, None]) -> boo
 
     # Only need to check one of the points in each segment
     # because every point will show up once in each position
-    on_vertex = (y1 == y2) & (x1 == x2)
+    on_vertex = (np.linalg.norm(y1 - y2) <= radius) & (np.linalg.norm(x1 - x2) <= radius)
 
     if np.any(on_vertex):
         return True
@@ -46,9 +43,11 @@ def point_in_polygon(point: np.ndarray, seglist: Union[np.ndarray, None]) -> boo
     denom = y3 - y2
     intersect_x = ((y1 - y2) * (x3 - x2) / denom) + x2
 
-    on_edge = (np.any(x1 == intersect_x)) | ((denom == 0) & ((x1 < x2) != (x1 < x3)))
+    on_edge = (np.any(np.abs(x1 - intersect_x) <= radius) & ((y1 < y2) != (y1 < y3))) | ((denom == 0) & (np.abs(y1 - y2) <= radius) & ((x1 < x2) != (x1 < x3)))
 
     if np.any(on_edge):
+        print("on edge")
+        print(np.abs(x1 - intersect_x))
         return True
 
     # Check if test point's y value lies between segment's y values
@@ -65,12 +64,14 @@ def point_in_polygon(point: np.ndarray, seglist: Union[np.ndarray, None]) -> boo
     #                 \
     #                  0---
     #
-    intersect = (((y1 < y2) != (y1 < y3)) & (x1 <= intersect_x + LINE_INTERSECT_TOL))
+    intersect = (((y1 < y2) != (y1 < y3)) & (x1 <= intersect_x + radius))
+
+    print(intersect)
 
     return bool(np.count_nonzero(intersect) % 2)
 
 
-def point_in_polygons(point: np.ndarray, polys: np.ndarray) -> bool:
+def point_in_polygons(point: np.ndarray, polys: np.ndarray, radius: float = 1e-9) -> bool:
     point = point.reshape((2))
     polys = polys.reshape((polys.shape[0], -1, 2))
     for poly in polys:
@@ -78,21 +79,13 @@ def point_in_polygons(point: np.ndarray, polys: np.ndarray) -> bool:
         for i in range(len(poly)):
             seglist.append(poly[(i-1, i), :])
         seglist = np.array(seglist)
-        if point_in_polygon(point, seglist):
+        if point_in_polygon(point, seglist, radius):
+            print(f"{point} in {poly}")
             return True
     return False
 
 
-def point_in_polygons_new(point: np.ndarray, seglists: np.ndarray) -> bool:
-    point = point.reshape((2))
-    seglists = seglists.reshape((seglists.shape[0], seglists.shape[1], -1, 2))
-    for seglist in seglists:
-        if point_in_polygon(point, seglist):
-            return True
-    return False
-
-
-def intersect(seg: np.ndarray, seglist: Union[np.ndarray, None]):
+def intersect(seg: np.ndarray, seglist: Union[np.ndarray, None], radius: float = 1e-9):
     """
     Determines if a segment intersects any of the segments in an array of segments
 
@@ -133,14 +126,14 @@ def intersect(seg: np.ndarray, seglist: Union[np.ndarray, None]):
 
     intersect = (
         (denom != 0)
-        & (intersect_x >= np.minimum(x1, x2) - LINE_INTERSECT_TOL)
-        & (intersect_x <= np.maximum(x1, x2) + LINE_INTERSECT_TOL)
-        & (intersect_y >= np.minimum(y1, y2) - LINE_INTERSECT_TOL)
-        & (intersect_y <= np.maximum(y1, y2) + LINE_INTERSECT_TOL)
-        & (intersect_x >= np.minimum(x3, x4) - LINE_INTERSECT_TOL)
-        & (intersect_x <= np.maximum(x3, x4) + LINE_INTERSECT_TOL)
-        & (intersect_y >= np.minimum(y3, y4) - LINE_INTERSECT_TOL)
-        & (intersect_y <= np.maximum(y3, y4) + LINE_INTERSECT_TOL)
+        & (intersect_x >= np.minimum(x1, x2) - radius)
+        & (intersect_x <= np.maximum(x1, x2) + radius)
+        & (intersect_y >= np.minimum(y1, y2) - radius)
+        & (intersect_y <= np.maximum(y1, y2) + radius)
+        & (intersect_x >= np.minimum(x3, x4) - radius)
+        & (intersect_x <= np.maximum(x3, x4) + radius)
+        & (intersect_y >= np.minimum(y3, y4) - radius)
+        & (intersect_y <= np.maximum(y3, y4) + radius)
     )
 
     return np.any(intersect, axis=1)
@@ -162,8 +155,8 @@ if __name__ == "__main__":
     # print(point_in_polygon(point, seglist))
     # print(intersect(segs[0], seglist))
 
-    end = np.array((0, 0))
+    end = np.array((5, 10))
     obstacles = np.array(
-        (((4, 4), (4, 7), (7, 7), (7, 4)), ((1, 1), (1, 5), (5, 5), (5, 1)))
-    )
-    print(point_in_polygons(end, obstacles))
+        (((4, 4), (4, 7), (7, 7), (7, 4)))
+    ).reshape(1, 4, 2)
+    print(point_in_polygons(end, obstacles, 2))

@@ -18,6 +18,7 @@ def rrt_star(
     goal: np.ndarray,
     obstacles: Union[np.ndarray, None],
     area: np.ndarray,
+    agent_radius: float = 1,
     max_step_size: float = 2,
     num_iters: int = 1000,
 ) -> list[Point]:
@@ -40,12 +41,12 @@ def rrt_star(
     for i in range(num_iters):
         t0 = time.time()
         new_point, nearest = get_random_point(
-            area, obstacles, seglist, points, max_step_size
+            area, obstacles, seglist, points, max_step_size, agent_radius
         )
         new_point.parent = nearest
         new_point.cost = nearest.cost + dist(new_point, nearest)
         t1 = time.time()
-        near_points = get_near(new_point, points, max_step_size, seglist)
+        near_points = get_near(new_point, points, max_step_size, seglist, agent_radius)
         t2 = time.time()
         choose_parent(new_point, near_points)
         t3 = time.time()
@@ -65,11 +66,11 @@ def rrt_star(
 
 
 def get_near(
-    point: Point, points: list[Point], radius: float, seglist: Union[np.ndarray, None]
+    point: Point, points: list[Point], radius: float, seglist: Union[np.ndarray, None], agent_radius: float,
 ) -> list[Point]:
     seg_array = np.array([np.array([p.pos, point.pos]) for p in points])
     dist_array = np.linalg.norm(seg_array[:, 0, :] - seg_array[:, 1, :], axis=1)
-    int_array = intersect(seg_array, seglist)
+    int_array = intersect(seg_array, seglist, agent_radius)
 
     near_array = (dist_array <= radius) & (np.logical_not(int_array))
     near_points = []
@@ -95,7 +96,7 @@ def rewire(potential_parent: Point, near_points: list[Point]):
 
 
 def draw_result(
-    points: list[Point], obstacles: Union[np.ndarray, None]
+    points: list[Point], obstacles: Union[np.ndarray, None],
 ):
     fig, ax = plt.subplots()
     for point in points:
@@ -116,13 +117,13 @@ def draw_result(
 
 
 def get_nearest(
-    point: Point, points: list[Point], seglist: Union[np.ndarray, None]
+    point: Point, points: list[Point], seglist: Union[np.ndarray, None], agent_radius: float,
 ) -> Union[Point, None]:
     if seglist is None:
         return min(points, key=lambda p: dist(p, point))
     seg_array = np.array([np.array([p.pos, point.pos]) for p in points])
     dist_array = np.linalg.norm(seg_array[:, 0, :] - seg_array[:, 1, :], axis=1)
-    int_array = intersect(seg_array, seglist)
+    int_array = intersect(seg_array, seglist, agent_radius)
 
     if np.all(int_array):
         return None
@@ -138,6 +139,7 @@ def get_random_point(
     seglist: Union[np.ndarray, None],
     points: list[Point],
     max_step_size: float,
+    agent_radius: float,
 ) -> tuple[Point, Point]:
     """
     Gets a random point (and its nearest neighbor) that is not in any of the obstacles.
@@ -151,23 +153,23 @@ def get_random_point(
     """
     if obstacles is None:
         rand_point = Point(np.random.uniform(area[0], area[1], (2)))
-        nearest = get_nearest(rand_point, points, seglist)
+        nearest = get_nearest(rand_point, points, seglist, agent_radius)
         assert nearest is not None
         new_point = bound(rand_point, nearest, max_step_size)
         return new_point, nearest
 
     rand_point = Point(np.random.uniform(area[0], area[1], (2)))
-    nearest = get_nearest(rand_point, points, seglist)
+    nearest = get_nearest(rand_point, points, seglist, agent_radius)
     while nearest is None:
         rand_point = Point(np.random.uniform(area[0], area[1], (2)))
-        nearest = get_nearest(rand_point, points, seglist)
+        nearest = get_nearest(rand_point, points, seglist, agent_radius)
     new_point = bound(rand_point, nearest, max_step_size)
-    while point_in_polygons(new_point.pos, obstacles):
+    while point_in_polygons(new_point.pos, obstacles, agent_radius):
         rand_point = Point(np.random.uniform(area[0], area[1], (2)))
-        nearest = get_nearest(rand_point, points, seglist)
+        nearest = get_nearest(rand_point, points, seglist, agent_radius)
         while nearest is None:
             rand_point = Point(np.random.uniform(area[0], area[1], (2)))
-            nearest = get_nearest(rand_point, points, seglist)
+            nearest = get_nearest(rand_point, points, seglist, agent_radius)
         new_point = bound(rand_point, nearest, max_step_size)
     return new_point, nearest
 
@@ -189,11 +191,17 @@ if __name__ == "__main__":
     # start = np.array((40, -30))
     start = np.array((0, 0))
     end = np.array((10, 10))
+    # obstacles = np.array(
+    #     (((4, 4), (4, 7), (7, 7), (7, 4)), ((1, 1), (1, 5), (5, 5), (5, 1)))
+    # )
     obstacles = np.array(
-        (((4, 4), (4, 7), (7, 7), (7, 4)), ((1, 1), (1, 5), (5, 5), (5, 1)))
-    )
+        (((4, 4), (4, 7), (7, 7), (7, 4)))
+    ).reshape(1, 4, 2)
     # obstacles = np.array([((20, 15), (50, -5), (45, -15), (25, -5), (20, -15), (25, -25), (20, -35), (10, -15))])
-    area = np.array(((-1, -1), (11, 11)))
+    area = np.array(((-2, -2), (11, 11)))
     # area = np.array([[-80.0, -40.0], [80.0, 40.0]])
-    tree = rrt_star(start, end, obstacles, area, 0.1, 5)
+    tree = rrt_star(start, end, obstacles, area, 2, 2, 1000)
+    obstacles = np.array(
+        (((2, 2), (2, 9), (9, 9), (9, 2)), ((4, 4), (4, 7), (7, 7), (7, 4)))
+    )
     draw_result(tree, obstacles)
