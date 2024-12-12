@@ -186,14 +186,14 @@ def dist(p1: Point, p2: Point) -> float:
 
 if __name__ == "__main__":
 
-    start = np.array((40, -30))
-    # start = np.array((0, 0))
+    # start = np.array((40, -30))
+    start = np.array((0, 0))
     end = np.array((10, 10))
-    # obstacles = np.array(
-    #     (((4, 4), (4, 7), (7, 7), (7, 4)), ((1, 1), (1, 5), (5, 5), (5, 1)))
-    # )
-    obstacles = np.array([((20, 15), (50, -5), (45, -15), (25, -5), (20, -15), (25, -25), (20, -35), (10, -15))])
-    # area = np.array(((-1, -1), (11, 11)))
-    area = np.array([[-80.0, -40.0], [80.0, 40.0]])
-    tree = rrt_star(start, end, obstacles, area, 10, 1000)
+    obstacles = np.array(
+        (((4, 4), (4, 7), (7, 7), (7, 4)), ((1, 1), (1, 5), (5, 5), (5, 1)))
+    )
+    # obstacles = np.array([((20, 15), (50, -5), (45, -15), (25, -5), (20, -15), (25, -25), (20, -35), (10, -15))])
+    area = np.array(((-1, -1), (11, 11)))
+    # area = np.array([[-80.0, -40.0], [80.0, 40.0]])
+    tree = rrt_star(start, end, obstacles, area, 0.1, 5)
     draw_result(tree, obstacles)

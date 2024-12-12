@@ -46,7 +46,7 @@ def point_in_polygon(point: np.ndarray, seglist: Union[np.ndarray, None]) -> boo
     denom = y3 - y2
     intersect_x = ((y1 - y2) * (x3 - x2) / denom) + x2
 
-    on_edge = (x1 == intersect_x) | (denom == 0 & ((x1 < x2) != (x1 < x3)))
+    on_edge = (np.any(x1 == intersect_x)) | ((denom == 0) & ((x1 < x2) != (x1 < x3)))
 
     if np.any(on_edge):
         return True
@@ -162,36 +162,8 @@ if __name__ == "__main__":
     # print(point_in_polygon(point, seglist))
     # print(intersect(segs[0], seglist))
 
-    import time
-    import matplotlib.pyplot as plt
-
-    num_polys = []
-    times = []
-    new_times = []
-
-    for j in range(1, 300, 10):
-        point = np.random.uniform(0, 100, (1, 2))
-        polys = np.random.uniform(0, 100, (j, 3, 2))
-        seglists = []
-        for poly in polys:
-            seglist = []
-            for i in range(len(poly)):
-                seglist.append(poly[(i-1, i), :])
-            seglists.append(seglist)
-        seglists = np.array(seglists)
-
-        start_time = time.time()
-        point_in_polygons(point, polys)
-        end_time = time.time()
-        times.append(end_time - start_time)
-        start_time = time.time()
-        point_in_polygons_new(point, seglists)
-        end_time = time.time()
-        num_polys.append(j)
-        new_times.append(end_time - start_time)
-
-
-    fig, ax = plt.subplots()
-    ax.scatter(num_polys, times, c="b")
-    ax.scatter(num_polys, new_times, c="r")
-    plt.show()
+    end = np.array((0, 0))
+    obstacles = np.array(
+        (((4, 4), (4, 7), (7, 7), (7, 4)), ((1, 1), (1, 5), (5, 5), (5, 1)))
+    )
+    print(point_in_polygons(end, obstacles))
