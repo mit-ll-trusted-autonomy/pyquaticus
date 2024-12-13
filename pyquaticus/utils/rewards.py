@@ -37,12 +37,14 @@ params{
     #
     #
     #
+    "team": int, #team ID (0 blue, 1 red)
     "num_players": int, #Number of players currently in the game
     "num_teammates": int, #Number of teammates currently in the game
     "num_opponents": int, #Number of opponents currently in the game
     "agent_id": int, #ID of agent rewards are being computed for
+    "agent_oob": int, #0 indicates agent is not oob 1 indicates agent is oob
     "capture_radius": int, #The radius required to grab, capture a flag; and tag opponents
-    "team_flag_pickup": bool,    # Indicates if team grabs flag
+    "team_has_flag": bool,    # Indicates if team grabs flag
     "team_flag_capture": bool,   # Indicates if team captures flag
     "opponent_flag_pickup": bool, # Indicates if opponent grabs flag 
     "opponent_flag_capture": bool, #Indicates if opponent grabs flag
@@ -94,6 +96,26 @@ import math
 
 def sparse(self, params, prev_params):
     reward = 0
+    #print("Agent: ", params['agent_id'])
+    #print("\tOOB: ", params['agent_oob'])
+    #print("\tTeam has Flag: ", params['team_has_flag'])
+    #print("\tTeam Capture: ", params['team_flag_capture'])
+    if params['team_flag_capture'] and not prev_params['team_flag_capture']:
+        #print("Opp Flag Captured")
+        reward += 100
+    if params['agent_oob'] and not prev_params['agent_oob']:
+        #print("Agent OOB")
+        reward -= 100
+    if params['team_has_flag'] and not prev_params['team_has_flag']:
+        reward += 50
+    if params['opponent_flag_pickup'] and not prev_params['opponent_flag_pickup']:
+        #print("Opponent Flag Pickup")
+        reward -= 50
+    if params['opponent_flag_capture'] and not prev_params['opponent_flag_capture']:
+        #print("Team Flag Capture")
+        reward += 100
+
+    '''reward = 0
     # Penalize player for opponent grabbing team flag
     if params["opponent_flag_pickup"] and not prev_params["opponent_flag_pickup"]:
         reward += -50
@@ -123,6 +145,7 @@ def sparse(self, params, prev_params):
     if params["agent_oob"][params["agent_id"]] == 1:
         reward -= 100
 
+    return reward'''
     return reward
 
 

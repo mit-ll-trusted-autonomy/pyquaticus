@@ -19,16 +19,16 @@ term_g = {0:False,1:False}
 truncated_g = {0:False,1:False}
 term = term_g
 trunc = truncated_g
-obs = env.reset()
+obs,_ = env.reset()
 temp_captures = env.state["captures"]
 temp_grabs = env.state["grabs"]
 temp_tags = env.state["tags"]
 
-r_one = BaseAttacker(2, Team.RED_TEAM, mode='competition_easy')
-r_two = BaseDefender(3, Team.RED_TEAM, mode='competition_easy')
+r_one = BaseAttacker('red_2', Team.RED_TEAM, mode='competition_easy')
+r_two = BaseDefender('red_3', Team.RED_TEAM, mode='competition_easy')
 
-b_one = BaseDefender(0, Team.BLUE_TEAM, mode='competition_easy')
-b_two = BaseAttacker(1, Team.BLUE_TEAM, mode='competition_easy')
+b_one = BaseDefender('blue_0', Team.BLUE_TEAM, mode='competition_easy')
+b_two = BaseAttacker('blue_1', Team.BLUE_TEAM, mode='competition_easy')
 step = 0
 while True:
     new_obs = {}
@@ -41,7 +41,7 @@ while True:
     one = r_two.compute_action(new_obs)
 
     
-    obs, reward, term, trunc, info = env.step({0:zero,1:one, 2:two, 3:three})
+    obs, reward, term, trunc, info = env.step({'blue_0':zero,'blue_1':one, 'red_2':two, 'red_3':three})
     k =  list(term.keys())
 
     step += 1

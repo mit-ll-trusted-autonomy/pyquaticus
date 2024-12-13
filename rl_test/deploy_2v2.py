@@ -44,30 +44,38 @@ from pyquaticus.base_policies.base_defend import BaseDefender
 from pyquaticus.base_policies.base_combined import Heuristic_CTF_Agent
 from ray.rllib.algorithms.ppo import PPO
 from ray.rllib.policy.policy import Policy
+from pyquaticus.config import config_dict_std
+from pyquaticus.envs.rllib_pettingzoo_wrapper import ParallelPettingZooWrapper
+import pyquaticus.utils.rewards as rew
 
 RENDER_MODE = 'human'
-#RENDER_MODE = None
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Deploy a trained policy in a 2v2 PyQuaticus environment')
-    parser.add_argument('policy_one', help='Please enter the path to the model you would like to load in')
-    parser.add_argument('policy_two', help='Please enter the path to the model you would like to load in') 
-    test = True
-    reward_config = {0:None, 1:None}
-    args = parser.parse_args()
+    parser.add_argument('policy_one', help='Please enter the path to the model you would like to load in Ex. ./ray_test/checkpoint_00001/policies/agent-0-policy')
+    parser.add_argument('policy_two', help='Please enter the path to the model you would like to load in Ex. ./ray_test/checkpoint_00001/policies/agent-1-policy') 
 
-    env = pyquaticus_v0.PyQuaticusEnv(render_mode='human', team_size=2)
-    term_g = {0:False,1:False}
-    truncated_g = {0:False,1:False}
-    term = term_g
-    trunc = truncated_g
-    obs = env.reset()
-    temp_score = env.game_score
-    H_one = BaseDefender(2, Team.RED_TEAM, mode='competition_easy')
-    H_two = BaseAttacker(3, Team.RED_TEAM, mode='competition_easy')
-    policy_one = Policy.from_checkpoint(args.policy_one)
-    policy_two = Policy.from_checkpoint(args.policy_two)
+    reward_config = {'blue_0':rew.sparse, 'blue_1':rew.sparse}
+    args = parser.parse_args()
+    config_dict = config_dict_std
+    config_dict['sim_speedup_factor'] = 8
+    config_dict['max_score'] = 100
+    config_dict['max_time']=360
+    config_dict['tagging_cooldown'] = 55
+    config_dict['tag_on_oob']=True
+
+    #Create Environment
+    env = pyquaticus_v0.PyQuaticusEnv(config_dict=config_dict,render_mode='human',reward_config=reward_config, team_size=2)
+
+    obs,_ = env.reset()
+
+    H_one = BaseDefender('red_0', Team.RED_TEAM, mode='easy')
+    H_two = BaseAttacker('red_1', Team.RED_TEAM, mode='easy')
+    
+    policy_one = Policy.from_checkpoint(os.path.abspath(args.policy_one))
+    policy_two = Policy.from_checkpoint(os.path.abspath(args.policy_two))
     step = 0
     max_step = 2500
+
     while True:
         new_obs = {}
         #Get Unnormalized Observation for heuristic agents (H_one, and H_two)
@@ -75,24 +83,25 @@ if __name__ == '__main__':
             new_obs[k] = env.agent_obs_normalizer.unnormalized(obs[k])
 
         #Get learning agent action from policy
-        zero = policy_one.compute_single_action(obs[0])[0]
-        one = policy_two.compute_single_action(obs[1])[0]
+        zero = policy_one.compute_single_action(obs['blue_0'])[0]
+        one = policy_two.compute_single_action(obs['blue_1'])[0]
         #Compute Heuristic agent actions
         two = H_one.compute_action(new_obs)
         three = H_two.compute_action(new_obs)
+        
         #Step the environment
-        obs, reward, term, trunc, info = env.step({0:zero,1:one, 2:two, 3:three})
+        #Opponents are BaseDefender & BaseAttacker
+        #obs, reward, term, trunc, info = env.step({'blue_0':zero, 'blue_1':one,'red_0':two,'red_1':three})
+
+        #Opponents Don't Move:
+        obs, reward, term, trunc, info = env.step({'blue_0':zero,'blue_1':one, 'red_0':-1, 'red_1':-1})
+        
         k =  list(term.keys())
         if step >= max_step:
             break
         step += 1
         if term[k[0]] == True or trunc[k[0]]==True:
-            for k in env.game_score:
-                temp_score[k] += env.game_score[k]
             env.reset()
-    for k in env.game_score:
-        temp_score[k] += env.game_score[k]
     env.close()
-    easy_score = temp_score['blue_captures'] - temp_score['red_captures']
 
 

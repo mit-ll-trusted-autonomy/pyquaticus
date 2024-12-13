@@ -48,14 +48,14 @@ config_dict_std = {
 
     # Simulation parameters
     "tau":              0.1,  # dt (seconds) for updating the simulation
-    "sim_speedup_factor": 1,  # simulation speed multiplier similar to time warp in MOOS (integer >= 1)
+    "sim_speedup_factor": 8,  # simulation speed multiplier similar to time warp in MOOS (integer >= 1)
 
     # Game parameters
     "max_score":            1,  # maximum score per episode (until a winner is declared)
     "max_time":         100.0,  # maximum time (seconds) per episode
-    "tagging_cooldown":  30.0,  # cooldown on an agent (seconds) after they tag another agent, to prevent consecutive tags
+    "tagging_cooldown":  55.0,  # cooldown on an agent (seconds) after they tag another agent, to prevent consecutive tags
     "tag_on_collision": False,  # option for setting the agent to a tagged state upon collsion with an obstacle
-    "tag_on_oob":       False,  # option for setting the agent to a tagged state upon driving out-of-bounds
+    "tag_on_oob":       True,  # option for setting the agent to a tagged state upon driving out-of-bounds
 
     # Observation parameters
     "normalize":        True,  # flag for normalizing the observation space.
@@ -163,7 +163,7 @@ LIDAR_DETECTION_CLASS_MAP = {class_name: i for i, class_name in enumerate(lidar_
 ### Action Map ###
 # maps discrete action id to (speed, heading)
 ACTION_MAP = []
-for spd in [1.0, 0.5]:
+for spd in [5.0,]:
     for hdg in range(180, -180, -45):
         ACTION_MAP.append([spd, hdg])
 # add a none action
