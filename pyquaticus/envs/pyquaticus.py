@@ -2043,6 +2043,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         ) 
         self.params[agent.id]["capture_radius"] = self.catch_radius
         self.params[agent.id]["agent_id"] = agent.id
+        self.params[agent.id]['agent_id_index'] = self.agents.index(agent.id)
         self.params[agent.id]["agent_oob"] = self.state["agent_oob"][self.agents.index(agent.id)]
 
         # Obstacle Distance/Bearing

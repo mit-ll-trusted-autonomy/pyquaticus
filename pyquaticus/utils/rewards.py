@@ -41,13 +41,14 @@ params{
     "num_players": int, #Number of players currently in the game
     "num_teammates": int, #Number of teammates currently in the game
     "num_opponents": int, #Number of opponents currently in the game
-    "agent_id": int, #ID of agent rewards are being computed for
+    "agent_id": str, #ID of agent rewards are being computed for
+    "agent_id_index: int, # The index you should expect to find info relating to that agent in the agent_is_tagged or agent_made_tag attributes 
     "agent_oob": int, #0 indicates agent is not oob 1 indicates agent is oob
     "capture_radius": int, #The radius required to grab, capture a flag; and tag opponents
     "team_has_flag": bool,    # Indicates if team grabs flag
     "team_flag_capture": bool,   # Indicates if team captures flag
     "opponent_flag_pickup": bool, # Indicates if opponent grabs flag 
-    "opponent_flag_capture": bool, #Indicates if opponent grabs flag
+    "opponent_flag_capture": bool, #Indicates if opponent captures flag
     "team_flag_home": float, #Agents distance to flag home (to untag)
     "team_flag_bearing": float, # Agents bearing to team flag
     "team_flag_distance": float, # Agents distance to team flag
@@ -69,7 +70,8 @@ params{
     "wall_3_distance": float, #Agents distance towards
     "wall_distances": Dict, (wallid, distance)
     "agent_captures": list, #List of agents that agent has tagged 0 not tagged 1 tagged by agent
-    "agent_tagged": list, #List of agents 0 not tagged 1 tagged
+    "agent_is_tagged": list, #List of agents 0 not tagged 1 tagged
+    "agent_made_tag": list, #List of Nones until an agent makes a tag then the agent at index has tagged the ID of the agent that was tagged
     #Teamates First where n is the teammate ID
     "teammate_n_bearing": float, #Agents yaw towards teammate
     "teammate_n_distance": float, #Agents distance towards teammate
@@ -96,56 +98,29 @@ import math
 
 def sparse(self, params, prev_params):
     reward = 0
-    #print("Agent: ", params['agent_id'])
-    #print("\tOOB: ", params['agent_oob'])
-    #print("\tTeam has Flag: ", params['team_has_flag'])
-    #print("\tTeam Capture: ", params['team_flag_capture'])
+    #Team captured opponents flag
     if params['team_flag_capture'] and not prev_params['team_flag_capture']:
-        #print("Opp Flag Captured")
-        reward += 100
+        reward += 1.0
+    #Agent went out of bounds
     if params['agent_oob'] and not prev_params['agent_oob']:
-        #print("Agent OOB")
-        reward -= 100
+        reward -= 1.0 
+    #Agent grabbed opponents flag
     if params['team_has_flag'] and not prev_params['team_has_flag']:
-        reward += 50
+        reward += 0.5 
+    #Opposing team grabbed teams flag
     if params['opponent_flag_pickup'] and not prev_params['opponent_flag_pickup']:
-        #print("Opponent Flag Pickup")
-        reward -= 50
+        reward -= 0.5
+    #Reward agent for capturing opposing teams flag
     if params['opponent_flag_capture'] and not prev_params['opponent_flag_capture']:
-        #print("Team Flag Capture")
-        reward += 100
-
-    '''reward = 0
-    # Penalize player for opponent grabbing team flag
-    if params["opponent_flag_pickup"] and not prev_params["opponent_flag_pickup"]:
-        reward += -50
-    # Penalize player for opponent successfully capturing team flag
-    if params["opponent_flag_capture"] and not prev_params["opponent_flag_capture"]:
-        reward +=  -100
-    # Reward player for grabbing opponents flag
-    if params["team_flag_pickup"] and not prev_params["team_flag_pickup"]:
-        reward += 50
-    # Reward player for capturing opponents flag
-    if params["team_flag_capture"] and not prev_params["team_flag_capture"]:
-        reward += 100
-    # Check to see if agent was tagged
-    if params["agent_tagged"][params["agent_id"]]:
-        if prev_params["has_flag"]:
-            reward += -100
-        else:
-            reward += -50
-    # Check to see if agent tagged an opponent
-    tagged_opponent = params["agent_captures"][params["agent_id"]]
-    if tagged_opponent is not None:
-        if prev_params["opponent_" + str(tagged_opponent) + "_has_flag"]:
-            reward += 50
-        else:
-            reward += 100
-    # Penalize agent if it went out of bounds (Hit border wall)
-    if params["agent_oob"][params["agent_id"]] == 1:
-        reward -= 100
-
-    return reward'''
+        reward -= 1.0
+    #Reward Agent for tagging Opponent
+    if not (params['agent_made_tag'][params['agent_id_index']] == None) and (prev_params['agent_made_tag'][params['agent_id_index']] == None):
+        reward += 0.25
+    
+    #Penalize agent for getting tagged
+    if (params['agent_is_tagged'][params['agent_id_index']]) and not (prev_params['agent_is_tagged'][params['agent_id_index']] and not prev_params['agent_oob']):
+        reward -= 0.25
+        
     return reward
 
 
