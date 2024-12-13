@@ -84,7 +84,8 @@ from pyquaticus.utils.utils import (
     reflect_vector,
     rot2d,
     vec_to_mag_heading,
-    wrap_mercator_x
+    wrap_mercator_x,
+    wrap_mercator_x_dist,
 )
 from scipy.ndimage import label
 from shapely import intersection, LineString, Point, Polygon
@@ -1662,10 +1663,20 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.PYGAME_UP = Vector2((0.0, 1.0))
 
             # pygame screen size
-            arena_buffer = self.arena_buffer_frac * self.env_diag
+            arena_buffer = np.full((2,2), self.arena_buffer_frac * np.sqrt(np.prod(self.env_size))) #matches self.env_bounds [(left, bottom), (right, top)]
+
+            if self.gps_env:
+                #clip horizontal buffers if necessary
+                render_area_width = self.env_size[0] + np.sum(arena_buffer[:, 0])
+                if render_area_width > 2*EPSG_3857_EXT_X:
+                    arena_buffer[:, 0] = (2*EPSG_3857_EXT_X - self.env_size[0]) / 2
+
+                #clip vertical buffers if necessary
+                arena_buffer[0][1] = min(arena_buffer[0][1], np.abs(-EPSG_3857_EXT_Y - self.env_bounds[0][1]))
+                arena_buffer[1][1] = min(arena_buffer[1][1], np.abs(EPSG_3857_EXT_Y - self.env_bounds[1][1]))
 
             max_screen_size = get_screen_res()
-            arena_aspect_ratio = (self.env_size[0] + 2 * arena_buffer) / (self.env_size[1] + 2 * arena_buffer)
+            arena_aspect_ratio = (self.env_size[0] + np.sum(arena_buffer[:, 0])) / (self.env_size[1] + np.sum(arena_buffer[:, 1]))
             width_based_height = max_screen_size[0] / arena_aspect_ratio
 
             if width_based_height <= max_screen_size[1]:
@@ -1674,9 +1685,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 height_based_width = max_screen_size[1] * arena_aspect_ratio
                 max_pygame_screen_width = int(height_based_width)
 
-            self.pixel_size = (self.screen_frac * max_pygame_screen_width) / (self.env_size[0] + 2 * arena_buffer)
-            self.screen_width = round((self.env_size[0] + 2 * arena_buffer) * self.pixel_size)
-            self.screen_height = round((self.env_size[1] + 2 * arena_buffer) * self.pixel_size)
+            self.pixel_size = (self.screen_frac * max_pygame_screen_width) / (self.env_size[0] + np.sum(arena_buffer[:, 0]))
+            self.screen_width = round((self.env_size[0] + np.sum(arena_buffer[:, 0])) * self.pixel_size)
+            self.screen_height = round((self.env_size[1] + np.sum(arena_buffer[:, 1])) * self.pixel_size)
 
             # environemnt element sizes in pixels
             self.arena_width, self.arena_height = self.pixel_size * self.env_size
@@ -1885,16 +1896,24 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         pygame.font.init()  # needed to import pygame fonts
 
         if self.gps_env:
-            pygame_background_img = pygame.surfarray.make_surface(np.transpose(self.background_img, (1, 0, 2)))  # pygame assumes images are (h, w, 3)
+            pygame_background_img = pygame.surfarray.make_surface(np.transpose(self.background_img, (1, 0, 2))) #pygame assumes images are (h, w, 3)
             self.pygame_background_img = pygame.transform.scale(pygame_background_img, (self.screen_width, self.screen_height))
 
             # add attribution text
-            img_attribution_font = pygame.font.SysFont(None, round(0.35 * self.arena_buffer))
+            img_attribution_font_size = max(8, round(0.35 * np.max(self.arena_buffer)))
+            img_attribution_font = pygame.font.SysFont(None, img_attribution_font_size)
             img_attribution_text = img_attribution_font.render(self.background_img_attribution, True, "black")
             img_attribution_text_rect = img_attribution_text.get_rect()
 
-            center_x = (self.screen_width - self.arena_buffer - 0.5 * img_attribution_text_rect[2])  # object is [left,top,width,height]
-            center_y = self.screen_height - 0.5 * self.arena_buffer
+            center_x = self.screen_width - (self.arena_buffer[1][0] + 2*self.boundary_width + 0.5*img_attribution_text_rect.w)
+
+            if img_attribution_text_rect.h < self.arena_buffer[0][1]:
+                center_y = self.screen_height - 0.5*self.arena_buffer[0][1]
+            elif img_attribution_text_rect.h < self.arena_buffer[1][1]:
+                center_y = 0.5*self.arena_buffer[1][1]
+            else:
+                center_y = self.screen_height - (self.arena_buffer[0][1] + 2*self.boundary_width + 0.5*img_attribution_text_rect.h)
+
             img_attribution_text_rect.center = [center_x, center_y]
 
             self.pygame_background_img.blit(img_attribution_text, img_attribution_text_rect)
@@ -2800,7 +2819,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
                 if flag_homes_unit == "m":
                     raise Exception(
-                        "Flag homes must be specified in aboslute coordinates (lat/long or web mercator xy) to auto-generate gps environment bounds"
+                        "Flag homes must be specified in aboslute coordinates (lat/long or web mercator xy) to auto-generate gps environment bounds."
                     )
                 elif flag_homes_unit == "ll":
                     # convert flag poses to web mercator xy
@@ -2809,8 +2828,26 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
                 flag_vec = wrap_mercator_x(flag_home_blue - flag_home_red)
                 flag_distance = np.linalg.norm(flag_vec)
+
+                if flag_distance == 0:
+                    raise Exception(
+                        "Flag homes of opposite teams cannot be in the same location."
+                    )
+
                 flag_unit_vec = flag_vec / flag_distance
                 flag_perp_vec = np.array([-flag_unit_vec[1], flag_unit_vec[0]])
+
+                # check if bounds will wrap more than once around the world
+                env_width = (
+                    np.abs(flag_vec[0]) +
+                    (flag_distance/6) * np.abs(flag_unit_vec[0]) +
+                    (flag_distance/3) * np.abs(flag_perp_vec[0])
+                )
+                if env_width > 2*EPSG_3857_EXT_X:
+                    raise Exception(
+                        "Automatic construction of environment bounds based on flag poses failed. \
+Desired environment width is greater than earth's equatorial diameter."
+                    )
 
                 # assuming default aquaticus field size ratio drawn on web mercator, these bounds will contain it
                 bounds_pt1 = flag_home_blue + (flag_distance/6) * flag_unit_vec + (flag_distance/3) * flag_perp_vec
@@ -2820,22 +2857,40 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 bounds_points = wrap_mercator_x([bounds_pt1, bounds_pt2, bounds_pt3, bounds_pt4])
 
                 # determine bounds
+                if np.sign(flag_vec[0]) == 1:
+                    # blue flag on right
+                    if np.sign(flag_vec[1]) == 1:
+                        xmin = bounds_points[2][0]
+                        xmax = bounds_points[1][0]
+                    elif np.sign(flag_vec[1]) == -1:
+                        xmin = bounds_points[3][0]
+                        xmax = bounds_points[0][0]
+                    else:
+                        xmin = bounds_points[2][0]
+                        xmax = bounds_points[0][0]
+                elif np.sign(flag_vec[0]) == -1:
+                    # red flag on right
+                    if np.sign(flag_vec[1]) == 1:
+                        xmin = bounds_points[0][0]
+                        xmax = bounds_points[3][0]
+                    elif np.sign(flag_vec[1]) == -1:
+                        xmin = bounds_points[1][0]
+                        xmax = bounds_points[2][0]
+                    else:
+                        xmin = bounds_points[0][0]
+                        xmax = bounds_points[2][0]
+                else:
+                    # blue flag x == red flag x
+                    if np.sign(flag_vec[1]) == 1:
+                        #blue flag on top
+                        xmin = bounds_points[0][0]
+                        xmax = bounds_points[1][0]
+                    else:
+                        #red flag on top
+                        xmin = bounds_points[1][0]
+                        xmax = bounds_points[0][0]
+
                 env_bounds = np.zeros((2, 2))
-                bounds_points_x = np.unique(bounds_points[:, 0])
-
-                xmin = None
-                xmax = None
-                for i, x in enumerate(bounds_points_x):
-                    x_vecs = wrap_mercator_x(x - np.delete(bounds_points_x, i), x_only=True)
-                    if np.all(x_vecs < 0):
-                        xmin = x
-                        break
-                for i, x in enumerate(bounds_points_x):
-                    x_vecs = wrap_mercator_x(x - np.delete(bounds_points_x, i), x_only=True)
-                    if np.all(x_vecs > 0):
-                        xmax = x
-                        break
-
                 env_bounds[0][0] = xmin #left x bound
                 env_bounds[1][0] = xmax #right y bound
                 env_bounds[0][1] = np.min(bounds_points[:, 1]) #lower y bound
@@ -2871,9 +2926,12 @@ when gps environment bounds are specified in meters"
                         )
 
                     # get flag midpoint
+                    flag_home_blue = np.asarray(flag_homes[Team.BLUE_TEAM])
+                    flag_home_red = np.asarray(flag_homes[Team.RED_TEAM])
+
                     if flag_homes_unit == "wm_xy":
-                        flag_home_blue = np.flip(_sm2ll(*flag_homes[Team.BLUE_TEAM]))
-                        flag_home_red = np.flip(_sm2ll(*flag_homes[Team.RED_TEAM]))
+                        flag_home_blue = np.flip(_sm2ll(*flag_home_blue))
+                        flag_home_red = np.flip(_sm2ll(*flag_home_red))
 
                     geodict_flags = Geodesic.WGS84.Inverse(
                         lat1=flag_home_blue[0],
@@ -2923,6 +2981,9 @@ when gps environment bounds are specified in meters"
                         mt.xy(env_right, env_top)
                     ])
                 else:
+                    # reshape to group by min and max bounds
+                    env_bounds = env_bounds.reshape((2,2))
+
                     # check for exceptions
                     if np.any(env_bounds[0] == env_bounds[1]):
                         raise Exception(
@@ -2946,7 +3007,10 @@ when gps environment bounds are specified in meters"
                 env_bounds[1, 0] = EPSG_3857_EXT_X
 
             # clip y bounds
-            env_bounds[:, 1] = np.clip(env_bounds[:, 1], -EPSG_3857_EXT_Y, EPSG_3857_EXT_Y)
+            #TODO: add a warning if the bounds do need to be clipped
+            if np.any(np.abs(env_bounds[:, 1]) > EPSG_3857_EXT_Y):
+                raise Warning(f"Clipping environment latitude bounds {env_bounds[:, 1]} to fall between {[-EPSG_3857_EXT_Y, EPSG_3857_EXT_Y]}")
+                env_bounds[:, 1] = np.clip(env_bounds[:, 1], -EPSG_3857_EXT_Y, EPSG_3857_EXT_Y)
 
             # environment size, diagonal, corners, and edges
             self.env_size = wrap_mercator_x_dist(np.diff(env_bounds, axis=0)[0])
@@ -3462,55 +3526,154 @@ when gps environment bounds are specified in meters"
             render_tile_source = cx.providers.CartoDB.Voyager  # DO NOT CHANGE!
             self.background_img_attribution = render_tile_source.get("attribution")
 
-            #topographical tile (for building geometries)
-            # if (
-            #     np.sign(self.env_bounds[0, 0]) == 1  and
-            #     np.sign(self.env_bounds[1, 0]) == -1
-            # ):
+            # topographical tile (for building geometries)
+            if self.env_bounds[0][0] < self.env_bounds[1][0]:
+                topo_tile, topo_ext = cx.bounds2img(
+                    *self.env_bounds.flatten(),
+                    zoom="auto",
+                    source=topo_tile_source,
+                    ll=False,
+                    wait=0,
+                    max_retries=2,
+                    n_connections=1,
+                    use_cache=False,
+                    zoom_adjust=None,
+                )
+                topo_img = self._crop_tiles(
+                    topo_tile[:, :, :-1],
+                    topo_ext, *self.env_bounds.flatten(),
+                    ll=False
+                )
+            else:
+                #tile 1
+                topo_tile_1, topo_ext_1 = cx.bounds2img(
+                    w=self.env_bounds[0][0],
+                    s=self.env_bounds[0][1],
+                    e=EPSG_3857_EXT_X, #180 longitude from the west
+                    n=self.env_bounds[1][1],
+                    zoom="auto",
+                    source=topo_tile_source,
+                    ll=False,
+                    wait=0,
+                    max_retries=2,
+                    n_connections=1,
+                    use_cache=False,
+                    zoom_adjust=None,
+                )
+                topo_img_1 = self._crop_tiles(
+                    topo_tile_1[:, :, :-1],
+                    topo_ext_1,
+                    w=self.env_bounds[0][0],
+                    s=self.env_bounds[0][1],
+                    e=EPSG_3857_EXT_X, #180 longitude from the west
+                    n=self.env_bounds[1][1],
+                    ll=False
+                )
 
-            # else:
-            topo_tile, topo_ext = cx.bounds2img(
-                *self.env_bounds.flatten(),
-                zoom="auto",
-                source=topo_tile_source,
-                ll=False,
-                wait=0,
-                max_retries=2,
-                n_connections=1,
-                use_cache=False,
-                zoom_adjust=None,
-            )
-            import matplotlib.pyplot as plt
-            plt.imshow(topo_tile)
-            plt.show()
-            topo_img = self._crop_tiles(
-                topo_tile[:, :, :-1],
-                topo_ext, *self.env_bounds.flatten(),
-                ll=False
-            )
+                #tile 2
+                topo_tile_2, topo_ext_2 = cx.bounds2img(
+                    w=-EPSG_3857_EXT_X, #180 longitude from the east
+                    s=self.env_bounds[0][1],
+                    e=self.env_bounds[1][0],
+                    n=self.env_bounds[1][1],
+                    zoom="auto",
+                    source=topo_tile_source,
+                    ll=False,
+                    wait=0,
+                    max_retries=2,
+                    n_connections=1,
+                    use_cache=False,
+                    zoom_adjust=None,
+                )
+                topo_img_2 = self._crop_tiles(
+                    topo_tile_2[:, :, :-1],
+                    topo_ext_2,
+                    w=-EPSG_3857_EXT_X, #180 longitude from the east
+                    s=self.env_bounds[0][1],
+                    e=self.env_bounds[1][0],
+                    n=self.env_bounds[1][1],
+                    ll=False
+                )
 
-            #rendering tile (for pygame background)
+                #combine tiles to cross 180 longitude
+                topo_img = np.hstack((topo_img_1, topo_img_2))
+
+            # rendering tile (for pygame background)
             render_tile_bounds = wrap_mercator_x(
-                self.env_bounds + self.arena_buffer_frac * np.asarray([[-self.env_diag], [self.env_diag]])
+                self.env_bounds + (self.arena_buffer / self.pixel_size) * np.array([[-1], [1]])
             )
 
-            render_tile, render_ext = cx.bounds2img(
-                *render_tile_bounds.flatten(),
-                zoom="auto",
-                source=render_tile_source,
-                ll=False,
-                wait=0,
-                max_retries=2,
-                n_connections=1,
-                use_cache=False,
-                zoom_adjust=None,
-            )
-            self.background_img = self._crop_tiles(
-                render_tile[:, :, :-1],
-                render_ext,
-                *render_tile_bounds.flatten(),
-                ll=False,
-            )
+            if render_tile_bounds[0][0] < render_tile_bounds[1][0]:
+                render_tile, render_ext = cx.bounds2img(
+                    *render_tile_bounds.flatten(),
+                    zoom="auto",
+                    source=render_tile_source,
+                    ll=False,
+                    wait=0,
+                    max_retries=2,
+                    n_connections=1,
+                    use_cache=False,
+                    zoom_adjust=None,
+                )
+                self.background_img = self._crop_tiles(
+                    render_tile[:, :, :-1],
+                    render_ext,
+                    *render_tile_bounds.flatten(),
+                    ll=False,
+                )
+            else:
+                #tile 1
+                render_tile_1, render_ext_1 = cx.bounds2img(
+                    w=render_tile_bounds[0][0],
+                    s=render_tile_bounds[0][1],
+                    e=EPSG_3857_EXT_X, #180 longitude from the west
+                    n=render_tile_bounds[1][1],
+                    zoom="auto",
+                    source=render_tile_source,
+                    ll=False,
+                    wait=0,
+                    max_retries=2,
+                    n_connections=1,
+                    use_cache=False,
+                    zoom_adjust=None,
+                )
+                background_img_1 = self._crop_tiles(
+                    render_tile_1[:, :, :-1],
+                    render_ext_1,
+                    w=render_tile_bounds[0][0],
+                    s=render_tile_bounds[0][1],
+                    e=EPSG_3857_EXT_X, #180 longitude from the west
+                    n=render_tile_bounds[1][1],
+                    ll=False
+                )
+
+                #tile 2
+                render_tile_2, render_ext_2 = cx.bounds2img(
+                    w=-EPSG_3857_EXT_X, #180 longitude from the east
+                    s=render_tile_bounds[0][1],
+                    e=render_tile_bounds[1][0],
+                    n=render_tile_bounds[1][1],
+                    zoom="auto",
+                    source=render_tile_source,
+                    ll=False,
+                    wait=0,
+                    max_retries=2,
+                    n_connections=1,
+                    use_cache=False,
+                    zoom_adjust=None,
+                )
+                background_img_2 = self._crop_tiles(
+                    render_tile_2[:, :, :-1],
+                    render_ext_2,
+                    w=-EPSG_3857_EXT_X, #180 longitude from the east
+                    s=render_tile_bounds[0][1],
+                    e=render_tile_bounds[1][0],
+                    n=render_tile_bounds[1][1],
+                    ll=False
+                )
+
+                #combine tiles to cross 180 longitude
+                self.background_img = np.hstack((background_img_1, background_img_2))
 
             # cache maps
             map_cache = {
@@ -3524,11 +3687,35 @@ when gps environment bounds are specified in meters"
         ### Topology Construction ###
         #TODO: remove start poses that happen to be trapped (maybe do this by using contours with buffer pixel size rounded up based on agent radius)
         #mask by water color on topo image
-        water_x, water_y  = self.flag_homes[Team.BLUE_TEAM] #assume flag is in water
-        water_pixel_x = ceil(topo_img.shape[1] * (water_x / self.env_size[0])) - 1
-        water_pixel_y = ceil(topo_img.shape[0] * (1 - water_y / self.env_size[1])) - 1
+        flag_homes = np.asarray(tuple(self.flag_homes.values()))
+        flag_water_xs, flag_water_ys = flag_homes[:, 0], flag_homes[:, 1]
 
-        water_pixel_color = topo_img[water_pixel_y, water_pixel_x]
+        flag_water_xs = np.clip(
+            np.floor(topo_img.shape[1] * (flag_water_xs / self.env_size[0])),
+            None,
+            topo_img.shape[1] - 1
+        ).astype(int)
+
+        flag_water_ys = np.clip(
+            np.floor(topo_img.shape[0] * (1 - flag_water_ys / self.env_size[1])),
+            None,
+            topo_img.shape[0] - 1
+        ).astype(int)
+
+        flag_water_pixel_colors = topo_img[flag_water_xs, flag_water_ys]
+        for flag_water_pixel_color in flag_water_pixel_colors: 
+            if not (
+                np.all(flag_water_pixel_color == 38) or # DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
+                np.all(flag_water_pixel_color == 39) or # DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
+                np.all(flag_water_pixel_color == 40)    # DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)! 
+            ):
+                raise Exception(
+                    f"One of the flags ({flag_homes}) is not in the the water."
+                )
+
+        water_pixel_x, water_pixel_y  = flag_water_xs[0], flag_water_ys[0] #assume flag is in correct body of water
+        water_pixel_color = 38 # DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
+
         mask = np.all(topo_img == water_pixel_color, axis=-1)
         water_connectivity = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]])
         labeled_mask, _ = label(mask, structure=water_connectivity)
@@ -3538,8 +3725,8 @@ when gps environment bounds are specified in meters"
         water_pixel_color_gray = grayscale_topo_img[water_pixel_y, water_pixel_x]
 
         land_mask = (labeled_mask == target_label) + (
-            water_pixel_color_gray <= grayscale_topo_img
-        ) * (grayscale_topo_img <= water_pixel_color_gray + 2)
+            (water_pixel_color_gray <= grayscale_topo_img) * (grayscale_topo_img <= water_pixel_color_gray + 2)
+        )
 
         # water contours
         land_mask_binary = 255 * land_mask.astype(np.uint8)
@@ -3620,11 +3807,11 @@ when gps environment bounds are specified in meters"
         img_size_x = img.shape[1]
         img_size_y = img.shape[0]
 
-        crop_start_x = ceil(img_size_x * wrap_mercator_x_dist(left - ext[0], x_only=True) / X_size) - 1
-        crop_end_x = ceil(img_size_x * wrap_mercator_x_dist(right - ext[0], x_only=True) / X_size) - 1
+        crop_start_x = round(img_size_x * wrap_mercator_x_dist(left - ext[0], x_only=True) / X_size)
+        crop_end_x = round(img_size_x * wrap_mercator_x_dist(right - ext[0], x_only=True) / X_size)
 
-        crop_start_y = ceil(img_size_y * (ext[2] - top) / Y_size)
-        crop_end_y = ceil(img_size_y * (ext[2] - bottom) / Y_size) - 1
+        crop_start_y = round(img_size_y * (ext[2] - top) / Y_size)
+        crop_end_y = round(img_size_y * (ext[2] - bottom) / Y_size)
 
         # crop image
         cropped_img = img[crop_start_y:crop_end_y, crop_start_x:crop_end_x, :]
@@ -4022,8 +4209,8 @@ when gps environment bounds are specified in meters"
 
     def env_to_screen(self, pos):
         screen_pos = self.pixel_size * np.asarray(pos)
-        screen_pos[0] += self.arena_buffer
-        screen_pos[1] = self.arena_height - screen_pos[1] + self.arena_buffer
+        screen_pos[0] += self.arena_buffer[0][0]
+        screen_pos[1] = self.arena_height - screen_pos[1] + self.arena_buffer[1][1]
 
         return screen_pos
 
