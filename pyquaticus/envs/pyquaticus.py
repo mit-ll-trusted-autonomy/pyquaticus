@@ -3698,7 +3698,7 @@ when gps environment bounds are specified in meters"
             topo_img.shape[0] - 1
         ).astype(int)
 
-        flag_water_pixel_colors = topo_img[flag_water_xs, flag_water_ys]
+        flag_water_pixel_colors = topo_img[flag_water_ys, flag_water_xs]
         for flag_water_pixel_color in flag_water_pixel_colors: 
             if not (
                 np.all(flag_water_pixel_color == 38) or # DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
