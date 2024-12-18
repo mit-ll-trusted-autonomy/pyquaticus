@@ -60,8 +60,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["black", "ruff", "mypy >= 1.0.0", "pre-commit", "tox"]
-test = ["pytest", "pytest-cov"]
 torch = ["torch==1.13.1", "tensorflow-probability==0.19.0"]
 ray = ["ray[rllib]"]
 
@@ -77,35 +75,3 @@ write_to = "pyquaticus/_version.py"
 
 [tool.setuptools]
 zip-safe = false
-
-[tool.black]
-preview = true
-
-[tool.ruff]
-select = [
-	"E",   # Pycodestyle
-	"F",   # PyFlakes
-	"B",   # Flake8-Bugbear
-	"C4",  # Flake8-Comprehensions
-	"SIM", # Flake8-Simplify
-	"A",   # Flake8-Builtins
-	"T10", # Flake8-Debugger
-	"C90", # McCabe complexity
-	"NPY", # NumPy-Specific rules
-	"I",   # ISort
-	"D",   # Pydocstyle
-	"UP",  # Upgrade
-
-]
-
-[tool.ruff.pydocstyle]
-convention = "numpy"
-ignore-decorators = ["typing.overload"]
-
-[tool.ruff.isort]
-known-first-party = ["tooliepy", "tests"]
-
-[tool.pytest.ini_options]
-addopts = ["--cov pyquaticus --cov-report term-missing", "--verbose"]
-nonrecursedirs = ["dist", "build", ".tox"]
-testpaths = "tests"
