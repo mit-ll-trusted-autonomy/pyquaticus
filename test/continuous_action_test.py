@@ -17,8 +17,8 @@ config_dict["render_agent_ids"] = True
 config_dict["action_type"] = "continuous"
 
 env = pyquaticus_v0.PyQuaticusEnv(team_size=1, config_dict=config_dict,render_mode='human')
-term_g = {0:False,1:False}
-truncated_g = {0:False,1:False}
+term_g = {'agent_0':False,'agent_1':False}
+truncated_g = {'agent_0':False,'agent_1':False}
 term = term_g
 trunc = truncated_g
 obs = env.reset()
@@ -29,7 +29,7 @@ while True:
     blue_action = [1,90] # speed, heading (in degrees)
     red_action = [0.7,45]
     
-    obs, reward, term, trunc, info = env.step({0:blue_action,1:red_action})
+    obs, reward, term, trunc, info = env.step({'agent_0':blue_action,'agent_1':red_action})
     k =  list(term.keys())
 
     step += 1

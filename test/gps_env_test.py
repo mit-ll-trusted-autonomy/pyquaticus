@@ -140,9 +140,11 @@ def main():
     config["gps_env"] = True
     # config["env_bounds"] = ((-1, 179), (1, -179))
     # config["env_bounds_unit"] = "ll"
+
+
     config["env_bounds"] = "auto"
-    config["blue_flag_home"] = (42.352229714597705, -70.99992567997114)
-    config["red_flag_home"] = (42.32710627259394, -70.96739585043458)
+    config["blue_flag_home"] = (49.301673369138015, -93.52174888478079)
+    config["red_flag_home"] = (49.30515588662647, -93.50487665880466)
     config["flag_homes_unit"] = "ll"
     config["sim_speedup_factor"] = 50
     config["max_time"] = 10_000

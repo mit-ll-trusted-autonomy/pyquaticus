@@ -764,19 +764,19 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     gps_env=self.gps_env,
                     meters_per_mercator_xy=getattr(self, "meters_per_mercator_xy", None),
                     dt=self.dt,
-                    id='blue_'+str(i),
+                    id='agent_'+str(i),
                     team=Team.BLUE_TEAM,
                     render_radius=self.agent_render_radius,
                     render_mode=render_mode,
                 )
             )
-        for i in range(0, self.num_red):
+        for i in range(self.num_blue, self.num_blue+self.num_red):
             r_players.append(
                 dynamics_registry[self.dynamics[i]](
                     gps_env=self.gps_env,
                     meters_per_mercator_xy=getattr(self, "meters_per_mercator_xy", None),
                     dt=self.dt,
-                    id='red_'+str(i),
+                    id='agent_'+str(i),
                     team=Team.RED_TEAM,
                     render_radius=self.agent_render_radius,
                     render_mode=render_mode,
@@ -936,7 +936,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     elif player.has_flag:
                         detection_class_name += "_has_flag"
 
-                    self.obj_ray_detection_states[team][self.ray_int_label_map[f"agent_{agent_id}"]] = LIDAR_DETECTION_CLASS_MAP[detection_class_name]
+                    self.obj_ray_detection_states[team][self.ray_int_label_map[agent_id]] = LIDAR_DETECTION_CLASS_MAP[detection_class_name]
 
         if self.message and self.render_mode:
             print(self.message)
@@ -1866,10 +1866,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 ray_int_segments.extend(segments)
 
             # agents
+            print("Ray Int lavel Map: ", self.ray_int_label_map)
             for agent_id in self.agents:
                 vertices = list(Point(0.0, 0.0).buffer(self.agent_radius, quad_segs=n_quad_segs).exterior.coords)[:-1]  # approximate circle with an octagon
                 segments = [[*vertex, *vertices[(i + 1) % len(vertices)]] for i, vertex in enumerate(vertices)]
-                ray_int_seg_labels.extend(len(segments) * [self.ray_int_label_map[f"agent_{agent_id}"]])
+                print("Current ID: ", agent_id)
+                ray_int_seg_labels.extend(len(segments) * [self.ray_int_label_map[agent_id]])
                 self.seg_label_type_to_inds["agent"].extend(np.arange(len(ray_int_segments), len(ray_int_segments) + len(segments)))
                 ray_int_segments.extend(segments)
 

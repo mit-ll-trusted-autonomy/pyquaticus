@@ -110,7 +110,7 @@ if __name__ == '__main__':
     config_dict['normalize'] = False
 
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
-    reward_config = {'blue_0':rew.sparse,'red_1':rew.sparse}
+    reward_config = {'agent_0':rew.sparse,'agent_1':rew.sparse}
     env = pyquaticus_v0.PyQuaticusEnv(render_mode='human',reward_config=reward_config, team_size=1)
     kt = KeyTest(env)
     kt.begin()
