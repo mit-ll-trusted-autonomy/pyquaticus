@@ -2013,7 +2013,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.dones["__all__"] = True
             self.message = "Blue Wins! Red Loses"
 
-        elif self.current_time >= self.max_time:
+        elif self.current_time > self.max_time or np.isclose(self.current_time, self.max_time):
             self.dones["__all__"] = True
             if self.state["captures"][0] > self.state["captures"][1]:
                 self.message = "Blue Wins! Red Loses"
@@ -2294,7 +2294,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if self.render_mode:
             if self.render_saving:
                 max_renders = 1 + ceil(self.max_time / (self.sim_speedup_factor * self.tau)) * self.num_renders_per_step
-                self.render_buffer = np.zeros((max_renders, self.screen_height, self.screen_width, 3))
+                self.render_buffer = np.zeros((max_renders, self.screen_height, self.screen_width, 3), dtype=np.uint8)
             if self.render_traj_mode:
                 self.traj_render_buffer = {agent_id: {"traj": [], "agent": [], "history": []} for agent_id in self.players}
 
