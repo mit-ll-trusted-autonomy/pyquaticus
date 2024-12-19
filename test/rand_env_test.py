@@ -20,6 +20,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import argparse
+import copy
 import gymnasium as gym
 import numpy as np
 import pygame
@@ -29,6 +30,7 @@ import time
 from pyquaticus.envs.pyquaticus import Team
 from pyquaticus import pyquaticus_v0
 import pyquaticus.utils.rewards as rew
+import pyquaticus.config
 
 RENDER_MODE = 'human'
 
@@ -60,5 +62,26 @@ if __name__ == '__main__':
 
     reward_config = {1:rew.sparse, 2:rew.custom_v1, 3:None, 5:None}
     args = parser.parse_args()
-    env = pyquaticus_v0.PyQuaticusEnv(render_mode=RENDER_MODE, team_size=3)
+
+    config = copy.deepcopy(pyquaticus.config.config_dict_std)
+    config["gps_env"] = True
+    config["env_bounds"] = "auto"
+    config["blue_flag_home"] = (42.352229714597705, -70.99992567997114)
+    config["red_flag_home"] = (42.32710627259394, -70.96739585043458)
+    config["flag_homes_unit"] = "ll"
+    config["sim_speedup_factor"] = 4
+    config["max_time"] = 700
+    config["lidar_obs"] = True
+    config["num_lidar_rays"] = 100
+    config["lidar_range"] = 120
+    config["render_agent_ids"] = True
+    config["render_lidar"] = True
+    # config["render_traj_mode"] = "traj_agent"
+    config["render_traj_freq"] = 10
+    config["render_traj_cutoff"] = 55
+    config["render_saving"] = False
+    config["render_saving_format"] = "mp4"
+
+
+    env = pyquaticus_v0.PyQuaticusEnv(render_mode=RENDER_MODE, team_size=3, config_dict=config)
     run_one_episode(env)

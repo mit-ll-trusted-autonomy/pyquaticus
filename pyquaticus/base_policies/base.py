@@ -287,7 +287,7 @@ class BaseAgentPolicy:
             opp_poses: List of opponents positions (rectangular coords)
             own_flag: Flag location (rectangular coords)
         """
-        min_dist = np.max(self.world_size) * 2.0
+        min_dist = np.max(self.env_size) * 2.0
 
         for ag in opp_poses:
             opp_flag_dist = self.get_distance_between_2_points(ag, own_flag)
