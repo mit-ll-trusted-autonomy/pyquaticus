@@ -148,7 +148,7 @@ def main():
     config["flag_homes_unit"] = "m"
     config["scrimmage_coords"] = [[80,0],[80,80]]
     config["scrimmage_coords_unit"] = "m"
-
+    config["render_saving"] = True
     config["render_agent_ids"] = True
     config["random_init"] = True
     

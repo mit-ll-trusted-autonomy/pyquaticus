@@ -97,7 +97,7 @@ class KeyTest:
                     time.sleep(1.)
                     self.env.save_screenshot() # save screenshot of last frame
                     last_obs = copy.deepcopy(self.obs)
-                    new_obs = self.env.reset(state_dict = self.env.state)
+                    new_obs = self.env.reset(options = {'state_dict':self.env.state})
                     break
 
     def process_event(self, quittable):
@@ -141,7 +141,6 @@ def main():
     config["sim_speedup_factor"] = 8
     config["render_traj_freq"] = 10
     config["render_traj_cutoff"] = 55
-    config["render_saving"] = True
 
     config["blue_flag_home"] = [140,40]
     config["red_flag_home"] = [20,40]
