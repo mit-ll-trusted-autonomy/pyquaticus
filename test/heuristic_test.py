@@ -26,6 +26,9 @@ obs = env.reset()
 temp_captures = env.state["captures"]
 temp_grabs = env.state["grabs"]
 temp_tags = env.state["tags"]
+temp_captures = env.state["captures"]
+temp_grabs = env.state["grabs"]
+temp_tags = env.state["tags"]
 
 H_one = BaseDefender(2, Team.RED_TEAM, mode="hard")
 H_two = BaseDefender(3, Team.RED_TEAM, mode="hard")
@@ -49,6 +52,13 @@ while True:
     step += 1
     if term[k[0]] == True or trunc[k[0]]==True:
         break
+for i in range(len(env.state["captures"])):
+    temp_captures[i] += env.state["captures"][i]
+for i in range(len(env.state["grabs"])):
+    temp_grabs[i] += env.state["grabs"][i]
+for i in range(len(env.state["tags"])):
+    temp_tags[i] += env.state["tags"][i]
+
 for i in range(len(env.state["captures"])):
     temp_captures[i] += env.state["captures"][i]
 for i in range(len(env.state["grabs"])):
