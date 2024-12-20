@@ -2013,7 +2013,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.dones["__all__"] = True
             self.message = "Blue Wins! Red Loses"
 
-        elif self.current_time >= self.max_time:
+        elif self.current_time > self.max_time or np.isclose(self.current_time, self.max_time):
             self.dones["__all__"] = True
             if self.state["captures"][0] > self.state["captures"][1]:
                 self.message = "Blue Wins! Red Loses"
