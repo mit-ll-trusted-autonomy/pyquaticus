@@ -1579,7 +1579,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             np.seterr(all="ignore")
 
         ### Environment History ###
-        short_hist_buffer_inds = np.arange(0, self.short_hist_length*self.short_hist_interval, self.short_hist_interval)
+        short_hist_buffer_inds = np.arange(0, self.short_hist_length * self.short_hist_interval, self.short_hist_interval)
         long_hist_buffer_inds = np.arange(0, self.long_hist_length * self.long_hist_interval, self.long_hist_interval)
         self.hist_buffer_inds = np.unique(
             np.concatenate((short_hist_buffer_inds, long_hist_buffer_inds))
@@ -2198,7 +2198,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self._set_flag_attributes_from_state()
             for i, player in enumerate(self.players.values()):
                 player.state = self.state['agent_dynamics'][i]
-
         else:
             if init_dict != None:
                 self._set_state_from_init_dict(init_dict)
@@ -2236,15 +2235,16 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.state['agent_dynamics'] = np.array([player.state for player in self.players.values()])
 
             #run event checks
+            #TODO: re-profile how fast the new vectorized and unvectorized functions run to adjust switchoff point
             self._check_flag_pickups_vectorized() if self.team_size >= 40 else self._check_flag_pickups()
             self._check_agent_made_tag_vectorized() if self.team_size >= 10 else self._check_agent_made_tag()
             self._check_untag_vectorized() if self.team_size >= 10 else self._check_untag()
             #note 1: _check_oob is not currently necessary b/c initializtion does not allow 
-            #for out-of-bounds, state_dict initialization will have up-to-date out-of-bounds info,
+            #for out-of-bounds, and state_dict initialization will have up-to-date out-of-bounds info.
 
             #note 2: _check_flag_captures is not currently necessary b/c initialization does not allow
             #for starting with flag on-sides and state_dict initialization would not start with capture
-            #(it would have been detected in the step function checks)
+            #(it would have been detected in the step function checks).
 
             # team wall orientation
             self._determine_team_wall_orient()
@@ -2293,12 +2293,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # Rendering
         if self.render_mode:
             if self.render_saving:
-                max_renders = 1 + ceil(self.max_time / (self.sim_speedup_factor * self.tau)) * self.num_renders_per_step
-                self.render_buffer = np.zeros((max_renders, self.screen_height, self.screen_width, 3))
+                self.render_buffer = []
             if self.render_traj_mode:
                 self.traj_render_buffer = {agent_id: {"traj": [], "agent": [], "history": []} for agent_id in self.players}
 
-            self.render_ctr = -1  # reset render doesn't count
+            self.render_ctr = 0
             self._render()
 
         # Observations
@@ -3709,20 +3708,17 @@ when gps environment bounds are specified in meters"
                     f"One of the flags ({flag_homes}) is not in the the water."
                 )
 
-        water_pixel_x, water_pixel_y  = flag_water_xs[0], flag_water_ys[0] #assume flag is in correct body of water
-        water_pixel_color = 38 # DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
-
-        mask = np.all(topo_img == water_pixel_color, axis=-1)
+        mask = (
+            np.all(topo_img == 38, axis=-1) | # DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
+            np.all(topo_img == 39, axis=-1) | # DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
+            np.all(topo_img == 40, axis=-1)   # DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
+        ) 
         water_connectivity = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]])
         labeled_mask, _ = label(mask, structure=water_connectivity)
+
+        water_pixel_x, water_pixel_y  = flag_water_xs[0], flag_water_ys[0] #assume flag is in correct body of water
         target_label = labeled_mask[water_pixel_y, water_pixel_x]
-
-        grayscale_topo_img = cv2.cvtColor(topo_img, cv2.COLOR_RGB2GRAY)
-        water_pixel_color_gray = grayscale_topo_img[water_pixel_y, water_pixel_x]
-
-        land_mask = (labeled_mask == target_label) + (
-            (water_pixel_color_gray <= grayscale_topo_img) * (grayscale_topo_img <= water_pixel_color_gray + 2)
-        )
+        land_mask = labeled_mask == target_label
 
         # water contours
         land_mask_binary = 255 * land_mask.astype(np.uint8)
@@ -4055,7 +4051,7 @@ when gps environment bounds are specified in meters"
                         self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
             # history
             elif self.render_traj_mode.endswith("history"):
-                for i in reversed( self.hist_buffer_inds[1:] - 1):  # current state of agent is not included in history buffer
+                for i in reversed(self.hist_buffer_inds[1:] - 1): #current state of agent is not included in history buffer
                     for agent_id in self.players:
                         if i < len(self.traj_render_buffer[agent_id]["history"]):
                             prev_rot_blit_pos, prev_agent_surf = self.traj_render_buffer[agent_id]["history"][i]
@@ -4131,7 +4127,7 @@ when gps environment bounds are specified in meters"
                 # save agent surface for trajectory rendering
                 if (
                     self.render_traj_mode
-                    and self.render_ctr % self.num_renders_per_step == 0
+                    and (self.render_ctr-1) % self.num_renders_per_step == 0
                 ):
                     # add traj/ agent render data
                     if self.render_traj_mode.startswith("traj"):
@@ -4139,29 +4135,29 @@ when gps environment bounds are specified in meters"
 
                     if (
                         self.render_traj_mode.endswith("agent") and
-                        (self.render_ctr / self.num_renders_per_step) % self.render_traj_freq == 0
+                        ((self.render_ctr-1) / self.num_renders_per_step) % self.render_traj_freq == 0
                     ):
                         self.traj_render_buffer[player.id]['agent'].insert(0, (rotated_blit_pos, rotated_surface))
 
-                    elif (
-                        self.render_traj_mode.endswith("history")
-                        and self.render_ctr % self.num_renders_per_step == 0
-                    ):
+                    elif self.render_traj_mode.endswith("history"):
                         self.traj_render_buffer[player.id]["history"].insert(0, (rotated_blit_pos, rotated_surface))
 
                     # truncate traj
                     if self.render_traj_cutoff is not None:
-                        agent_render_cutoff = (
-                            floor(self.render_traj_cutoff / self.render_traj_freq) +
-                            (
+                        if self.render_traj_mode.startswith("traj"):
+                            self.traj_render_buffer[player.id]["traj"] = self.traj_render_buffer[player.id]["traj"][: self.render_traj_cutoff]
+
+                        if self.render_traj_mode.endswith("agent"):
+                            agent_render_cutoff = (
+                                floor(self.render_traj_cutoff / self.render_traj_freq) +
                                 (
-                                    (self.render_ctr / self.num_renders_per_step) % self.render_traj_freq +
-                                    self.render_traj_freq * floor(self.render_traj_cutoff / self.render_traj_freq)
-                                ) <= self.render_traj_cutoff
+                                    (
+                                        ((self.render_ctr-1) / self.num_renders_per_step) % self.render_traj_freq +
+                                        self.render_traj_freq * floor(self.render_traj_cutoff / self.render_traj_freq)
+                                    ) <= self.render_traj_cutoff
+                                )
                             )
-                        )
-                        self.traj_render_buffer[player.id]["traj"] = self.traj_render_buffer[player.id]["traj"][: self.render_traj_cutoff]
-                        self.traj_render_buffer[player.id]["agent"] = self.traj_render_buffer[player.id]["agent"][:agent_render_cutoff]
+                            self.traj_render_buffer[player.id]["agent"] = self.traj_render_buffer[player.id]["agent"][: agent_render_cutoff]
 
                     self.traj_render_buffer[player.id]["history"] = self.traj_render_buffer[player.id]["history"][: self.hist_buffer_len]
 
@@ -4198,7 +4194,12 @@ when gps environment bounds are specified in meters"
 
         # Record
         if self.render_saving:
-            self.render_buffer[self.render_ctr + 1] = np.transpose(np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2))
+            self.render_buffer.append(
+                np.transpose(
+                    np.array(pygame.surfarray.pixels3d(self.screen), dtype=np.uint8),
+                    axes=(1, 0, 2)
+                )
+            )
 
         # Update counter
         self.render_ctr += 1
@@ -4216,7 +4217,7 @@ when gps environment bounds are specified in meters"
             print("Warning: Environment rendering is disabled. Cannot save the video. See the render_saving option in the config dictionary.")
             print()
         elif self.render_mode is not None:
-            if self.render_ctr > 0:
+            if self.render_ctr > 1:
                 video_file_dir = str(pathlib.Path(__file__).resolve().parents[1] / 'videos')
                 if not os.path.isdir(video_file_dir):
                     os.mkdir(video_file_dir)
@@ -4269,7 +4270,7 @@ when gps environment bounds are specified in meters"
             image_file_name = f"pyquaticus_{image_id}.png"
             image_file_path = os.path.join(image_file_dir, image_file_name)
 
-            cv2.imwrite(image_file_path, cv2.cvtColor(self.render_buffer[self.render_ctr], cv2.COLOR_RGB2BGR))
+            cv2.imwrite(image_file_path, cv2.cvtColor(self.render_buffer[self.render_ctr - 1], cv2.COLOR_RGB2BGR))
         else:
             raise Exception("Envrionment was not rendered. See the render_mode option in the config dictionary.")
 
