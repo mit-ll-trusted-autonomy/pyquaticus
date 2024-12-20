@@ -24,10 +24,14 @@ import numpy as np
 from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import Team
 from pyquaticus.utils.obs_utils import ObsNormalizer
-from pyquaticus.base_policies.utils import rrt_star, draw_result
+from pyquaticus.base_policies.utils import Point
+from pyquaticus.base_policies.rrt_star import rrt_star
+
 
 from typing import Union
 
+from multiprocessing.dummy import Pool
+from functools import partial
 
 class WaypointFollower(BaseAgentPolicy):
     """This is a Policy class that contains logic for capturing the flag."""
@@ -42,15 +46,20 @@ class WaypointFollower(BaseAgentPolicy):
         state_normalizer: ObsNormalizer,
         continuous: bool = False,
         capture_radius: float = 1,
+        agent_radius: float = 2,
         wps: list[np.ndarray] = [],
     ):
         super().__init__(agent_id, team, teammate_ids, opponent_ids, obs_normalizer, state_normalizer)
 
         self.capture_radius = capture_radius
 
+        self.agent_radius = agent_radius
+
         self.wps = wps
 
         self.continuous = continuous
+
+        self.plan_process = Pool(processes=1)
 
         if team not in Team:
             raise AttributeError(f"Invalid team {team}")
@@ -120,9 +129,13 @@ class WaypointFollower(BaseAgentPolicy):
     def set_wps(self, wps: list[np.ndarray]):
         self.wps = wps
 
-    def plan(self, wp: np.ndarray, obstacles: Union[np.ndarray, None], area: np.ndarray, max_step_size: float = 2, num_iters: int = 1000):
-        tree = rrt_star(self.pos, wp, obstacles, area, max_step_size, num_iters)
-        draw_result(tree, obstacles)
+    def plan(self, wp: np.ndarray, obstacles: Union[list[np.ndarray], None], area: np.ndarray, max_step_size: float = 2, num_iters: int = 1000):
+        kwargs=dict(start=self.pos, obstacles=obstacles, area=area, max_step_size=max_step_size, num_iters=num_iters, agent_radius=self.agent_radius)
+        tree = self.plan_process.apply_async(rrt_star, kwds=kwargs, callback=partial(self.get_path, wp=wp))
+        
+        
+    
+    def get_path(self, tree: list[Point], wp: np.ndarray):
         possible_points = []
         for point in tree:
             if np.linalg.norm(point.pos - wp) <= self.capture_radius:

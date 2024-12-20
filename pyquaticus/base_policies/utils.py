@@ -13,53 +13,7 @@ class Point:
     parent: Union["Point", None] = None
 
 
-def rrt_star(
-    start: np.ndarray,
-    goal: np.ndarray,
-    obstacles: Optional[list[np.ndarray]],
-    area: np.ndarray,
-    agent_radius: float = 1e-9,
-    max_step_size: float = 2,
-    num_iters: int = 1000,
-) -> list[Point]:
 
-    points = [Point(start, 0, None)]
-
-    # Generate array of all obstacle segments
-    if obstacles is not None:
-        ungrouped_seglist = get_ungrouped_seglist(obstacles)
-        grouped_seglist = get_grouped_seglist(obstacles)
-
-
-    sample_time = 0
-    find_near_time = 0
-    choose_parent_time = 0
-    rewire_time = 0
-    for i in range(num_iters):
-        t0 = time.time()
-        new_point, nearest = get_random_point(
-            area, grouped_seglist, ungrouped_seglist, points, max_step_size, agent_radius
-        )
-        new_point.parent = nearest
-        new_point.cost = nearest.cost + dist(new_point, nearest)
-        t1 = time.time()
-        near_points = get_near(new_point, points, max_step_size, ungrouped_seglist, agent_radius)
-        t2 = time.time()
-        choose_parent(new_point, near_points)
-        t3 = time.time()
-        rewire(new_point, near_points)
-        t4 = time.time()
-        points.append(new_point)
-        sample_time += t1 - t0
-        find_near_time += t2 - t1
-        choose_parent_time += t3 - t2
-        rewire_time += t4 - t3
-
-    print(f"Time spent sampling: {sample_time:.2f}")
-    print(f"Time spend finding near nodes: {find_near_time:.2f}")
-    print(f"Time spent choosing parent: {choose_parent_time:.2f}")
-    print(f"Time spent rewiring: {rewire_time:.2f}")
-    return points
 
 
 def get_near(
@@ -93,7 +47,7 @@ def rewire(potential_parent: Point, near_points: list[Point]):
 
 
 def draw_result(
-    points: list[Point], obstacles: Union[np.ndarray, None],
+    points: list[Point], obstacles: Optional[list[np.ndarray]],
 ):
     fig, ax = plt.subplots()
     for point in points:
@@ -205,7 +159,7 @@ def get_grouped_seglist(polys: list[np.ndarray]) -> np.ndarray:
             max_len = poly.shape[0]
         seglist = []
         for i in range(poly.shape[0]):
-            seglist.append(poly[(i - 1, i), :])
+            seglist.append(poly[(i - 1, i), :].astype(np.float64))
         seglists.append(np.array(seglist))
     padded_seglists = []
     for seglist in seglists:
@@ -218,27 +172,4 @@ def pad(seglist: np.ndarray, length: int) -> np.ndarray:
 
 
 
-if __name__ == "__main__":
 
-    # start = np.array((40, -30))
-    start = np.array((0, 0))
-    end = np.array((10, 10))
-    # obstacles = np.array(
-    #     (((4, 4), (4, 7), (7, 7), (7, 4)), ((1, 1), (1, 5), (5, 5), (5, 1)))
-    # )
-    obstacles = [np.array(
-        (((4., 4), (4, 7), (7, 7), (7, 4)))
-    )]
-    # obstacles = np.array([((20, 15), (50, -5), (45, -15), (25, -5), (20, -15), (25, -25), (20, -35), (10, -15))])
-    area = np.array(((-2, -2), (11, 11)))
-    # area = np.array([[-80.0, -40.0], [80.0, 40.0]])
-    tree = rrt_star(start, end, obstacles, area, 2, 2, 1000)
-    obstacles = np.array(
-        (((2., 2), (2, 9), (9, 9), (9, 2)), ((4, 4), (4, 7), (7, 7), (7, 4)))
-    )
-    fig, ax = draw_result(tree, obstacles)
-    ax.add_patch(plt.Circle((4, 4), 2, fill=False, edgecolor="r"))
-    ax.add_patch(plt.Circle((4, 7), 2, fill=False, edgecolor="r"))
-    ax.add_patch(plt.Circle((7, 4), 2, fill=False, edgecolor="r"))
-    ax.add_patch(plt.Circle((7, 7), 2, fill=False, edgecolor="r"))
-    plt.show()

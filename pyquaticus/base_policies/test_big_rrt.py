@@ -1,4 +1,6 @@
-from utils import rrt_star, draw_result
+from utils import draw_result
+from rrt_star import rrt_star
+import matplotlib.pyplot as plt
 import numpy as np
 start = np.array((10, 10))
 
@@ -13,7 +15,8 @@ for i in range(100):
     squares.append(np.array(((center - (15, 0)), (center + (0, 15)), (center + (15, 0)), (center - (0, 15)))))
 
 
-tree = rrt_star(start, None, triangles + squares, np.array(((0, 0), (1000, 1000))), agent_radius=2, max_step_size=20)
+tree = rrt_star(start, triangles + squares, np.array(((0, 0), (1000, 1000))), agent_radius=2, max_step_size=20, num_iters=5000)
 
-draw_result(tree, triangles + squares)
+fig, ax = draw_result(tree, triangles + squares)
+plt.show()
 

@@ -1,25 +1,33 @@
 import numpy as np
 from typing import Optional
-
+np.seterr(divide='ignore')
 def point_in_polygons(point: np.ndarray, seglists: Optional[np.ndarray], radius: float = 1e-9):
     """
     Determines if a point is in any of the polygons, provided as an array of segments
 
-    Note: pad all polygons with np.nan so that the length of each individual seglist is the same
+    Note: pad all polygons with np.nan so that the length of each individual seglist is the same.
+    The function get_grouped_seglist() does this. 
 
     point.shape should be (2)
+
     seglists.shape should be (n, k, 2, 2), where there are n polygons with a maximum of k edges
 
     Args:
         point (np.ndarray): (x, y)
-        seglists (np.ndarray): ((((x1, y1), (x2, y2)), ((x2, y2), (x3, y3)), ... , ((xk, yk), (x1, y1))                 -> first polygon
+
+        seglists (np.ndarray): 
+                               ((((x1, y1), (x2, y2)), ((x2, y2), (x3, y3)), ... , ((xk, yk), (x1, y1))                 -> first polygon
+
                                 (((x1, y1), (x2, y2)), ((x2, y2), (x3, y3)), ... , ((np.nan, np.nan), (np.nan, np.nan)) -> second polygon
+
                                 ...
+
                                 ...
+
                                 (((x1, y1), (x2, y2)), ((x2, y2), (x3, y3)), ... , ((np.nan, np.nan), (np.nan, np.nan))) -> nth polygon
 
     Returns:
-        bool: True if the segment intersects any of the segments in the array
+        bool: True if the point is inside any of the polygons (or within the given radius of an edge or vertex)
     """
     point = point.reshape((2))
 
@@ -66,6 +74,7 @@ def point_in_polygons(point: np.ndarray, seglists: Optional[np.ndarray], radius:
     #                 \
     #                  0---
     #
+
     intersect = (((y1 < y2) != (y1 < y3)) & (x1 <= intersect_x + radius))
 
     return np.any(np.count_nonzero(intersect, axis=1) % 2)
@@ -142,12 +151,25 @@ if __name__ == "__main__":
         return np.array(padded_seglists)
     def pad(seglist: np.ndarray, length: int) -> np.ndarray:
         return np.pad(seglist, ((0, length - seglist.shape[0]), (0, 0), (0, 0)), constant_values=np.nan)
-    point = np.array((0, 0))
+    def get_ungrouped_seglist(polys: list[np.ndarray]) -> np.ndarray:
+        seglist = []
+        for poly in polys:
+            for i in range(poly.shape[0]):
+                seglist.append(poly[(i - 1, i), :])
+        seglist = np.array(seglist)
+        return seglist
+    point = np.array((-2, -2))
     # segs = np.array((((0, -40), (0, 0)), ((4, 4), (5, 5))))
     # Square
     square = np.array(((0., 0), (0, 1), (1, 1), (1, 0)))
     # shape = np.array(((20, 15), (50, -5), (45, -15), (25, -5), (20, -15), (25, -25), (20, -35), (10, -15)))
     # Diamond
-    diamond = np.array(((-1., 0), (0, 1), (1, 0), (0, -1)))
+    diamond = np.array(((-1., 0), (0, 1), (1, 0)))
     seglist = get_grouped_seglist([square, diamond])
     print(point_in_polygons(point, seglist))
+
+    obstacles = [np.array(
+        (((4., 4), (4, 7), (7, 7), (7, 4)))
+    )]
+    seg = np.array(((2.28, 2.78), (1.63, 1.82)))
+    print(intersect(seg, get_ungrouped_seglist(obstacles)))
