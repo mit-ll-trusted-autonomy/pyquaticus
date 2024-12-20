@@ -35,6 +35,7 @@ from pyquaticus import pyquaticus_v0
 import pyquaticus.utils.rewards as reward
 
 def main():
+    print("Warning: This script requires MOOS to be set up, which must be installed separately")
     no_op = 16
     straight = 4
     left = 6

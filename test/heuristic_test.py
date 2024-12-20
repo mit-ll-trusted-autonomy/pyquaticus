@@ -13,6 +13,8 @@ from pyquaticus.config import config_dict_std, ACTION_MAP
 config_dict = config_dict_std
 config_dict["max_time"] = 600.0
 config_dict["max_score"] = 100
+config_dict["render_agent_ids"] = True
+config_dict["dynamics"] = ["si", "si", "si", "drone"]
 
 env = pyquaticus_v0.PyQuaticusEnv(team_size=2, config_dict=config_dict,render_mode='human')
 term_g = {0:False,1:False}
@@ -20,13 +22,15 @@ truncated_g = {0:False,1:False}
 term = term_g
 trunc = truncated_g
 obs = env.reset()
-temp_score = env.game_score
+temp_captures = env.state["captures"]
+temp_grabs = env.state["grabs"]
+temp_tags = env.state["tags"]
 
-H_one = BaseAttacker(2, Team.RED_TEAM, mode='competition_easy')
-H_two = BaseDefender(3, Team.RED_TEAM, mode='competition_easy')
+H_one = Heuristic_CTF_Agent(2, Team.RED_TEAM, mode="hard")
+H_two = Heuristic_CTF_Agent(3, Team.RED_TEAM, mode="hard")
 
-R_one = BaseDefender(0, Team.BLUE_TEAM, mode='competition_easy')
-R_two = BaseAttacker(1, Team.BLUE_TEAM, mode='competition_easy')
+R_one = Heuristic_CTF_Agent(0, Team.BLUE_TEAM, mode="hard")
+R_two = Heuristic_CTF_Agent(1, Team.BLUE_TEAM, mode="hard")
 step = 0
 while True:
     new_obs = {}
@@ -45,6 +49,11 @@ while True:
     step += 1
     if term[k[0]] == True or trunc[k[0]]==True:
         break
-for k in env.game_score:
-    temp_score[k] += env.game_score[k]
+for i in range(len(env.state["captures"])):
+    temp_captures[i] += env.state["captures"][i]
+for i in range(len(env.state["grabs"])):
+    temp_grabs[i] += env.state["grabs"][i]
+for i in range(len(env.state["tags"])):
+    temp_tags[i] += env.state["tags"][i]
+
 env.close()

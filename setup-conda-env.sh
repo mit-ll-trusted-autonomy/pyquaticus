@@ -65,6 +65,7 @@ eval "$(conda shell.bash hook)"
 ${CONDATYPE} create --prefix=${ENV_NAME} -y python=3.10
 conda activate ${ENV_NAME}
 conda install -y -c conda-forge libstdcxx-ng
+conda install conda-forge::ffmpeg
 
 if [[ "$ENVTYPE" == "light" ]]; then
     pip install -e .

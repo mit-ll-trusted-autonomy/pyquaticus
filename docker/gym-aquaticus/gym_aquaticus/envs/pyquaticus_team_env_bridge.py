@@ -233,7 +233,7 @@ class PyquaticusBridge(AquaticusTeamEnv):
         """Initializes the normalizer."""
         agent_obs_normalizer = ObsNormalizer(True)
         max_bearing = [180]
-        max_dist = [np.linalg.norm(self.world_size) + 10]  # add a ten meter buffer
+        max_dist = [np.linalg.norm(self.env_size) + 10]  # add a ten meter buffer
         min_dist = [0.0]
         max_bool, min_bool = [1.0], [0.0]
         min_speed, max_speed = self._moos_config.speed_bounds

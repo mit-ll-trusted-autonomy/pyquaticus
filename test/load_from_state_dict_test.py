@@ -93,10 +93,17 @@ class KeyTest:
             action_dict = self.process_event(self.quittable)
             self.obs, rewards, terminated, truncated, info = self.env.step(action_dict)
             for k in terminated:
-                if terminated[k] == True or truncated[k]==True:
+                if truncated[k]==True:
                     time.sleep(1.)
-                    self.env.reset()
+                    last_obs = copy.deepcopy(self.obs)
+                    self.obs = self.env.reset(options = {'state_dict':self.env.state})
+                    #TODO: check that last obs is the same as self.obs
                     break
+                elif terminated[k] == True:
+                    time.sleep(1.)
+                    self.obs = self.env.reset()
+                    break
+
 
     def process_event(self, quittable):
 
@@ -131,35 +138,25 @@ def main():
     parser.add_argument('--red-policy', default=None, choices=[], help='Select a red policy to play against.')
     args = parser.parse_args()
 
-    #Setup for 1 blue player and 1 red player with sparse rewards
-    reward_config = {0:None, 1:None}
-    #Alternative
-    #reward_config = {0:reward.sparse, 1:reward.sparse}
-
     config = copy.deepcopy(pyquaticus.config.config_dict_std)
     config["obstacles"] = {
         "circle": [(4, (6, 5))],
         "polygon": [((70, 10), (85, 21), (83, 51), (72, 35))]
     }
     config["sim_speedup_factor"] = 8
-    # config["normalize"] = False
-    config["max_time"] = 1000
-    config["lidar_obs"] = True
-    config["num_lidar_rays"] = 100
-    config["lidar_range"] = 20
-    config["render_lidar_mode"] = "detection"
+    config["render_traj_freq"] = 10
+    config["render_traj_cutoff"] = 55
+
+    config["blue_flag_home"] = [140,40]
+    config["red_flag_home"] = [20,40]
+    config["flag_homes_unit"] = "m"
+    config["scrimmage_coords"] = [[80,0],[80,80]]
+    config["scrimmage_coords_unit"] = "m"
+
     config["render_agent_ids"] = True
-    config["render_traj_mode"] = "traj_history"
-    config["render_traj_freq"] = 50
-    config["max_speed"] = 1.5
-    config["short_hist_length"] = 4
-    config["short_hist_interval"] = 5
-    config["long_hist_length"] = 5
-    config["long_hist_interval"] = 20
-    config["render_traj_cutoff"] = 100
-    # config["tag_on_oob"] = True
+    config["random_init"] = False
 
-
+    config["max_time"] = 100
     
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
     try:

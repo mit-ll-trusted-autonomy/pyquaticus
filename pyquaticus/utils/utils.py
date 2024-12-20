@@ -20,9 +20,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import math
-
 import numpy as np
 import pygame
+
+from pyquaticus.config import EPSG_3857_EXT_X
 from numpy.linalg import norm
 
 
@@ -38,7 +39,6 @@ def rot2d(vector: np.ndarray, theta) -> np.ndarray:
     rot = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
 
     return np.dot(rot, vector)
-
 
 def rc_intersection(
     ray: np.ndarray, circle_center: np.ndarray, circle_radius
@@ -124,7 +124,6 @@ def rc_intersection(
 
     return exit_wound
 
-
 def reflect_vector(
     point: np.ndarray, vector: np.ndarray, circle_center: np.ndarray
 ) -> np.ndarray:
@@ -174,7 +173,6 @@ def reflect_vector(
 
     return reflection
 
-
 def get_rot_angle(tail: np.ndarray, tip: np.ndarray):
     """
     This function returns the rotation angle (in radians)
@@ -199,7 +197,6 @@ def get_rot_angle(tail: np.ndarray, tip: np.ndarray):
 
     return theta
 
-
 def get_screen_res():
     """Returns the screen resolution as [Width, Height]."""
     pygame.init()
@@ -207,7 +204,6 @@ def get_screen_res():
     res = [screen_info.current_w, screen_info.current_h]
     pygame.quit()
     return res
-
 
 def line_intersection(line1, line2):
     xdiff = (line1[0][0] - line1[1][0], line2[0][0] - line2[1][0])
@@ -224,7 +220,6 @@ def line_intersection(line1, line2):
     x = det(d, xdiff) / div
     y = det(d, ydiff) / div
     return np.array([x, y])
-
 
 def closest_point_on_line(A, B, P):
     """
@@ -251,7 +246,6 @@ def closest_point_on_line(A, B, P):
     else:
         return [A[0] + (unit_AB[0] * proj_dist), A[1] + (unit_AB[1] * proj_dist)]
 
-
 def vector_to(A, B, unit=False):
     """
     Returns a vector from A to B
@@ -269,7 +263,6 @@ def vector_to(A, B, unit=False):
 
     return vec
 
-
 def heading_angle_conversion(deg):
     """
     Converts a world-frame angle to a heading and vice-versa
@@ -281,13 +274,11 @@ def heading_angle_conversion(deg):
     """
     return (90 - deg) % 360
 
-
 def vec_to_mag_heading(vec):
     """Converts a vector to a magnitude and heading (deg)."""
     mag = np.linalg.norm(vec)
     angle = math.degrees(math.atan2(vec[1], vec[0]))
     return mag, angle180(heading_angle_conversion(angle))
-
 
 def mag_heading_to_vec(mag, bearing):
     """Converts a magnitude and heading (deg) to a vector."""
@@ -295,7 +286,6 @@ def mag_heading_to_vec(mag, bearing):
     x = mag * math.cos(angle)
     y = mag * math.sin(angle)
     return np.array([x, y], dtype=np.float32)
-
 
 def mag_bearing_to(A, B, relative_hdg=None):
     """
@@ -315,7 +305,6 @@ def mag_bearing_to(A, B, relative_hdg=None):
         hdg = (hdg - relative_hdg) % 360
     return mag, angle180(hdg)
 
-
 def angle180(deg):
     while deg > 180:
         deg -= 360
@@ -323,6 +312,55 @@ def angle180(deg):
         deg += 360
     return deg
 
+def wrap_mercator_x(wm, x_only:bool = False) -> np.ndarray:
+    """
+    Wrap web mercator x (horizontal) location or measurement to
+    fall within [-EPSG_3857_EXT_X, EPSG_3857_EXT_X].
+
+    Args:
+        wm: the web mercator position or measurement
+
+    Note: when converting measurements, assumes that the shortest
+    x distance between two points on web mercator is desired
+    (will not exceed a difference in longitude of 180 degrees).
+    """
+    if x_only:
+        wm = np.asarray(wm).reshape(-1, 1)
+    else:
+        wm = np.asarray(wm).reshape(-1, 2)
+
+    over = wm[:, 0] > EPSG_3857_EXT_X
+    while np.any(over):
+        wm[np.where(over)[0], 0] -= 2*EPSG_3857_EXT_X
+        over = wm[:, 0] > EPSG_3857_EXT_X
+
+    under = wm[:, 0] < -EPSG_3857_EXT_X
+    while np.any(under):
+        wm[np.where(under)[0], 0] += 2*EPSG_3857_EXT_X
+        under = wm[:, 0] < -EPSG_3857_EXT_X
+
+    return wm.squeeze()
+
+def wrap_mercator_x_dist(wm, x_only:bool = False) -> np.ndarray:
+    """
+    Wrap web mercator x (horizontal) measurement
+    to fall within [0, 2*EPSG_3857_EXT_X].
+
+    Args:
+        wm: the web mercator measurement
+
+    Note: assumes that the measurement is from west to east, and
+    therefore will be normalized to [0, 2*EPSG_3857_EXT_X].
+    """
+    if x_only:
+        wm = np.asarray(wm, dtype=float).reshape(-1, 1)
+    else:
+        wm = np.asarray(wm, dtype=float).reshape(-1, 2)
+
+    under = np.where(wm[:, 0] < 0)[0]
+    wm[under, 0] += 2*EPSG_3857_EXT_X
+
+    return wm.squeeze()
 
 def clip(val, minimum, maximum):
     if val > maximum:
@@ -331,6 +369,7 @@ def clip(val, minimum, maximum):
         return minimum
     else:
         return val
+
 def global_point(point_name, team):
     point = point_name
     if team == Team.BLUE_TEAM:
@@ -343,3 +382,75 @@ def global_point(point_name, team):
         elif point_name not in ['SC', 'CC', 'PC']:
             point = point_name[:-1]
     return point
+
+def detect_collision(
+    poses: np.ndarray,
+    agent_radius: float,
+    obstacle_geoms: dict,
+    padding:float = 1e-4
+):
+    poses = np.expand_dims(poses.reshape(-1, 2), axis=1)
+    collisions = np.zeros(poses.shape[0], dtype=bool)
+
+    for obstacle_type, geoms in obstacle_geoms.items():
+        if obstacle_type == "circle":
+            dists = np.linalg.norm(poses - geoms[:, 1:], axis=-1) - geoms[:, 0]
+            collisions |= np.any(dists <= agent_radius + padding, axis=-1)
+        else: #polygon obstacle
+            #determine closest points on all obtacle line segments
+            v_AB = np.diff(geoms, axis=-2)
+            v_AP = poses - geoms[:, 0] #take only first point of segment (but preserve num dimensions)
+            v_AB_AP = np.sum(v_AP * v_AB.squeeze(axis=-2), axis=-1) #dot product
+
+            mag_AB = np.linalg.norm(v_AB, axis=-1)
+            unit_AB = v_AB.squeeze(axis=-2) / mag_AB
+            proj_mag = np.expand_dims(v_AB_AP / mag_AB.squeeze(axis=-1), axis=-1)
+            
+            closest_points = geoms[:, 0, :] + proj_mag * unit_AB
+            closest_points = np.where(proj_mag <= 0., geoms[:, 0], closest_points)
+            closest_points = np.where(proj_mag >= mag_AB, geoms[:, 1], closest_points)
+
+            #calculate distances to obstacles
+            distances = np.linalg.norm(poses - closest_points, axis=-1)
+            collisions |= np.any(distances <= agent_radius + padding, axis=-1)
+    
+    if collisions.shape[0] == 1:
+        collisions = collisions.item()
+
+    return collisions
+
+def closest_line(
+    poses: np.ndarray,
+    lines: np.ndarray
+):
+    """
+    Returns the index of the line closest to each pos in poses.
+
+    Args:
+        poses : 2D pos (or poses)
+        lines : 2D lines (assumes there are multiple) 
+    """
+    poses = np.expand_dims(np.asarray(poses).reshape(-1, 2), axis=1)
+
+    #determine closest points on all line segments
+    v_AB = np.diff(lines, axis=-2)
+    v_AP = poses - lines[:, 0] #take only first point of segment (but preserve num dimensions)
+    v_AB_AP = np.sum(v_AP * v_AB.squeeze(axis=-2), axis=-1) #dot product
+
+    mag_AB = np.linalg.norm(v_AB, axis=-1)
+    unit_AB = v_AB.squeeze(axis=-2) / mag_AB
+    proj_mag = np.expand_dims(v_AB_AP / mag_AB.squeeze(axis=-1), axis=-1)
+    
+    closest_points = lines[:, 0, :] + proj_mag * unit_AB
+    closest_points = np.where(proj_mag <= 0., lines[:, 0], closest_points)
+    closest_points = np.where(proj_mag >= mag_AB, lines[:, 1], closest_points)
+
+    #calculate distances to lines
+    distances = np.linalg.norm(poses - closest_points, axis=-1)
+    closest_line = np.argmin(distances, axis=-1)
+    
+    if closest_line.shape[0] == 1:
+        closest_line = closest_line.item()
+
+    return closest_line
+    
