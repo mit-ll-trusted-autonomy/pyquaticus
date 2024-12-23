@@ -2367,7 +2367,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if "agent_position" in init_dict:
             agent_pos_unit = init_dict.get('agent_pos_unit', None)
             if agent_pos_unit is not None:
-                if self.gps_envs:
+                if self.gps_env:
                     if not (agent_pos_unit == "ll" or agent_pos_unit == "wm_xy"):
                         raise Exception(
                             "Agent poses must be specified in aboslute coordinates ('ll' or 'wm_xy') when self.gps_env is True"
