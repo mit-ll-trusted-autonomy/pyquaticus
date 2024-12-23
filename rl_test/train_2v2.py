@@ -93,7 +93,7 @@ if __name__ == '__main__':
     def policy_mapping_fn(agent_id, episode, worker, **kwargs):
         if agent_id == 'agent_0':
             return "agent-0-policy"
-        if agent_id == 'blue_1':
+        if agent_id == 'agent_1':
             return "agent-1-policy"
         return "random"
         #elif agent_id == 2 or agent_id == 'agent-2':
