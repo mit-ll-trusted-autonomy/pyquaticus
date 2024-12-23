@@ -19,6 +19,7 @@ config_dict["action_type"] = "continuous"
 env = pyquaticus_v0.PyQuaticusEnv(team_size=1, config_dict=config_dict,render_mode='human')
 term_g = {'agent_0':False,'agent_1':False}
 truncated_g = {'agent_0':False,'agent_1':False}
+
 term = term_g
 trunc = truncated_g
 obs = env.reset()

@@ -21,7 +21,9 @@ term_g = {'agent_0':False,'agent_1':False}
 truncated_g = {'agent_0':False,'agent_1':False}
 term = term_g
 trunc = truncated_g
+
 obs,_ = env.reset()
+
 temp_captures = env.state["captures"]
 temp_grabs = env.state["grabs"]
 temp_tags = env.state["tags"]
@@ -31,6 +33,7 @@ H_two = Heuristic_CTF_Agent('agent_3', Team.RED_TEAM, mode="hard")
 
 R_one = Heuristic_CTF_Agent('agent_0', Team.BLUE_TEAM, mode="hard")
 R_two = Heuristic_CTF_Agent('agent_1', Team.BLUE_TEAM, mode="hard")
+
 step = 0
 while True:
     new_obs = {}

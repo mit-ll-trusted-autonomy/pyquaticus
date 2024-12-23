@@ -14,8 +14,8 @@ config = config_dict_std
 config["gps_env"] = True
 config["default_init"] = False
 config["env_bounds"] = "auto"
-config["blue_flag_home"] = (42.352229714597705, -70.99992567997114)
-config["red_flag_home"] = (42.32710627259394, -70.96739585043458)
+config["blue_flag_home"] = (49.301673369138015, -93.52174888478079)
+config["red_flag_home"] = (49.30515588662647, -93.50487665880466)
 config["flag_homes_unit"] = "ll"
 config["sim_speedup_factor"] = 5
 config["default_dynamics"] = False
@@ -35,9 +35,11 @@ truncated_g = {'agent_0': False, 'agent_1': False}
 term = term_g
 trunc = truncated_g
 obs,_ = env.reset()
+
 temp_captures = env.state["captures"]
 temp_grabs = env.state["grabs"]
 temp_tags = env.state["tags"]
+
 
 H_one = Heuristic_CTF_Agent('agent_3', Team.RED_TEAM, mode="hard")
 H_two = Heuristic_CTF_Agent('agent_4', Team.RED_TEAM, mode="hard")
@@ -46,6 +48,7 @@ H_three = Heuristic_CTF_Agent('agent_5', Team.RED_TEAM, mode="hard")
 R_one = Heuristic_CTF_Agent('agent_0', Team.BLUE_TEAM, mode="hard")
 R_two = Heuristic_CTF_Agent('agent_1', Team.BLUE_TEAM, mode="hard")
 R_three = Heuristic_CTF_Agent('agent_2', Team.BLUE_TEAM, mode="hard")
+
 step = 0
 while True:
     new_obs = {}

@@ -19,7 +19,9 @@ term_g = {0:False,1:False}
 truncated_g = {0:False,1:False}
 term = term_g
 trunc = truncated_g
+
 obs,_ = env.reset()
+
 temp_captures = env.state["captures"]
 temp_grabs = env.state["grabs"]
 temp_tags = env.state["tags"]

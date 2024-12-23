@@ -95,8 +95,8 @@ class KeyTest:
             for k in terminated:
                 if terminated[k] == True or truncated[k]==True:
                     self.env.save_screenshot() # save screenshot of last frame
-                    time.sleep(1.)
                     self.env.buffer_to_video(recording_compression=True) # save full sized video and compressed video
+                    time.sleep(1.)
                     self.env.reset()
                     break
 
@@ -141,16 +141,15 @@ def main():
     config["sim_speedup_factor"] = 8
     config["render_traj_freq"] = 10
     config["render_traj_cutoff"] = 55
-    config["render_saving"] = False # This must be set to True to save screenshots and videos
-
     config["blue_flag_home"] = [140,40]
     config["red_flag_home"] = [20,40]
     config["flag_homes_unit"] = "m"
     config["scrimmage_coords"] = [[80,0],[80,80]]
     config["scrimmage_coords_unit"] = "m"
-
+    config["render_saving"] = True # This must be set to True to save screenshots and videos
     config["render_agent_ids"] = True
     config["random_init"] = True
+    config["max_time"] = 60
     
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
     try:

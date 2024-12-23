@@ -70,7 +70,7 @@ class RandPolicy(Policy):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train a 2v2 policy in a 2v2 PyQuaticus environment')
     parser.add_argument('--render', help='Enable rendering', action='store_true')
-    reward_config = {'blue_0':rew.sparse, 'blue_1':rew.sparse, 'red_2':None, 'red_3':None} # Example Reward Config
+    reward_config = {'agent_0':rew.sparse, 'agent_1':rew.sparse, 'agent_2':None, 'agent_3':None} # Example Reward Config
     #Competitors: reward_config should be updated to reflect how you want to reward your learning agent
     
     args = parser.parse_args()
@@ -88,10 +88,10 @@ if __name__ == '__main__':
     env_creator = lambda config: pyquaticus_v0.PyQuaticusEnv(config_dict=config_dict,render_mode=RENDER_MODE, reward_config=reward_config, team_size=2)
     env = ParallelPettingZooWrapper(pyquaticus_v0.PyQuaticusEnv(config_dict=config_dict,render_mode=RENDER_MODE, reward_config=reward_config, team_size=2))
     register_env('pyquaticus', lambda config: ParallelPettingZooWrapper(env_creator(config)))
-    obs_space = env.observation_space['blue_0']
-    act_space = env.action_space['blue_0']
+    obs_space = env.observation_space['agent_0']
+    act_space = env.action_space['agent_0']
     def policy_mapping_fn(agent_id, episode, worker, **kwargs):
-        if agent_id == 'blue_0':
+        if agent_id == 'agent_0':
             return "agent-0-policy"
         if agent_id == 'blue_1':
             return "agent-1-policy"

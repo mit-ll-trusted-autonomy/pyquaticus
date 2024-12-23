@@ -93,12 +93,17 @@ class KeyTest:
             action_dict = self.process_event(self.quittable)
             self.obs, rewards, terminated, truncated, info = self.env.step(action_dict)
             for k in terminated:
-                if terminated[k] == True or truncated[k]==True:
+                if truncated[k]==True:
                     time.sleep(1.)
-                    self.env.save_screenshot() # save screenshot of last frame
                     last_obs = copy.deepcopy(self.obs)
-                    new_obs = self.env.reset(state_dict = self.env.state)
+                    self.obs = self.env.reset(options = {'state_dict':self.env.state})
+                    #TODO: check that last obs is the same as self.obs
                     break
+                elif terminated[k] == True:
+                    time.sleep(1.)
+                    self.obs = self.env.reset()
+                    break
+
 
     def process_event(self, quittable):
 
@@ -130,7 +135,7 @@ class KeyTest:
 
 def main():
     parser = argparse.ArgumentParser(description='Play CTF manually (optionally against a policy)')
-    parser.add_argument('--red-policy', default=None, choices=[], help='Select a red policy to play against.')
+    parser.add_argument('--red_policy', default=None, choices=[], help='Select a red policy to play against.')
     args = parser.parse_args()
 
     config = copy.deepcopy(pyquaticus.config.config_dict_std)
@@ -141,7 +146,6 @@ def main():
     config["sim_speedup_factor"] = 8
     config["render_traj_freq"] = 10
     config["render_traj_cutoff"] = 55
-    config["render_saving"] = True
 
     config["blue_flag_home"] = [140,40]
     config["red_flag_home"] = [20,40]
@@ -152,10 +156,7 @@ def main():
     config["render_agent_ids"] = True
     config["random_init"] = False
 
-    config["render_traj_mode"] = "history"
-    # config["short_hist_duration"] = 100
-    # config["long_hist_jump"] = 6
-    config["render_transparency_alpha"] = 127
+    config["max_time"] = 100
     
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
     try:

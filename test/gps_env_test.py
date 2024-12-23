@@ -141,7 +141,6 @@ def main():
     # config["env_bounds"] = ((-1, 179), (1, -179))
     # config["env_bounds_unit"] = "ll"
 
-
     config["env_bounds"] = "auto"
     config["blue_flag_home"] = (49.301673369138015, -93.52174888478079)
     config["red_flag_home"] = (49.30515588662647, -93.50487665880466)

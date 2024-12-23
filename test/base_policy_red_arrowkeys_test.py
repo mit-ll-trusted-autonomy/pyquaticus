@@ -68,8 +68,8 @@ class KeyTest:
                                  K_UP + K_RIGHT : straightright
                                 }
 
-        self.blue_agent_id = env.agents_of_team[Team.BLUE_TEAM][0].id#self.env.agents_of_team[Team.BLUE_TEAM][0].id
-        self.red_agent_id  = env.agents_of_team[Team.RED_TEAM][0].id#self.env.agents_of_team[Team.RED_TEAM][0].id
+        self.blue_agent_id = env.agents_of_team[Team.BLUE_TEAM][0].id
+        self.red_agent_id  = env.agents_of_team[Team.RED_TEAM][0].id
 
 
     def begin(self):
