@@ -95,7 +95,7 @@ params{
 """
 
 import math
-
+#Sparse Rewards for all game events that occur
 def sparse(self, params, prev_params):
     reward = 0
     #Team captured opponents flag
@@ -116,13 +116,29 @@ def sparse(self, params, prev_params):
     #Reward Agent for tagging Opponent
     if not (params['agent_made_tag'][params['agent_id_index']] == None) and (prev_params['agent_made_tag'][params['agent_id_index']] == None):
         reward += 0.25
-    
     #Penalize agent for getting tagged
     if (params['agent_is_tagged'][params['agent_id_index']]) and not (prev_params['agent_is_tagged'][params['agent_id_index']] and not prev_params['agent_oob']):
         reward -= 0.25
         
     return reward
 
-
-def custom_v1(self, params, prev_params):
-    return 0
+#Reward Captures and Grabs Only
+def caps_and_grabs(self, params, prev_params):
+    reward = 0
+    #Team captured opponents flag
+    if params['team_flag_capture'] and not prev_params['team_flag_capture']:
+        reward += 1.0
+     #Agent grabbed opponents flag
+    if params['team_has_flag'] and not prev_params['team_has_flag']:
+        reward += 0.5
+    #Agent went out of bounds
+    if params['agent_oob'] and not prev_params['agent_oob']:
+        reward -= 1.0
+    
+    #Opposing team grabbed teams flag
+    if params['opponent_flag_pickup'] and not prev_params['opponent_flag_pickup']:
+        reward -= 0.5
+    #Opposing team captures teams flag
+    if params['opponent_flag_capture'] and not prev_params['opponent_flag_capture']:
+        reward -= 1.0
+    return reward * 100

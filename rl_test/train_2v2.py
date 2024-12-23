@@ -70,7 +70,7 @@ class RandPolicy(Policy):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train a 2v2 policy in a 2v2 PyQuaticus environment')
     parser.add_argument('--render', help='Enable rendering', action='store_true')
-    reward_config = {'agent_0':rew.sparse, 'agent_1':rew.sparse, 'agent_2':None, 'agent_3':None} # Example Reward Config
+    reward_config = {'agent_0':rew.caps_and_grabs, 'agent_1':rew.caps_and_grabs, 'agent_2':None, 'agent_3':None} # Example Reward Config
     #Competitors: reward_config should be updated to reflect how you want to reward your learning agent
     
     args = parser.parse_args()
@@ -79,7 +79,7 @@ if __name__ == '__main__':
     RENDER_MODE = 'human' if args.render else None #set to 'human' if you want rendered output
     
     config_dict = config_dict_std
-    config_dict['sim_speedup_factor'] = 1
+    config_dict['sim_speedup_factor'] = 4
     config_dict['max_score'] = 3
     config_dict['max_time']=240
     config_dict['tagging_cooldown'] = 60
@@ -110,7 +110,7 @@ if __name__ == '__main__':
                 #'easy-attack-policy': (AttackGen(3, Team.RED_TEAM, 'easy', 2, env.par_env.agent_obs_normalizer), obs_space, act_space, {})}
     env.close()
     #Not using the Alpha Rllib (api_stack False) 
-    ppo_config = PPOConfig().api_stack(enable_rl_module_and_learner=False, enable_env_runner_and_connector_v2=False).environment(env='pyquaticus').env_runners(num_env_runners=14, num_cpus_per_env_runner=1.0)
+    ppo_config = PPOConfig().api_stack(enable_rl_module_and_learner=False, enable_env_runner_and_connector_v2=False).environment(env='pyquaticus').env_runners(num_env_runners=50, num_cpus_per_env_runner=0.25)
     #If your system allows changing the number of rollouts can significantly reduce training times (num_rollout_workers=15)
     ppo_config.multi_agent(policies=policies, policy_mapping_fn=policy_mapping_fn, policies_to_train=["agent-0-policy", "agent-1-policy"],)
     algo = ppo_config.build()
