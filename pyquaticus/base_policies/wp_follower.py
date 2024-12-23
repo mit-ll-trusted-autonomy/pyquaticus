@@ -28,7 +28,7 @@ from pyquaticus.base_policies.rrt.utils import Point
 from pyquaticus.base_policies.rrt.rrt_star import rrt_star
 
 
-from typing import Union
+from typing import Union, Optional
 
 from multiprocessing.dummy import Pool
 from functools import partial
@@ -46,12 +46,17 @@ class WaypointFollower(BaseAgentPolicy):
         state_normalizer: ObsNormalizer,
         continuous: bool = False,
         capture_radius: float = 1,
+        slip_radius: Optional[float] = None,
         agent_radius: float = 2,
         wps: list[np.ndarray] = [],
     ):
         super().__init__(agent_id, team, teammate_ids, opponent_ids, obs_normalizer, state_normalizer)
 
         self.capture_radius = capture_radius
+
+        self.slip_radius = slip_radius
+
+        self.cur_dist = None
 
         self.agent_radius = agent_radius
 
@@ -123,15 +128,25 @@ class WaypointFollower(BaseAgentPolicy):
 
         if len(self.wps) == 0:
             return
-        elif np.linalg.norm(self.wps[0] - pos) <= self.capture_radius:
+        
+        new_dist = np.linalg.norm(self.wps[0] - pos)
+        if new_dist <= self.capture_radius:
             self.wps.pop(0)
+            self.cur_dist = None
+        elif (self.slip_radius is not None) and (self.cur_dist is not None) and (new_dist > self.cur_dist) and (new_dist <= self.slip_radius):
+            self.wps.pop(0)
+            self.cur_dist = None
+        else:
+            self.cur_dist = new_dist
+
+        self.cur_dist = np.linalg.norm(self.wps[0] - pos)
 
     def set_wps(self, wps: list[np.ndarray]):
         self.wps = wps
 
     def plan(self, wp: np.ndarray, obstacles: Union[list[np.ndarray], None], area: np.ndarray, max_step_size: float = 2, num_iters: int = 1000):
-        kwargs=dict(start=self.pos, obstacles=obstacles, area=area, max_step_size=max_step_size, num_iters=num_iters, agent_radius=self.agent_radius)
-        tree = self.plan_process.apply_async(rrt_star, kwds=kwargs, callback=partial(self.get_path, wp=wp))
+        kwargs=dict(start=self.pos, obstacles=obstacles, area=area, max_step_size=max_step_size, num_iters=num_iters, agent_radius=1.5 * self.agent_radius)
+        self.plan_process.apply_async(rrt_star, kwds=kwargs, callback=partial(self.get_path, wp=wp))
         
         
     def get_path(self, tree: list[Point], wp: np.ndarray):

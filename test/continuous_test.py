@@ -34,7 +34,7 @@ obs, info = env.reset()
 H_one = BaseAttacker(2, Team.RED_TEAM, 3, [0, 1], env.agent_obs_normalizer, env.global_state_normalizer, mode="easy", continuous=False)
 H_two = BaseDefender(3, Team.RED_TEAM, 2, [0, 1], env.agent_obs_normalizer, env.global_state_normalizer, mode="easy", continuous=False)
 
-R_one = WaypointFollower(0, Team.BLUE_TEAM, 1, [2, 3], env.agent_obs_normalizer, env.global_state_normalizer, continuous=False, capture_radius=5)
+R_one = WaypointFollower(0, Team.BLUE_TEAM, 1, [2, 3], env.agent_obs_normalizer, env.global_state_normalizer, continuous=False, capture_radius=5, slip_radius=10)
 R_two = BaseAttacker(1, Team.BLUE_TEAM, 0, [2, 3], env.agent_obs_normalizer, env.global_state_normalizer, mode="easy", continuous=False)
 
 R_one.update_state(obs, info)
