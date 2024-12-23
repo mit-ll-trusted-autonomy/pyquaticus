@@ -24,8 +24,8 @@ import numpy as np
 from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import Team
 from pyquaticus.utils.obs_utils import ObsNormalizer
-from pyquaticus.base_policies.utils import Point
-from pyquaticus.base_policies.rrt_star import rrt_star
+from pyquaticus.base_policies.rrt.utils import Point
+from pyquaticus.base_policies.rrt.rrt_star import rrt_star
 
 
 from typing import Union
@@ -134,12 +134,13 @@ class WaypointFollower(BaseAgentPolicy):
         tree = self.plan_process.apply_async(rrt_star, kwds=kwargs, callback=partial(self.get_path, wp=wp))
         
         
-    
     def get_path(self, tree: list[Point], wp: np.ndarray):
         possible_points = []
         for point in tree:
             if np.linalg.norm(point.pos - wp) <= self.capture_radius:
                 possible_points.append(point)
+        if len(possible_points) == 0:
+            return
         min_cost = possible_points[0].cost
         min_point = possible_points[0]
         for point in possible_points:

@@ -1,5 +1,5 @@
 import numpy as np
-from rrt_star import rrt_star
+from pyquaticus.base_policies.rrt.rrt_star import rrt_star
 from utils import draw_result
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle

@@ -1,5 +1,5 @@
 from utils import draw_result
-from rrt_star import rrt_star
+from pyquaticus.base_policies.rrt.rrt_star import rrt_star
 import matplotlib.pyplot as plt
 import numpy as np
 start = np.array((10, 10))

@@ -1,23 +1,25 @@
 from attr import dataclass
 import numpy as np
-from typing import Union, Optional
+from typing import Optional
 import matplotlib.pyplot as plt
-from pyquaticus.base_policies.intersect_utils import point_in_polygons, intersect
-import time
+
+
+np.seterr(divide="ignore")
 
 
 @dataclass
 class Point:
     pos: np.ndarray
     cost: float = 0.0
-    parent: Union["Point", None] = None
-
-
-
+    parent: Optional["Point"] = None
 
 
 def get_near(
-    point: Point, points: list[Point], radius: float, seglist: Union[np.ndarray, None], agent_radius: float,
+    point: Point,
+    points: list[Point],
+    radius: float,
+    seglist: Optional[np.ndarray],
+    agent_radius: float,
 ) -> list[Point]:
     seg_array = np.array([np.array([p.pos, point.pos]) for p in points])
     dist_array = np.linalg.norm(seg_array[:, 0, :] - seg_array[:, 1, :], axis=1)
@@ -47,7 +49,8 @@ def rewire(potential_parent: Point, near_points: list[Point]):
 
 
 def draw_result(
-    points: list[Point], obstacles: Optional[list[np.ndarray]],
+    points: list[Point],
+    obstacles: Optional[list[np.ndarray]],
 ):
     fig, ax = plt.subplots()
     for point in points:
@@ -57,19 +60,22 @@ def draw_result(
                 [point.pos[1], point.parent.pos[1]],
                 "b",
             )
-    # for point in points:
-    #     ax.plot(point.pos[0], point.pos[1], "ko")
+
     if obstacles is not None:
         for obstacle in obstacles:
             for i in range(obstacle.shape[0]):
                 seg = obstacle[(i - 1, i), :]
                 ax.plot(seg[:, 0], seg[:, 1], "r")
+
     return fig, ax
 
 
 def get_nearest(
-    point: Point, points: list[Point], seglist: Union[np.ndarray, None], agent_radius: float,
-) -> Union[Point, None]:
+    point: Point,
+    points: list[Point],
+    seglist: Optional[np.ndarray],
+    agent_radius: float,
+) -> Optional[Point]:
     if seglist is None:
         return min(points, key=lambda p: dist(p, point))
     seg_array = np.array([np.array([p.pos, point.pos]) for p in points])
@@ -86,8 +92,8 @@ def get_nearest(
 
 def get_random_point(
     area: np.ndarray,
-    grouped_seglist: Union[np.ndarray, None],
-    ungrouped_seglist: Union[np.ndarray, None],
+    grouped_seglist: Optional[np.ndarray],
+    ungrouped_seglist: Optional[np.ndarray],
     points: list[Point],
     max_step_size: float,
     agent_radius: float,
@@ -136,12 +142,14 @@ def bound(to_point: Point, from_point: Point, max_step_size):
 def dist(p1: Point, p2: Point) -> float:
     return float(np.linalg.norm(p1.pos - p2.pos))
 
+
 def get_seglist(poly: np.ndarray) -> np.ndarray:
     seglist = []
     for i in range(poly.shape[0]):
         seglist.append(poly[(i - 1, i), :])
     seglist = np.array(seglist)
     return seglist
+
 
 def get_ungrouped_seglist(polys: list[np.ndarray]) -> np.ndarray:
     seglist = []
@@ -150,6 +158,7 @@ def get_ungrouped_seglist(polys: list[np.ndarray]) -> np.ndarray:
             seglist.append(poly[(i - 1, i), :])
     seglist = np.array(seglist)
     return seglist
+
 
 def get_grouped_seglist(polys: list[np.ndarray]) -> np.ndarray:
     seglists = []
@@ -166,10 +175,131 @@ def get_grouped_seglist(polys: list[np.ndarray]) -> np.ndarray:
         padded_seglists.append(pad(seglist, max_len))
     return np.array(padded_seglists)
 
+
 def pad(seglist: np.ndarray, length: int) -> np.ndarray:
-    return np.pad(seglist, ((0, length - seglist.shape[0]), (0, 0), (0, 0)), constant_values=np.nan)
+    return np.pad(
+        seglist,
+        ((0, length - seglist.shape[0]), (0, 0), (0, 0)),
+        constant_values=np.nan,
+    )
 
 
+def point_in_polygons(
+    point: np.ndarray, seglists: Optional[np.ndarray], radius: float = 1e-9
+):
+    """
+    Determines if a point is in any of the polygons, provided as an array of segments
+
+    Note: pad all polygons with np.nan so that the length of each individual seglist is the same.
+    The function get_grouped_seglist() does this.
+
+    point.shape should be (2)
+
+    seglists.shape should be (n, k, 2, 2), where there are n polygons with a maximum of k edges
+
+    Args:
+        point (np.ndarray): (x, y)
+
+        seglists (np.ndarray):
+                               ((((x1, y1), (x2, y2)), ((x2, y2), (x3, y3)), ... , ((xk, yk), (x1, y1))                 -> first polygon
+
+                                (((x1, y1), (x2, y2)), ((x2, y2), (x3, y3)), ... , ((np.nan, np.nan), (np.nan, np.nan)) -> second polygon
+
+                                ...
+
+                                ...
+
+                                (((x1, y1), (x2, y2)), ((x2, y2), (x3, y3)), ... , ((np.nan, np.nan), (np.nan, np.nan))) -> nth polygon
+
+    Returns:
+        bool: True if the point is inside any of the polygons (or within the given radius of an edge or vertex)
+    """
+    point = point.reshape((2))
+
+    if seglists is None:
+        return False
+
+    x1, y1 = (
+        point[0],
+        point[1],
+    )
+    x2, y2, x3, y3 = (
+        seglists[:, :, 0, 0],
+        seglists[:, :, 0, 1],
+        seglists[:, :, 1, 0],
+        seglists[:, :, 1, 1],
+    )
+
+    vertex_dists = np.linalg.norm(
+        np.array((((x1 - x2).flatten()), ((y1 - y2).flatten()))), axis=0
+    )
+    if np.any(vertex_dists <= radius):
+        return True
+
+    denom = y3 - y2
+    intersect_x = ((y1 - y2) * (x3 - x2) / denom) + x2
+
+    on_edge = ((np.abs(x1 - intersect_x) <= radius) & ((y1 < y2) != (y1 < y3))) | (
+        (denom == 0) & (np.abs(y1 - y2) <= radius) & ((x1 < x2) != (x1 < x3))
+    )
+    if np.any(on_edge):
+        return True
+
+    intersect = ((y1 < y2) != (y1 < y3)) & (x1 <= intersect_x + radius)
+
+    return np.any(np.count_nonzero(intersect, axis=1) % 2)
 
 
+def intersect(seg: np.ndarray, seglist: Optional[np.ndarray], radius: float = 1e-9):
+    """
+    Determines if a segment intersects any of the segments in an array of segments
 
+    Note: if segments are parallel, this function will not detect an intersection
+
+    Args:
+        seg (np.ndarray): ((x1, y1), (x2, y2))
+        seglist (np.ndarray): (((x1, y1), (x2, y2)), ((x1, y1), (x2, y2)), ... )
+
+    Returns:
+        bool: True if the segment intersects any of the segments in the array
+    """
+    if seglist is None:
+        return False
+
+    seglist = seglist.reshape((-1, 2, 2))
+    seg = seg.reshape((-1, 2, 2))
+
+    x1, y1, x2, y2 = (
+        seg[:, 0, 0].reshape((-1, 1)),
+        seg[:, 0, 1].reshape((-1, 1)),
+        seg[:, 1, 0].reshape((-1, 1)),
+        seg[:, 1, 1].reshape((-1, 1)),
+    )
+    x3, y3, x4, y4 = (
+        seglist[:, 0, 0],
+        seglist[:, 0, 1],
+        seglist[:, 1, 0],
+        seglist[:, 1, 1],
+    )
+
+    denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+    intersect_x = (
+        (x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)
+    ) / denom
+    intersect_y = (
+        (x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)
+    ) / denom
+
+    intersect = (
+        (denom != 0)
+        & (intersect_x >= np.minimum(x1, x2) - radius)
+        & (intersect_x <= np.maximum(x1, x2) + radius)
+        & (intersect_y >= np.minimum(y1, y2) - radius)
+        & (intersect_y <= np.maximum(y1, y2) + radius)
+        & (intersect_x >= np.minimum(x3, x4) - radius)
+        & (intersect_x <= np.maximum(x3, x4) + radius)
+        & (intersect_y >= np.minimum(y3, y4) - radius)
+        & (intersect_y <= np.maximum(y3, y4) + radius)
+    )
+
+    return np.any(intersect, axis=1)

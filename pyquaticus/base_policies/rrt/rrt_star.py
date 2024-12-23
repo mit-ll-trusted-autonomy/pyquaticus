@@ -1,6 +1,6 @@
 import numpy as np
 from typing import Optional
-from pyquaticus.base_policies.utils import *
+from pyquaticus.base_policies.rrt.utils import *
 
 def rrt_star(
     start: np.ndarray,
