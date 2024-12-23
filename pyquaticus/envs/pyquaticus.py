@@ -1387,7 +1387,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             team_agent_cantag = team_agent_on_sides & \
                 np.logical_not(team_agent_oob) & \
                 np.logical_not(team_agent_is_tagged) & \
-                team_agent_tagging_cooldown == self.tagging_cooldown
+                (team_agent_tagging_cooldown == self.tagging_cooldown)
 
             # Determine which agents of the other team(s) can be tagged
             other_agent_on_sides = self.state['agent_on_sides'][other_agent_inds]
