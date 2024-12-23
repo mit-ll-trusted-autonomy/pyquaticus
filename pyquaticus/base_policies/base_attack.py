@@ -22,7 +22,7 @@
 import numpy as np
 
 from pyquaticus.base_policies.base import BaseAgentPolicy
-from pyquaticus.envs.pyquaticus import config_dict_std, Team
+from pyquaticus.envs.pyquaticus import config_dict_std, Team, PyQuaticusEnv
 from pyquaticus.utils.obs_utils import ObsNormalizer
 
 from typing import Union
@@ -43,15 +43,12 @@ class BaseAttacker(BaseAgentPolicy):
         self,
         agent_id: int,
         team: Team,
-        teammate_ids: Union[list[int], int, None],
-        opponent_ids: Union[list[int], int, None],
-        obs_normalizer: ObsNormalizer,
-        state_normalizer: ObsNormalizer,
+        env: PyQuaticusEnv,
         mode: str = "easy",
         continuous: bool = False,
         using_pyquaticus: bool = True,
     ):
-        super().__init__(agent_id, team, teammate_ids, opponent_ids, obs_normalizer, state_normalizer)
+        super().__init__(agent_id, team, env)
         if mode not in modes:
             raise AttributeError(f"Invalid mode {mode}")
         self.mode = mode
@@ -94,11 +91,9 @@ class BaseAttacker(BaseAgentPolicy):
         if not isinstance(global_state, dict):
             global_state = self.state_normalizer.unnormalized(global_state)
 
-        # TODO: Fix this
-        # Some big speed hard-coded so that every agent drives at max speed
-        desired_speed = 50
-
         if self.mode == "easy":
+
+            desired_speed = self.max_speed / 2
 
             # If I or someone on my team has the flag, go back home
             if self.has_flag or self.my_team_has_flag:
@@ -199,7 +194,10 @@ class BaseAttacker(BaseAgentPolicy):
             ):
                 self.goal = "SC"
             return self.goal
+        
         elif self.mode == "medium":
+
+            desired_speed = self.max_speed / 2
 
             # If I or someone on my team has the flag, return to my side.
             if self.has_flag or self.my_team_has_flag:
@@ -250,6 +248,9 @@ class BaseAttacker(BaseAgentPolicy):
                     return 12
 
         elif self.mode == "competition_medium":
+
+            desired_speed = self.max_speed
+            
             # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid
             if global_state["wall_0_distance"] < 10 and (
                 -90 < global_state["wall_0_bearing"] < 90
@@ -365,6 +366,9 @@ class BaseAttacker(BaseAgentPolicy):
                 return 4
 
         elif self.mode == "hard":
+
+            desired_speed = self.max_speed
+
             # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid
             if global_state["wall_0_distance"] < 10 and (
                 -90 < global_state["wall_0_bearing"] < 90

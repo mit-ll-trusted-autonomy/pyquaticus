@@ -22,8 +22,7 @@
 import numpy as np
 
 from pyquaticus.base_policies.base import BaseAgentPolicy
-from pyquaticus.envs.pyquaticus import config_dict_std, Team
-from pyquaticus.utils.obs_utils import ObsNormalizer
+from pyquaticus.envs.pyquaticus import config_dict_std, Team, PyQuaticusEnv
 
 from typing import Union
 
@@ -37,17 +36,14 @@ class BaseDefender(BaseAgentPolicy):
         self,
         agent_id: int,
         team: Team,
-        teammate_ids: Union[list[int], int, None],
-        opponent_ids: Union[list[int], int, None],
-        obs_normalizer: ObsNormalizer,
-        state_normalizer: ObsNormalizer,
+        env: PyQuaticusEnv,
         mode: str = "easy",
         continuous: bool = False,
         flag_keepout: float = 10.0,
         catch_radius: float = config_dict_std["catch_radius"],
         using_pyquaticus: bool = True,
     ):
-        super().__init__(agent_id, team, teammate_ids, opponent_ids, obs_normalizer, state_normalizer)
+        super().__init__(agent_id, team, env)
 
         if mode not in modes:
             raise ValueError(f"mode {mode} not in set of valid modes {modes}")
@@ -93,11 +89,10 @@ class BaseDefender(BaseAgentPolicy):
         if not isinstance(global_state, dict):
             global_state = self.state_normalizer.unnormalized(global_state)
 
-        # TODO: Fix this
-        # Some big speed hard-coded so that every agent drives at max speed
-        desired_speed = 50
-
         if self.mode == "easy":
+
+            desired_speed = self.max_speed / 2
+
             ag_vect = [0, 0]
             my_flag_vec = self.bearing_to_vec(self.my_flag_bearing)
 
@@ -187,6 +182,9 @@ class BaseDefender(BaseAgentPolicy):
             return self.goal
 
         elif self.mode == "competition_medium":
+
+            desired_speed = self.max_speed
+
             my_flag_vec = self.bearing_to_vec(self.my_flag_bearing)
             # Check if opponents are on teams side
             min_enemy_distance = 1000.00
@@ -248,6 +246,9 @@ class BaseDefender(BaseAgentPolicy):
                 act_index = 4
 
         elif self.mode == "medium":
+
+            desired_speed = self.max_speed / 2
+
             my_flag_vec = self.bearing_to_vec(self.my_flag_bearing)
 
             # If the blue team doesn't have the flag, guard it
@@ -295,6 +296,9 @@ class BaseDefender(BaseAgentPolicy):
                     return 12
 
         elif self.mode == "hard":
+
+            desired_speed = self.max_speed
+
             # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid
             wall_pos = []
             if global_state["wall_0_distance"] < 7 and (

@@ -21,8 +21,7 @@
 
 import numpy as np
 
-from pyquaticus.envs.pyquaticus import Team
-from pyquaticus.utils.obs_utils import ObsNormalizer
+from pyquaticus.envs.pyquaticus import Team, PyQuaticusEnv
 
 from typing import Any, Union
 
@@ -37,15 +36,12 @@ class BaseAgentPolicy:
         self,
         agent_id: int,
         team: Team,
-        teammate_ids: Union[list[int], int, None],
-        opponent_ids: Union[list[int], int, None],
-        obs_normalizer: ObsNormalizer,
-        state_normalizer: ObsNormalizer,
+        env: PyQuaticusEnv,
         suppress_numpy_warnings=True,
     ):
         self.id = agent_id
-        self.obs_normalizer = obs_normalizer
-        self.state_normalizer = state_normalizer
+        self.obs_normalizer = env.agent_obs_normalizer
+        self.state_normalizer = env.global_state_normalizer
         if isinstance(team, str):
             if team == "red":
                 team = Team.RED_TEAM
@@ -56,20 +52,16 @@ class BaseAgentPolicy:
         self.team = team
 
         # Make sure own id is not in teammate_ids
-        if teammate_ids == self.id:
-            teammate_ids = None
-        if isinstance(teammate_ids, list):
-            for id in teammate_ids:
-                if id == self.id:
-                    teammate_ids.remove(id)
-            self.teammate_ids = teammate_ids
+        agents_per_team = env.team_size
+        if team == Team.BLUE_TEAM:
+            self.teammate_ids = [i for i in range(agents_per_team) if i != self.id]
+            self.opponent_ids = [i for i in range(agents_per_team, 2 * agents_per_team)]
         else:
-            self.teammate_ids = [teammate_ids]
+            self.teammate_ids = [i for i in range(agents_per_team, 2 * agents_per_team) if i != self.id]
+            self.opponent_ids = [i for i in range(agents_per_team)]
 
-        if isinstance(opponent_ids, list):
-            self.opponent_ids = opponent_ids
-        else:
-            self.opponent_ids = [opponent_ids]
+        self.max_speed = env.players[self.id].get_max_speed()
+
 
         self.speed = 0.0
         self.has_flag = False

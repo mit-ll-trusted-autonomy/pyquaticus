@@ -93,7 +93,7 @@ class NoOp(Policy):
         pass
 
 
-def AttackGen(agentid, team, teammate_ids, opponent_ids, obs_normalizer, state_normalizer, mode, continuous, team_size):
+def AttackGen(agentid, team, env, mode, continuous, team_size):
 
     class AttackPolicy(Policy):
         """
@@ -102,7 +102,7 @@ def AttackGen(agentid, team, teammate_ids, opponent_ids, obs_normalizer, state_n
 
         def __init__(self, observation_space, action_space, config):
             Policy.__init__(self, observation_space, action_space, config)
-            self.policy = BaseAttacker(agentid, team, teammate_ids, opponent_ids, obs_normalizer, state_normalizer, mode=mode, continuous=continuous)
+            self.policy = BaseAttacker(agentid, team, env, mode=mode, continuous=continuous)
             self.action_dict = {}
 
         def compute_actions(self,
@@ -137,7 +137,7 @@ def AttackGen(agentid, team, teammate_ids, opponent_ids, obs_normalizer, state_n
     return AttackPolicy
 
 
-def DefendGen(agentid, team, teammate_ids, opponent_ids, obs_normalizer, state_normalizer, mode, continuous, team_size):
+def DefendGen(agentid, team, env, mode, continuous, team_size):
     class DefendPolicy(Policy):
         """
         Creates a defender policy
@@ -145,7 +145,7 @@ def DefendGen(agentid, team, teammate_ids, opponent_ids, obs_normalizer, state_n
 
         def __init__(self, observation_space, action_space, config):
             Policy.__init__(self, observation_space, action_space, config)
-            self.policy = BaseDefender(agentid, team, teammate_ids, opponent_ids, obs_normalizer, state_normalizer, mode=mode, continuous=continuous)
+            self.policy = BaseDefender(agentid, team, env, mode=mode, continuous=continuous)
             self.action_dict = {}
 
         def compute_actions(self,
@@ -179,7 +179,7 @@ def DefendGen(agentid, team, teammate_ids, opponent_ids, obs_normalizer, state_n
     return DefendPolicy
 
 
-def CombinedGen(agentid, team, teammate_ids, opponent_ids, obs_normalizer, state_normalizer, mode, continuous, team_size):
+def CombinedGen(agentid, team, env, mode, continuous, team_size):
     class CombinedPolicy(Policy):
         """
         Creates a combined (attacker and defender) policy
@@ -187,7 +187,7 @@ def CombinedGen(agentid, team, teammate_ids, opponent_ids, obs_normalizer, state
 
         def __init__(self, observation_space, action_space, config):
             Policy.__init__(self, observation_space, action_space, config)
-            self.policy = Heuristic_CTF_Agent(agentid, team, teammate_ids, opponent_ids, obs_normalizer, state_normalizer, mode=mode, continuous=continuous)
+            self.policy = Heuristic_CTF_Agent(agentid, team, env, mode=mode, continuous=continuous)
             self.action_dict = {}
 
         def compute_actions(self,

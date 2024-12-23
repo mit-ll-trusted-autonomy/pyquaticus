@@ -24,8 +24,7 @@ import numpy as np
 import pyquaticus.base_policies.base_attack as attack_policy
 import pyquaticus.base_policies.base_defend as defend_policy
 from pyquaticus.base_policies.base import BaseAgentPolicy
-from pyquaticus.envs.pyquaticus import config_dict_std, Team
-from pyquaticus.utils.obs_utils import ObsNormalizer
+from pyquaticus.envs.pyquaticus import config_dict_std, Team, PyQuaticusEnv
 
 from typing import Union
 
@@ -39,10 +38,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         self,
         agent_id: int,
         team: Team,
-        teammate_ids: Union[list[int], int, None],
-        opponent_ids: Union[list[int], int, None],
-        obs_normalizer: ObsNormalizer,
-        state_normalizer: ObsNormalizer,
+        env: PyQuaticusEnv,
         mode="easy",
         continuous: bool = False,
         flag_keepout=10.0,
@@ -50,7 +46,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         using_pyquaticus=True,
         defensiveness=20.0,
     ):
-        super().__init__(agent_id, team, teammate_ids, opponent_ids, obs_normalizer, state_normalizer)
+        super().__init__(agent_id, team, env)
 
         if mode not in modes:
             raise ValueError(f"mode {mode} not a valid mode out of {modes}")
@@ -66,10 +62,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         self.base_attacker = attack_policy.BaseAttacker(
             self.id,
             team,
-            teammate_ids,
-            opponent_ids,
-            obs_normalizer,
-            state_normalizer,
+            env,
             mode,
             continuous,
             using_pyquaticus,
@@ -77,10 +70,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         self.base_defender = defend_policy.BaseDefender(
             self.id,
             team,
-            teammate_ids,
-            opponent_ids,
-            obs_normalizer,
-            state_normalizer,
+            env,
             mode,
             continuous,
             flag_keepout,

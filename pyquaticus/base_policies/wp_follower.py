@@ -23,7 +23,7 @@ import numpy as np
 
 from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import Team
-from pyquaticus.utils.obs_utils import ObsNormalizer
+from pyquaticus.envs.pyquaticus import PyQuaticusEnv
 from pyquaticus.base_policies.rrt.utils import Point
 from pyquaticus.base_policies.rrt.rrt_star import rrt_star
 
@@ -40,17 +40,14 @@ class WaypointFollower(BaseAgentPolicy):
         self,
         agent_id: int,
         team: Team,
-        teammate_ids: Union[list[int], int, None],
-        opponent_ids: Union[list[int], int, None],
-        obs_normalizer: ObsNormalizer,
-        state_normalizer: ObsNormalizer,
+        env: PyQuaticusEnv,
         continuous: bool = False,
         capture_radius: float = 1,
         slip_radius: Optional[float] = None,
         agent_radius: float = 2,
         wps: list[np.ndarray] = [],
     ):
-        super().__init__(agent_id, team, teammate_ids, opponent_ids, obs_normalizer, state_normalizer)
+        super().__init__(agent_id, team, env)
 
         self.capture_radius = capture_radius
 
@@ -86,8 +83,7 @@ class WaypointFollower(BaseAgentPolicy):
         """
         self.update_state(obs, info)
 
-        # Some big speed hard-coded so that every agent drives at max speed
-        desired_speed = 50
+        desired_speed = self.max_speed / 2
         heading_error = 0
 
         self.update_wps(self.pos)
@@ -138,8 +134,6 @@ class WaypointFollower(BaseAgentPolicy):
             self.cur_dist = None
         else:
             self.cur_dist = new_dist
-
-        self.cur_dist = np.linalg.norm(self.wps[0] - pos)
 
     def set_wps(self, wps: list[np.ndarray]):
         self.wps = wps
