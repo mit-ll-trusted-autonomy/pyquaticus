@@ -2373,10 +2373,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if "agent_position" in init_dict:
             agent_pos_unit = init_dict.get('agent_pos_unit', None)
             if agent_pos_unit is not None:
-                if self.gps_envs:
+                if self.gps_env:
                     if not (agent_pos_unit == "ll" or agent_pos_unit == "wm_xy"):
                         raise Exception(
-                            "Agent poses must be specified in aboslute coordinates ('ll' or 'wm_xy') when self.gps_env is True"
+                            "Agent poses must be specified in absolute coordinates ('ll' or 'wm_xy') when self.gps_env is True"
                         )
                 else:
                     if agent_pos_unit != "m":
@@ -2388,46 +2388,37 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         agent_pos_dict = {}
         agent_spd_dict = {}
         agent_hdg_dict = {}
-        for i, agent_id in enumerate(self.agents):
-            # position
-            if "agent_position" in init_dict:
-                if isinstance(init_dict['agent_position'], (list, tuple, np.ndarray)):
-                    if len(init_dict['agent_position']) == self.num_agents:
-                        agent_pos_dict[agent_id] = init_dict['agent_position'][i]
-                    else:
-                        raise Exception("agent_position array must be be of length self.num_agents with entries matching order of self.agents")
-                else:
-                    pos = init_dict.get('agent_position').get(agent_id, None)
-                    if pos != None:
-                        if agent_pos_unit == "ll":
-                            pos = mt.xy(pos[1], pos[0])
 
-                        pos = wrap_mercator_x_dist(pos - self.env_bounds[0])
-                        agent_pos_dict[agent_id] = pos
-
-            # speed
-            if "agent_speed" in init_dict:
-                if isinstance(init_dict['agent_speed'], (list, tuple, np.ndarray)):
-                    if len(init_dict['agent_speed']) == self.num_agents:
-                        agent_spd_dict[agent_id] = init_dict['agent_speed'][i]
-                    else:
-                        raise Exception("agent_speed array must be be of length self.num_agents with entries matching order of self.agents")
+        for state_var in ["agent_position", "agent_speed", "agent_heading"]:
+            if state_var in init_dict:
+                if (
+                    isinstance(init_dict[state_var], (list, tuple, np.ndarray)) and
+                    len(init_dict[state_var]) != self.num_agents
+                ):
+                    raise Exception(f"{state_var} {str(type(state_var))[8:-2]} must be be of length self.num_agents with entries matching order of self.agents")
                 else:
-                    speed = init_dict.get('agent_speed').get(agent_id, None)
-                    if speed != None:
-                        agent_spd_dict[agent_id] = speed
+                    for i, agent_id in enumerate(self.agents):
+                        if isinstance(init_dict[state_var], (list, tuple, np.ndarray)):
+                            val = init_dict[state_var][i]
+                        else: 
+                            val = init_dict.get(state_var).get(agent_id, None)
+                            if val == None:
+                                continue
 
-            # heading
-            if "agent_heading" in init_dict:
-                if isinstance(init_dict['agent_heading'], (list, tuple, np.ndarray)):
-                    if len(init_dict['agent_heading']) == self.num_agents:
-                        agent_hdg_dict[agent_id] = init_dict['agent_heading'][i]
-                    else:
-                        raise Exception("agent_heading array must be be of length self.num_agents with entries matching order of self.agents")
-                else:
-                    heading = init_dict.get('agent_heading').get(agent_id, None)
-                    if heading != None:
-                        agent_hdg_dict[agent_id] = heading
+                        # position
+                        if state_var == "agent_position":
+                            if agent_pos_unit == "ll":
+                                val = mt.xy(val[1], val[0])
+                                val = wrap_mercator_x_dist(val - self.env_bounds[0])
+                            elif agent_pos_unit == "wm_xy":
+                                val = wrap_mercator_x_dist(val - self.env_bounds[0])
+                            agent_pos_dict[agent_id] = val
+                        # speed
+                        elif state_var == "agent_speed":
+                            agent_spd_dict[agent_id] = val
+                        # heading
+                        else:
+                            agent_hdg_dict[agent_id] = val
 
         ## has_flag, flag_taken, team_has_flag ##
         if "agent_has_flag" in init_dict:
@@ -2536,7 +2527,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         Note: assumes two teams, and one flag per team.
 
         Args:
-            flag_homes: The home location of all flags that are not picked up.
+            flag_homes: The home location of all flags that are not picked up
             agent_pos_dict: positions of a subset of the agents with id's as keys
             agent_spd_dict: speeds of a subset of the agents with id's as keys
             agent_hdg_dict: headings of a subset of the agents with id's as keys
@@ -2814,7 +2805,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
                 if flag_homes_unit == "m":
                     raise Exception(
-                        "Flag homes must be specified in aboslute coordinates (lat/long or web mercator xy) to auto-generate gps environment bounds."
+                        "Flag homes must be specified in absolute coordinates (lat/long or web mercator xy) to auto-generate gps environment bounds."
                     )
                 elif flag_homes_unit == "ll":
                     # convert flag poses to web mercator xy
@@ -2901,7 +2892,7 @@ Desired environment width is greater than earth's equatorial diameter."
                         or flag_homes_unit == "m"
                     ):
                         raise Exception(
-                            "Flag locations must be specified in aboslute coordinates (lat/long or web mercator xy) \
+                            "Flag locations must be specified in absolute coordinates (lat/long or web mercator xy) \
 when gps environment bounds are specified in meters"
                         )
 
