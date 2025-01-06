@@ -911,12 +911,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.current_time += self.sim_speedup_factor * self.tau
 
         # agent and flag capture checks and more
-        #TODO: re-profile how fast the new vectorized and unvectorized functions run to adjust switchoff point
-        self._check_oob_vectorized() if self.team_size >= 40 else self._check_oob()
-        self._check_flag_pickups_vectorized() if self.team_size >= 40 else self._check_flag_pickups()
-        self._check_agent_made_tag_vectorized() if self.team_size >= 10 else self._check_agent_made_tag()
+        self._check_oob_vectorized()
+        self._check_flag_pickups_vectorized() if self.team_size >= 7 else self._check_flag_pickups()
+        self._check_agent_made_tag_vectorized() if self.team_size >= 14 else self._check_agent_made_tag()
         self._check_flag_captures()
-        self._check_untag_vectorized() if self.team_size >= 10 else self._check_untag()
+        self._check_untag_vectorized() if self.team_size >= 5 else self._check_untag()
         self._set_dones()
         self._get_dist_bearing_to_obstacles()
 
@@ -2233,10 +2232,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.state['agent_dynamics'] = np.array([player.state for player in self.players.values()])
 
             #run event checks
-            #TODO: re-profile how fast the new vectorized and unvectorized functions run to adjust switchoff point
-            self._check_flag_pickups_vectorized() if self.team_size >= 40 else self._check_flag_pickups()
-            self._check_agent_made_tag_vectorized() if self.team_size >= 10 else self._check_agent_made_tag()
-            self._check_untag_vectorized() if self.team_size >= 10 else self._check_untag()
+            self._check_flag_pickups_vectorized() if self.team_size >= 7 else self._check_flag_pickups()
+            self._check_agent_made_tag_vectorized() if self.team_size >= 14 else self._check_agent_made_tag()
+            self._check_untag_vectorized() if self.team_size >= 5 else self._check_untag()
             #note 1: _check_oob is not currently necessary b/c initializtion does not allow 
             #for out-of-bounds, and state_dict initialization will have up-to-date out-of-bounds info.
 
