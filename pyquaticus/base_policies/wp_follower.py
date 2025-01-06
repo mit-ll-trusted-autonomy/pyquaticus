@@ -31,6 +31,8 @@ from pyquaticus.base_policies.rrt.rrt_star import rrt_star
 from typing import Union, Optional
 
 from multiprocessing.dummy import Pool
+from multiprocessing.pool import ThreadPool
+
 from functools import partial
 
 class WaypointFollower(BaseAgentPolicy):
@@ -139,24 +141,44 @@ class WaypointFollower(BaseAgentPolicy):
         self.wps = wps
 
     def plan(self, wp: np.ndarray, obstacles: Union[list[np.ndarray], None], area: np.ndarray, max_step_size: float = 2, num_iters: int = 1000):
+        """
+        Asynchronously run RRT* from the agent's current position, and update the waypoints if a valid path to the goal was found
+        """
+
         kwargs=dict(start=self.pos, obstacles=obstacles, area=area, max_step_size=max_step_size, num_iters=num_iters, agent_radius=1.5 * self.agent_radius)
+
+        assert isinstance(self.plan_process, ThreadPool)
+        
         self.plan_process.apply_async(rrt_star, kwds=kwargs, callback=partial(self.get_path, wp=wp))
         
         
     def get_path(self, tree: list[Point], wp: np.ndarray):
+        """
+        Given a tree, search the tree for points near the goal and create a list of waypoints
+        that determine the shortest path to the goal from the starting point
+        """
         possible_points = []
+
+        # Find all points that satisfy the goal
         for point in tree:
             if np.linalg.norm(point.pos - wp) <= self.capture_radius:
                 possible_points.append(point)
+
         if len(possible_points) == 0:
             return
+        
+        # Find the satisfying point with the minimum cost
         min_cost = possible_points[0].cost
         min_point = possible_points[0]
+
         for point in possible_points:
             if point.cost < min_cost:
                 min_cost = point.cost
                 min_point = point
+
         wps = [min_point.pos]
+
+        # Trace the path back to the root of the tree
         while min_point.parent is not None:
             wps.insert(0, min_point.parent.pos)
             min_point = min_point.parent

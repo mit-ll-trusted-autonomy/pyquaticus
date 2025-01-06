@@ -16,7 +16,7 @@ config_dict = config_dict_std
 config_dict["max_time"] = 600.0
 config_dict["max_score"] = 100
 config_dict["render_agent_ids"] = True
-config_dict["dynamics"] = "heron"
+config_dict["dynamics"] = "si"
 config_dict["action_type"] = "continuous"
 continuous = True
 config_dict["lidar_obs"] = True
@@ -72,7 +72,7 @@ R_two = BaseAttacker(
     1,
     Team.BLUE_TEAM,
     env,
-    mode="easy",
+    mode="nothing",
     continuous=continuous,
 )
 
@@ -92,8 +92,9 @@ obstacles = [
     )
 ]
 
+print(env.flag_homes[Team.RED_TEAM])
 R_one.plan(
-    np.array([0, 0]), obstacles, np.array([[-80.0, -40.0], [80.0, 40.0]]), 5, 2000
+    env.flag_homes[Team.RED_TEAM] - [80, 40], obstacles, np.array([[-80.0, -40.0], [80.0, 40.0]]), 5, 2000
 )
 
 while True:

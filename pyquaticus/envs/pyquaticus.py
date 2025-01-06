@@ -752,7 +752,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # Create players, use IDs from [0, (2 * team size) - 1] so their IDs can also be used as indices.
         b_players = []
         r_players = []
-
+        if not hasattr(self, "agent_render_radius"):
+            self.agent_render_radius = self.agent_radius
         for i in range(0, self.num_blue):
             b_players.append(
                 dynamics_registry[self.dynamics[i]](

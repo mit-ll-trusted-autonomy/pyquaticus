@@ -30,74 +30,62 @@ init_dict = {
         4: (49.3051, -93.5055),
         5: (49.3057, -93.5055),
     },
+    "agent_heading": {
+        0: 90,
+        1: 90,
+        2: 90,
+        3: -90,
+        4: -90,
+        5: -90,
+    }
 }
 
 
 env = pyquaticus_v0.PyQuaticusEnv(team_size=3, config_dict=config, render_mode="human")
-term_g = {0: False, 1: False}
-truncated_g = {0: False, 1: False}
-term = term_g
-trunc = truncated_g
+term = {0: False, 1: False}
+trunc = {0: False, 1: False}
 obs, info = env.reset(options={"init_dict": init_dict})
 
 red_one = Heuristic_CTF_Agent(
     3,
     Team.RED_TEAM,
-    [4, 5],
-    [0, 1, 2],
-    env.agent_obs_normalizer,
-    env.global_state_normalizer,
+    env,
     mode="nothing",
 )
 red_two = Heuristic_CTF_Agent(
     4,
     Team.RED_TEAM,
-    [3, 5],
-    [0, 1, 2],
-    env.agent_obs_normalizer,
-    env.global_state_normalizer,
+    env,
     mode="nothing",
 )
 red_three = Heuristic_CTF_Agent(
     5,
     Team.RED_TEAM,
-    [3, 4],
-    [0, 1, 2],
-    env.agent_obs_normalizer,
-    env.global_state_normalizer,
+    env,
     mode="nothing",
 )
 
 blue_one = Heuristic_CTF_Agent(
     0,
     Team.BLUE_TEAM,
-    [1, 2],
-    [3, 4, 5],
-    env.agent_obs_normalizer,
-    env.global_state_normalizer,
+    env,
     mode="nothing",
 )
 blue_two = WaypointFollower(
     1,
     Team.BLUE_TEAM,
-    [0, 2],
-    [3, 4, 5],
-    env.agent_obs_normalizer,
-    env.global_state_normalizer,
+    env,
     capture_radius=5,
     slip_radius=10
 )
 blue_three = Heuristic_CTF_Agent(
     2,
     Team.BLUE_TEAM,
-    [0, 1],
-    [3, 4, 5],
-    env.agent_obs_normalizer,
-    env.global_state_normalizer,
+    env,
     mode="nothing",
 )
 
-while True:
+while not (any(term.values()) or any(trunc.values())):
 
     three = red_one.compute_action(obs, info)
     four = red_two.compute_action(obs, info)
@@ -109,9 +97,5 @@ while True:
     obs, reward, term, trunc, info = env.step(
         {0: zero, 1: one, 2: two, 3: three, 4: four, 5: five}
     )
-    k = list(term.keys())
-
-    if term[k[0]] == True or trunc[k[0]] == True:
-        break
 
 env.close()
