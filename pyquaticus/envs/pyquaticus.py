@@ -220,24 +220,26 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             max_bearing = [180]
             max_dist_scrimmage = [self.env_diag]
             max_dist_lidar = self.num_lidar_rays * [self.lidar_range]
-            min_dist = [0.0]
+            min_dist_lidar = self.num_lidar_rays * [0.0]
             max_bool, min_bool = [1.0], [0.0]
             max_speed, min_speed = [max(self.max_speeds)], [0.0]
             max_score, min_score = [self.max_score], [0.0]
+            max_lidar_label = self.num_lidar_rays * [len(LIDAR_DETECTION_CLASS_MAP) - 1]
+            min_lidar_label = self.num_lidar_rays * [0.0]
 
             agent_obs_normalizer.register("scrimmage_line_bearing", max_bearing)
-            agent_obs_normalizer.register("scrimmage_line_distance", max_dist_scrimmage, min_dist)
+            agent_obs_normalizer.register("scrimmage_line_distance", max_dist_scrimmage, [0.0])
             agent_obs_normalizer.register("speed", max_speed, min_speed)
             agent_obs_normalizer.register("has_flag", max_bool, min_bool)
             agent_obs_normalizer.register("team_has_flag", max_bool, min_bool)
             agent_obs_normalizer.register("opponent_has_flag", max_bool, min_bool)
             agent_obs_normalizer.register("on_side", max_bool, min_bool)
-            agent_obs_normalizer.register(  "tagging_cooldown", [self.tagging_cooldown], [0.0])
+            agent_obs_normalizer.register("tagging_cooldown", [self.tagging_cooldown], [0.0])
             agent_obs_normalizer.register("is_tagged", max_bool, min_bool)
             agent_obs_normalizer.register("team_score", max_score, min_score)
             agent_obs_normalizer.register("opponent_score", max_score, min_score)
-            agent_obs_normalizer.register("ray_distances", max_dist_lidar)
-            agent_obs_normalizer.register("ray_labels", self.num_lidar_rays * [len(LIDAR_DETECTION_CLASS_MAP) - 1])
+            agent_obs_normalizer.register("ray_distances", max_dist_lidar, min_dist_lidar)
+            agent_obs_normalizer.register("ray_labels", max_lidar_label, min_lidar_label)
         else:
             max_bearing = [180]
             max_dist = [self.env_diag]
@@ -297,9 +299,9 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         ### Global State Normalizer ###
         max_heading = [180]
         max_bearing = [180]
-        pos_x_max = [self.env_size[0] / 2]
-        pos_y_max = [self.env_size[1] / 2]
-        max_dist_scrimmage = [self.env_diag]
+        pos_max = self.env_size + 5*self.agent_radius #add a buffer
+        pos_min = len(self.env_size) * [-5*self.agent_radius] #add a buffer
+        max_dist = [self.env_diag]
         min_dist = [0.0]
         max_bool, min_bool = [1.0], [0.0]
         max_speed, min_speed = [max(self.max_speeds)], [0.0]
@@ -308,31 +310,28 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         for player in self.players.values():
             player_name = f"player_{player.id}"
 
-            global_state_normalizer.register((player_name, "player_pos_x"), pos_x_max)
-            global_state_normalizer.register((player_name, "player_pos_y"), pos_y_max)
-            global_state_normalizer.register((player_name, "player_heading"), max_heading)
-            global_state_normalizer.register((player_name, "player_scrimmage_line_distance"), max_dist_scrimmage, min_dist)
-            global_state_normalizer.register((player_name, "player_scrimmage_line_bearing"), max_bearing)
-            global_state_normalizer.register((player_name, "player_speed"), max_speed, min_speed)
-            global_state_normalizer.register((player_name, "player_is_tagged"), max_bool, min_bool)
-            global_state_normalizer.register((player_name, "player_has_flag"), max_bool, min_bool)
-            global_state_normalizer.register((player_name, "player_tagging_cooldown"), [self.tagging_cooldown], [0.0])
-            global_state_normalizer.register((player_name, "player_on_side"), max_bool, min_bool)
-            global_state_normalizer.register((player_name, "player_oob"), max_bool, min_bool)
+            global_state_normalizer.register((player_name, "pos"), pos_max, pos_min)
+            global_state_normalizer.register((player_name, "heading"), max_heading)
+            global_state_normalizer.register((player_name, "scrimmage_line_distance"), max_dist, min_dist)
+            global_state_normalizer.register((player_name, "scrimmage_line_bearing"), max_bearing)
+            global_state_normalizer.register((player_name, "speed"), max_speed, min_speed)
+            global_state_normalizer.register((player_name, "is_tagged"), max_bool, min_bool)
+            global_state_normalizer.register((player_name, "has_flag"), max_bool, min_bool)
+            global_state_normalizer.register((player_name, "tagging_cooldown"), [self.tagging_cooldown], [0.0])
+            global_state_normalizer.register((player_name, "on_side"), max_bool, min_bool)
+            global_state_normalizer.register((player_name, "oob"), max_bool, min_bool)
 
-        global_state_normalizer.register("blue_flag_home_x", pos_x_max)
-        global_state_normalizer.register("blue_flag_home_y", pos_y_max)
-        global_state_normalizer.register("red_flag_home_x", pos_x_max)
-        global_state_normalizer.register("red_flag_home_y", pos_y_max)
+            for i in range(num_obstacles):
+                global_state_normalizer.register((player_name, f"obstacle_{i}_distance"), max_dist, min_dist)
+                global_state_normalizer.register((player_name, f"obstacle_{i}_bearing"), max_bearing)
 
-        global_state_normalizer.register("blue_flag_pos_x", pos_x_max)
-        global_state_normalizer.register("blue_flag_pos_y", pos_y_max)
-        global_state_normalizer.register("red_flag_pos_x", pos_x_max)
-        global_state_normalizer.register("red_flag_pos_y", pos_y_max)
+        global_state_normalizer.register("blue_flag_home", pos_max, pos_min)
+        global_state_normalizer.register("red_flag_home", pos_max, pos_min)
+        global_state_normalizer.register("blue_flag_pos", pos_max, pos_min)
+        global_state_normalizer.register("red_flag_pos", pos_max, pos_min)
 
         global_state_normalizer.register("blue_flag_pickup", max_bool, min_bool)
         global_state_normalizer.register("red_flag_pickup", max_bool, min_bool)
-
         global_state_normalizer.register("blue_team_score", max_score, min_score)
         global_state_normalizer.register("red_team_score", max_score, min_score)
 
@@ -522,7 +521,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         else:
             return obs
     
-    def state_to_global_obs(self, normalize=True):
+    def state_to_global_state(self, normalize=True):
         """
         Returns a global observation space. These observations are
         based entirely on the center of the environment coordinate frame.
@@ -539,6 +538,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
               - tagging cooldown
               - on side
               - out of bounds
+              - relative distance and bearing to each obstacle
             - Agent 1: same as Agent 0
             - Agent 2: same as Agent 0
             - Repeat through Agent n
@@ -558,47 +558,45 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         Developer Note 1: changes here should be reflected in _register_state_elements.
         Developer Note 2: check that variables used here are available to PyQuaticusMoosBridge in pyquaticus_moos_bridge.py
         """
-
         global_obs_dict = dict()
 
         for i, player in enumerate(self.players.values()):
-            player_name  = f"player_{player.id}"
-            np_pos = np.array(player.pos)
+            player_name = f"player_{player.id}"
+            pos = np.array(player.pos)
 
             scrimmage_line_closest_point = closest_point_on_line(
-                self.scrimmage_coords[0], self.scrimmage_coords[1], np_pos
+                self.scrimmage_coords[0], self.scrimmage_coords[1], pos
             )
-            scrimmage_line_dist, _ = mag_bearing_to(
-                np_pos, scrimmage_line_closest_point, player.heading
+            scrimmage_line_dist, scrimmage_line_bearing = mag_bearing_to(
+                pos, scrimmage_line_closest_point, player.heading
             )
 
-            _,scrimmage_line_bearing = vec_to_mag_heading(self.scrimmage_vec)
-            player_scrimmage_line_bearing = player.heading - scrimmage_line_bearing
+            global_obs_dict[(player_name, "pos")] = pos
+            global_obs_dict[(player_name, "heading")] = player.heading
+            global_obs_dict[(player_name, "scrimmage_line_distance")] = scrimmage_line_dist
+            global_obs_dict[(player_name, "scrimmage_line_bearing")] = scrimmage_line_bearing
+            global_obs_dict[(player_name, "speed")] = player.speed
+            global_obs_dict[(player_name, "is_tagged")] = player.is_tagged
+            global_obs_dict[(player_name, "has_flag")] = player.has_flag
+            global_obs_dict[(player_name, "tagging_cooldown")] = player.tagging_cooldown
+            global_obs_dict[(player_name, "on_side")] = player.on_own_side
+            global_obs_dict[(player_name, "oob")] = self.state["agent_oob"][i]
 
-            global_obs_dict[(player_name, "player_pos_x")] = np_pos[0]-self.env_size[0]/2
-            global_obs_dict[(player_name, "player_pos_y")] = np_pos[1]-self.env_size[1]/2
-            global_obs_dict[(player_name, "player_heading")] = player.heading
-            global_obs_dict[(player_name, "player_scrimmage_line_distance")] = scrimmage_line_dist
-            global_obs_dict[(player_name, "player_scrimmage_line_bearing")] = player_scrimmage_line_bearing
-            global_obs_dict[(player_name, "player_speed")] = player.speed
-            global_obs_dict[(player_name, "player_is_tagged")] = player.is_tagged
-            global_obs_dict[(player_name, "player_has_flag")] = player.has_flag
-            global_obs_dict[(player_name, "player_tagging_cooldown")] = player.tagging_cooldown
-            global_obs_dict[(player_name, "player_on_side")] = player.on_own_side
-            global_obs_dict[(player_name, "player_oob")] = self.state["agent_oob"][i]
+            # Obstacle Distance/Bearing
+            for i, obstacle in enumerate(
+                self.state["dist_bearing_to_obstacles"][player.id]
+            ):
+                global_obs_dict[(player_name, f"obstacle_{i}_distance")] = obstacle[0]
+                global_obs_dict[(player_name, f"obstacle_{i}_bearing")] = obstacle[1]
 
-        global_obs_dict["blue_flag_home_x"] = self.flags[0].home[0] - self.env_size[0]/2
-        global_obs_dict["blue_flag_home_y"] = self.flags[0].home[1] - self.env_size[1]/2
-        global_obs_dict["red_flag_home_x"] = self.flags[1].home[0] - self.env_size[0]/2
-        global_obs_dict["red_flag_home_y"] = self.flags[1].home[1] - self.env_size[1]/2
-        global_obs_dict["blue_flag_pos_x"] = self.flags[0].pos[0] - self.env_size[0]/2
-        global_obs_dict["blue_flag_pos_y"] = self.flags[0].pos[1] - self.env_size[1]/2
-        global_obs_dict["red_flag_pos_x"] = self.flags[1].pos[0] - self.env_size[0]/2
-        global_obs_dict["red_flag_pos_y"] = self.flags[1].pos[1] - self.env_size[1]/2
-        global_obs_dict["blue_flag_pickup"] = self.state["flag_taken"][0]
-        global_obs_dict["red_flag_pickup"] = self.state["flag_taken"][1]
-        global_obs_dict["blue_team_score"] = self.state["captures"][0]
-        global_obs_dict["red_team_score"] = self.state["captures"][1]
+        global_obs_dict["blue_flag_home"] = np.array(self.flags[int(Team.BLUE_TEAM)].home)
+        global_obs_dict["red_flag_home"] = np.array(self.flags[int(Team.RED_TEAM)].home)
+        global_obs_dict["blue_flag_pos"] = np.array(self.flags[int(Team.BLUE_TEAM)].pos)
+        global_obs_dict["red_flag_pos"] = np.array(self.flags[int(Team.RED_TEAM)].pos)
+        global_obs_dict["blue_flag_pickup"] = np.array(self.state["flag_taken"][int(Team.BLUE_TEAM)])
+        global_obs_dict["red_flag_pickup"] = np.array(self.state["flag_taken"][int(Team.RED_TEAM)])
+        global_obs_dict["blue_team_score"] = np.array(self.state["captures"][int(Team.BLUE_TEAM)])
+        global_obs_dict["red_team_score"] = np.array(self.state["captures"][int(Team.RED_TEAM)])
 
         if normalize:
             global_obs_array = self.global_state_normalizer.normalized(
@@ -914,11 +912,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # agent and flag capture checks and more
         #TODO: re-profile how fast the new vectorized and unvectorized functions run to adjust switchoff point
-        self._check_oob_vectorized() if self.team_size >= 40 else self._check_oob()
-        self._check_flag_pickups_vectorized() if self.team_size >= 40 else self._check_flag_pickups()
-        self._check_agent_made_tag_vectorized() if self.team_size >= 10 else self._check_agent_made_tag()
+        self._check_oob_vectorized()
+        self._check_flag_pickups_vectorized() if self.team_size >= 7 else self._check_flag_pickups()
+        self._check_agent_made_tag_vectorized() if self.team_size >= 14 else self._check_agent_made_tag()
         self._check_flag_captures()
-        self._check_untag_vectorized() if self.team_size >= 10 else self._check_untag()
+        self._check_untag_vectorized() if self.team_size >= 5 else self._check_untag()
         self._set_dones()
         self._get_dist_bearing_to_obstacles()
 
@@ -967,7 +965,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Info
         self.state["global_state_hist_buffer"][1:] = self.state["global_state_hist_buffer"][:-1]
-        self.state["global_state_hist_buffer"][0] = self.state_to_global_obs(self.normalize)
+        self.state["global_state_hist_buffer"][0] = self.state_to_global_state(self.normalize)
 
         if self.hist_len > 1:
             info = {"global_state": self.state["global_state_hist_buffer"][self.hist_buffer_inds]}
@@ -2157,11 +2155,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                                be used to generate unspecified information, or as an array, which must be be of length self.num_agents
                                and the indices of the entries must match the indices of the corresponding agents' ids in self.agents
 
-                     **Note 2: 'agent_pos_unit' should be either "wm_xy" (web mercator xy) or "ll" (lat-lon) when self.gps_env is
-                               True, and should not be specified for default (non-gps) environment. If not specified, 'agent_position'
-                               will be assumed to be relative to the environment origin (bottom left) and in the default environment 
-                               units (these can be found by checking self.env_bounds_unit after initializing the environment)
-                    
+                     **Note 2: 'agent_pos_unit' can be either "m" (meters relative to origin), "wm_xy" (web mercator xy),
+                               or "ll" (lat-lon) when self.gps_env is True, and can only be "m" (meters relative to origin)
+                               for default (non-gps) environment. If not specified, 'agent_position' will be assumed to be
+                               relative to the environment origin (bottom left) and in the default environment units
+                               (these can be found by checking self.env_bounds_unit after initializing the environment)
+
                     ***Note 3: These variables can either be specified as a dict with teams (from the Team class in structs.py) as keys,
                                in which case it is not required to specify variable-specific information for each team and variables will
                                be set to 0 for unspecified teams, or as an array, which must be of length self.agents_of_team and the indides
@@ -2281,7 +2280,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.state["obs_hist_buffer"][agent_id] = np.array(self.hist_buffer_len * [reset_obs[agent_id]])
 
             # global state history
-            reset_global_state = self.state_to_global_obs(self.normalize)
+            reset_global_state = self.state_to_global_state(self.normalize)
             self.state["global_state_hist_buffer"] = np.array(self.hist_buffer_len * [reset_global_state])
 
         self.message = ""
@@ -2332,11 +2331,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                            be used to generate unspecified information, or as an array, which must be be of length self.num_agents
                            and the indices of the entries must match the indices of the corresponding agents' ids in self.agents
 
-                 **Note 2: 'agent_pos_unit' should be either "wm_xy" (web mercator xy) or "ll" (lat-lon) when self.gps_env is
-                           True, and should not be specified for default (non-gps) environment. If not specified, 'agent_position'
-                           will be assumed to be relative to the environment origin (bottom left) and in the default environment 
-                           units (these can be found by checking self.env_bounds_unit after initializing the environment)
-                
+                 **Note 2: 'agent_pos_unit' can be either "m" (meters relative to origin), "wm_xy" (web mercator xy),
+                           or "ll" (lat-lon) when self.gps_env is True, and can only be "m" (meters relative to origin)
+                           for default (non-gps) environment. If not specified, 'agent_position' will be assumed to be
+                           relative to the environment origin (bottom left) and in the default environment units
+                           (these can be found by checking self.env_bounds_unit after initializing the environment)
+
                 ***Note 3: These variables can either be specified as a dict with teams (from the Team class in structs.py) as keys,
                            in which case it is not required to specify variable-specific information for each team and variables will
                            be set to 0 for unspecified teams, or as an array, which must be of length self.agents_of_team and the indides
@@ -2372,11 +2372,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         ## setup agent pos unit ##
         if "agent_position" in init_dict:
             agent_pos_unit = init_dict.get('agent_pos_unit', None)
-            if agent_pos_unit is not None:
+            if agent_pos_unit is None:   
+                agent_pos_unit = self.env_bounds_unit
+            else:
                 if self.gps_env:
-                    if not (agent_pos_unit == "ll" or agent_pos_unit == "wm_xy"):
+                    if not (agent_pos_unit == "ll" or agent_pos_unit == "wm_xy" or agent_pos_unit == "m"):
                         raise Exception(
-                            "Agent poses must be specified in absolute coordinates ('ll' or 'wm_xy') when self.gps_env is True"
+                            f"Unrecognized agent_pos_unit: '{agent_pos_unit}'. Choose from 'll', 'wm_xy', or 'm' when self.gps_env is True"
                         )
                 else:
                     if agent_pos_unit != "m":
@@ -2405,13 +2407,18 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                             if val == None:
                                 continue
 
+                        val = copy.deepcopy(val)
+
                         # position
                         if state_var == "agent_position":
-                            if agent_pos_unit == "ll":
-                                val = mt.xy(val[1], val[0])
-                                val = wrap_mercator_x_dist(val - self.env_bounds[0])
-                            elif agent_pos_unit == "wm_xy":
-                                val = wrap_mercator_x_dist(val - self.env_bounds[0])
+                            if self.gps_env:
+                                if agent_pos_unit == "ll":
+                                    val = np.asarray(mt.xy(val[1], val[0]))
+                                    val = wrap_mercator_x_dist(val - self.env_bounds[0])
+                                elif agent_pos_unit == "wm_xy":
+                                    val = wrap_mercator_x_dist(val - self.env_bounds[0])
+                                else:
+                                    val = np.asarray(val) / self.meters_per_mercator_xy
                             agent_pos_dict[agent_id] = val
                         # speed
                         elif state_var == "agent_speed":
@@ -3987,7 +3994,7 @@ when gps environment bounds are specified in meters"
         self.screen.blit(self.pygame_background_img, (0, 0))
 
         # Flags
-        for team in Team:
+        for team in self.agents_of_team:
             team_idx = int(team)
             flag = self.flags[team_idx]
             color = "blue" if team == Team.BLUE_TEAM else "red"
