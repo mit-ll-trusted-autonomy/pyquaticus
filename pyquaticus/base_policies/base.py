@@ -57,11 +57,12 @@ class BaseAgentPolicy:
             self.teammate_ids = [i for i in range(agents_per_team) if i != self.id]
             self.opponent_ids = [i for i in range(agents_per_team, 2 * agents_per_team)]
         else:
-            self.teammate_ids = [i for i in range(agents_per_team, 2 * agents_per_team) if i != self.id]
+            self.teammate_ids = [
+                i for i in range(agents_per_team, 2 * agents_per_team) if i != self.id
+            ]
             self.opponent_ids = [i for i in range(agents_per_team)]
 
         self.max_speed = env.players[self.id].get_max_speed()
-
 
         self.speed = 0.0
         self.has_flag = False
@@ -115,31 +116,18 @@ class BaseAgentPolicy:
         # Copy this agents state from the observation
         id = self.id
         self.pos = np.asarray(
-            (
-                global_state[(f"player_{id}", "player_pos_x")],
-                global_state[(f"player_{id}", "player_pos_y")],
-            )
+            global_state[(f"player_{id}", "pos")],
         )
-        self.heading = global_state[(f"player_{id}", "player_heading")]
-        self.speed = global_state[(f"player_{id}", "player_speed")]
-        self.on_sides = global_state[(f"player_{id}", "player_on_side")]
-        self.has_flag = global_state[(f"player_{id}", "player_has_flag")]
-        self.tagging_cooldown = global_state[
-            (f"player_{id}", "player_tagging_cooldown")
-        ]
-        self.is_tagged = global_state[(f"player_{id}", "player_is_tagged")]
+        self.heading = global_state[(f"player_{id}", "heading")]
+        self.speed = global_state[(f"player_{id}", "speed")]
+        self.on_sides = global_state[(f"player_{id}", "on_side")]
+        self.has_flag = global_state[(f"player_{id}", "has_flag")]
+        self.tagging_cooldown = global_state[(f"player_{id}", "tagging_cooldown")]
+        self.is_tagged = global_state[(f"player_{id}", "is_tagged")]
 
         # Calculate the rectangular coordinates for the flags location relative to the agent.
         if self.team == Team.BLUE_TEAM:
-            self.my_flag_loc = (
-                np.asarray(
-                    (
-                        global_state["blue_flag_home_x"],
-                        global_state["blue_flag_home_y"],
-                    )
-                )
-                - self.pos
-            )
+            self.my_flag_loc = np.asarray(global_state["blue_flag_home"]) - self.pos
             self.my_flag_distance = np.linalg.norm(self.my_flag_loc)
             self.my_flag_bearing = (
                 self.angle180(
@@ -148,15 +136,7 @@ class BaseAgentPolicy:
                 - self.heading
             )  # relative bearing
             self.own_home_bearing = self.my_flag_bearing
-            self.opp_flag_loc = (
-                np.asarray(
-                    (
-                        global_state["red_flag_home_x"],
-                        global_state["red_flag_home_y"],
-                    )
-                )
-                - self.pos
-            )
+            self.opp_flag_loc = np.asarray(global_state["red_flag_home"]) - self.pos
             self.opp_flag_distance = np.linalg.norm(self.opp_flag_loc)
             self.opp_flag_bearing = (
                 self.angle180(
@@ -165,15 +145,7 @@ class BaseAgentPolicy:
                 - self.heading
             )  # relative bearing
         else:
-            self.my_flag_loc = (
-                np.asarray(
-                    (
-                        global_state["red_flag_home_x"],
-                        global_state["red_flag_home_y"],
-                    )
-                )
-                - self.pos
-            )
+            self.my_flag_loc = np.asarray(global_state["red_flag_home"]) - self.pos
             self.my_flag_distance = np.linalg.norm(self.my_flag_loc)
             self.my_flag_bearing = (
                 self.angle180(
@@ -182,15 +154,7 @@ class BaseAgentPolicy:
                 - self.heading
             )  # relative bearing
             self.own_home_bearing = self.my_flag_bearing
-            self.opp_flag_loc = (
-                np.asarray(
-                    (
-                        global_state["blue_flag_home_x"],
-                        global_state["blue_flag_home_y"],
-                    )
-                )
-                - self.pos
-            )
+            self.opp_flag_loc = np.asarray(global_state["blue_flag_home"]) - self.pos
             self.opp_flag_distance = np.linalg.norm(self.opp_flag_loc)
             self.opp_flag_bearing = (
                 self.angle180(
@@ -207,12 +171,7 @@ class BaseAgentPolicy:
             if type(k) is tuple:
                 if "player_" in k[0]:
                     if int(k[0].replace("player_", "")) in self.opponent_ids:
-                        rect_pos = np.asarray(
-                            (
-                                global_state[(k[0], "player_pos_x")],
-                                global_state[(k[0], "player_pos_y")],
-                            )
-                        )
+                        rect_pos = np.asarray(global_state[(k[0], "pos")])
                         polar_pos = np.asarray(
                             (
                                 np.linalg.norm(rect_pos - self.pos),
@@ -226,27 +185,19 @@ class BaseAgentPolicy:
                         self.opp_team_pos.append(polar_pos)
                         self.opp_team_pos_dict[k[0]] = polar_pos
                         self.opp_team_has_flag = (
-                            self.opp_team_has_flag
-                            or global_state[(k[0], "player_has_flag")]
+                            self.opp_team_has_flag or global_state[(k[0], "has_flag")]
                         )
 
                         # update own flag position if flag has been picked up
-                        if global_state[(k[0], "player_has_flag")]:
+                        if global_state[(k[0], "has_flag")]:
                             self.my_flag_distance = polar_pos[0]
                             self.my_flag_bearing = polar_pos[1]
                             self.my_flag_loc = rect_pos - self.pos
 
-                        self.opp_team_tag.append(
-                            global_state[(k[0], "player_is_tagged")]
-                        )
+                        self.opp_team_tag.append(global_state[(k[0], "is_tagged")])
 
                     elif int(k[0].replace("player_", "")) in self.teammate_ids:
-                        rect_pos = np.asarray(
-                            (
-                                global_state[(k[0], "player_pos_x")],
-                                global_state[(k[0], "player_pos_y")],
-                            )
-                        )
+                        rect_pos = np.asarray(global_state[(k[0], "pos")])
                         polar_pos = np.asarray(
                             (
                                 np.linalg.norm(rect_pos - self.pos),
@@ -259,17 +210,14 @@ class BaseAgentPolicy:
                         self.my_team_rect_pos.append(rect_pos)
                         self.my_team_pos.append(polar_pos)
                         self.my_team_has_flag = (
-                            self.my_team_has_flag
-                            or global_state[(k[0], "player_has_flag")]
+                            self.my_team_has_flag or global_state[(k[0], "has_flag")]
                         )
                         # update opponent flag position if flag has been picked up by teammate
-                        if global_state[(k[0], "player_has_flag")]:
+                        if global_state[(k[0], "has_flag")]:
                             self.opp_flag_distance = polar_pos[0]
                             self.opp_flag_bearing = polar_pos[1]
                             self.opp_flag_loc = rect_pos - self.pos
-                        self.my_team_tag.append(
-                            global_state[(k[0], "player_is_tagged")]
-                        )
+                        self.my_team_tag.append(global_state[(k[0], "is_tagged")])
 
             # update opponent flag position if flag has been picked up by agent
             if self.has_flag:
