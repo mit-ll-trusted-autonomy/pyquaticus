@@ -6,7 +6,7 @@ from pyquaticus import pyquaticus_v0
 from pyquaticus.base_policies.base_attack import BaseAttacker
 from pyquaticus.base_policies.base_defend import BaseDefender
 from pyquaticus.base_policies.base_combined import Heuristic_CTF_Agent
-from pyquaticus.base_policies.wp_follower import WaypointFollower
+from pyquaticus.base_policies.waypoint_policy import WaypointPolicy
 from pyquaticus.envs.pyquaticus import Team
 from collections import OrderedDict
 from pyquaticus.config import config_dict_std, ACTION_MAP
@@ -71,7 +71,7 @@ blue_one = Heuristic_CTF_Agent(
     env,
     mode="nothing",
 )
-blue_two = WaypointFollower(
+blue_two = WaypointPolicy(
     1,
     Team.BLUE_TEAM,
     env,

@@ -26,6 +26,7 @@ from pyquaticus.envs.pyquaticus import Team
 from pyquaticus.envs.pyquaticus import PyQuaticusEnv
 from pyquaticus.base_policies.rrt.utils import Point
 from pyquaticus.base_policies.rrt.rrt_star import rrt_star
+from pyquaticus.structs import PolygonObstacle
 
 
 from typing import Union, Optional
@@ -35,7 +36,7 @@ from multiprocessing.pool import ThreadPool
 
 from functools import partial
 
-class WaypointFollower(BaseAgentPolicy):
+class WaypointPolicy(BaseAgentPolicy):
     """This is a Policy class that contains logic for capturing the flag."""
 
     def __init__(
@@ -65,8 +66,20 @@ class WaypointFollower(BaseAgentPolicy):
 
         self.plan_process = Pool(processes=1)
 
+        self.obstacles = self.get_env_geom(env)
+
         if team not in Team:
             raise AttributeError(f"Invalid team {team}")
+        
+    def get_env_geom(self, env: PyQuaticusEnv) -> Optional[list[np.ndarray]]:
+        obstacles = []
+        for obstacle in env.obstacles:
+            assert isinstance(obstacle, PolygonObstacle)
+            poly = np.array(obstacle.anchor_points).reshape(-1, 2)
+            obstacles.append(poly)
+        if len(obstacles) == 0:
+            return None
+        return obstacles
 
     def compute_action(self, obs, info):
         """
@@ -144,7 +157,9 @@ class WaypointFollower(BaseAgentPolicy):
         """
         Asynchronously run RRT* from the agent's current position, and update the waypoints if a valid path to the goal was found
         """
-
+        if obstacles is None:
+            obstacles = self.obstacles
+            
         kwargs=dict(start=self.pos, obstacles=obstacles, area=area, max_step_size=max_step_size, num_iters=num_iters, agent_radius=1.5 * self.agent_radius)
 
         assert isinstance(self.plan_process, ThreadPool)

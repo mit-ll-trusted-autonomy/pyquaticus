@@ -6,7 +6,7 @@ from pyquaticus import pyquaticus_v0
 from pyquaticus.base_policies.base_attack import BaseAttacker
 from pyquaticus.base_policies.base_defend import BaseDefender
 from pyquaticus.base_policies.base_combined import Heuristic_CTF_Agent
-from pyquaticus.base_policies.wp_follower import WaypointFollower
+from pyquaticus.base_policies.waypoint_policy import WaypointPolicy
 from pyquaticus.envs.pyquaticus import Team
 from collections import OrderedDict
 from pyquaticus.config import config_dict_std, ACTION_MAP
@@ -60,7 +60,7 @@ H_two = BaseDefender(
     continuous=continuous,
 )
 
-R_one = WaypointFollower(
+R_one = WaypointPolicy(
     0,
     Team.BLUE_TEAM,
     env,
@@ -92,13 +92,11 @@ obstacles = [
     )
 ]
 
-print(env.flag_homes[Team.RED_TEAM])
 R_one.plan(
-    env.flag_homes[Team.RED_TEAM] - [80, 40], obstacles, np.array([[-80.0, -40.0], [80.0, 40.0]]), 5, 2000
+    env.flag_homes[Team.RED_TEAM] - [80, 40], None, np.array([[-80.0, -40.0], [80.0, 40.0]]), 5, 2000
 )
 
 while True:
-    # print(global_state)
 
     two = H_one.compute_action(obs, info)
     three = H_two.compute_action(obs, info)
