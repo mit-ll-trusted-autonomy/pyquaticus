@@ -38,7 +38,6 @@ class BaseDefender(BaseAgentPolicy):
         team: Team,
         env: PyQuaticusEnv,
         mode: str = "easy",
-        continuous: bool = False,
         flag_keepout: float = 10.0,
         catch_radius: float = config_dict_std["catch_radius"],
         using_pyquaticus: bool = True,
@@ -49,7 +48,7 @@ class BaseDefender(BaseAgentPolicy):
             raise ValueError(f"mode {mode} not in set of valid modes {modes}")
         self.mode = mode
 
-        self.continuous = continuous
+        self.continuous = env.action_type = "continuous"
         self.flag_keepout = flag_keepout
         self.catch_radius = catch_radius
         self.using_pyquaticus = using_pyquaticus

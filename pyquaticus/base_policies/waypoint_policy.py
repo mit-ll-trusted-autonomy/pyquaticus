@@ -62,7 +62,7 @@ class WaypointPolicy(BaseAgentPolicy):
 
         self.wps = wps
 
-        self.continuous = continuous
+        self.continuous = env.action_type == "continuous"
 
         self.plan_process = Pool(processes=1)
 

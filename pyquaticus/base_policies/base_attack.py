@@ -45,7 +45,6 @@ class BaseAttacker(BaseAgentPolicy):
         team: Team,
         env: PyQuaticusEnv,
         mode: str = "easy",
-        continuous: bool = False,
         using_pyquaticus: bool = True,
     ):
         super().__init__(agent_id, team, env)
@@ -56,7 +55,7 @@ class BaseAttacker(BaseAgentPolicy):
         if team not in Team:
             raise AttributeError(f"Invalid team {team}")
 
-        self.continuous = continuous
+        self.continuous = env.action_type == "continuous"
 
         self.using_pyquaticus = using_pyquaticus
         self.competition_easy = [15, 6, 50, 35]

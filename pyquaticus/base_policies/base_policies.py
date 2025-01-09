@@ -102,7 +102,7 @@ def AttackGen(agentid, team, env, mode, continuous, team_size):
 
         def __init__(self, observation_space, action_space, config):
             Policy.__init__(self, observation_space, action_space, config)
-            self.policy = BaseAttacker(agentid, team, env, mode=mode, continuous=continuous)
+            self.policy = BaseAttacker(agentid, team, env, mode=mode)
             self.action_dict = {}
 
         def compute_actions(self,
@@ -145,7 +145,7 @@ def DefendGen(agentid, team, env, mode, continuous, team_size):
 
         def __init__(self, observation_space, action_space, config):
             Policy.__init__(self, observation_space, action_space, config)
-            self.policy = BaseDefender(agentid, team, env, mode=mode, continuous=continuous)
+            self.policy = BaseDefender(agentid, team, env, mode=mode)
             self.action_dict = {}
 
         def compute_actions(self,
@@ -187,7 +187,7 @@ def CombinedGen(agentid, team, env, mode, continuous, team_size):
 
         def __init__(self, observation_space, action_space, config):
             Policy.__init__(self, observation_space, action_space, config)
-            self.policy = Heuristic_CTF_Agent(agentid, team, env, mode=mode, continuous=continuous)
+            self.policy = Heuristic_CTF_Agent(agentid, team, env, mode=mode)
             self.action_dict = {}
 
         def compute_actions(self,

@@ -50,21 +50,18 @@ H_one = BaseAttacker(
     Team.RED_TEAM,
     env,
     mode="easy",
-    continuous=continuous,
 )
 H_two = BaseDefender(
     3,
     Team.RED_TEAM,
     env,
     mode="easy",
-    continuous=continuous,
 )
 
 R_one = WaypointPolicy(
     0,
     Team.BLUE_TEAM,
     env,
-    continuous=continuous,
     capture_radius=5,
     slip_radius=10,
     avoid_radius=4,
@@ -74,7 +71,6 @@ R_two = BaseAttacker(
     Team.BLUE_TEAM,
     env,
     mode="nothing",
-    continuous=continuous,
 )
 
 R_one.update_state(obs, info)
