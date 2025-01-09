@@ -15,7 +15,7 @@ for i in range(100):
     squares.append(np.array(((center - (15, 0)), (center + (0, 15)), (center + (15, 0)), (center - (0, 15)))))
 
 
-tree = rrt_star(start, triangles + squares, np.array(((0, 0), (1000, 1000))), agent_radius=2, max_step_size=20, num_iters=5000)
+tree = rrt_star(start, np.array((900, 900)), triangles + squares, np.array(((0, 0), (1000, 1000))), agent_radius=2, max_step_size=20, num_iters=1000)
 
 fig, ax = draw_result(tree, triangles + squares)
 plt.show()

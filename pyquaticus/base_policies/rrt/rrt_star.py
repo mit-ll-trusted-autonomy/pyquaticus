@@ -4,12 +4,15 @@ from pyquaticus.base_policies.rrt.utils import *
 
 def rrt_star(
     start: np.ndarray,
+    goal: Optional[np.ndarray],
     obstacles: Optional[list[np.ndarray]],
     area: np.ndarray,
     agent_radius: float = 1e-9,
     max_step_size: float = 2,
     num_iters: int = 1000,
 ) -> list[Point]:
+    
+    np.seterr(all="ignore")
 
     points = [Point(start, 0, None)]
 
@@ -23,7 +26,7 @@ def rrt_star(
     for _ in range(num_iters):
 
         new_point, nearest = get_random_point(
-            area, grouped_seglist, ungrouped_seglist, points, max_step_size, agent_radius
+            area, grouped_seglist, ungrouped_seglist, points, max_step_size, agent_radius, goal
         )
 
         new_point.parent = nearest

@@ -97,6 +97,7 @@ def get_random_point(
     points: list[Point],
     max_step_size: float,
     agent_radius: float,
+    goal: Optional[np.ndarray],
 ) -> tuple[Point, Point]:
     """
     Gets a random point (and its nearest neighbor) that is not in any of the obstacles.
@@ -108,14 +109,20 @@ def get_random_point(
     Returns:
         Point: point not in obstacles
     """
-    if grouped_seglist is None:
+
+    # 5% chance to sample goal point, if it exists
+    if (np.random.uniform(0, 1) < 0.05) and goal is not None:
+        rand_point = Point(goal)
+    else:
         rand_point = Point(np.random.uniform(area[0], area[1], (2)))
+
+
+    if grouped_seglist is None:
         nearest = get_nearest(rand_point, points, ungrouped_seglist, agent_radius)
         assert nearest is not None
         new_point = bound(rand_point, nearest, max_step_size)
         return new_point, nearest
 
-    rand_point = Point(np.random.uniform(area[0], area[1], (2)))
     nearest = get_nearest(rand_point, points, ungrouped_seglist, agent_radius)
     while nearest is None:
         rand_point = Point(np.random.uniform(area[0], area[1], (2)))
@@ -303,3 +310,72 @@ def intersect(seg: np.ndarray, seglist: Optional[np.ndarray], radius: float = 1e
     )
 
     return np.any(intersect, axis=1)
+
+def intersect_new(seg: np.ndarray, seglist: Optional[np.ndarray], radius: float = 1e-9):
+    """
+    Determines if a segment intersects any of the segments in an array of segments
+
+    Note: if segments are parallel, this function will not detect an intersection
+
+    Args:
+        seg (np.ndarray): ((x1, y1), (x2, y2))
+        seglist (np.ndarray): (((x1, y1), (x2, y2)), ((x1, y1), (x2, y2)), ... )
+
+    Returns:
+        bool: True if the segment intersects any of the segments in the array
+    """
+    if seglist is None:
+        return np.full((seg.shape[0]), False)
+    
+    pts = seglist[:, 0, :]
+
+    past1 = (np.matmul(pts - seg[:, 1, :].reshape((-1, 1, 2)), (seg[:, 1, :] - seg[:, 0, :]).reshape((-1, 2, 1))) > 0).reshape((seg.shape[0], pts.shape[0]))
+    past0 = (np.matmul(pts - seg[:, 0, :].reshape((-1, 1, 2)), (seg[:, 1, :] - seg[:, 0, :]).reshape((-1, 2, 1))) < 0).reshape((seg.shape[0], pts.shape[0]))
+    between = np.logical_and(np.logical_not(past1), np.logical_not(past0))
+
+    num = np.abs(np.cross((pts - seg[:, 0, :].reshape((-1, 1, 2))).transpose((0, 2, 1)).ravel(order="F").reshape((-1, 2, seg.shape[0])).transpose((0, 2, 1)), seg[:, 1, :] - seg[:, 0, :]))
+    denom = np.linalg.norm(seg[:, 1, :] - seg[:, 0, :], axis=1)
+
+    dist0 = np.linalg.norm(pts - seg[:, 0, :].reshape((-1, 1, 2)), axis=2)
+    dist1 = np.linalg.norm(pts - seg[:, 1, :].reshape((-1, 1, 2)), axis=2)
+    distline = (num / denom).transpose((1, 0))
+
+    distfinal = past1 * dist1 + past0 * dist0 + between * distline
+
+    seglist = seglist.reshape((-1, 2, 2))
+    seg = seg.reshape((-1, 2, 2))
+
+    x1, y1, x2, y2 = (
+        seg[:, 0, 0].reshape((-1, 1)),
+        seg[:, 0, 1].reshape((-1, 1)),
+        seg[:, 1, 0].reshape((-1, 1)),
+        seg[:, 1, 1].reshape((-1, 1)),
+    )
+    x3, y3, x4, y4 = (
+        seglist[:, 0, 0],
+        seglist[:, 0, 1],
+        seglist[:, 1, 0],
+        seglist[:, 1, 1],
+    )
+
+    denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+    intersect_x = (
+        (x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)
+    ) / denom
+    intersect_y = (
+        (x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)
+    ) / denom
+
+    intersect = (
+        (denom != 0)
+        & (intersect_x >= np.minimum(x1, x2) - radius)
+        & (intersect_x <= np.maximum(x1, x2) + radius)
+        & (intersect_y >= np.minimum(y1, y2) - radius)
+        & (intersect_y <= np.maximum(y1, y2) + radius)
+        & (intersect_x >= np.minimum(x3, x4) - radius)
+        & (intersect_x <= np.maximum(x3, x4) + radius)
+        & (intersect_y >= np.minimum(y3, y4) - radius)
+        & (intersect_y <= np.maximum(y3, y4) + radius)
+    )
+
+    return np.logical_or(np.any(intersect, axis=1), np.any(distfinal < radius, axis=1))

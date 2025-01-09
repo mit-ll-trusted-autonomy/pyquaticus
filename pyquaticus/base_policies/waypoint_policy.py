@@ -24,7 +24,7 @@ import numpy as np
 from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import Team
 from pyquaticus.envs.pyquaticus import PyQuaticusEnv
-from pyquaticus.base_policies.rrt.utils import Point
+from pyquaticus.base_policies.rrt.utils import Point, draw_result
 from pyquaticus.base_policies.rrt.rrt_star import rrt_star
 from pyquaticus.structs import PolygonObstacle
 
@@ -47,7 +47,7 @@ class WaypointPolicy(BaseAgentPolicy):
         continuous: bool = False,
         capture_radius: float = 1,
         slip_radius: Optional[float] = None,
-        agent_radius: float = 2,
+        avoid_radius: float = 2,
         wps: list[np.ndarray] = [],
     ):
         super().__init__(agent_id, team, env)
@@ -58,7 +58,7 @@ class WaypointPolicy(BaseAgentPolicy):
 
         self.cur_dist = None
 
-        self.agent_radius = agent_radius
+        self.avoid_radius = avoid_radius
 
         self.wps = wps
 
@@ -67,6 +67,8 @@ class WaypointPolicy(BaseAgentPolicy):
         self.plan_process = Pool(processes=1)
 
         self.obstacles = self.get_env_geom(env)
+
+        self.tree = None
 
         if team not in Team:
             raise AttributeError(f"Invalid team {team}")
@@ -79,6 +81,9 @@ class WaypointPolicy(BaseAgentPolicy):
             obstacles.append(poly)
         if len(obstacles) == 0:
             return None
+
+        self.env_bounds = np.array(((0, 0), env.env_size))
+
         return obstacles
 
     def compute_action(self, obs, info):
@@ -153,14 +158,20 @@ class WaypointPolicy(BaseAgentPolicy):
     def set_wps(self, wps: list[np.ndarray]):
         self.wps = wps
 
-    def plan(self, wp: np.ndarray, obstacles: Union[list[np.ndarray], None], area: np.ndarray, max_step_size: float = 2, num_iters: int = 1000):
+    def plan(self, wp: np.ndarray, obstacles: Optional[list[np.ndarray]] = None, area: Optional[np.ndarray] = None, max_step_size: Optional[float] = None, num_iters: int = 1000):
         """
         Asynchronously run RRT* from the agent's current position, and update the waypoints if a valid path to the goal was found
         """
         if obstacles is None:
             obstacles = self.obstacles
+
+        if area is None:
+            area = self.env_bounds
+
+        if max_step_size is None:
+            max_step_size = np.max(self.env_bounds[1] - self.env_bounds[0]) / 10
             
-        kwargs=dict(start=self.pos, obstacles=obstacles, area=area, max_step_size=max_step_size, num_iters=num_iters, agent_radius=1.5 * self.agent_radius)
+        kwargs=dict(start=self.pos, goal=wp, obstacles=obstacles, area=area, max_step_size=max_step_size, num_iters=num_iters, agent_radius=self.avoid_radius)
 
         assert isinstance(self.plan_process, ThreadPool)
         
@@ -176,17 +187,22 @@ class WaypointPolicy(BaseAgentPolicy):
 
         # Find all points that satisfy the goal
         for point in tree:
+            #if np.linalg.norm(point.pos - wp) <= self.capture_radius:
             if np.linalg.norm(point.pos - wp) <= self.capture_radius:
                 possible_points.append(point)
 
         if len(possible_points) == 0:
+            print("No path found.")
+            self.tree = tree
             return
         
         # Find the satisfying point with the minimum cost
-        min_cost = possible_points[0].cost
         min_point = possible_points[0]
+        assert isinstance(min_point, Point)
+        min_cost = possible_points[0].cost
 
         for point in possible_points:
+            assert isinstance(point, Point)
             if point.cost < min_cost:
                 min_cost = point.cost
                 min_point = point
@@ -197,5 +213,7 @@ class WaypointPolicy(BaseAgentPolicy):
         while min_point.parent is not None:
             wps.insert(0, min_point.parent.pos)
             min_point = min_point.parent
+
+        self.tree = tree
 
         self.wps = wps

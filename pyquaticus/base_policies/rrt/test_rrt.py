@@ -12,7 +12,7 @@ obstacles = [np.array(
 
 area = np.array(((-2, -2), (11, 11)))
 
-tree = rrt_star(start, obstacles, area, 2, 5, 1000)
+tree = rrt_star(start, np.array((10, 10)), obstacles, area, 2, 5, 1000)
 
 fig, ax = draw_result(tree, obstacles)
 ax.plot((2, 2, 9, 9, 2), (2, 9, 9, 2, 2), "r")

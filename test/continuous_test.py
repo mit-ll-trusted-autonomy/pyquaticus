@@ -67,6 +67,7 @@ R_one = WaypointPolicy(
     continuous=continuous,
     capture_radius=5,
     slip_radius=10,
+    avoid_radius=4,
 )
 R_two = BaseAttacker(
     1,
@@ -77,23 +78,9 @@ R_two = BaseAttacker(
 )
 
 R_one.update_state(obs, info)
-obstacles = [
-    np.array(
-        (
-            (20, 15),
-            (50, -5),
-            (45, -15),
-            (25, -5),
-            (20, -15),
-            (25, -25),
-            (20, -35),
-            (10, -15),
-        )
-    )
-]
 
 R_one.plan(
-    env.flag_homes[Team.RED_TEAM] - [80, 40], None, np.array([[-80.0, -40.0], [80.0, 40.0]]), 5, 2000
+    wp=env.flag_homes[Team.RED_TEAM], num_iters=500
 )
 
 while True:

@@ -18,7 +18,9 @@ config["env_bounds"] = "auto"
 config["blue_flag_home"] = (49.3016, -93.5217)
 config["red_flag_home"] = (49.3051, -93.5048)
 config["flag_homes_unit"] = "ll"
-config["sim_speedup_factor"] = 5
+config["sim_speedup_factor"] = 40
+config["max_time"] = 2400
+config["action_type"] = "continuous"
 
 init_dict = {
     "agent_pos_unit": "ll",
@@ -84,6 +86,9 @@ blue_three = Heuristic_CTF_Agent(
     env,
     mode="nothing",
 )
+
+blue_two.update_state(obs, info)
+blue_two.plan(wp=env.flag_homes[Team.RED_TEAM], num_iters=500)
 
 while not (any(term.values()) or any(trunc.values())):
 
