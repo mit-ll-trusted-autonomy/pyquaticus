@@ -3052,8 +3052,8 @@ when gps environment bounds are specified in meters"
                     # convert bounds to web mercator xy
                     if env_bounds_unit == "ll":
                         env_bounds = np.array([
-                            mt.xy(*env_bounds[0][-1::-1]),
-                            mt.xy(*env_bounds[1][-1::-1])
+                            mt.xy(*env_bounds[0]),
+                            mt.xy(*env_bounds[1])
                         ])
 
             # unit
@@ -3161,8 +3161,8 @@ when gps environment bounds are specified in meters"
                 elif scrimmage_coords_unit == "wm_xy":
                     pass
                 elif scrimmage_coords_unit == "ll":
-                    scrimmage_coords_1 = mt.xy(*scrimmage_coords[0])
-                    scrimmage_coords_2 = mt.xy(*scrimmage_coords[1])
+                    scrimmage_coords_1 = mt.xy(*scrimmage_coords[0][-1::-1])
+                    scrimmage_coords_2 = mt.xy(*scrimmage_coords[1][-1::-1])
                     scrimmage_coords = np.array([scrimmage_coords_1, scrimmage_coords_2])
                 else:
                     raise Exception(
