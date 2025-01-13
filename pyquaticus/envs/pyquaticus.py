@@ -3052,8 +3052,8 @@ when gps environment bounds are specified in meters"
                     # convert bounds to web mercator xy
                     if env_bounds_unit == "ll":
                         env_bounds = np.array([
-                            mt.xy(*env_bounds[0][-1::-1]),
-                            mt.xy(*env_bounds[1][-1::-1])
+                            mt.xy(*env_bounds[0]),
+                            mt.xy(*env_bounds[1])
                         ])
 
             # unit
@@ -3097,10 +3097,10 @@ when gps environment bounds are specified in meters"
             # auto home
             if self._is_auto_string(flag_homes[Team.BLUE_TEAM]) and self._is_auto_string(flag_homes[Team.RED_TEAM]):
                 flag_homes[Team.BLUE_TEAM] = wrap_mercator_x(
-                    env_bounds[0] + np.array([7/8 * self.env_size[0], 0.5 * self.env_size[0]])
+                    env_bounds[0] + np.array([7/8 * self.env_size[0], 0.5 * self.env_size[1]])
                 )
                 flag_homes[Team.RED_TEAM] = wrap_mercator_x(
-                    env_bounds[0] + np.array([1/8 * self.env_size[0], 0.5 * self.env_size[0]])
+                    env_bounds[0] + np.array([1/8 * self.env_size[0], 0.5 * self.env_size[1]])
                 )
             elif self._is_auto_string(flag_homes[Team.BLUE_TEAM]) or self._is_auto_string(flag_homes[Team.RED_TEAM]):
                 raise Exception("Flag homes should be either all 'auto', or all specified")
@@ -3161,8 +3161,8 @@ when gps environment bounds are specified in meters"
                 elif scrimmage_coords_unit == "wm_xy":
                     pass
                 elif scrimmage_coords_unit == "ll":
-                    scrimmage_coords_1 = mt.xy(*scrimmage_coords[0])
-                    scrimmage_coords_2 = mt.xy(*scrimmage_coords[1])
+                    scrimmage_coords_1 = mt.xy(*scrimmage_coords[0][-1::-1])
+                    scrimmage_coords_2 = mt.xy(*scrimmage_coords[1][-1::-1])
                     scrimmage_coords = np.array([scrimmage_coords_1, scrimmage_coords_2])
                 else:
                     raise Exception(
