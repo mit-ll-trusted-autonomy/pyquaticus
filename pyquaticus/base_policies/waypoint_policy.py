@@ -44,7 +44,6 @@ class WaypointPolicy(BaseAgentPolicy):
         agent_id: int,
         team: Team,
         env: PyQuaticusEnv,
-        continuous: bool = False,
         capture_radius: float = 1,
         slip_radius: Optional[float] = None,
         avoid_radius: float = 2,
@@ -195,6 +194,8 @@ class WaypointPolicy(BaseAgentPolicy):
             print("No path found.")
             self.tree = tree
             return
+        
+        # print("Path found.")
         
         # Find the satisfying point with the minimum cost
         min_point = possible_points[0]
