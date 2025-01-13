@@ -16,45 +16,28 @@ config_dict["max_score"] = 100
 config_dict["sim_speedup_factor"] = 5
 
 env = pyquaticus_v0.PyQuaticusEnv(team_size=2, config_dict=config_dict,render_mode='human')
-term_g = {0:False,1:False}
-truncated_g = {0:False,1:False}
-term = term_g
-trunc = truncated_g
-obs = env.reset()
-temp_captures = env.state["captures"]
-temp_grabs = env.state["grabs"]
-temp_tags = env.state["tags"]
 
-r_one = BaseAttacker(2, Team.RED_TEAM, mode='easy')
-r_two = BaseAttacker(3, Team.RED_TEAM, mode='easy')
 
-b_one = BaseDefender(0, Team.BLUE_TEAM, mode='hard')
-b_two = BaseDefender(1, Team.BLUE_TEAM, mode='hard')
-step = 0
+obs, info = env.reset()
+
+r_one = BaseAttacker(2, Team.RED_TEAM, env, mode='hard')
+r_two = BaseAttacker(3, Team.RED_TEAM, env, mode='nothing')
+
+b_one = BaseDefender(0, Team.BLUE_TEAM, env, mode='nothing')
+b_two = BaseDefender(1, Team.BLUE_TEAM, env, mode='nothing')
+
 while True:
-    new_obs = {}
-    for k in obs:
-        new_obs[k] = env.agent_obs_normalizer.unnormalized(obs[k])
 
-    two = r_one.compute_action(new_obs)
-    three = r_two.compute_action(new_obs)
-    zero = r_one.compute_action(new_obs)
-    one = r_two.compute_action(new_obs)
+    two = r_one.compute_action(obs, info)
+    three = r_two.compute_action(obs, info)
+    zero = b_one.compute_action(obs, info)
+    one = b_two.compute_action(obs, info)
 
     
     obs, reward, term, trunc, info = env.step({0:zero,1:one, 2:two, 3:three})
     k =  list(term.keys())
 
-    step += 1
     if term[k[0]] == True or trunc[k[0]]==True:
         break
-for i in range(len(env.state["captures"])):
-    temp_captures[i] += env.state["captures"][i]
-for i in range(len(env.state["grabs"])):
-    temp_grabs[i] += env.state["grabs"][i]
-for i in range(len(env.state["tags"])):
-    temp_tags[i] += env.state["tags"][i]
-
-
 
 env.close()

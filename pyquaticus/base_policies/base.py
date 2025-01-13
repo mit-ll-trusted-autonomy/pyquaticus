@@ -22,6 +22,7 @@
 import numpy as np
 
 from pyquaticus.envs.pyquaticus import Team, PyQuaticusEnv
+from pyquaticus.utils.utils import closest_point_on_line, mag_bearing_to
 
 from typing import Any, Union
 
@@ -42,6 +43,9 @@ class BaseAgentPolicy:
         self.id = agent_id
         self.obs_normalizer = env.agent_obs_normalizer
         self.state_normalizer = env.global_state_normalizer
+
+        self.walls = env._walls
+
         if isinstance(team, str):
             if team == "red":
                 team = Team.RED_TEAM
@@ -226,6 +230,16 @@ class BaseAgentPolicy:
                 self.opp_flag_loc = np.asarray((0.0, 0.0))
 
             # Get wall distances and bearings
+            self.wall_distances = []
+            self.wall_bearings = []
+            for i in range(4):
+                wall = self.walls[int(self.team)][i]
+                wall_closest_point = closest_point_on_line(wall[0], wall[1], self.pos)
+                dist, bearing = mag_bearing_to(
+                    self.pos, wall_closest_point, self.heading
+                )
+                self.wall_distances.append(dist)
+                self.wall_bearings.append(bearing)
 
     def angle180(self, deg):
         """Rotates an angle to be between -180 and +180 degrees."""
