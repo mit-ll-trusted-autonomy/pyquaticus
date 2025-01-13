@@ -159,7 +159,11 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         """
         processed_action_dict = OrderedDict()
         for player in self.players.values():
-            if player.id in action_dict:
+            if player.id in action_dict and type(action_dict[player.id] is list:
+                speed = action_dict[player.id][0]
+                heading = action_dict[player.id][1]
+            elif player.id in action_dict:
+                    
                 default_action = True
                 try:
                     action_dict[player.id] / 2
@@ -748,7 +752,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         self.reset_count = 0
         self.current_time = 0
-
+        self.return_info = False
         self.state = {}
         self.dones = {}
 
@@ -794,7 +798,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         self.players = {player.id: player for player in itertools.chain(b_players, r_players)}  # maps player ids (or names) to player objects
         self.agents = [agent_id for agent_id in self.players]
-
+        self.possible_agents = [agent_id for agent_id in self.players]
         self.max_speeds = [player.get_max_speed() for player in self.players.values()]
 
         # Agents (player objects) of each team
@@ -897,11 +901,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.state["agent_tagging_cooldown"][i] = player.tagging_cooldown
 
         self.flag_collision_bool = np.zeros(self.num_agents, dtype=bool)
-
-        if self.action_type == "discrete":
+        
+        if self.action_type == 'continuous' or self.action_type == 'discrete':
             action_dict = self._to_speed_heading(raw_action_dict)
-        elif self.action_type == "continuous":
-            action_dict = raw_action_dict
         else:
             raise ValueError(
                 f"action_type must be either 'discrete' or 'continuous'. Got '{self.action_type}' instead."
@@ -980,13 +982,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # Info
         self.state["global_state_hist_buffer"][1:] = self.state["global_state_hist_buffer"][:-1]
         self.state["global_state_hist_buffer"][0] = self.state_to_global_obs(self.normalize)
-
-        if self.hist_len > 1:
-            info = {agent_id: self.state["global_state_hist_buffer"][self.hist_buffer_inds] for agent_id in self.players}
+        if self.return_info:
+            if self.hist_len > 1:
+                info = {agent_id: self.state["global_state_hist_buffer"][self.hist_buffer_inds] for agent_id in self.players}
+            else:
+                info = {agent_id: self.state["global_state_hist_buffer"][0] for agent_id in self.players}
         else:
-            info = {agent_id: self.state["global_state_hist_buffer"][0] for agent_id in self.players}
-
-        return obs, rewards, terminated, truncated, {agent_id:{} for agent_id in self.players}
+            info = {agent_id: {} for agent_id in self.players}
+        return obs, rewards, terminated, truncated, info
 
     def _move_agents(self, action_dict, dt):
         """Moves agents in the space according to the specified speed/heading in `action_dict`."""
@@ -2321,16 +2324,16 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Return
         
-        if return_info:
-            # Info
+        # Info
+        self.return_info = return_info
+        if self.return_info:
             if self.hist_len > 1:
-                info = {agent_id:self.state["global_state_hist_buffer"][self.hist_buffer_inds] for agent_id in self.players}
+                info = {agent_id: self.state["global_state_hist_buffer"][self.hist_buffer_inds] for agent_id in self.players}
             else:
                 info = {agent_id: self.state["global_state_hist_buffer"][0] for agent_id in self.players}
-
-            return obs, {agent_id: {} for agent_id in self.players}
         else:
-            return obs, {agent_id: {} for agent_id in self.players}
+            info = {agent_id:{} for agent_id in self.players}
+        return obs, info
 
     def _set_state_from_init_dict(self, init_dict: dict):
         """

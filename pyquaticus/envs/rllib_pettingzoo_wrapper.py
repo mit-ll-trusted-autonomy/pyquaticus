@@ -26,16 +26,8 @@ import copy
 class ParallelPettingZooWrapper(ParallelPettingZooEnv):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.agents = [agent for agent in self.par_env.agents]
-        self.possible_agents = copy.deepcopy(self.agents)
-        #self.action_spaces = {str(agent):self.get_agent_action_space() for agent in self.par_env.agents}
-        #self.par_env.action_spaces = self.action_spaces
-        #self.observation_spaces = {str(agent):self.get_agent_observation_space() for agent in self.par_env.agents}
-        self.par_env.observation_spaces = self.observation_spaces
     def reset(self, *, seed: Optional[int] = None, return_info=False, options: Optional[dict] = None):
         obs, infos = super().reset(seed=seed, options=options)
-       # sobs = {str(aid): obs[aid] for aid in obs}
-       # sinfos = {str(aid): infos[aid] for aid in infos}
         return obs, infos
         # pass empty info just to align with RLlib code
     def render(self):

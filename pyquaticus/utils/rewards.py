@@ -124,7 +124,7 @@ def sparse(self, params, prev_params):
 
 #Reward Captures and Grabs Only
 def caps_and_grabs(self, params, prev_params):
-    reward = 0
+    reward = 0.0#-0.025
     #Team captured opponents flag
     if params['team_flag_capture'] and not prev_params['team_flag_capture']:
         reward += 1.0
@@ -134,11 +134,15 @@ def caps_and_grabs(self, params, prev_params):
     #Agent went out of bounds
     if params['agent_oob'] and not prev_params['agent_oob']:
         reward -= 1.0
-    
+
     #Opposing team grabbed teams flag
     if params['opponent_flag_pickup'] and not prev_params['opponent_flag_pickup']:
         reward -= 0.5
     #Opposing team captures teams flag
     if params['opponent_flag_capture'] and not prev_params['opponent_flag_capture']:
         reward -= 1.0
-    return reward * 100
+    #Add sloped reward towards opposing teams flag when it has not been grabbed by the team.
+    if not params['team_has_flag'] and not params['has_flag']:
+        # Max reward when on the flag 0.45 slopes to 0 at 160m 7 = -0.003x + 0.45
+        reward += (-params['opponent_flag_distance'] * 0.003 + 0.45) /8
+    return reward
