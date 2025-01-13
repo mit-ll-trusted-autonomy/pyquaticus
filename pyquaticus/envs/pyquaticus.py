@@ -159,7 +159,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         """
         processed_action_dict = OrderedDict()
         for player in self.players.values():
-            if player.id in action_dict and type(action_dict[player.id] is list:
+            if player.id in action_dict and type(action_dict[player.id]) is list:
                 speed = action_dict[player.id][0]
                 heading = action_dict[player.id][1]
             elif player.id in action_dict:
@@ -757,6 +757,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.dones = {}
 
         self.seed()
+        
+        self.active_collisions = [] #List that contains all new collisions between agents prevents counting a collision multiple times
 
         # Set variables from config
         self.set_config_values(config_dict)
@@ -934,6 +936,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self._check_untag_vectorized() if self.team_size >= 10 else self._check_untag()
         self._set_dones()
         self._get_dist_bearing_to_obstacles()
+        self._check_collisions()
 
         if self.lidar_obs:
             for team in self.agents_of_team:
@@ -1519,7 +1522,31 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 # Update captures
                 self.team_flag_capture[team_idx] = True
                 self.state['captures'][team_idx] += 1
+    def _check_collisions(self):
+        """
+        Updates game state attribute agent_collisions
+        Note: Checks collisions between all players teammates and opponents
+        """
+        for player_id in self.players:
+            for other_id in self.players:
+                if player_id == other_id:
+                    continue
+                else:
+                    dist_between_agents = self.get_distance_between_2_points(
+                            self.players[player_id].pos, self.players[other_id].pos)
+                    if not ((player_id, other_id) in self.active_collisions):
+                        if dist_between_agents >= 0.0 and dist_between_agents <= 2.5:
+                            self.active_collisions.append((player_id, other_id))
+                            self.active_collisions.append((other_id, player_id))
+                            self.state['agent_collisions'][self.agents.index(player_id)] += 1
+                            self.state['agent_collisions'][self.agents.index(other_id)] += 1
+                    else:
+                        if dist_between_agents > 3.0:
+                            self.active_collisions.remove((player_id, other_id))
+                            self.active_collisions.remove((other_id, player_id))
+                       
 
+    
     def set_config_values(self, config_dict):
         """
         Sets initial configuration parameters for the environment.
@@ -2057,7 +2084,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.params[agent.id]["agent_id"] = agent.id
         self.params[agent.id]['agent_id_index'] = self.agents.index(agent.id)
         self.params[agent.id]["agent_oob"] = self.state["agent_oob"][self.agents.index(agent.id)]
-
+        self.params[agent.id]['agent_collisions'] = self.state['agent_collisions'][self.agents.index(agent.id)]
         # Obstacle Distance/Bearing
         for i, obstacle in enumerate(self.state["dist_bearing_to_obstacles"][agent.id]):
             self.params[agent.id][f"obstacle_{i}_distance"] = obstacle[0]
@@ -2068,7 +2095,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.params[agent.id]["opponent_flag_pickup"] = self.state["team_has_flag"][other_team_idx]
         self.params[agent.id]["team_flag_capture"] = self.team_flag_capture[team_idx]
         self.params[agent.id]["opponent_flag_capture"] = self.team_flag_capture[other_team_idx]
-
+        self.params[agent.id]['all_agent_collisions'] = self.state['agent_collisions']
         # Elements
         self.params[agent.id]["team_flag_home"] = self.get_distance_between_2_points(
                 agent.pos, copy.deepcopy(self.state["flag_home"][team_idx])
@@ -2232,6 +2259,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     "agent_is_tagged":           np.zeros(self.num_agents, dtype=bool), #if this agent is tagged
                     "agent_made_tag":            np.array([None] * self.num_agents), #whether this agent tagged something at the current timestep (will be index of tagged agent if so)
                     "agent_tagging_cooldown":    np.array([self.tagging_cooldown] * self.num_agents),
+                    "agent_collisions":          np.zeros(len(self.players), dtype=int), #number of collisions per agent
                     "dist_bearing_to_obstacles": {agent_id: np.zeros((len(self.obstacles), 2)) for agent_id in self.players},
                     "flag_home":                 np.array(flag_homes),
                     "flag_position":             np.array(flag_homes),

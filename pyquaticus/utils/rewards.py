@@ -88,7 +88,8 @@ params{
     "opponent_n_has_flag": bool, # True if opponent currently has opponents flag
     "opponent_n_on_side": bool, # True if opponent is on their side
     "opponent_n_tagging_cooldown": float, #Current value for tagging cooldown.
-
+    "agent_collisions": int #Current number of collisions for the current agent
+    "all_agent_collisions": list #list of the number of agent collisions for all agents currently in game
 }
 
 #prev_params is the parameters from the previous step and have the same keys as params
