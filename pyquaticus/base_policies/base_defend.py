@@ -67,7 +67,6 @@ class BaseDefender(BaseAgentPolicy):
 
     def compute_action(self, obs, info):
         """
-        **THIS FUNCTION REQUIRES UNNORMALIZED OBSERVATIONS**.
 
         Compute an action for the given position. This function uses observations
         of both teams.
@@ -143,15 +142,15 @@ class BaseDefender(BaseAgentPolicy):
             if self.team == Team.RED_TEAM:
                 estimated_position = np.asarray(
                     [
-                        global_state["wall_1_distance"],
-                        global_state["wall_0_distance"],
+                        self.wall_distances[1],
+                        self.wall_distances[0],
                     ]
                 )
             else:
                 estimated_position = np.asarray(
                     [
-                        global_state["wall_3_distance"],
-                        global_state["wall_2_distance"],
+                        self.wall_distances[3],
+                        self.wall_distances[2],
                     ]
                 )
             value = self.goal
@@ -210,15 +209,15 @@ class BaseDefender(BaseAgentPolicy):
                 if self.team == Team.RED_TEAM:
                     estimated_position = np.asarray(
                         [
-                            global_state["wall_1_distance"],
-                            global_state["wall_0_distance"],
+                            self.wall_distances[1],
+                            self.wall_distances[0],
                         ]
                     )
                 else:
                     estimated_position = np.asarray(
                         [
-                            global_state["wall_3_distance"],
-                            global_state["wall_2_distance"],
+                            self.wall_distances[3],
+                            self.wall_distances[2],
                         ]
                     )
                 point = "CH" if self.team == Team.RED_TEAM else "CHX"
@@ -300,52 +299,44 @@ class BaseDefender(BaseAgentPolicy):
 
             # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid
             wall_pos = []
-            if global_state["wall_0_distance"] < 7 and (
-                -90 < global_state["wall_0_bearing"] < 90
-            ):
+            if self.wall_distances[0] < 7 and (-90 < self.wall_bearings[0] < 90):
                 wall_0_unit_vec = self.rb_to_rect(
-                    np.array((global_state["wall_0_distance"], global_state["wall_0_bearing"]))
+                    np.array((self.wall_distances[0], self.wall_bearings[0]))
                 )
                 wall_pos.append(
                     (
-                        global_state["wall_0_distance"] * wall_0_unit_vec[0],
-                        global_state["wall_0_distance"] * wall_0_unit_vec[1],
+                        self.wall_distances[0] * wall_0_unit_vec[0],
+                        self.wall_distances[0] * wall_0_unit_vec[1],
                     )
                 )
-            elif global_state["wall_2_distance"] < 7 and (
-                -90 < global_state["wall_2_bearing"] < 90
-            ):
+            elif self.wall_distances[2] < 7 and (-90 < self.wall_bearings[2] < 90):
                 wall_2_unit_vec = self.rb_to_rect(
-                    np.array((global_state["wall_2_distance"], global_state["wall_2_bearing"]))
+                    np.array((self.wall_distances[2], self.wall_bearings[2]))
                 )
                 wall_pos.append(
                     (
-                        global_state["wall_2_distance"] * wall_2_unit_vec[0],
-                        global_state["wall_2_distance"] * wall_2_unit_vec[1],
+                        self.wall_distances[2] * wall_2_unit_vec[0],
+                        self.wall_distances[2] * wall_2_unit_vec[1],
                     )
                 )
-            if global_state["wall_1_distance"] < 7 and (
-                -90 < global_state["wall_1_bearing"] < 90
-            ):
+            if self.wall_distances[1] < 7 and (-90 < self.wall_bearings[1] < 90):
                 wall_1_unit_vec = self.rb_to_rect(
-                    np.array((global_state["wall_1_distance"], global_state["wall_1_bearing"]))
+                    np.array((self.wall_distances[1], self.wall_bearings[1]))
                 )
                 wall_pos.append(
                     (
-                        global_state["wall_1_distance"] * wall_1_unit_vec[0],
-                        global_state["wall_1_distance"] * wall_1_unit_vec[1],
+                        self.wall_distances[1] * wall_1_unit_vec[0],
+                        self.wall_distances[1] * wall_1_unit_vec[1],
                     )
                 )
-            elif global_state["wall_3_distance"] < 7 and (
-                -90 < global_state["wall_3_bearing"] < 90
-            ):
+            elif self.wall_distances[3] < 7 and (-90 < self.wall_bearings[3] < 90):
                 wall_3_unit_vec = self.rb_to_rect(
-                    np.array((global_state["wall_3_distance"], global_state["wall_3_bearing"]))
+                    np.array((self.wall_distances[3], self.wall_bearings[3]))
                 )
                 wall_pos.append(
                     (
-                        global_state["wall_3_distance"] * wall_3_unit_vec[0],
-                        global_state["wall_3_distance"] * wall_3_unit_vec[1],
+                        self.wall_distances[3] * wall_3_unit_vec[0],
+                        self.wall_distances[3] * wall_3_unit_vec[1],
                     )
                 )
 
