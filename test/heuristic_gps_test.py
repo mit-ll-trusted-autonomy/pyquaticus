@@ -48,23 +48,23 @@ term = {0: False, 1: False}
 trunc = {0: False, 1: False}
 obs, info = env.reset(options={"init_dict": init_dict})
 
-red_one = Heuristic_CTF_Agent(
+red_one = BaseDefender(
     3,
     Team.RED_TEAM,
     env,
-    mode="nothing",
+    mode="easy",
 )
-red_two = Heuristic_CTF_Agent(
+red_two = BaseDefender(
     4,
     Team.RED_TEAM,
     env,
-    mode="nothing",
+    mode="easy",
 )
-red_three = Heuristic_CTF_Agent(
+red_three = BaseDefender(
     5,
     Team.RED_TEAM,
     env,
-    mode="nothing",
+    mode="easy",
 )
 
 blue_one = Heuristic_CTF_Agent(

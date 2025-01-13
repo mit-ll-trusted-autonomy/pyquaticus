@@ -45,7 +45,7 @@ env = pyquaticus_v0.PyQuaticusEnv(
 
 obs, info = env.reset()
 
-H_one = BaseAttacker(
+H_one = BaseDefender(
     2,
     Team.RED_TEAM,
     env,

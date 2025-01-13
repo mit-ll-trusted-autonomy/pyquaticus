@@ -87,6 +87,7 @@ from pyquaticus.utils.utils import (
     wrap_mercator_x,
     wrap_mercator_x_dist,
 )
+from pyquaticus.base_policies.env_waypoint_policy import EnvWaypointPolicy
 from scipy.ndimage import label
 from shapely import intersection, LineString, Point, Polygon
 from typing import Optional, Union
@@ -831,6 +832,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if self.render_mode:
             self.create_background_image()  # create background pygame surface (for faster rendering)
 
+        # RRT policies for driving back home
+        self.rrt_policies = []
+        for i in range(self.num_agents):
+            self.rrt_policies.append(EnvWaypointPolicy(self.obstacles, self.env_size, self.max_speeds[i], capture_radius=0.45 * self.catch_radius, slip_radius=2 * self.catch_radius, avoid_radius=1.5 * self.agent_radius))
+
     def seed(self, seed=None):
         """
         Overridden method from Gym inheritance to set seeds in the environment.
@@ -1011,11 +1017,19 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.state['agent_heading'][i] = player.heading
                 continue
 
+            if len(self.rrt_policies[i].wps) > 0 and not player.is_tagged:
+                self.rrt_policies[i].wps = []
+
             # If agent is tagged, drive at max speed towards home
             if player.is_tagged:
-                flag_home = self.flags[team_idx].home
-                _, heading_error = mag_bearing_to(player.pos, flag_home, player.heading)
-                desired_speed = player.get_max_speed()
+                policy = self.rrt_policies[i]
+                assert isinstance(policy, EnvWaypointPolicy)
+                if len(policy.wps) == 0 and not policy.planning:
+                    policy.plan(player.pos, self.flags[team_idx].home)
+                    desired_speed = 0
+                    heading_error = 0
+                else:
+                    desired_speed, heading_error = policy.compute_action(player.pos, player.heading)
 
             # If agent is out of bounds, drive back in bounds at fraction of max speed
             elif self.state["agent_oob"][i]:
