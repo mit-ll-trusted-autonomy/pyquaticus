@@ -3099,10 +3099,10 @@ when gps environment bounds are specified in meters"
             # auto home
             if self._is_auto_string(flag_homes[Team.BLUE_TEAM]) and self._is_auto_string(flag_homes[Team.RED_TEAM]):
                 flag_homes[Team.BLUE_TEAM] = wrap_mercator_x(
-                    env_bounds[0] + np.array([7/8 * self.env_size[0], 0.5 * self.env_size[0]])
+                    env_bounds[0] + np.array([7/8 * self.env_size[0], 0.5 * self.env_size[1]])
                 )
                 flag_homes[Team.RED_TEAM] = wrap_mercator_x(
-                    env_bounds[0] + np.array([1/8 * self.env_size[0], 0.5 * self.env_size[0]])
+                    env_bounds[0] + np.array([1/8 * self.env_size[0], 0.5 * self.env_size[1]])
                 )
             elif self._is_auto_string(flag_homes[Team.BLUE_TEAM]) or self._is_auto_string(flag_homes[Team.RED_TEAM]):
                 raise Exception("Flag homes should be either all 'auto', or all specified")
