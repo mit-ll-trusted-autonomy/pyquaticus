@@ -3,6 +3,7 @@ from pyquaticus.base_policies.rrt.rrt_star import rrt_star
 from utils import draw_result
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
+import time
 
 start = np.array((0, 0))
 
@@ -12,7 +13,9 @@ obstacles = [np.array(
 
 area = np.array(((-2, -2), (11, 11)))
 
+start_time = time.time()
 tree = rrt_star(start, np.array((10, 10)), obstacles, area, 2, 5, 1000)
+print(time.time() - start_time)
 
 fig, ax = draw_result(tree, obstacles)
 ax.plot((2, 2, 9, 9, 2), (2, 9, 9, 2, 2), "r")

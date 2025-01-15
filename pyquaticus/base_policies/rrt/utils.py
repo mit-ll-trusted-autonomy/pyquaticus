@@ -3,7 +3,7 @@ import numpy as np
 from typing import Optional
 import matplotlib.pyplot as plt
 
-
+# Ignore divide by zero errors
 np.seterr(divide="ignore")
 
 
@@ -21,6 +21,10 @@ def get_near(
     seglist: Optional[np.ndarray],
     agent_radius: float,
 ) -> list[Point]:
+    """
+    Returns all points within the radius of the given point whose paths
+    to the given point are obstacle-free.
+    """
     seg_array = np.array([np.array([p.pos, point.pos]) for p in points])
     dist_array = np.linalg.norm(seg_array[:, 0, :] - seg_array[:, 1, :], axis=1)
     int_array = intersect(seg_array, seglist, agent_radius)
@@ -33,8 +37,12 @@ def get_near(
 
     return near_points
 
-
 def choose_parent(point: Point, parents: list[Point]):
+    """
+    Sets the given point's parent to be the one which minimizes the
+    given point's cost. Assumes all paths to potential parents are
+    obstacle-free.
+    """
     for parent in parents:
         if parent.cost + dist(parent, point) < point.cost:
             point.cost = parent.cost + dist(parent, point)
@@ -42,6 +50,11 @@ def choose_parent(point: Point, parents: list[Point]):
 
 
 def rewire(potential_parent: Point, near_points: list[Point]):
+    """
+    Sets any of the given points' parent to be the potential parent
+    if it results in a lower cost for the point. Assumes all paths
+    to potential children are obstacle-free.
+    """
     for point in near_points:
         if potential_parent.cost + dist(potential_parent, point) < point.cost:
             point.cost = potential_parent.cost + dist(potential_parent, point)
@@ -76,6 +89,10 @@ def get_nearest(
     seglist: Optional[np.ndarray],
     agent_radius: float,
 ) -> Optional[Point]:
+    """
+    Returns the point in the tree nearest to the given point and
+    whose path to the given point is obstacle-free.
+    """
     if seglist is None:
         return min(points, key=lambda p: dist(p, point))
     seg_array = np.array([np.array([p.pos, point.pos]) for p in points])
@@ -139,6 +156,10 @@ def get_random_point(
 
 
 def bound(to_point: Point, from_point: Point, max_step_size):
+    """
+    Returns the point on the vector from p1 -> p2 
+    where the distance is no greater than max_step_size.
+    """
     vector = to_point.pos - from_point.pos
     if np.linalg.norm(vector) > max_step_size:
         vector = vector * max_step_size / np.linalg.norm(vector)
@@ -151,6 +172,15 @@ def dist(p1: Point, p2: Point) -> float:
 
 
 def get_seglist(poly: np.ndarray) -> np.ndarray:
+    """
+    Turns a polygon into an array of segments that define the polygon.
+
+    Args:
+        poly (np.ndarray): ((x1, y1), (x2, y2), ... , (xn, yn))
+
+    Returns:
+        seglist (np.ndarray): (((xn, yn), (x1, y1)), ((x1, y1), (x2, y2)), ... , ((xn-1, yn-1), (xn, yn)))
+    """
     seglist = []
     for i in range(poly.shape[0]):
         seglist.append(poly[(i - 1, i), :])
@@ -159,6 +189,16 @@ def get_seglist(poly: np.ndarray) -> np.ndarray:
 
 
 def get_ungrouped_seglist(polys: list[np.ndarray]) -> np.ndarray:
+    """
+    Turns a list of polygons into an array of all segments in the polygons, ungrouped.
+    Used for determining if a line (or list of lines) intersects any of the polygons.
+    
+    Args:
+        polys (list[np.ndarray]): [((x1, y1), (x2, y2), ... , (xn, yn)), ... ]
+
+    Returns:
+        seglist (np.ndarray): (((xn, yn), (x1, y1)), ((x1, y1), (x2, y2)), ... , ((xn-1, yn-1), (xn, yn)), ... )
+    """
     seglist = []
     for poly in polys:
         for i in range(poly.shape[0]):
@@ -168,6 +208,26 @@ def get_ungrouped_seglist(polys: list[np.ndarray]) -> np.ndarray:
 
 
 def get_grouped_seglist(polys: list[np.ndarray]) -> np.ndarray:
+    """
+    Turns a list of polygons into an array of all segments in the polygons, grouped by each polygon.
+    Used for determining if a point is in any of the polygons.
+    Polygons with fewer than the maximum number of sides are padded with np.nan. 
+
+    Args:
+        polys (list[np.ndarray]): [((x1, y1), (x2, y2), ... , (xn, yn)), ... ]
+
+    Returns:
+        seglist (np.ndarray): 
+                               ((((x1, y1), (x2, y2)), ((x2, y2), (x3, y3)), ... , ((xk, yk), (x1, y1))                 -> first polygon
+
+                                (((x1, y1), (x2, y2)), ((x2, y2), (x3, y3)), ... , ((np.nan, np.nan), (np.nan, np.nan)) -> second polygon
+
+                                ...
+
+                                ...
+
+                                (((x1, y1), (x2, y2)), ((x2, y2), (x3, y3)), ... , ((np.nan, np.nan), (np.nan, np.nan))) -> nth polygon
+    """
     seglists = []
     max_len = 3
     for poly in polys:
@@ -195,10 +255,9 @@ def point_in_polygons(
     point: np.ndarray, seglists: Optional[np.ndarray], radius: float = 1e-9
 ):
     """
-    Determines if a point is in any of the polygons, provided as an array of segments
-
-    Note: pad all polygons with np.nan so that the length of each individual seglist is the same.
-    The function get_grouped_seglist() does this.
+    Determines if a single point is in any of the polygons, provided as an array of segments.
+    
+    seglists can be obstained via get_grouped_seglist()
 
     point.shape should be (2)
 
@@ -257,30 +316,37 @@ def point_in_polygons(
     return np.any(np.count_nonzero(intersect, axis=1) % 2)
 
 
-def intersect(seg: np.ndarray, seglist: Optional[np.ndarray], radius: float = 1e-9):
+def intersect(segs_to_check: np.ndarray, seglist: Optional[np.ndarray], radius: float = 1e-9):
     """
-    Determines if a segment intersects any of the segments in an array of segments
+    Determines which segments in an array of segments intersect any of the segments in another array of segments
 
-    Note: if segments are parallel, this function will not detect an intersection
+    Note: if two segments are parallel, this function will not detect an intersection.
+    This does not pose a problem when checking if a segment intersects a polygon as an intersection will
+    be detected with adjacent edges.
+
+    Note: when using for detecting intersections with polygons, this algorithm will not detect "corner cutting,"
+    as it merely extends the segments - it does not check the distance from the endpoints to the segments. 
+    This can be avoided by using a larger agent radius, or by using the (slower) alternate intersection function below.
 
     Args:
-        seg (np.ndarray): ((x1, y1), (x2, y2))
-        seglist (np.ndarray): (((x1, y1), (x2, y2)), ((x1, y1), (x2, y2)), ... )
+        seg (np.ndarray of shape (n, 2, 2)): (((x1, y1), (x2, y2)), ((x1, y1), (x2, y2)), ... )
+        seglist (np.ndarray of shape (m, 2, 2)): (((x1, y1), (x2, y2)), ((x1, y1), (x2, y2)), ... )
 
     Returns:
-        bool: True if the segment intersects any of the segments in the array
+        intersect (np.ndarray of shape (n)): intersect[i] is True if the i-th segment in the first array
+        intersects any of the m segments in the second array
     """
     if seglist is None:
         return False
 
     seglist = seglist.reshape((-1, 2, 2))
-    seg = seg.reshape((-1, 2, 2))
+    segs_to_check = segs_to_check.reshape((-1, 2, 2))
 
     x1, y1, x2, y2 = (
-        seg[:, 0, 0].reshape((-1, 1)),
-        seg[:, 0, 1].reshape((-1, 1)),
-        seg[:, 1, 0].reshape((-1, 1)),
-        seg[:, 1, 1].reshape((-1, 1)),
+        segs_to_check[:, 0, 0].reshape((-1, 1)),
+        segs_to_check[:, 0, 1].reshape((-1, 1)),
+        segs_to_check[:, 1, 0].reshape((-1, 1)),
+        segs_to_check[:, 1, 1].reshape((-1, 1)),
     )
     x3, y3, x4, y4 = (
         seglist[:, 0, 0],
@@ -311,18 +377,24 @@ def intersect(seg: np.ndarray, seglist: Optional[np.ndarray], radius: float = 1e
 
     return np.any(intersect, axis=1)
 
-def intersect_new(seg: np.ndarray, seglist: Optional[np.ndarray], radius: float = 1e-9):
+def intersect_slow(seg: np.ndarray, seglist: Optional[np.ndarray], radius: float = 1e-9):
     """
-    Determines if a segment intersects any of the segments in an array of segments
+    Determines which segments in an array of segments intersect any of the segments in another array of segments
 
-    Note: if segments are parallel, this function will not detect an intersection
+    Note: if two segments are parallel, this function will not detect an intersection.
+    This does not pose a problem when checking if a segment intersects a polygon as an intersection will
+    be detected with adjacent edges.
+
+    Note: when using for detecting intersections with polygons, this algorithm will detect "corner cutting,"
+    but is much slower than the algorithm above. 
 
     Args:
-        seg (np.ndarray): ((x1, y1), (x2, y2))
-        seglist (np.ndarray): (((x1, y1), (x2, y2)), ((x1, y1), (x2, y2)), ... )
+        seg (np.ndarray of shape (n, 2, 2)): (((x1, y1), (x2, y2)), ((x1, y1), (x2, y2)), ... )
+        seglist (np.ndarray of shape (m, 2, 2)): (((x1, y1), (x2, y2)), ((x1, y1), (x2, y2)), ... )
 
     Returns:
-        bool: True if the segment intersects any of the segments in the array
+        intersect (np.ndarray of shape (n)): intersect[i] is True if the i-th segment in the first array
+        intersects any of the m segments in the second array
     """
     if seglist is None:
         return np.full((seg.shape[0]), False)
