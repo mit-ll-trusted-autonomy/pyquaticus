@@ -15,14 +15,15 @@ config = config_dict_std
 config["gps_env"] = True
 config["default_init"] = False
 config["env_bounds"] = "auto"
-config["env_bounds"] = [-93.5317, 49.2916, -93.4948, 49.3151]
+config["env_bounds"] = [-93.5417, 49.2916, -93.4848, 49.3151]
 config["env_bounds_unit"] = "ll"
 config["blue_flag_home"] = (49.3016, -93.5217)
 config["red_flag_home"] = (49.3051, -93.5048)
 config["flag_homes_unit"] = "ll"
-config["sim_speedup_factor"] = 40
+config["sim_speedup_factor"] = 80
 config["max_time"] = 2400
 config["action_type"] = "continuous"
+config["dynamics"] = "heron"
 
 init_dict = {
     "agent_pos_unit": "ll",

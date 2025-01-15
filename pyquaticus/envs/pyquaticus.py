@@ -901,7 +901,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # RRT policies for driving back home
         self.rrt_policies = []
         for i in range(self.num_agents):
-            self.rrt_policies.append(EnvWaypointPolicy(self.obstacles, self.env_size, self.max_speeds[i], capture_radius=0.45 * self.catch_radius, slip_radius=2 * self.catch_radius, avoid_radius=1.5 * self.agent_radius))
+            self.rrt_policies.append(EnvWaypointPolicy(self.obstacles, self.env_size, self.max_speeds[i], capture_radius=0.45 * self.catch_radius, slip_radius=4 * self.catch_radius, avoid_radius=2 * self.agent_radius))
 
     def seed(self, seed=None):
         """

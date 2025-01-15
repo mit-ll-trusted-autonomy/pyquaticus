@@ -107,6 +107,9 @@ class WaypointPolicy(BaseAgentPolicy):
 
         self.update_wps(self.pos)
 
+        if self.is_tagged:
+            self.wps = []
+
         if len(self.wps) == 0:
             if self.continuous:
                 return 0, 0
