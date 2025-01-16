@@ -23,7 +23,7 @@ config["flag_homes_unit"] = "ll"
 config["sim_speedup_factor"] = 80
 config["max_time"] = 2400
 config["action_type"] = "continuous"
-config["dynamics"] = "heron"
+config["dynamics"] = "large_usv"
 
 init_dict = {
     "agent_pos_unit": "ll",
@@ -80,8 +80,8 @@ blue_two = WaypointPolicy(
     1,
     Team.BLUE_TEAM,
     env,
-    capture_radius=5,
-    slip_radius=10
+    capture_radius=10,
+    slip_radius=20
 )
 blue_three = Heuristic_CTF_Agent(
     2,

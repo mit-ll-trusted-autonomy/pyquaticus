@@ -24,17 +24,16 @@ import numpy as np
 from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import Team
 from pyquaticus.envs.pyquaticus import PyQuaticusEnv
-from pyquaticus.base_policies.rrt.utils import Point, draw_result
+from pyquaticus.base_policies.rrt.utils import Point
 from pyquaticus.base_policies.rrt.rrt_star import rrt_star
 from pyquaticus.structs import PolygonObstacle
 
 
-from typing import Union, Optional
+from typing import Optional
 
 from multiprocessing.dummy import Pool
 from multiprocessing.pool import ThreadPool
-
-from functools import partial
+from multiprocessing import TimeoutError
 
 class WaypointPolicy(BaseAgentPolicy):
     """This is a Policy class that contains logic for capturing the flag."""
@@ -65,40 +64,38 @@ class WaypointPolicy(BaseAgentPolicy):
 
         self.plan_process = Pool(processes=1)
 
-        self.obstacles = self.get_env_geom(env)
+        self.get_env_geom(env)
 
         self.tree = None
 
         if team not in Team:
             raise AttributeError(f"Invalid team {team}")
         
-    def get_env_geom(self, env: PyQuaticusEnv) -> Optional[list[np.ndarray]]:
+    def get_env_geom(self, env: PyQuaticusEnv):
         obstacles = []
         for obstacle in env.obstacles:
             assert isinstance(obstacle, PolygonObstacle)
             poly = np.array(obstacle.anchor_points).reshape(-1, 2)
             obstacles.append(poly)
         if len(obstacles) == 0:
-            return None
+            self.obstacles = None
 
         self.env_bounds = np.array(((0, 0), env.env_size))
 
-        return obstacles
+        self.obstacles = obstacles
 
     def compute_action(self, obs, info):
         """
-        **THIS FUNCTION REQUIRES UNNORMALIZED GLOBAL STATE**.
-
-        Compute an action for the given position. This function uses observations
-        of both teams.
+        Compute an action from the given observation and global state.
 
         Args:
-            obs: Unnormalized observation from the gym
+            obs: observation from the gym
+            info: info from the gym
 
         Returns
         -------
-            desired_speed: m/s
-            heading_error: deg
+            action: if continuous, a tuple containing desired speed and heading error.
+            if discrete, an action index corresponding to ACTION_MAP in config.py
         """
         self.update_state(obs, info)
 
@@ -143,27 +140,36 @@ class WaypointPolicy(BaseAgentPolicy):
                 return 12
 
     def update_wps(self, pos: np.ndarray):
+        """
+        Remove the current waypoint from the list of waypoints, if necessary.
+        """
 
         if len(self.wps) == 0:
             return
         
         new_dist = np.linalg.norm(self.wps[0] - pos)
+
         if new_dist <= self.capture_radius:
             self.wps.pop(0)
             self.cur_dist = None
+
         elif (self.slip_radius is not None) and (self.cur_dist is not None) and (new_dist > self.cur_dist) and (new_dist <= self.slip_radius):
             self.wps.pop(0)
             self.cur_dist = None
+
         else:
             self.cur_dist = new_dist
 
     def set_wps(self, wps: list[np.ndarray]):
         self.wps = wps
 
-    def plan(self, wp: np.ndarray, obstacles: Optional[list[np.ndarray]] = None, area: Optional[np.ndarray] = None, max_step_size: Optional[float] = None, num_iters: int = 1000):
+    def plan(self, wp: np.ndarray, obstacles: Optional[list[np.ndarray]] = None, area: Optional[np.ndarray] = None, max_step_size: Optional[float] = None, num_iters: int = 1000, timeout: float = 10):
         """
         Asynchronously run RRT* from the agent's current position, and update the waypoints if a valid path to the goal was found
         """
+
+        # Use obstacles, area, and step size from environment if not provided
+
         if obstacles is None:
             obstacles = self.obstacles
 
@@ -172,12 +178,20 @@ class WaypointPolicy(BaseAgentPolicy):
 
         if max_step_size is None:
             max_step_size = np.max(self.env_bounds[1] - self.env_bounds[0]) / 10
+
+        # Run RRT in a separate process
             
         kwargs=dict(start=self.pos, goal=wp, obstacles=obstacles, area=area, max_step_size=max_step_size, num_iters=num_iters, agent_radius=self.avoid_radius)
 
         assert isinstance(self.plan_process, ThreadPool)
         
-        self.plan_process.apply_async(rrt_star, kwds=kwargs, callback=partial(self.get_path, wp=wp))
+        try:
+            tree = self.plan_process.apply_async(rrt_star, kwds=kwargs).get(timeout=timeout)
+
+            self.get_path(tree, wp)
+
+        except TimeoutError:
+            print("Planning timed out.")
         
         
     def get_path(self, tree: list[Point], wp: np.ndarray):
@@ -185,20 +199,19 @@ class WaypointPolicy(BaseAgentPolicy):
         Given a tree, search the tree for points near the goal and create a list of waypoints
         that determine the shortest path to the goal from the starting point
         """
+
         possible_points = []
 
         # Find all points that satisfy the goal
         for point in tree:
-            #if np.linalg.norm(point.pos - wp) <= self.capture_radius:
             if np.linalg.norm(point.pos - wp) <= self.capture_radius:
                 possible_points.append(point)
 
+        # Check for no possible paths
         if len(possible_points) == 0:
             print("No path found.")
             self.tree = tree
             return
-        
-        # print("Path found.")
         
         # Find the satisfying point with the minimum cost
         min_point = possible_points[0]
@@ -213,11 +226,10 @@ class WaypointPolicy(BaseAgentPolicy):
 
         wps = [min_point.pos]
 
-        # Trace the path back to the root of the tree
+        # Trace the path back to the root of the tree (the agent's current position)
         while min_point.parent is not None:
             wps.insert(0, min_point.parent.pos)
             min_point = min_point.parent
 
         self.tree = tree
-
         self.wps = wps

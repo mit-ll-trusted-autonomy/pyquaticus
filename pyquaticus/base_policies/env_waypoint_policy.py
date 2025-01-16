@@ -34,7 +34,7 @@ from multiprocessing.pool import ThreadPool
 from functools import partial
 
 class EnvWaypointPolicy():
-    """Waypoint policy for use inside Pywuaticus environment only."""
+    """Waypoint policy for use inside Pyquaticus environment only."""
 
     def __init__(
         self,

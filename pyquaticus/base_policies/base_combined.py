@@ -105,19 +105,16 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
 
     def compute_action(self, obs, info):
         """
-        **THIS FUNCTION REQUIRES UNNORMALIZED GLOBAL STATE**.
-
-        Upates the state of the agent using the observation `obs` and then computes
-        an action to take based on the new state.
+        Compute an action from the given observation and global state.
 
         Args:
-            obs: Dictionary of raw observations for teams -- containing the regular
-                    observations
+            obs: observation from the gym
+            info: info from the gym
 
         Returns
         -------
-            action: A discrete action index representing the agents choice.
-
+            action: if continuous, a tuple containing desired speed and heading error.
+            if discrete, an action index corresponding to ACTION_MAP in config.py
         """
         # Update the state based on this observation
         self.update_state(obs, info)

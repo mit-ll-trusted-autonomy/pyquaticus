@@ -49,21 +49,21 @@ H_one = BaseDefender(
     2,
     Team.RED_TEAM,
     env,
-    mode="easy",
+    mode="medium",
 )
 H_two = BaseDefender(
     3,
     Team.RED_TEAM,
     env,
-    mode="easy",
+    mode="medium",
 )
 
 R_one = WaypointPolicy(
     0,
     Team.BLUE_TEAM,
     env,
-    capture_radius=5,
-    slip_radius=10,
+    capture_radius=4,
+    slip_radius=8,
     avoid_radius=4,
 )
 R_two = BaseAttacker(

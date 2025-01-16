@@ -23,9 +23,6 @@ import numpy as np
 
 from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import config_dict_std, Team, PyQuaticusEnv
-from pyquaticus.utils.obs_utils import ObsNormalizer
-
-from typing import Union
 
 modes = {"nothing", "easy", "medium", "hard", "competition_easy", "competition_medium"}
 """
@@ -34,7 +31,6 @@ Difficulty modes for the policy, each one has different behavior.
 'medium' = Medium Attacker - Go to goal and avoid others
 'hard' = Hard Attacker - Not Implemented, but plan to goal smartly
 """
-
 
 class BaseAttacker(BaseAgentPolicy):
     """This is a Policy class that contains logic for capturing the flag."""
@@ -48,6 +44,7 @@ class BaseAttacker(BaseAgentPolicy):
         using_pyquaticus: bool = True,
     ):
         super().__init__(agent_id, team, env)
+
         if mode not in modes:
             raise AttributeError(f"Invalid mode {mode}")
         self.mode = mode
@@ -69,18 +66,16 @@ class BaseAttacker(BaseAgentPolicy):
 
     def compute_action(self, obs, info):
         """
-        **THIS FUNCTION REQUIRES UNNORMALIZED OBSERVATIONS**.
-
-        Compute an action for the given position. This function uses observations
-        of both teams.
+        Compute an action from the given observation and global state.
 
         Args:
-            obs: Unnormalized observation from the gym
+            obs: observation from the gym
+            info: info from the gym
 
         Returns
         -------
-            action: The action index describing which speed/heading combo to use (assumes
-            discrete action values from `ctf-gym.envs.pyquaticus.ACTION_MAP`)
+            action: if continuous, a tuple containing desired speed and heading error.
+            if discrete, an action index corresponding to ACTION_MAP in config.py
         """
         self.update_state(obs, info)
 
@@ -123,7 +118,7 @@ class BaseAttacker(BaseAgentPolicy):
                     elif heading_error > 1:
                         return 10
                     else:
-                        # Should only happen if the act_heading is somehow NAN
+                        # Should only happen if the heading error is somehow NAN
                         return 12
             except Exception:
                 # If there is an error converting the vector to a heading, just go straight
@@ -494,7 +489,6 @@ class BaseAttacker(BaseAgentPolicy):
             try:
                 heading_error = self.angle180(self.vec_to_heading(my_action))
                 # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
-                # TODO: Look at this
                 if self.continuous:
                     if np.isnan(heading_error):
                         heading_error = 0
