@@ -22,7 +22,8 @@
 import numpy as np
 
 from pyquaticus.base_policies.base import BaseAgentPolicy
-from pyquaticus.envs.pyquaticus import config_dict_std, Team, PyQuaticusEnv
+from pyquaticus.envs.pyquaticus import Team, PyQuaticusEnv
+from pyquaticus.utils.utils import mag_bearing_to
 
 modes = {"nothing", "easy", "medium", "hard", "competition_easy", "competition_medium"}
 """
@@ -55,8 +56,10 @@ class BaseAttacker(BaseAgentPolicy):
         self.continuous = env.action_type == "continuous"
 
         self.using_pyquaticus = using_pyquaticus
-        self.competition_easy = [15, 6, 50, 35]
+
         self.goal = "SC"
+
+        self.aquaticus_field_points = env.config_dict["aquaticus_field_points"]
 
     def set_mode(self, mode: str):
         """Sets difficulty mode."""
@@ -134,6 +137,7 @@ class BaseAttacker(BaseAgentPolicy):
                 return -1
 
         elif self.mode == "competition_easy":
+
             if self.team == Team.RED_TEAM:
                 estimated_position = np.asarray(
                     [
@@ -159,13 +163,13 @@ class BaseAttacker(BaseAgentPolicy):
                     value += "X"
                 elif self.goal not in ["SC", "CC", "PC"]:
                     value = value[:-1]
-            if global_state["is_tagged"]:
+            if self.is_tagged:
                 self.goal = "SC"
 
             if (
                 -2.5
                 <= self.get_distance_between_2_points(
-                    estimated_position, config_dict_std["aquaticus_field_points"][value]
+                    estimated_position, self.aquaticus_field_points[value]
                 )
                 <= 2.5
             ):
@@ -182,12 +186,42 @@ class BaseAttacker(BaseAgentPolicy):
                 self.goal == "CF"
                 and -6
                 <= self.get_distance_between_2_points(
-                    estimated_position, config_dict_std["aquaticus_field_points"][value]
+                    estimated_position, self.aquaticus_field_points[value]
                 )
                 <= 6
             ):
                 self.goal = "SC"
-            return self.goal
+
+            if self.continuous:
+
+                # Make point system the same on both blue and red side
+                if self.team == Team.BLUE_TEAM:
+                    if "P" in self.goal:
+                        self.goal = "S" + self.goal[1:]
+                    elif "S" in self.goal:
+                        self.goal = "P" + self.goal[1:]
+                    if "X" not in self.goal and self.goal not in ["SC", "CC", "PC"]:
+                        self.goal += "X"
+                    elif self.goal not in ["SC", "CC", "PC"]:
+                        self.goal = self.goal[:-1]
+
+                _, heading = mag_bearing_to(
+                    self.pos,
+                    self.aquaticus_field_points[self.goal],
+                    self.heading,
+                )
+                if (-0.3 <= self.get_distance_between_2_points(
+                        self.pos,
+                        self.aquaticus_field_points[self.goal],
+                    ) <= 0.3
+                ):
+                    speed = 0.0
+                else:
+                    speed = self.max_speed
+
+                return speed, heading
+            else:
+                return self.goal
 
         elif self.mode == "medium":
 
@@ -354,22 +388,36 @@ class BaseAttacker(BaseAgentPolicy):
                         )
                 else:
                     my_action = np.multiply(1.25, goal_vect) + avoid_vect
-
+            
             # Try to convert the heading to a discrete action
             try:
                 heading_error = self.angle180(self.vec_to_heading(my_action))
                 # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
-                if 1 >= heading_error >= -1:
-                    return 4
-                elif heading_error < -1:
-                    return 6
-                elif heading_error > 1:
-                    return 2
+                if self.continuous:
+                    if np.isnan(heading_error):
+                        heading_error = 0
+
+                    if np.abs(heading_error) < 5:
+                        heading_error = 0
+
+                    return (desired_speed, heading_error)
+
                 else:
-                    # Should only happen if the act_heading is somehow NAN
-                    return 4
+                    if 1 >= heading_error >= -1:
+                        return 4
+                    elif heading_error < -1:
+                        return 6
+                    elif heading_error > 1:
+                        return 2
+                    else:
+                        # Should only happen if the act_heading is somehow NAN
+                        return 4
             except Exception:
-                return 4
+                # If there is an error converting the vector to a heading, just go straight
+                if self.continuous:
+                    return (desired_speed, 0)
+                else:
+                    return 4
 
         elif self.mode == "hard":
 

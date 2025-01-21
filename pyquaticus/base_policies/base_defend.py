@@ -23,6 +23,7 @@ import numpy as np
 
 from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import config_dict_std, Team, PyQuaticusEnv
+from pyquaticus.utils.utils import mag_bearing_to
 
 from typing import Union
 
@@ -53,6 +54,7 @@ class BaseDefender(BaseAgentPolicy):
         self.catch_radius = catch_radius
         self.using_pyquaticus = using_pyquaticus
         self.goal = "PM"
+        self.aquaticus_field_points = env.config_dict["aquaticus_field_points"]
 
     def set_mode(self, mode: str):
         """
@@ -138,6 +140,7 @@ class BaseDefender(BaseAgentPolicy):
                 return -1
 
         elif self.mode == "competition_easy":
+
             if self.team == Team.RED_TEAM:
                 estimated_position = np.asarray(
                     [
@@ -163,12 +166,12 @@ class BaseDefender(BaseAgentPolicy):
                     value += "X"
                 elif self.goal not in ["SC", "CC", "PC"]:
                     value = value[:-1]
-            if global_state["is_tagged"]:
+            if self.is_tagged:
                 self.goal = "SC"
             if (
                 -2.5
                 <= self.get_distance_between_2_points(
-                    estimated_position, config_dict_std["aquaticus_field_points"][value]
+                    estimated_position, self.aquaticus_field_points[value]
                 )
                 <= 2.5
             ):
@@ -176,7 +179,39 @@ class BaseDefender(BaseAgentPolicy):
                     self.goal = "PM"
                 else:
                     self.goal = "SM"
-            return self.goal
+
+
+            if self.continuous:
+
+                # Make point system the same on both blue and red side
+                if self.team == Team.BLUE_TEAM:
+                    if "P" in self.goal:
+                        self.goal = "S" + self.goal[1:]
+                    elif "S" in self.goal:
+                        self.goal = "P" + self.goal[1:]
+                    if "X" not in self.goal and self.goal not in ["SC", "CC", "PC"]:
+                        self.goal += "X"
+                    elif self.goal not in ["SC", "CC", "PC"]:
+                        self.goal = self.goal[:-1]
+
+                _, heading = mag_bearing_to(
+                    self.pos,
+                    self.aquaticus_field_points[self.goal],
+                    self.heading,
+                )
+                if (-0.3 <= self.get_distance_between_2_points(
+                        self.pos,
+                        self.aquaticus_field_points[self.goal],
+                    ) <= 0.3
+                ):
+                    speed = 0.0
+                else:
+                    speed = self.max_speed
+
+                return speed, heading
+            else:
+                return self.goal
+        
 
         elif self.mode == "competition_medium":
 
@@ -224,23 +259,76 @@ class BaseDefender(BaseAgentPolicy):
                     -2.5
                     <= self.get_distance_between_2_points(
                         estimated_position,
-                        config_dict_std["aquaticus_field_points"][point],
+                        self.aquaticus_field_points[point],
                     )
                     <= 2.5
                 ):
-                    return -1
+                    if self.continuous:
+                        return (0, 0)
+                    else:
+                        return -1
                 else:
-                    return "CH"
+                    if self.continuous:
+                        goal = "CH"
+                        # Make point system the same on both blue and red side
+                        if self.team == Team.BLUE_TEAM:
+                            if "P" in goal:
+                                goal = "S" + goal[1:]
+                            elif "S" in goal:
+                                goal = "P" + goal[1:]
+                            if "X" not in goal and goal not in ["SC", "CC", "PC"]:
+                                goal += "X"
+                            elif self.goal not in ["SC", "CC", "PC"]:
+                                goal = goal[:-1]
+
+                        _, heading = mag_bearing_to(
+                            self.pos,
+                            self.aquaticus_field_points[goal],
+                            self.heading,
+                        )
+                        if (-0.3 <= self.get_distance_between_2_points(
+                                self.pos,
+                                self.aquaticus_field_points[goal],
+                            ) <= 0.3
+                        ):
+                            speed = 0.0
+                        else:
+                            speed = self.max_speed
+
+                        return speed, heading
+                    else:
+                        return "CH"
+                
+            # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
+            # Convert the vector to a heading, and then pick the best discrete action to perform
             try:
-                act_heading = self.angle180(self.vec_to_heading(ag_vect))
-                if 1 >= act_heading >= -1:
-                    act_index = 4
-                elif act_heading < -1:
-                    act_index = 6
-                elif act_heading > 1:
-                    act_index = 2
+                heading_error = self.angle180(self.vec_to_heading(ag_vect))
+
+                if self.continuous:
+                    if np.isnan(heading_error):
+                        heading_error = 0
+
+                    if np.abs(heading_error) < 5:
+                        heading_error = 0
+
+                    return (desired_speed, heading_error)
+
+                else:
+                    if 1 >= heading_error >= -1:
+                        return 4
+                    elif heading_error < -1:
+                        return 6
+                    elif heading_error > 1:
+                        return 2
+                    else:
+                        # Should only happen if the act_heading is somehow NAN
+                        return 4
             except Exception:
-                act_index = 4
+                # If there is an error converting the vector to a heading, just go straight
+                if self.continuous:
+                    return (desired_speed, 0)
+                else:
+                    return 4
 
         elif self.mode == "medium":
 
@@ -432,5 +520,3 @@ class BaseDefender(BaseAgentPolicy):
                     return (desired_speed, 0)
                 else:
                     return 4
-
-        return act_index
