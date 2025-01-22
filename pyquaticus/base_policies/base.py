@@ -336,25 +336,6 @@ class BaseAgentPolicy:
         """Calculates the distance between two rectagular points."""
         return np.linalg.norm(start - end)
 
-    # def get_nearest_opponent_2_flag(self, opp_poses, own_flag):
-    #     """
-    #     Iterate over agent positions, returning the distance of the closest
-    #     agent to the flag and their position.
-
-    #     Args:
-    #         opp_poses: List of opponents positions (rectangular coords)
-    #         own_flag: Flag location (rectangular coords)
-    #     """
-    #     min_dist = np.max(self.env_size) * 2.0
-
-    #     for ag in opp_poses:
-    #         opp_flag_dist = self.get_distance_between_2_points(ag, own_flag)
-    #         if opp_flag_dist < min_dist:
-    #             min_dist = opp_flag_dist
-    #             nearest_pose = ag
-
-    #     return min_dist, nearest_pose
-
     def closest_point_on_line(self, A, B, P):
         """
         Calculates the closest point to point `P` on a line between `A` and `B`.

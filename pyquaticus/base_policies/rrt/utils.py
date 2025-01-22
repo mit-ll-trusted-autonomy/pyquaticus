@@ -37,6 +37,7 @@ def get_near(
 
     return near_points
 
+
 def choose_parent(point: Point, parents: list[Point]):
     """
     Sets the given point's parent to be the one which minimizes the
@@ -133,7 +134,6 @@ def get_random_point(
     else:
         rand_point = Point(np.random.uniform(area[0], area[1], (2)))
 
-
     if grouped_seglist is None:
         nearest = get_nearest(rand_point, points, ungrouped_seglist, agent_radius)
         assert nearest is not None
@@ -157,7 +157,7 @@ def get_random_point(
 
 def bound(to_point: Point, from_point: Point, max_step_size):
     """
-    Returns the point on the vector from p1 -> p2 
+    Returns the point on the vector from p1 -> p2
     where the distance is no greater than max_step_size.
     """
     vector = to_point.pos - from_point.pos
@@ -192,7 +192,7 @@ def get_ungrouped_seglist(polys: list[np.ndarray]) -> np.ndarray:
     """
     Turns a list of polygons into an array of all segments in the polygons, ungrouped.
     Used for determining if a line (or list of lines) intersects any of the polygons.
-    
+
     Args:
         polys (list[np.ndarray]): [((x1, y1), (x2, y2), ... , (xn, yn)), ... ]
 
@@ -211,13 +211,13 @@ def get_grouped_seglist(polys: list[np.ndarray]) -> np.ndarray:
     """
     Turns a list of polygons into an array of all segments in the polygons, grouped by each polygon.
     Used for determining if a point is in any of the polygons.
-    Polygons with fewer than the maximum number of sides are padded with np.nan. 
+    Polygons with fewer than the maximum number of sides are padded with np.nan.
 
     Args:
         polys (list[np.ndarray]): [((x1, y1), (x2, y2), ... , (xn, yn)), ... ]
 
     Returns:
-        seglist (np.ndarray): 
+        seglist (np.ndarray):
                                ((((x1, y1), (x2, y2)), ((x2, y2), (x3, y3)), ... , ((xk, yk), (x1, y1))                 -> first polygon
 
                                 (((x1, y1), (x2, y2)), ((x2, y2), (x3, y3)), ... , ((np.nan, np.nan), (np.nan, np.nan)) -> second polygon
@@ -256,7 +256,7 @@ def point_in_polygons(
 ):
     """
     Determines if a single point is in any of the polygons, provided as an array of segments.
-    
+
     seglists can be obstained via get_grouped_seglist()
 
     point.shape should be (2)
@@ -316,7 +316,9 @@ def point_in_polygons(
     return np.any(np.count_nonzero(intersect, axis=1) % 2)
 
 
-def intersect(segs_to_check: np.ndarray, seglist: Optional[np.ndarray], radius: float = 1e-9):
+def intersect(
+    segs_to_check: np.ndarray, seglist: Optional[np.ndarray], radius: float = 1e-9
+):
     """
     Determines which segments in an array of segments intersect any of the segments in another array of segments
 
@@ -325,7 +327,7 @@ def intersect(segs_to_check: np.ndarray, seglist: Optional[np.ndarray], radius: 
     be detected with adjacent edges.
 
     Note: when using for detecting intersections with polygons, this algorithm will not detect "corner cutting,"
-    as it merely extends the segments - it does not check the distance from the endpoints to the segments. 
+    as it merely extends the segments - it does not check the distance from the endpoints to the segments.
     This can be avoided by using a larger agent radius, or by using the (slower) alternate intersection function below.
 
     Args:
@@ -377,7 +379,10 @@ def intersect(segs_to_check: np.ndarray, seglist: Optional[np.ndarray], radius: 
 
     return np.any(intersect, axis=1)
 
-def intersect_slow(seg: np.ndarray, seglist: Optional[np.ndarray], radius: float = 1e-9):
+
+def intersect_slow(
+    seg: np.ndarray, seglist: Optional[np.ndarray], radius: float = 1e-9
+):
     """
     Determines which segments in an array of segments intersect any of the segments in another array of segments
 
@@ -386,7 +391,7 @@ def intersect_slow(seg: np.ndarray, seglist: Optional[np.ndarray], radius: float
     be detected with adjacent edges.
 
     Note: when using for detecting intersections with polygons, this algorithm will detect "corner cutting,"
-    but is much slower than the algorithm above. 
+    but is much slower than the algorithm above.
 
     Args:
         seg (np.ndarray of shape (n, 2, 2)): (((x1, y1), (x2, y2)), ((x1, y1), (x2, y2)), ... )
@@ -398,14 +403,35 @@ def intersect_slow(seg: np.ndarray, seglist: Optional[np.ndarray], radius: float
     """
     if seglist is None:
         return np.full((seg.shape[0]), False)
-    
+
     pts = seglist[:, 0, :]
 
-    past1 = (np.matmul(pts - seg[:, 1, :].reshape((-1, 1, 2)), (seg[:, 1, :] - seg[:, 0, :]).reshape((-1, 2, 1))) > 0).reshape((seg.shape[0], pts.shape[0]))
-    past0 = (np.matmul(pts - seg[:, 0, :].reshape((-1, 1, 2)), (seg[:, 1, :] - seg[:, 0, :]).reshape((-1, 2, 1))) < 0).reshape((seg.shape[0], pts.shape[0]))
+    past1 = (
+        np.matmul(
+            pts - seg[:, 1, :].reshape((-1, 1, 2)),
+            (seg[:, 1, :] - seg[:, 0, :]).reshape((-1, 2, 1)),
+        )
+        > 0
+    ).reshape((seg.shape[0], pts.shape[0]))
+    past0 = (
+        np.matmul(
+            pts - seg[:, 0, :].reshape((-1, 1, 2)),
+            (seg[:, 1, :] - seg[:, 0, :]).reshape((-1, 2, 1)),
+        )
+        < 0
+    ).reshape((seg.shape[0], pts.shape[0]))
     between = np.logical_and(np.logical_not(past1), np.logical_not(past0))
 
-    num = np.abs(np.cross((pts - seg[:, 0, :].reshape((-1, 1, 2))).transpose((0, 2, 1)).ravel(order="F").reshape((-1, 2, seg.shape[0])).transpose((0, 2, 1)), seg[:, 1, :] - seg[:, 0, :]))
+    num = np.abs(
+        np.cross(
+            (pts - seg[:, 0, :].reshape((-1, 1, 2)))
+            .transpose((0, 2, 1))
+            .ravel(order="F")
+            .reshape((-1, 2, seg.shape[0]))
+            .transpose((0, 2, 1)),
+            seg[:, 1, :] - seg[:, 0, :],
+        )
+    )
     denom = np.linalg.norm(seg[:, 1, :] - seg[:, 0, :], axis=1)
 
     dist0 = np.linalg.norm(pts - seg[:, 0, :].reshape((-1, 1, 2)), axis=2)

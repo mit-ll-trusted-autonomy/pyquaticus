@@ -23,7 +23,7 @@ obs, info = env.reset()
 r_one = BaseAttacker(2, Team.RED_TEAM, env, mode='easy')
 r_two = BaseAttacker(3, Team.RED_TEAM, env, mode='nothing')
 
-b_one = BaseDefender(0, Team.BLUE_TEAM, env, mode='hard')
+b_one = Heuristic_CTF_Agent(0, Team.BLUE_TEAM, env, mode='hard')
 b_two = BaseDefender(1, Team.BLUE_TEAM, env, mode='nothing')
 
 while True:

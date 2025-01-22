@@ -19,15 +19,10 @@
 
 # SPDX-License-Identifier: BSD-3-Clause
 
-from collections import OrderedDict
 from ray.rllib.policy.policy import PolicySpec, Policy
 from pyquaticus.base_policies.base_attack import BaseAttacker
 from pyquaticus.base_policies.base_defend import BaseDefender
 from pyquaticus.base_policies.base_combined import Heuristic_CTF_Agent
-from pyquaticus.utils.obs_utils import ObsNormalizer
-import numpy as np
-import pyquaticus.envs.pyquaticus as pyq
-from pyquaticus.envs.pyquaticus import Team
 
 
 class RandPolicy(Policy):
@@ -40,17 +35,20 @@ class RandPolicy(Policy):
     See policies and policy_mapping_fn for how policies are associated
     with agents
     """
+
     def __init__(self, observation_space, action_space, config):
         Policy.__init__(self, observation_space, action_space, config)
 
-    def compute_actions(self,
-                        obs_batch,
-                        state_batches,
-                        prev_action_batch=None,
-                        prev_reward_batch=None,
-                        info_batch=None,
-                        episodes=None,
-                        **kwargs):
+    def compute_actions(
+        self,
+        obs_batch,
+        state_batches,
+        prev_action_batch=None,
+        prev_reward_batch=None,
+        info_batch=None,
+        episodes=None,
+        **kwargs,
+    ):
 
         return [self.action_space.sample() for _ in obs_batch], [], {}
 
@@ -69,17 +67,20 @@ class NoOp(Policy):
     No-op policy - stays in place
 
     """
+
     def __init__(self, observation_space, action_space, config):
         Policy.__init__(self, observation_space, action_space, config)
 
-    def compute_actions(self,
-                        obs_batch,
-                        state_batches,
-                        prev_action_batch=None,
-                        prev_reward_batch=None,
-                        info_batch=None,
-                        episodes=None,
-                        **kwargs):
+    def compute_actions(
+        self,
+        obs_batch,
+        state_batches,
+        prev_action_batch=None,
+        prev_reward_batch=None,
+        info_batch=None,
+        episodes=None,
+        **kwargs,
+    ):
 
         return [16], [], {}
 
@@ -93,7 +94,7 @@ class NoOp(Policy):
         pass
 
 
-def AttackGen(agentid, team, env, mode, continuous, team_size):
+def AttackGen(agentid, team, env, mode):
 
     class AttackPolicy(Policy):
         """
@@ -105,14 +106,16 @@ def AttackGen(agentid, team, env, mode, continuous, team_size):
             self.policy = BaseAttacker(agentid, team, env, mode=mode)
             self.action_dict = {}
 
-        def compute_actions(self,
-                            obs_batch,
-                            state_batches,
-                            prev_action_batch=None,
-                            prev_reward_batch=None,
-                            info_batch=None,
-                            episodes=None,
-                            **kwargs):
+        def compute_actions(
+            self,
+            obs_batch,
+            state_batches,
+            prev_action_batch=None,
+            prev_reward_batch=None,
+            info_batch=None,
+            episodes=None,
+            **kwargs,
+        ):
 
             if info_batch is None:
                 raise Warning("Warning: Base policy requires info as well as obs")
@@ -121,7 +124,9 @@ def AttackGen(agentid, team, env, mode, continuous, team_size):
             for i in range(len(obs_batch)):
 
                 # Compute action and add it to the action dictionary
-                self.action_dict[agentid] = self.policy.compute_action(obs_batch[i], info_batch[i])
+                self.action_dict[agentid] = self.policy.compute_action(
+                    obs_batch[i], info_batch[i]
+                )
 
             return [self.action_dict[agentid]], [], {}
 
@@ -137,7 +142,7 @@ def AttackGen(agentid, team, env, mode, continuous, team_size):
     return AttackPolicy
 
 
-def DefendGen(agentid, team, env, mode, continuous, team_size):
+def DefendGen(agentid, team, env, mode):
     class DefendPolicy(Policy):
         """
         Creates a defender policy
@@ -148,14 +153,16 @@ def DefendGen(agentid, team, env, mode, continuous, team_size):
             self.policy = BaseDefender(agentid, team, env, mode=mode)
             self.action_dict = {}
 
-        def compute_actions(self,
-                            obs_batch,
-                            state_batches,
-                            prev_action_batch=None,
-                            prev_reward_batch=None,
-                            info_batch=None,
-                            episodes=None,
-                            **kwargs):
+        def compute_actions(
+            self,
+            obs_batch,
+            state_batches,
+            prev_action_batch=None,
+            prev_reward_batch=None,
+            info_batch=None,
+            episodes=None,
+            **kwargs,
+        ):
 
             if info_batch is None:
                 raise Warning("Warning: Base policy requires info as well as obs")
@@ -164,7 +171,9 @@ def DefendGen(agentid, team, env, mode, continuous, team_size):
             for i in range(len(obs_batch)):
 
                 # Compute action and add it to the action dictionary
-                self.action_dict[agentid] = self.policy.compute_action(obs_batch[i], info_batch[i])
+                self.action_dict[agentid] = self.policy.compute_action(
+                    obs_batch[i], info_batch[i]
+                )
 
             return [self.action_dict[agentid]], [], {}
 
@@ -176,10 +185,11 @@ def DefendGen(agentid, team, env, mode, continuous, team_size):
 
         def set_weights(self, weights):
             pass
+
     return DefendPolicy
 
 
-def CombinedGen(agentid, team, env, mode, continuous, team_size):
+def CombinedGen(agentid, team, env, mode):
     class CombinedPolicy(Policy):
         """
         Creates a combined (attacker and defender) policy
@@ -190,14 +200,16 @@ def CombinedGen(agentid, team, env, mode, continuous, team_size):
             self.policy = Heuristic_CTF_Agent(agentid, team, env, mode=mode)
             self.action_dict = {}
 
-        def compute_actions(self,
-                            obs_batch,
-                            state_batches,
-                            prev_action_batch=None,
-                            prev_reward_batch=None,
-                            info_batch=None,
-                            episodes=None,
-                            **kwargs):  # Iterate over all observations in obs_batch
+        def compute_actions(
+            self,
+            obs_batch,
+            state_batches,
+            prev_action_batch=None,
+            prev_reward_batch=None,
+            info_batch=None,
+            episodes=None,
+            **kwargs,
+        ):  # Iterate over all observations in obs_batch
             if info_batch is None:
                 raise Warning("Warning: Base policy requires info as well as obs")
 
@@ -205,7 +217,9 @@ def CombinedGen(agentid, team, env, mode, continuous, team_size):
             for i in range(len(obs_batch)):
 
                 # Compute action and add it to the action dictionary
-                self.action_dict[agentid] = self.policy.compute_action(obs_batch[i], info_batch[i])
+                self.action_dict[agentid] = self.policy.compute_action(
+                    obs_batch[i], info_batch[i]
+                )
 
             return [self.action_dict[agentid]], [], {}
 
@@ -217,4 +231,5 @@ def CombinedGen(agentid, team, env, mode, continuous, team_size):
 
         def set_weights(self, weights):
             pass
+
     return CombinedPolicy

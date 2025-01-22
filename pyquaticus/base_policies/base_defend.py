@@ -39,9 +39,6 @@ class BaseDefender(BaseAgentPolicy):
         team: Team,
         env: PyQuaticusEnv,
         mode: str = "easy",
-        flag_keepout: float = 10.0,
-        catch_radius: float = config_dict_std["catch_radius"],
-        using_pyquaticus: bool = True,
     ):
         super().__init__(agent_id, team, env)
 
@@ -50,9 +47,8 @@ class BaseDefender(BaseAgentPolicy):
         self.mode = mode
 
         self.continuous = env.action_type == "continuous"
-        self.flag_keepout = flag_keepout
-        self.catch_radius = catch_radius
-        self.using_pyquaticus = using_pyquaticus
+        self.flag_keepout = env.flag_keepout_radius
+        self.catch_radius = env.catch_radius
         self.goal = "PM"
         self.aquaticus_field_points = env.config_dict["aquaticus_field_points"]
 
@@ -169,8 +165,7 @@ class BaseDefender(BaseAgentPolicy):
             if self.is_tagged:
                 self.goal = "SC"
             if (
-                -2.5
-                <= self.get_distance_between_2_points(
+                self.get_distance_between_2_points(
                     estimated_position, self.aquaticus_field_points[value]
                 )
                 <= 2.5
@@ -179,7 +174,6 @@ class BaseDefender(BaseAgentPolicy):
                     self.goal = "PM"
                 else:
                     self.goal = "SM"
-
 
             if self.continuous:
 
@@ -199,10 +193,12 @@ class BaseDefender(BaseAgentPolicy):
                     self.aquaticus_field_points[self.goal],
                     self.heading,
                 )
-                if (-0.3 <= self.get_distance_between_2_points(
+                if (
+                    self.get_distance_between_2_points(
                         self.pos,
                         self.aquaticus_field_points[self.goal],
-                    ) <= 0.3
+                    )
+                    <= 0.3
                 ):
                     speed = 0.0
                 else:
@@ -211,7 +207,6 @@ class BaseDefender(BaseAgentPolicy):
                 return speed, heading
             else:
                 return self.goal
-        
 
         elif self.mode == "competition_medium":
 
@@ -256,8 +251,7 @@ class BaseDefender(BaseAgentPolicy):
                     )
                 point = "CH" if self.team == Team.RED_TEAM else "CHX"
                 if (
-                    -2.5
-                    <= self.get_distance_between_2_points(
+                    self.get_distance_between_2_points(
                         estimated_position,
                         self.aquaticus_field_points[point],
                     )
@@ -286,10 +280,13 @@ class BaseDefender(BaseAgentPolicy):
                             self.aquaticus_field_points[goal],
                             self.heading,
                         )
-                        if (-0.3 <= self.get_distance_between_2_points(
+                        if (
+                            -0.3
+                            <= self.get_distance_between_2_points(
                                 self.pos,
                                 self.aquaticus_field_points[goal],
-                            ) <= 0.3
+                            )
+                            <= 0.3
                         ):
                             speed = 0.0
                         else:
@@ -298,7 +295,7 @@ class BaseDefender(BaseAgentPolicy):
                         return speed, heading
                     else:
                         return "CH"
-                
+
             # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
             # Convert the vector to a heading, and then pick the best discrete action to perform
             try:

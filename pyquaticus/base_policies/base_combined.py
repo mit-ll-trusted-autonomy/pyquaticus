@@ -26,8 +26,6 @@ import pyquaticus.base_policies.base_defend as defend_policy
 from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import config_dict_std, Team, PyQuaticusEnv
 
-from typing import Union
-
 modes = {"easy", "medium", "hard", "nothing"}
 
 
@@ -40,9 +38,6 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         team: Team,
         env: PyQuaticusEnv,
         mode="easy",
-        flag_keepout=10.0,
-        catch_radius=config_dict_std["catch_radius"],
-        using_pyquaticus=True,
         defensiveness=20.0,
     ):
         super().__init__(agent_id, team, env)
@@ -53,44 +48,23 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         if mode not in modes:
             raise ValueError(f"Invalid mode {mode}, valid modes are {modes}")
         self.mode = mode
-        self.flag_keepout = flag_keepout
         self.defensiveness = defensiveness
-        self.using_pyquaticus = using_pyquaticus
         self.id = agent_id
         self.continuous = env.action_type == "continuous"
+        self.flag_keepout = env.flag_keepout_radius
         self.base_attacker = attack_policy.BaseAttacker(
             self.id,
             team,
             env,
             mode,
-            using_pyquaticus,
         )
         self.base_defender = defend_policy.BaseDefender(
             self.id,
             team,
             env,
             mode,
-            flag_keepout,
-            catch_radius,
-            using_pyquaticus,
         )
         self.scrimmage = None
-
-        # My state
-        self.my_pos = None
-        self.my_hdg = None
-        self.has_flag = False
-        self.on_sides = False
-
-        # State of my team
-        self.friendly_team_pos = None
-        self.friendly_team_density = None
-        self.my_team_has_flag = False
-
-        # State of the opp team
-        self.opp_team_pos = None
-        self.opp_team_density = None
-        self.opp_team_has_flag = False
 
     def set_mode(self, mode="easy"):
         """
@@ -189,12 +163,14 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             span_len = self.scrimmage
             goal_vec = [np.random.random() * span_len, 0]
         else:
-            near_enemy_dist = 1000
+            near_enemy_dist = np.inf
+            nearest_enemy = None
             for en in enem_positions:
                 temp_enem_dist = en[0]
                 if temp_enem_dist < near_enemy_dist:
                     near_enemy_dist = temp_enem_dist
                     nearest_enemy = en
+            assert nearest_enemy is not None
             if np.random.random() < 0.5:
                 goal_vec = self.bearing_to_vec(nearest_enemy[1])
             else:
@@ -210,9 +186,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
                 self.opp_team_pos, avoid_threshold=15
             )
 
-        # TODO: Fix this
-        # Some big speed hard-coded so that every agent drives at max speed
-        desired_speed = 50
+        desired_speed = self.max_speed
 
         try:
             heading_error = self.angle180(self.vec_to_heading(direction))
@@ -223,6 +197,9 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
 
                 if np.abs(heading_error) < 5:
                     heading_error = 0
+
+                if self.mode != "hard":
+                    desired_speed = self.max_speed / 2
 
                 return (desired_speed, heading_error)
 

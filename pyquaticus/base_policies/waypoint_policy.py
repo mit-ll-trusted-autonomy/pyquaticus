@@ -35,6 +35,7 @@ from multiprocessing.dummy import Pool
 from multiprocessing.pool import ThreadPool
 from multiprocessing import TimeoutError
 
+
 class WaypointPolicy(BaseAgentPolicy):
     """This is a Policy class that contains logic for capturing the flag."""
 
@@ -70,7 +71,7 @@ class WaypointPolicy(BaseAgentPolicy):
 
         if team not in Team:
             raise AttributeError(f"Invalid team {team}")
-        
+
     def get_env_geom(self, env: PyQuaticusEnv):
         obstacles = []
         for obstacle in env.obstacles:
@@ -146,14 +147,19 @@ class WaypointPolicy(BaseAgentPolicy):
 
         if len(self.wps) == 0:
             return
-        
+
         new_dist = np.linalg.norm(self.wps[0] - pos)
 
         if new_dist <= self.capture_radius:
             self.wps.pop(0)
             self.cur_dist = None
 
-        elif (self.slip_radius is not None) and (self.cur_dist is not None) and (new_dist > self.cur_dist) and (new_dist <= self.slip_radius):
+        elif (
+            (self.slip_radius is not None)
+            and (self.cur_dist is not None)
+            and (new_dist > self.cur_dist)
+            and (new_dist <= self.slip_radius)
+        ):
             self.wps.pop(0)
             self.cur_dist = None
 
@@ -163,7 +169,15 @@ class WaypointPolicy(BaseAgentPolicy):
     def set_wps(self, wps: list[np.ndarray]):
         self.wps = wps
 
-    def plan(self, wp: np.ndarray, obstacles: Optional[list[np.ndarray]] = None, area: Optional[np.ndarray] = None, max_step_size: Optional[float] = None, num_iters: int = 1000, timeout: float = 10):
+    def plan(
+        self,
+        wp: np.ndarray,
+        obstacles: Optional[list[np.ndarray]] = None,
+        area: Optional[np.ndarray] = None,
+        max_step_size: Optional[float] = None,
+        num_iters: int = 1000,
+        timeout: float = 10,
+    ):
         """
         Asynchronously run RRT* from the agent's current position, and update the waypoints if a valid path to the goal was found
         """
@@ -180,20 +194,29 @@ class WaypointPolicy(BaseAgentPolicy):
             max_step_size = np.max(self.env_bounds[1] - self.env_bounds[0]) / 10
 
         # Run RRT in a separate process
-            
-        kwargs=dict(start=self.pos, goal=wp, obstacles=obstacles, area=area, max_step_size=max_step_size, num_iters=num_iters, agent_radius=self.avoid_radius)
+
+        kwargs = dict(
+            start=self.pos,
+            goal=wp,
+            obstacles=obstacles,
+            area=area,
+            max_step_size=max_step_size,
+            num_iters=num_iters,
+            agent_radius=self.avoid_radius,
+        )
 
         assert isinstance(self.plan_process, ThreadPool)
-        
+
         try:
-            tree = self.plan_process.apply_async(rrt_star, kwds=kwargs).get(timeout=timeout)
+            tree = self.plan_process.apply_async(rrt_star, kwds=kwargs).get(
+                timeout=timeout
+            )
 
             self.get_path(tree, wp)
 
         except TimeoutError:
             print("Planning timed out.")
-        
-        
+
     def get_path(self, tree: list[Point], wp: np.ndarray):
         """
         Given a tree, search the tree for points near the goal and create a list of waypoints
@@ -212,7 +235,7 @@ class WaypointPolicy(BaseAgentPolicy):
             print("No path found.")
             self.tree = tree
             return
-        
+
         # Find the satisfying point with the minimum cost
         min_point = possible_points[0]
         assert isinstance(min_point, Point)

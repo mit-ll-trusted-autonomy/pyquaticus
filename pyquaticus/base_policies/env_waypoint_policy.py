@@ -33,7 +33,8 @@ from multiprocessing.pool import ThreadPool
 
 from functools import partial
 
-class EnvWaypointPolicy():
+
+class EnvWaypointPolicy:
     """Waypoint policy for use inside Pyquaticus environment only."""
 
     def __init__(
@@ -67,7 +68,7 @@ class EnvWaypointPolicy():
         self.max_speed = max_speed
 
         self.planning = False
-        
+
     def get_env_geom(self, obstacles: list) -> Optional[list[np.ndarray]]:
         final_obstacles = []
         for obstacle in obstacles:
@@ -118,12 +119,17 @@ class EnvWaypointPolicy():
 
         if len(self.wps) == 0:
             return
-        
+
         new_dist = np.linalg.norm(self.wps[0] - pos)
         if new_dist <= self.capture_radius:
             self.wps.pop(0)
             self.cur_dist = None
-        elif (self.slip_radius is not None) and (self.cur_dist is not None) and (new_dist > self.cur_dist) and (new_dist <= self.slip_radius):
+        elif (
+            (self.slip_radius is not None)
+            and (self.cur_dist is not None)
+            and (new_dist > self.cur_dist)
+            and (new_dist <= self.slip_radius)
+        ):
             self.wps.pop(0)
             self.cur_dist = None
         else:
@@ -132,7 +138,15 @@ class EnvWaypointPolicy():
     def set_wps(self, wps: list[np.ndarray]):
         self.wps = wps
 
-    def plan(self, pos: np.ndarray, wp: np.ndarray, obstacles: Optional[list[np.ndarray]] = None, area: Optional[np.ndarray] = None, max_step_size: Optional[float] = None, num_iters: int = 200):
+    def plan(
+        self,
+        pos: np.ndarray,
+        wp: np.ndarray,
+        obstacles: Optional[list[np.ndarray]] = None,
+        area: Optional[np.ndarray] = None,
+        max_step_size: Optional[float] = None,
+        num_iters: int = 400,
+    ):
         """
         Asynchronously run RRT* from the agent's current position, and update the waypoints if a valid path to the goal was found
         """
@@ -147,14 +161,23 @@ class EnvWaypointPolicy():
 
         if max_step_size is None:
             max_step_size = np.max(self.env_bounds[1] - self.env_bounds[0]) / 10
-            
-        kwargs=dict(start=pos, goal=wp, obstacles=obstacles, area=area, max_step_size=max_step_size, num_iters=num_iters, agent_radius=self.avoid_radius)
+
+        kwargs = dict(
+            start=pos,
+            goal=wp,
+            obstacles=obstacles,
+            area=area,
+            max_step_size=max_step_size,
+            num_iters=num_iters,
+            agent_radius=self.avoid_radius,
+        )
 
         assert isinstance(self.plan_process, ThreadPool)
-        
-        self.plan_process.apply_async(rrt_star, kwds=kwargs, callback=partial(self.get_path, wp=wp))
-        
-        
+
+        self.plan_process.apply_async(
+            rrt_star, kwds=kwargs, callback=partial(self.get_path, wp=wp)
+        )
+
     def get_path(self, tree: list[Point], wp: np.ndarray):
         """
         Given a tree, search the tree for points near the goal and create a list of waypoints
@@ -173,7 +196,7 @@ class EnvWaypointPolicy():
         if len(possible_points) == 0:
             self.tree = tree
             return
-        
+
         # Find the satisfying point with the minimum cost
         min_point = possible_points[0]
         assert isinstance(min_point, Point)
@@ -203,7 +226,7 @@ class EnvWaypointPolicy():
         while deg < -180:
             deg += 360
         return deg
-    
+
     def vec_to_heading(self, vec):
         """Converts a vector to a magnitude and heading (deg)."""
         angle = np.degrees(np.arctan2(vec[1], vec[0]))

@@ -26,12 +26,7 @@ from pyquaticus.envs.pyquaticus import Team, PyQuaticusEnv
 from pyquaticus.utils.utils import mag_bearing_to
 
 modes = {"nothing", "easy", "medium", "hard", "competition_easy", "competition_medium"}
-"""
-Difficulty modes for the policy, each one has different behavior.
-'easy' = Easy Attacker - Go straight to goal
-'medium' = Medium Attacker - Go to goal and avoid others
-'hard' = Hard Attacker - Not Implemented, but plan to goal smartly
-"""
+
 
 class BaseAttacker(BaseAgentPolicy):
     """This is a Policy class that contains logic for capturing the flag."""
@@ -42,7 +37,6 @@ class BaseAttacker(BaseAgentPolicy):
         team: Team,
         env: PyQuaticusEnv,
         mode: str = "easy",
-        using_pyquaticus: bool = True,
     ):
         super().__init__(agent_id, team, env)
 
@@ -54,8 +48,6 @@ class BaseAttacker(BaseAgentPolicy):
             raise AttributeError(f"Invalid team {team}")
 
         self.continuous = env.action_type == "continuous"
-
-        self.using_pyquaticus = using_pyquaticus
 
         self.goal = "SC"
 
@@ -210,10 +202,12 @@ class BaseAttacker(BaseAgentPolicy):
                     self.aquaticus_field_points[self.goal],
                     self.heading,
                 )
-                if (-0.3 <= self.get_distance_between_2_points(
+                if (
+                    self.get_distance_between_2_points(
                         self.pos,
                         self.aquaticus_field_points[self.goal],
-                    ) <= 0.3
+                    )
+                    <= 0.3
                 ):
                     speed = 0.0
                 else:
@@ -343,6 +337,7 @@ class BaseAttacker(BaseAgentPolicy):
 
             # Increase the avoidance threshold to start avoiding when farther away
             avoid_thresh = 60.0
+
             # If I have the flag, go back to my side
             if self.has_flag:
                 goal_vect = np.multiply(
@@ -388,7 +383,7 @@ class BaseAttacker(BaseAgentPolicy):
                         )
                 else:
                     my_action = np.multiply(1.25, goal_vect) + avoid_vect
-            
+
             # Try to convert the heading to a discrete action
             try:
                 heading_error = self.angle180(self.vec_to_heading(my_action))
