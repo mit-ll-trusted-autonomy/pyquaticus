@@ -73,11 +73,13 @@ from pyquaticus.utils.utils import (
     clip,
     closest_line,
     closest_point_on_line,
+    crop_tiles,
     vector_to,
     detect_collision,
     get_rot_angle,
     get_screen_res,
     heading_angle_conversion,
+    longitude_diff_west2east,
     mag_bearing_to,
     mag_heading_to_vec,
     rc_intersection,
@@ -3265,7 +3267,7 @@ when gps environment bounds are specified in meters"
             ### agent and flag geometries ###
             lon1, lat1 = _sm2ll(*env_bounds[0])
             lon2, lat2 = _sm2ll(*env_bounds[1])
-            lon_diff = self._longitude_diff_west2east(lon1, lon2)
+            lon_diff = longitude_diff_west2east(lon1, lon2)
 
             if np.abs(lat1) > np.abs(lat2):
                 lat = lat1
@@ -3550,16 +3552,6 @@ when gps environment bounds are specified in meters"
     def _is_auto_string(self, var):
         return isinstance(var, str) and var == "auto"
 
-    def _longitude_diff_west2east(self, lon1, lon2):
-        """Calculate the longitude difference from westing (lon1) to easting (lon2)"""
-        diff = lon2 - lon1
-
-        # adjust for crossing the 180/-180 boundary
-        if diff < 0:
-            diff += 360
-
-        return diff
-
     def _get_topo_geom(self):
         ### Environment Map Retrieval and Caching ###
         map_caching_dir = str(pathlib.Path(__file__).resolve().parents[1] / "__mapcache__")
@@ -3598,7 +3590,7 @@ when gps environment bounds are specified in meters"
                     use_cache=False,
                     zoom_adjust=None,
                 )
-                topo_img = self._crop_tiles(
+                topo_img = crop_tiles(
                     topo_tile[:, :, :-1],
                     topo_ext, *self.env_bounds.flatten(),
                     ll=False
@@ -3619,7 +3611,7 @@ when gps environment bounds are specified in meters"
                     use_cache=False,
                     zoom_adjust=None,
                 )
-                topo_img_1 = self._crop_tiles(
+                topo_img_1 = crop_tiles(
                     topo_tile_1[:, :, :-1],
                     topo_ext_1,
                     w=self.env_bounds[0][0],
@@ -3644,7 +3636,7 @@ when gps environment bounds are specified in meters"
                     use_cache=False,
                     zoom_adjust=None,
                 )
-                topo_img_2 = self._crop_tiles(
+                topo_img_2 = crop_tiles(
                     topo_tile_2[:, :, :-1],
                     topo_ext_2,
                     w=-EPSG_3857_EXT_X, #180 longitude from the east
@@ -3674,7 +3666,7 @@ when gps environment bounds are specified in meters"
                     use_cache=False,
                     zoom_adjust=None,
                 )
-                self.background_img = self._crop_tiles(
+                self.background_img = crop_tiles(
                     render_tile[:, :, :-1],
                     render_ext,
                     *render_tile_bounds.flatten(),
@@ -3696,7 +3688,7 @@ when gps environment bounds are specified in meters"
                     use_cache=False,
                     zoom_adjust=None,
                 )
-                background_img_1 = self._crop_tiles(
+                background_img_1 = crop_tiles(
                     render_tile_1[:, :, :-1],
                     render_ext_1,
                     w=render_tile_bounds[0][0],
@@ -3721,7 +3713,7 @@ when gps environment bounds are specified in meters"
                     use_cache=False,
                     zoom_adjust=None,
                 )
-                background_img_2 = self._crop_tiles(
+                background_img_2 = crop_tiles(
                     render_tile_2[:, :, :-1],
                     render_ext_2,
                     w=-EPSG_3857_EXT_X, #180 longitude from the east
@@ -3829,50 +3821,6 @@ when gps environment bounds are specified in meters"
         island_cnts = [self._img2env_coords(cnt.squeeze(), topo_img.shape) for cnt in island_cnts_approx]
 
         return border_cnt, island_cnts, land_mask_approx
-
-    def _crop_tiles(self, img, ext, w, s, e, n, ll=True):
-        """
-        img : ndarray
-            Image as a 3D array of RGB values
-        ext : tuple
-            Bounding box [minX, maxX, minY, maxY] of the returned image
-        w : float
-            West edge
-        s : float
-            South edge
-        e : float
-            East edge
-        n : float
-            North edge
-        ll : Boolean
-            [Optional. Default: True] If True, `w`, `s`, `e`, `n` are
-            assumed to be lon/lat as opposed to Spherical Mercator.
-        """
-        # convert lat/lon bounds to Web Mercator XY (EPSG:3857)
-        if ll:
-            left, bottom = mt.xy(w, s)
-            right, top = mt.xy(e, n)
-        else:
-            left, bottom = w, s
-            right, top = e, n
-
-        # determine crop
-        X_size = wrap_mercator_x_dist(ext[1] - ext[0], x_only=True)
-        Y_size = ext[3] - ext[2]
-
-        img_size_x = img.shape[1]
-        img_size_y = img.shape[0]
-
-        crop_start_x = round(img_size_x * wrap_mercator_x_dist(left - ext[0], x_only=True) / X_size)
-        crop_end_x = round(img_size_x * wrap_mercator_x_dist(right - ext[0], x_only=True) / X_size)
-
-        crop_start_y = round(img_size_y * (ext[2] - top) / Y_size)
-        crop_end_y = round(img_size_y * (ext[2] - bottom) / Y_size)
-
-        # crop image
-        cropped_img = img[crop_start_y:crop_end_y, crop_start_x:crop_end_x, :]
-
-        return cropped_img
 
     def _img2env_coords(self, cnt, image_shape):
         cnt = cnt.astype(float) # convert contour array to float64 so as not to lose precision

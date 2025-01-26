@@ -312,6 +312,16 @@ def angle180(deg):
         deg += 360
     return deg
 
+def longitude_diff_west2east(lon1, lon2):
+    """Calculate the longitude difference from westing (lon1) to easting (lon2)"""
+    diff = lon2 - lon1
+
+    # adjust for crossing the 180/-180 boundary
+    if diff < 0:
+        diff += 360
+
+    return diff
+
 def wrap_mercator_x(wm, x_only:bool = False) -> np.ndarray:
     """
     Wrap web mercator x (horizontal) location or measurement to
@@ -361,6 +371,50 @@ def wrap_mercator_x_dist(wm, x_only:bool = False) -> np.ndarray:
     wm[under, 0] += 2*EPSG_3857_EXT_X
 
     return wm.squeeze()
+
+def crop_tiles(img, ext, w, s, e, n, ll=True):
+    """
+    img : ndarray
+        Image as a 3D array of RGB values
+    ext : tuple
+        Bounding box [minX, maxX, minY, maxY] of the returned image
+    w : float
+        West edge
+    s : float
+        South edge
+    e : float
+        East edge
+    n : float
+        North edge
+    ll : Boolean
+        [Optional. Default: True] If True, `w`, `s`, `e`, `n` are
+        assumed to be lon/lat as opposed to Spherical Mercator.
+    """
+    # convert lat/lon bounds to Web Mercator XY (EPSG:3857)
+    if ll:
+        left, bottom = mt.xy(w, s)
+        right, top = mt.xy(e, n)
+    else:
+        left, bottom = w, s
+        right, top = e, n
+
+    # determine crop
+    X_size = wrap_mercator_x_dist(ext[1] - ext[0], x_only=True)
+    Y_size = ext[3] - ext[2]
+
+    img_size_x = img.shape[1]
+    img_size_y = img.shape[0]
+
+    crop_start_x = round(img_size_x * wrap_mercator_x_dist(left - ext[0], x_only=True) / X_size)
+    crop_end_x = round(img_size_x * wrap_mercator_x_dist(right - ext[0], x_only=True) / X_size)
+
+    crop_start_y = round(img_size_y * (ext[2] - top) / Y_size)
+    crop_end_y = round(img_size_y * (ext[2] - bottom) / Y_size)
+
+    # crop image
+    cropped_img = img[crop_start_y:crop_end_y, crop_start_x:crop_end_x, :]
+
+    return cropped_img
 
 def clip(val, minimum, maximum):
     if val > maximum:
