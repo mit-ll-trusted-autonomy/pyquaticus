@@ -138,7 +138,7 @@ def main():
 
     config = copy.deepcopy(pyquaticus.config.config_dict_std)
     config["gps_env"] = True
-    # config["env_bounds"] = ((179, -1), (-179, 1))
+    # config["env_bounds"] = (179, -1, -179, 1)
     # config["env_bounds_unit"] = "ll"
     config["env_bounds"] = "auto"
     config["blue_flag_home"] = (42.352229714597705, -70.99992567997114)
