@@ -158,6 +158,7 @@ def main():
     config["default_init"] = False
     # config["render_fps"] = 10
     # config["normalize"] = False
+    config["agent_radius"] = [2, 2, 2, 2, 2, 100]
     
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
     env = pyquaticus_v0.PyQuaticusEnv(team_size=3, render_mode='human', config_dict=config)

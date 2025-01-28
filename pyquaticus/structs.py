@@ -47,7 +47,7 @@ class Player:
         oob: Indicator for whether or not this player is out-of-bounds
     """
 
-    id: Hashable
+    id: int
     team: Team
     pos: list[float] = field(init=False, default_factory=list)
     speed: float = field(init=False, default_factory=float)
