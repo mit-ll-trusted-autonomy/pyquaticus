@@ -39,7 +39,6 @@ config_dict_std = {
     # note: for polygons, there is an implied edge between (xn, yn) and (x1, y1), to complete the polygon.
 
     # Dynamics parameters
-    "action_type": "discrete",  # "discrete" or "continuous"
     "oob_speed_frac":     0.5,  # proportion
     "dynamics":       "heron",  # dynamics to use for all agents
 
@@ -48,7 +47,6 @@ config_dict_std = {
 
     # Simulation parameters
     "tau":              0.1,  # dt (seconds) for updating the simulation
-
     "sim_speedup_factor": 1,  # simulation speed multiplier similar to time warp in MOOS (integer >= 1)
 
     # Game parameters
@@ -164,7 +162,6 @@ LIDAR_DETECTION_CLASS_MAP = {class_name: i for i, class_name in enumerate(lidar_
 ### Action Map ###
 # maps discrete action id to (speed, heading)
 ACTION_MAP = []
-
 for spd in [1.0, 0.5]:
     for hdg in range(180, -180, -45):
         ACTION_MAP.append([spd, hdg])
