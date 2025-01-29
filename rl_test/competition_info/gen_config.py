@@ -3,7 +3,7 @@ import numpy as np
 #######
 
 #This is the configuration which will be used to setup the observation space for your agent
-#You need to update the config_dict_std to match your observation space requirements!!!
+#You need to update the config_dict_competition to match your observation space requirements!!!
 #Changing other settings which are not Observation parameters will result in DISQUALIFICATION of that submission
 
 ######
@@ -17,8 +17,8 @@ EPSG_3857_EXT_Y = 20048966.104014594 # meters (https://epsg.io/3857)
 
 LINE_INTERSECT_TOL = 1e-9
 
-### Standard Configuration Dictionary ###
-config_dict_std = {
+### Competition Configuration ###
+config_dict_competition = {
 
     # Geometry parameters
     "gps_env":             False,  # option to use a real world location for the game
@@ -27,7 +27,7 @@ config_dict_std = {
     "blue_flag_home":     "auto",  # coordinates (lat, lon), list of coordinates, or "auto"
     "red_flag_home":      "auto",  # coordinates (lat, lon), list of coordinates, or "auto"
     "flag_homes_unit":       "m",  # "m" (meters relative to environment origin), "wm_xy" (web mercator xy), or "ll" (lat/lon)
-    "scrimmage_coords":   "auto",  # [(coord1_x, coord1_y), (coord2_x, coord2_y)] or "auto"
+    "scrimmage_coords":   "auto",  # [(coord1_lat, coord1_lon), (coord2_lat, coord2_lon)], [(coord1_x, coord1_y), (coord2_x, coord2_y)], or "auto"
     "scrimmage_coords_unit": "m",  # "m" (meters relative to environment origin), "wm_xy" (web mercator xy), or "ll" (lat/lon)
     "topo_contour_eps":    0.001,  # tolerance for error between approximate and true contours dividing water and land
     "agent_radius":          2.0,  # meters
@@ -36,43 +36,50 @@ config_dict_std = {
     "catch_radius":         10.0,  # distance (meters) for tagging and flag pickup
     "n_circle_segments":       8,  # default is to approximate circles as an octagon
     "obstacles":            None,  # optional dictionary of obstacles in the enviornment
-    "default_init":         True,  # Spawn agents programmatically, rather than randomly (only for non-gps envs)
 
-    # notes: obstacles are specified via dictionary. Keys are the obstacle type ("circle" or "polygon").
+    # note: obstacles are specified via dictionary. Keys are the obstacle type ("circle" or "polygon").
     # values are the parameters for the obstacle.
     # note: for circles, it should be a list of tuples: (radius, (center_x, center_y)) all in meters
     # note: for polygons, it should be a list of tuples: ((x1, y1), (x2, y2), (x3, y3), ..., (xn, yn)) all in meters
     # note: for polygons, there is an implied edge between (xn, yn) and (x1, y1), to complete the polygon.
 
     # Dynamics parameters
-    "action_type": "discrete",  # "discrete" or "continuous"
     "oob_speed_frac":     0.5,  # proportion
-    "dynamics":       "heron",  # dynamics to use for all agents
+    "dynamics":       "heron",  # dynamics to use for agents (from dynamics_registry.py)
 
-    # note: if different dynamics are desired for different agents, provide a list like
-    # ["heron", "large_usv", "drone", "fixed_wing"]
+    # note: if different dynamics are desired for different agents, provide a list / tuple / numpy.ndarray like
+    # ["heron", "large_usv", "heron", "drone", "fixed_wing", "fixed_wing"]
 
     # Simulation parameters
     "tau":              0.1,  # dt (seconds) for updating the simulation
-
     "sim_speedup_factor": 1,  # simulation speed multiplier similar to time warp in MOOS (integer >= 1)
 
     # Game parameters
+    "default_init":      True,  # Spawn agents programmatically, rather than randomly
     "max_score":            1,  # maximum score per episode (until a winner is declared)
     "max_time":         600.0,  # maximum time (seconds) per episode
-    "tagging_cooldown":  30.0,  # cooldown on an agent (seconds) after they tag another agent, to prevent consecutive tags
+    "tagging_cooldown":  60.0,  # cooldown on an agent (seconds) after they tag another agent, to prevent consecutive tags
     "tag_on_collision": False,  # option for setting the agent to a tagged state upon collsion with an obstacle
-    "tag_on_oob":       False,  # option for setting the agent to a tagged state upon driving out-of-bounds
+    "tag_on_oob":        True,  # option for setting the agent to a tagged state upon driving out-of-bounds
 
     # Observation parameters
-    "normalize":        True,  # flag for normalizing the observation space.
-    "short_hist_length":   1,  # number of timesteps to include for the short-term history
-    "short_hist_interval": 1,  # number of steps in between entries in the short-term history
-    "long_hist_length":    1,  # number of timesteps to include for the long-term history
-    "long_hist_interval":  4,  # number of steps in between entries in the long-term history
+    "normalize_obs":        True,  # flag for normalizing the observation space
+    "short_obs_hist_length":   1,  # number of timesteps to include for the short-term observation history
+    "short_obs_hist_interval": 1,  # number of steps in between entries in the short-term observation history
+    "long_obs_hist_length":    1,  # number of timesteps to include for the long-term observation history
+    "long_obs_hist_interval":  4,  # number of steps in between entries in the long-term observation history
+
+    # Lidar observation parameters
     "lidar_obs":       False,  # option to use lidar (ray casting model) observations
     "lidar_range":     200.0,  # meters
     "num_lidar_rays":     50,  # number of rays for lidar
+
+    # Global state parameters
+    "normalize_state":        True,  # flag for normalizing the global state
+    "short_state_hist_length":   1,  # number of timesteps to include for the short-term global state history
+    "short_state_hist_interval": 1,  # number of steps in between entries in the short-term global state history
+    "long_state_hist_length":    1,  # number of timesteps to include for the long-term global state history
+    "long_state_hist_interval":  4,  # number of steps in between entries in the long-term global state history
 
     # Rendering parameters
     "render_fps":                 30,  # target number of frames per second
