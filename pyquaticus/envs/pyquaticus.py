@@ -1088,15 +1088,23 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             # If agent is tagged, drive at max speed towards home
             if player.is_tagged:
-                policy = self.rrt_policies[i]
-                assert isinstance(policy, EnvWaypointPolicy)
-                if len(policy.wps) == 0 and not policy.planning:
-                    policy.plan(player.pos, self.flags[team_idx].home)
-                    desired_speed = 0
-                    heading_error = 0
-                else:
-                    desired_speed, heading_error = policy.compute_action(player.pos, player.heading)
 
+                # If we are in a non-default environment, use RRT*
+                if len(self.obstacles) > 0:
+                    policy = self.rrt_policies[i]
+                    assert isinstance(policy, EnvWaypointPolicy)
+                    if len(policy.wps) == 0 and not policy.planning:
+                        policy.plan(player.pos, self.flags[team_idx].home)
+                        desired_speed = 0
+                        heading_error = 0
+                    else:
+                        desired_speed, heading_error = policy.compute_action(player.pos, player.heading)
+
+                # Or else just use PID
+                else:
+                    flag_home = self.flags[team_idx].home
+                    _, heading_error = mag_bearing_to(player.pos, flag_home, player.heading)
+                    desired_speed = player.get_max_speed()
             # If agent is out of bounds, drive back in bounds at fraction of max speed
             elif self.state["agent_oob"][i]:
                 #compute the closest env edge and steer towards heading perpendicular to edge
