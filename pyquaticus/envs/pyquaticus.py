@@ -64,7 +64,7 @@ from pyquaticus.structs import (
     Flag,
     PolygonObstacle,
     RenderingPlayer,
-    Team,
+    Team
 )
 from pyquaticus.utils.obs_utils import ObsNormalizer
 from pyquaticus.utils.pid import PID
@@ -812,7 +812,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.reset_count = 0
         self.current_time = 0
 
-        self.state = {}
+        self.state = None
+        self.prev_state = None
         self.dones = {}
         self.return_info = False
 
@@ -858,8 +859,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 )
             )
 
-        self.players = {player.id: player for player in itertools.chain(b_players, r_players)}  # maps player ids (or names) to player objects
-        self.agents = [agent_id for agent_id in self.players]
+        self.players = {player.id: player for player in itertools.chain(b_players, r_players)}  #maps player ids (or names) to player objects
+        self.agents = [agent_id for agent_id in self.players] #maps agent indices to ids
         self.possible_agents = [agent_id for agent_id in self.players]
         self.max_speeds = [player.get_max_speed() for player in self.players.values()]
 
@@ -950,6 +951,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 f" {raw_action_dict.keys()}"
             )
 
+        # Previous state
+        self.prev_state = copy.deepcopy(self.state)
+
+        # Tagging cooldown
         for i, player in enumerate(self.players.values()):
             if player.tagging_cooldown != self.tagging_cooldown:
                 # player is still under a cooldown from tagging, advance their cooldown timer, clip at the configured tagging cooldown
@@ -959,9 +964,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 )
                 self.state["agent_tagging_cooldown"][i] = player.tagging_cooldown
         
+        # Process incoming actions
         action_dict = self._to_speed_heading(raw_action_dict)
-        self.flag_collision_bool = np.zeros(self.num_agents, dtype=bool)
 
+        # Move agents and render
         if self.render_mode:
             for _i in range(self.num_renders_per_step):
                 for _j in range(self.sim_speedup_factor):
@@ -975,11 +981,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             if self.lidar_obs:
                 self._update_lidar()
 
-        # set the time
+        # Set the time
         self.current_time += self.sim_speedup_factor * self.tau
 
-        # agent and flag capture checks and more
-        #TODO: re-profile how fast the new vectorized and unvectorized functions run to adjust switchoff point
+        # Agent and flag checks and more
         self._check_oob_vectorized()
         self._check_flag_pickups_vectorized() if self.team_size >= 7 else self._check_flag_pickups()
         self._check_agent_made_tag_vectorized() if self.team_size >= 14 else self._check_agent_made_tag()
@@ -1003,11 +1008,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
                     self.obj_ray_detection_states[team][self.ray_int_label_map[agent_id]] = LIDAR_DETECTION_CLASS_MAP[detection_class_name]
 
+        # Message
         if self.message and self.render_mode:
             print(self.message)
 
         # Rewards
-        rewards = {agent_id: self.compute_rewards(agent_id) for agent_id in self.players}
+        rewards = {agent_id: self.compute_rewards(agent_id, player.team) for agent_id, player in self.players.items()}
 
         # Observations
         for agent_id in raw_action_dict:
@@ -1117,8 +1123,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 and not self.state["flag_taken"][team_idx]
                 and self.flag_keepout_radius > 0.
             ):
-                self.flag_collision_bool[i] = True
-
                 ag_pos = rc_intersection(
                     np.array([player.pos, player.prev_pos]),
                     np.asarray(flag_loc),
@@ -1417,7 +1421,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
                             other_player.is_tagged = True
                             self.state['agent_is_tagged'][j] = 1
-                            self.state['agent_made_tag'][i] = other_player.id
+                            self.state['agent_made_tag'][i] = j
                             self.state['tags'][team_idx] += 1
 
                             if other_player.has_flag:
@@ -1482,13 +1486,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     player = self.players[agent_id]
 
                     tagged_agent_idx = other_agent_inds[other_agents_tagged[0]]
-                    tagged_agent_id = self.agents[tagged_agent_idx]
-                    tagged_player = self.players[tagged_agent_id]
+                    tagged_player = self.players[self.agents[tagged_agent_idx]]
                     tagged_player_team_idx = int(tagged_player.team)
 
                     # update tagger agent
                     player.tagging_cooldown = 0.0
-                    self.state['agent_made_tag'][agent_idx] = tagged_agent_id
+                    self.state['agent_made_tag'][agent_idx] = tagged_agent_idx
                     self.state['agent_tagging_cooldown'][agent_idx] = 0.0
 
                     # update tagged agent
@@ -2166,13 +2169,22 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             else:
                 self.message = "Game Over. No Winner"
 
-    def compute_rewards(self, agent_id):
+    def compute_rewards(self, agent_id, team):
         if self.reward_config[agent_id] is None:
             return 0.0
 
         # Get reward based on the passed in reward function
         return self.reward_config[agent_id](
-            agent_id, self.agents, self.state, #TODO: self.prev_state
+            agent_id=agent_id,
+            team=team,
+            agents=self.agents,
+            agent_inds=self.agent_inds_of_team,
+            state=self.state,
+            prev_state=self.prev_state,
+            env_size=self.env_size,
+            agent_radius=self.agent_radius,
+            catch_radius=self.catch_radius,
+            scrimmage_coords=self.scrimmage_coords
         )
 
     def _reset_dones(self):
@@ -2342,9 +2354,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.dones = self._reset_dones()
         self.team_flag_capture = [False for _ in Team] #this is False except at the timestep that the flag is captured
 
-        # Previous state
-        #TODO
-
         # Rendering
         if self.render_mode:
             if self.render_saving:
@@ -2360,8 +2369,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             obs = {agent_id: self.state["obs_hist_buffer"][agent_id][self.obs_hist_buffer_inds] for agent_id in self.players}
         else:
             obs = {agent_id: self.state["obs_hist_buffer"][agent_id][0] for agent_id in self.players}
-
-        # Return
         
         # Info
         self.return_info = return_info
@@ -3992,8 +3999,8 @@ when gps environment bounds are specified in meters"
         if self.clock is None:
             self.clock = pygame.time.Clock()
 
-        if self.state == {}:
-            return None
+        if self.state is None:
+            return
 
         # Background
         self.screen.blit(self.pygame_background_img, (0, 0))

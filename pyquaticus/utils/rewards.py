@@ -111,50 +111,24 @@
 """
 
 import math
-#Sparse Rewards for all game events that occur
-def sparse(self, agent_id, agents, state, prev_state):
-    reward = 0
-    #Team captured opponents flag
-    if params['team_flag_capture'] and not prev_params['team_flag_capture']:
-        reward += 1.0
-    #Agent went out of bounds
-    if params['agent_oob'] and not prev_params['agent_oob']:
-        reward -= 1.0 
-    #Agent grabbed opponents flag
-    if params['team_has_flag'] and not prev_params['team_has_flag']:
-        reward += 0.5 
-    #Opposing team grabbed teams flag
-    if params['opponent_flag_pickup'] and not prev_params['opponent_flag_pickup']:
-        reward -= 0.5
-    #Reward agent for capturing opposing teams flag
-    if params['opponent_flag_capture'] and not prev_params['opponent_flag_capture']:
-        reward -= 1.0
-    #Reward Agent for tagging Opponent
-    if not (params['agent_made_tag'][params['agent_id_index']] == None) and (prev_params['agent_made_tag'][params['agent_id_index']] == None):
-        reward += 0.25
-    #Penalize agent for getting tagged
-    if (params['agent_is_tagged'][params['agent_id_index']]) and not (prev_params['agent_is_tagged'][params['agent_id_index']] and not prev_params['agent_oob']):
-        reward -= 0.25
-        
-    return reward
+import numpy
 
-#Reward Captures and Grabs Only
-def caps_and_grabs(self, agent_id, agents, state, prev_state):
-    reward = 0.0
-    #Team captured opponents flag
-    if params['team_flag_capture'] and not prev_params['team_flag_capture']:
-        reward += 1.0
-     #Agent grabbed opponents flag
-    if params['team_has_flag'] and not prev_params['team_has_flag']:
-        reward += 0.5
-    #Agent went out of bounds
-    if params['agent_oob'] and not prev_params['agent_oob']:
-        reward -= 1.0
+from pyquaticus.structs import Team
+from pyquaticus.utils.utils import *
 
-    #Opposing team grabbed teams flag
-    if params['opponent_flag_pickup'] and not prev_params['opponent_flag_pickup']:
-        reward -= 0.5
-    #Opposing team captures teams flag
-    if params['opponent_flag_capture'] and not prev_params['opponent_flag_capture']:
-        reward -= 1.0
-    return reward
+### Example Reward Funtion ###
+def example_reward(
+    agent_id: str,
+    team: Team,
+    agents: list,
+    agent_inds_of_team: dict,
+    state: dict,
+    prev_state: dict,
+    env_size: np.ndarray,
+    agent_radius: np.ndarray,
+    catch_radius: float,
+    scrimmage_coords: np.ndarray
+):
+    return 0.0
+
+### Add Custom Reward Functions Here ###
