@@ -1574,7 +1574,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 # Update captures
                 self.team_flag_capture[team_idx] = True
                 self.state['captures'][team_idx] += 1
-
+    def _check_collisions_vectorized(self):
+        #for i, player in enu merate(self.players.values()):
+        return #TODO
     def _check_collisions(self):
         """
         Updates game state attribute agent_collisions
