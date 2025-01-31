@@ -2160,7 +2160,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             state=self.state,
             prev_state=self.prev_state,
             env_size=self.env_size,
-            agent_radius=self.agent_radius
+            agent_radius=self.agent_radius,
             catch_radius=self.catch_radius,
             scrimmage_coords=self.scrimmage_coords
         )
