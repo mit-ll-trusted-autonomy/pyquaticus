@@ -21,83 +21,98 @@
 
 """
 #Configureable Rewards
-params{
     # -- NOTE --
-    #   All bearings are in nautical format
+    #   All headings are in nautical format
     #                 0
     #                 |
     #          270 -- . -- 90
     #                 |
     #                180
     #
-    # This can be converted the standard bearing format that is counterclockwise
+    # This can be converted the standard heading format that is counterclockwise
     # using the heading_angle_conversion(deg) function found in utils.py
     #
     #
-    #
-    #
-    #
-    "team": int, #team ID (0 blue, 1 red)
-    "num_players": int, #Number of players currently in the game
-    "num_teammates": int, #Number of teammates currently in the game
-    "num_opponents": int, #Number of opponents currently in the game
-    "agent_id": str, #ID of agent rewards are being computed for
-    "agent_id_index: int, # The index you should expect to find info relating to that agent in the agent_is_tagged or agent_made_tag attributes 
-    "agent_oob": int, #0 indicates agent is not oob 1 indicates agent is oob
-    "capture_radius": int, #The radius required to grab, capture a flag; and tag opponents
-    "team_has_flag": bool,    # Indicates if team grabs flag
-    "team_flag_capture": bool,   # Indicates if team captures flag
-    "opponent_flag_pickup": bool, # Indicates if opponent grabs flag 
-    "opponent_flag_capture": bool, #Indicates if opponent captures flag
-    "team_flag_home": float, #Agents distance to flag home (to untag)
-    "team_flag_bearing": float, # Agents bearing to team flag
-    "team_flag_distance": float, # Agents distance to team flag
-    "opponent_flag_bearing": float, # Agents bearing to opponents flag
-    "opponent_flag_distance": float, #Agents distance to opponents flag
-    "speed": float, #Agents current speed
-    "tagging_cooldown": bool, # True when agents tag is on cooldown False otherwise
-    "thrust": float, # Agents current thrust
-    "has_flag": bool, #Indicates if agent currently has opponents flag
-    "on_own_side": bool, #Indicates if agent is currently on teams side
-    "heading": float, #Agents yaw in degrees
-    "wall_0_bearing": float, #Agents bearing towards 
-    "wall_0_distance": float, #Agents distance towards
-    "wall_1_bearing": float, #Agents bearing towards 
-    "wall_1_distance": float, #Agents distance towards
-    "wall_2_bearing": float, #Agents bearing towards
-    "wall_2_distance": float, #Agents distance towards
-    "wall_3_bearing": float, #Agents bearing towards
-    "wall_3_distance": float, #Agents distance towards
-    "wall_distances": Dict, (wallid, distance)
-    "agent_captures": list, #List of agents that agent has tagged 0 not tagged 1 tagged by agent
-    "agent_is_tagged": list, #List of agents 0 not tagged 1 tagged
-    "agent_made_tag": list, #List of Nones until an agent makes a tag then the agent at index has tagged the ID of the agent that was tagged
-    #Teamates First where n is the teammate ID
-    "teammate_n_bearing": float, #Agents yaw towards teammate
-    "teammate_n_distance": float, #Agents distance towards teammate
-    "teammate_n_relative_heading": float, #Teammates current yaw value
-    "teammate_n_speed": float, #Teammates current speed
-    "teammate_n_has_flag": bool, # True if teammate currently has opponents flag
-    "teammate_n_on_side": bool, # True if teammate is on teams side
-    "teammate_n_tagging_cooldown": float, #Current value for tagging cooldown
-    #Opponents
-    "opponent_n_bearing": float, #Agents yaw towards opponent
-    "opponent_n_distance": float, #Agents distance towards opponent
-    "opponent_n_relative_heading": float, #Opponent current yaw value
-    "opponent_n_speed": float, #Opponent current speed
-    "opponent_n_has_flag": bool, # True if opponent currently has opponents flag
-    "opponent_n_on_side": bool, # True if opponent is on their side
-    "opponent_n_tagging_cooldown": float, #Current value for tagging cooldown.
-    "agent_collisions": int #Current number of collisions for the current agent
-    "all_agent_collisions": list #list of the number of agent collisions for all agents currently in game
-}
+    ## Each custom reward function should have the following arguments ##
+    Args:
+        agent_id (int): Agent ID we are computing the sparse reward for
+        agents (list): List of agent ID's (this is used to find the index of our agent_id)
+        state (dict):
+            'agent_position' (list): List of agent positions in the order of (agents list)
+                                    Each Index in the list are positions [x,y]
 
-#prev_params is the parameters from the previous step and have the same keys as params
+                        Ex. Usage: Get agent_id's current position
+                        agent_id = 'agent_1'
+                        position = state['agent_position'][agents.index(agent_id)]
+
+            'prev_agent_position' (list): Contains the prev position [x,y] for agent at the specified index
+                        Ex. Usage: Get agent_id's previous position
+                        agent_id = 'agent_1'
+                        prev_position = state['prev_agent_position'][agents.index(agent_id)]
+
+            'agent_speed' (list): Each element represents the speed of the agent in the agents list order
+
+                        Ex. Usage: Get agent_id's speed
+                        agent_id = 'agent_1'
+                        speed = state
+
+            'agent_heading' (list): List of headings for each agent in the agents list order
+
+                        Ex. Usage: Get agent_id's heading
+                        agent_id = 'agent_1'
+                        heading = state['agent_heading'][agents.index(agent_id)]
+
+            'agent_oob' (list): List of all agents and the number of times they have                                driven OOB in order of agents list
+                        
+                        Ex. Usage: Check the number of times agent_id has gone OOB
+                        agent_id = 'agent_1'
+                        num_oob = state['agent_oob'][agents.index(agent_id)]
+            
+            'agent_has_flag' (list):
+
+
+                        Ex. Usage: Check if agent_id has opponents flag
+                        agent_id = 'agent_1'
+                        has_flag = state['agent_has_flag'][agents.index(agent_id)] == 1
+            'agent_made_tag' (list):  list of all agents and if that agent tagged something at the current timestep (will be index of tagged agent if so) otherwise None
+                        Ex. Usage: Check of agent_id has tagged an agent
+                        agent_id = 'agent_1'
+                        tagged_opponent = state['agent_made_tag'][agents.index(agent_id)]
+
+            'agent_tagging_cooldown (list): Current tagging cooldown for all agents in the agents list order
+                        Note: 0.0 means agent currently has a tag available                    
+    
+                        Ex. Usage: Get agent_id current tagging cooldown
+                        agent_id = 'agent_1'
+                        cooldown = self.state['agent_tagging_cooldown'][agents.index(agent_id)]
+                        
+
+            'dist_bearing_to_obstacles' (dict): For each agent in game list out distances and bears to all obstacles in game in order of obstacles list
+                        Note: Not Used for the 2025 MCTF competition
+            
+            TODO: Add Team mapping for each agent to the state
+
+            'flag_home' (list):
+
+            'flag_position' (list):
+
+            'flag_taken' (list):
+
+            'team_has_flag' (list):
+
+            'captures' (list):
+
+            'tags' (list):
+
+            'grabs' (list):
+
+        prev_state (dict): Contains the state information from the previous step
+
 """
 
 import math
 #Sparse Rewards for all game events that occur
-def sparse(self, params, prev_params):
+def sparse(self, agent_id, agents, state, prev_state):
     reward = 0
     #Team captured opponents flag
     if params['team_flag_capture'] and not prev_params['team_flag_capture']:
@@ -124,8 +139,8 @@ def sparse(self, params, prev_params):
     return reward
 
 #Reward Captures and Grabs Only
-def caps_and_grabs(self, params, prev_params):
-    reward = 0.0#-0.025
+def caps_and_grabs(self, agent_id, agents, state, prev_state):
+    reward = 0.0
     #Team captured opponents flag
     if params['team_flag_capture'] and not prev_params['team_flag_capture']:
         reward += 1.0
@@ -142,8 +157,4 @@ def caps_and_grabs(self, params, prev_params):
     #Opposing team captures teams flag
     if params['opponent_flag_capture'] and not prev_params['opponent_flag_capture']:
         reward -= 1.0
-    #Add sloped reward towards opposing teams flag when it has not been grabbed by the team.
-    if not params['team_has_flag'] and not params['has_flag']:
-        # Max reward when on the flag 0.45 slopes to 0 at 160m 7 = -0.003x + 0.45
-        reward += (-params['opponent_flag_distance'] * 0.003 + 0.45) /8
     return reward
