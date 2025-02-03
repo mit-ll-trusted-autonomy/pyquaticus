@@ -35,62 +35,73 @@
     #
     ## Each custom reward function should have the following arguments ##
     Args:
-        agent_id (int): Agent ID we are computing the sparse reward for
-        team: team from Team class in structs.py 
-        agents (list): List of agent ID's (this is used to map agent_id's to agent indices and viceversa)
+        agent_id (int): ID of the agent we are computing the reward for
+        team (Team): team of the agent we are computing the reward for
+        agents (list): list of agent ID's (this is used to map agent_id's to agent indices and viceversa)
         agent_inds_of_team (dict): mapping from team to agent indices of that team
         state (dict):
-            'agent_position' (array): List of agent positions in the order of (agents list).
-                                      Each index in the list are positions [x,y].
-                        Ex. Usage: Get agent_id's current position
+            'agent_position' (array): list of agent positions (in the order of agents list)
+
+                        Ex. Usage: Get agent's current position
                         agent_id = 'agent_1'
                         position = state['agent_position'][agents.index(agent_id)]
 
-            'prev_agent_position' (array): Contains the prev position [x,y] for agent at the specified index.
-                        Ex. Usage: Get agent_id's previous position
+            'prev_agent_position' (array): list of agent positions (in the order of agents list) at the previous timestep
+
+                        Ex. Usage: Get agent's previous position
                         agent_id = 'agent_1'
                         prev_position = state['prev_agent_position'][agents.index(agent_id)]
 
-            'agent_speed' (list): Each element represents the speed of the agent in the agents list order
+            'agent_speed' (array): list of agent speeds (in the order of agents list)
 
-                        Ex. Usage: Get agent_id's speed
+                        Ex. Usage: Get agent's speed
                         agent_id = 'agent_1'
                         speed = state
 
-            'agent_heading' (list): List of headings for each agent in the agents list order
+            'agent_heading' (array): list of agent headings (in the order of agents list)
 
-                        Ex. Usage: Get agent_id's heading
+                        Ex. Usage: Get agent's heading
                         agent_id = 'agent_1'
                         heading = state['agent_heading'][agents.index(agent_id)]
 
-            'agent_oob' (list): List of all agents and the number of times they have                                driven OOB in order of agents list
+            'agent_on_sides' (array): list of booleans (in the order of agents list) where True means the agent
+                                      is on its own side, and False means the agent is not on its own side
+
+                        Ex. Usage: Check if agent is on its own side
+                        agent_id = 'agent_1'
+                        on_own_side = state['agent_on_sides'][agents.index(agent_id)]
+
+            'agent_oob' (array): list of booleans (in the order of agents list) where True means the agent
+                                 is out-of-bounds (OOB), and False means the agent is not out-of-bounds
                         
-                        Ex. Usage: Check the number of times agent_id has gone OOB
+                        Ex. Usage: Check if agent is out-of-bounds
                         agent_id = 'agent_1'
                         num_oob = state['agent_oob'][agents.index(agent_id)]
             
-            'agent_has_flag' (list):
+            'agent_has_flag' (list): list of booleans (in the order of agents list) where True means the
+                                     agent has a flag, and False means the agent does not have a flag
 
-
-                        Ex. Usage: Check if agent_id has opponents flag
+                        Ex. Usage: Check if agent has a flag
                         agent_id = 'agent_1'
                         has_flag = state['agent_has_flag'][agents.index(agent_id)] == 1
-            'agent_made_tag' (list):  list of all agents and if that agent tagged something at the current timestep (will be index of tagged agent if so) otherwise None
+
+            'agent_is_tagged' (array): list of booleans (in the order of agents list) where True means
+                                       the agent is tagged, and False means the agent is not tagged
+
+            'agent_made_tag' (list): list of all agents and if that agent tagged something at the current timestep (will be index of tagged agent if so) otherwise None
+
                         Ex. Usage: Check of agent_id has tagged an agent
                         agent_id = 'agent_1'
                         tagged_opponent = state['agent_made_tag'][agents.index(agent_id)]
 
-            'agent_tagging_cooldown (list): Current tagging cooldown for all agents in the agents list order
-                        Note: 0.0 means agent currently has a tag available                    
+            'agent_tagging_cooldown' (list): Current tagging cooldown for all agents in the agents list order
+                        Note: Agent is able to tag when this value is equal to tagging_cooldown                    
     
                         Ex. Usage: Get agent_id current tagging cooldown
                         agent_id = 'agent_1'
                         cooldown = self.state['agent_tagging_cooldown'][agents.index(agent_id)]
-                        
 
             'dist_bearing_to_obstacles' (dict): For each agent in game list out distances and bearings to all obstacles in game in order of obstacles list
-            
-            TODO: Add Team mapping for each agent to the state
 
             'flag_home' (list):
 
@@ -105,6 +116,8 @@
             'tags' (list):
 
             'grabs' (list):
+
+            'agent_collisions' (array):
 
             'agent_dynamics' (array): List of dictionaries containing agent-specific dynamics information (state attribute of a dynamics class - see dynamics.py)
 
@@ -123,6 +136,17 @@
 
         prev_state (dict): Contains the state information from the previous step
 
+        env_size (array):
+
+        agent_radii (array):
+
+        catch_radius (float):
+
+        scrimmage_coords (array):
+
+        max_speeds (list):
+
+        tagging_cooldown (float):
 """
 
 import math
@@ -142,7 +166,8 @@ def example_reward(
     env_size: np.ndarray,
     agent_radius: np.ndarray,
     catch_radius: float,
-    scrimmage_coords: np.ndarray
+    scrimmage_coords: np.ndarray,
+    tagging_cooldown: float
 ):
     return 0.0
 

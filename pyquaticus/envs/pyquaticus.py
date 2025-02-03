@@ -867,21 +867,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # Agents (player objects) of each team
         self.agents_of_team = {Team.BLUE_TEAM: b_players, Team.RED_TEAM: r_players}
         self.agent_ids_of_team = {team: np.array([player.id for player in self.agents_of_team[team]]) for team in Team}
-        self.agent_inds_of_team = {team: np.array([self.agents.index(player.id) for player in self.agents_of_team[team]]) for team in Team}
-
-        # Mappings from agent ids to teams, team member ids, team member inds, opponent ids, and opponent inds
-        self.agent_to_team = {
-            agent_id: player.team for agent_id, player in self.players.items()
-        }
-        self.agent_to_team_ids = {
-            agent_id: np.array(self.agent_ids_of_team[player.team]) for agent_id, player in self.players.items()
-        }
-        self.agent_to_team_inds = {
-            agent_id: np.array(self.agent_inds_of_team[player.team]) for agent_id, player in self.players.items()
-        }
-        self.agent_to_opp_ids = {
-            agent_id: np.array([p.id for p in self.agents_of_team[Team(not player.team.value)]]) for agent_id, player in self.players.items()
-        }
+        self.agent_inds_of_team = {team: np.array([self.agents.index(agent_id) for agent_id in self.agent_ids_of_team[team]]) for team in Team}
 
         # Create the list of flags that are indexed by self.flags[int(player.team)]
         self.flags = []
@@ -1580,6 +1566,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 # Update captures
                 self.team_flag_capture[team_idx] = True
                 self.state['captures'][team_idx] += 1
+
     def _check_collisions_vectorized(self): 
         agent_poses = self.state['agent_position']
         dists = np.linalg.norm(agent_poses[:, np.newaxis, :] - agent_poses[np.newaxis, :, :], axis=-1)
@@ -1595,16 +1582,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 #Update state to reflect new collisions
                 self.state['agent_collisions'][i] += 1
                 self.state['agent_collisions'][j] += 1
+
         #Remove Inactive Collisions from active list
         for i,j in inactive_collisions:
             pair = (self.agents[i], self.agents[j])
             if pair in self.active_collisions:
                 self.active_collisions.remove(pair)
                 self.active_collisions.remove((self.agents[j], self.agents[i]))
-        return
 
-            
-        return #TODO
     def _check_collisions(self):
         """
         Updates game state attribute agent_collisions
@@ -1627,9 +1612,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         if dist_between_agents > 3.0:
                             self.active_collisions.remove((player_id, other_id))
                             self.active_collisions.remove((other_id, player_id))
-                       
 
-    
     def set_config_values(self, config_dict):
         """
         Sets initial configuration parameters for the environment.
@@ -2184,13 +2167,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             agent_id=agent_id,
             team=team,
             agents=self.agents,
-            agent_inds=self.agent_inds_of_team,
+            agent_inds_of_team=self.agent_inds_of_team,
             state=self.state,
             prev_state=self.prev_state,
             env_size=self.env_size,
             agent_radius=self.agent_radius,
             catch_radius=self.catch_radius,
-            scrimmage_coords=self.scrimmage_coords
+            scrimmage_coords=self.scrimmage_coords,
+            max_speeds=self.max_speeds,
+            tagging_cooldown=self.tagging_cooldown
         )
 
     def _reset_dones(self):
@@ -2286,15 +2271,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     "agent_is_tagged":           np.zeros(self.num_agents, dtype=bool), #if this agent is tagged
                     "agent_made_tag":            np.array([None] * self.num_agents), #whether this agent tagged something at the current timestep (will be index of tagged agent if so)
                     "agent_tagging_cooldown":    np.array([self.tagging_cooldown] * self.num_agents),
-                    "agent_collisions":          np.zeros(len(self.players), dtype=int), #number of collisions per agent
                     "dist_bearing_to_obstacles": {agent_id: np.zeros((len(self.obstacles), 2)) for agent_id in self.players},
                     "flag_home":                 np.array(flag_homes),
                     "flag_position":             np.array(flag_homes),
                     "flag_taken":                np.zeros(len(self.flags), dtype=bool),
                     "team_has_flag":             np.zeros(len(self.agents_of_team), dtype=bool), #whether a member of this team has a flag of the other team's
-                    "captures":                  np.zeros(len(self.agents_of_team), dtype=int), #number of flag captures made by this team
-                    "tags":                      np.zeros(len(self.agents_of_team), dtype=int), #number of tags made by this team
-                    "grabs":                     np.zeros(len(self.agents_of_team), dtype=int), #number of flag grabs made by this team
+                    "captures":                  np.zeros(len(self.agents_of_team), dtype=int), #total number of flag captures made by this team
+                    "tags":                      np.zeros(len(self.agents_of_team), dtype=int), #total number of tags made by this team
+                    "grabs":                     np.zeros(len(self.agents_of_team), dtype=int), #total number of flag grabs made by this team
+                    "agent_collisions":          np.zeros(len(self.players), dtype=int), #total number of collisions per agent
                 }
 
             # set player and flag attributes
@@ -2682,8 +2667,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         spawn_line_mag = np.linalg.norm(spawn_line_env_intersection_1 - spawn_line_env_intersection_2)
                         spawn_line_unit_vec = (spawn_line_env_intersection_2 - spawn_line_env_intersection_1)/spawn_line_mag
 
-                        agent_idx_within_team = np.where(self.agent_ids_of_team[player.team] == player.id)[0] + 1
-                        pos = spawn_line_env_intersection_1 + (spawn_line_mag * agent_idx_within_team/(self.team_size + 1)) * spawn_line_unit_vec
+                        agent_idx_within_team = np.where(self.agent_inds_of_team[player.team] == i)[0]
+                        pos = spawn_line_env_intersection_1 + (spawn_line_mag * (agent_idx_within_team + 1)/(self.team_size + 1)) * spawn_line_unit_vec
 
                         pos[0] = max(self.agent_radius, min(self.env_size[0] - self.agent_radius, pos[0])) #project out-of-bounds pos back into the environment
                         pos[1] = max(self.agent_radius, min(self.env_size[1] - self.agent_radius, pos[1])) #project out-of-bounds pos back into the environment
