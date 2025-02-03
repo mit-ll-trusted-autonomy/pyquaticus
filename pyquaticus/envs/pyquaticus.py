@@ -998,7 +998,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self._check_untag_vectorized() if self.team_size >= 5 else self._check_untag()
         self._set_dones()
         self._get_dist_bearing_to_obstacles()
-        self._check_collisions()
+        self._check_collisions_vectorized()
 
         if self.lidar_obs:
             for team in self.agents_of_team:
@@ -1580,8 +1580,30 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 # Update captures
                 self.team_flag_capture[team_idx] = True
                 self.state['captures'][team_idx] += 1
-    def _check_collisions_vectorized(self):
-        #for i, player in enu merate(self.players.values()):
+    def _check_collisions_vectorized(self): 
+        agent_poses = self.state['agent_position']
+        dists = np.linalg.norm(agent_poses[:, np.newaxis, :] - agent_poses[np.newaxis, :, :], axis=-1)
+        np.fill_diagonal(dists, np.inf)
+        new_collisions = np.argwhere((dists >= 0.0) & (dists <= 2.5))
+        inactive_collisions = np.argwhere(dists > 3.0)
+        for i, j in new_collisions:
+            pair = (self.agents[i], self.agents[j])
+            if pair not in self.active_collisions:
+                #Append new collisions to tracked active collisions
+                self.active_collisions.append(pair)
+                self.active_collisions.append((self.agents[j], self.agents[i]))
+                #Update state to reflect new collisions
+                self.state['agent_collisions'][i] += 1
+                self.state['agent_collisions'][j] += 1
+        #Remove Inactive Collisions from active list
+        for i,j in inactive_collisions:
+            pair = (self.agents[i], self.agents[j])
+            if pair in self.active_collisions:
+                self.active_collisions.remove(pair)
+                self.active_collisions.remove((self.agents[j], self.agents[i]))
+        return
+
+            
         return #TODO
     def _check_collisions(self):
         """
