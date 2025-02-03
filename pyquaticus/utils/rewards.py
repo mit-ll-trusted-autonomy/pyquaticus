@@ -30,22 +30,23 @@
     #                180
     #
     # This can be converted the standard heading format that is counterclockwise
-    # using the heading_angle_conversion(deg) function found in utils.py
+    # by using the heading_angle_conversion(deg) function found in utils.py
     #
     #
     ## Each custom reward function should have the following arguments ##
     Args:
         agent_id (int): Agent ID we are computing the sparse reward for
-        agents (list): List of agent ID's (this is used to find the index of our agent_id)
+        team: team from Team class in structs.py 
+        agents (list): List of agent ID's (this is used to map agent_id's to agent indices and viceversa)
+        agent_inds_of_team (dict): mapping from team to agent indices of that team
         state (dict):
-            'agent_position' (list): List of agent positions in the order of (agents list)
-                                    Each Index in the list are positions [x,y]
-
+            'agent_position' (array): List of agent positions in the order of (agents list).
+                                      Each index in the list are positions [x,y].
                         Ex. Usage: Get agent_id's current position
                         agent_id = 'agent_1'
                         position = state['agent_position'][agents.index(agent_id)]
 
-            'prev_agent_position' (list): Contains the prev position [x,y] for agent at the specified index
+            'prev_agent_position' (array): Contains the prev position [x,y] for agent at the specified index.
                         Ex. Usage: Get agent_id's previous position
                         agent_id = 'agent_1'
                         prev_position = state['prev_agent_position'][agents.index(agent_id)]
@@ -87,8 +88,7 @@
                         cooldown = self.state['agent_tagging_cooldown'][agents.index(agent_id)]
                         
 
-            'dist_bearing_to_obstacles' (dict): For each agent in game list out distances and bears to all obstacles in game in order of obstacles list
-                        Note: Not Used for the 2025 MCTF competition
+            'dist_bearing_to_obstacles' (dict): For each agent in game list out distances and bearings to all obstacles in game in order of obstacles list
             
             TODO: Add Team mapping for each agent to the state
 
@@ -105,6 +105,21 @@
             'tags' (list):
 
             'grabs' (list):
+
+            'agent_dynamics' (array): List of dictionaries containing agent-specific dynamics information (state attribute of a dynamics class - see dynamics.py)
+
+            ######################################################################################
+            ##### The following keys will exist in the state dictionary if lidar_obs is True #####
+                'lidar_labels' (dict):
+
+                'lidar_labels' (dict):
+
+                'lidar_labels' (dict):
+            ######################################################################################
+            
+            'obs_hist_buffer' (dict): Observation history buffer where the keys are agent_id's and values are the agents' observations
+
+            'global_state_hist_buffer' (array): Global state history buffer
 
         prev_state (dict): Contains the state information from the previous step
 

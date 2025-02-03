@@ -869,9 +869,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.agent_ids_of_team = {team: np.array([player.id for player in self.agents_of_team[team]]) for team in Team}
         self.agent_inds_of_team = {team: np.array([self.agents.index(player.id) for player in self.agents_of_team[team]]) for team in Team}
 
-        # Mappings from agent ids to team member ids and opponent ids
+        # Mappings from agent ids to teams, team member ids, team member inds, opponent ids, and opponent inds
+        self.agent_to_team = {
+            agent_id: player.team for agent_id, player in self.players.items()
+        }
         self.agent_to_team_ids = {
-            agent_id: np.array([p.id for p in self.agents_of_team[player.team]]) for agent_id, player in self.players.items()
+            agent_id: np.array(self.agent_ids_of_team[player.team]) for agent_id, player in self.players.items()
+        }
+        self.agent_to_team_inds = {
+            agent_id: np.array(self.agent_inds_of_team[player.team]) for agent_id, player in self.players.items()
         }
         self.agent_to_opp_ids = {
             agent_id: np.array([p.id for p in self.agents_of_team[Team(not player.team.value)]]) for agent_id, player in self.players.items()
