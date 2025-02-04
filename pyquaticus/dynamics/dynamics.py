@@ -316,8 +316,8 @@ class LargeUSV(Dynamics):
             desired_thrust, self.thrust_map[0, :], self.thrust_map[1, :]
         )
         new_speed = min(
-            raw_speed * 1 - ((abs(desired_rudder) / 100) * self.turn_loss),
-            self.max_speed,
+            raw_speed * (1 - ((abs(desired_rudder) / 100) * self.turn_loss)),
+            self.max_speed
         )
         if (new_speed - self.speed) / self.dt > self.max_acc:
             new_speed = self.speed + self.max_acc * self.dt
