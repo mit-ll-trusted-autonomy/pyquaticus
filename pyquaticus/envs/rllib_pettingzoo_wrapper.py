@@ -19,18 +19,17 @@
 
 # SPDX-License-Identifier: BSD-3-Clause
 
-from ray.rllib.env.wrappers.pettingzoo_env import ParallelPettingZooEnv as RLlibParallelPettingZooEnv
+from ray.rllib.env.wrappers.pettingzoo_env import ParallelPettingZooEnv,PettingZooEnv
 from typing import Optional
+import copy
 
-
-class ParallelPettingZooWrapper(RLlibParallelPettingZooEnv):
+class ParallelPettingZooWrapper(ParallelPettingZooEnv):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-    def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
+    def reset(self, *, seed: Optional[int] = None, return_info=False, options: Optional[dict] = None):
+        obs, infos = super().reset(seed=seed, options=options)
+        return obs, infos
         # pass empty info just to align with RLlib code
-        info = {}
-        return self.par_env.reset(seed=seed, options=options), info
-
     def render(self):
         return self.par_env.render()
+

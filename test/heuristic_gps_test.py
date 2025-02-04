@@ -47,63 +47,40 @@ init_dict = {
 
 
 env = pyquaticus_v0.PyQuaticusEnv(team_size=3, config_dict=config, render_mode="human")
-term = {0: False, 1: False}
-trunc = {0: False, 1: False}
-obs, info = env.reset(options={"init_dict": init_dict})
+term_g = {'agent_0': False, 'agent_1': False}
+truncated_g = {'agent_0': False, 'agent_1': False}
+term = term_g
+trunc = truncated_g
+obs,_ = env.reset()
 
-red_one = BaseDefender(
-    3,
-    Team.RED_TEAM,
-    env,
-    mode="easy",
-)
-red_two = BaseDefender(
-    4,
-    Team.RED_TEAM,
-    env,
-    mode="easy",
-)
-red_three = BaseDefender(
-    5,
-    Team.RED_TEAM,
-    env,
-    mode="easy",
-)
+temp_captures = env.state["captures"]
+temp_grabs = env.state["grabs"]
+temp_tags = env.state["tags"]
 
-blue_one = Heuristic_CTF_Agent(
-    0,
-    Team.BLUE_TEAM,
-    env,
-    mode="nothing",
-)
-blue_two = WaypointPolicy(
-    1,
-    Team.BLUE_TEAM,
-    env,
-    capture_radius=10,
-    slip_radius=20
-)
-blue_three = Heuristic_CTF_Agent(
-    2,
-    Team.BLUE_TEAM,
-    env,
-    mode="nothing",
-)
 
-blue_two.update_state(obs, info)
-blue_two.plan(wp=env.flag_homes[Team.RED_TEAM], num_iters=500)
+H_one = Heuristic_CTF_Agent('agent_3', Team.RED_TEAM, mode="hard")
+H_two = Heuristic_CTF_Agent('agent_4', Team.RED_TEAM, mode="hard")
+H_three = Heuristic_CTF_Agent('agent_5', Team.RED_TEAM, mode="hard")
 
-while not (any(term.values()) or any(trunc.values())):
+R_one = Heuristic_CTF_Agent('agent_0', Team.BLUE_TEAM, mode="hard")
+R_two = Heuristic_CTF_Agent('agent_1', Team.BLUE_TEAM, mode="hard")
+R_three = Heuristic_CTF_Agent('agent_2', Team.BLUE_TEAM, mode="hard")
 
-    three = red_one.compute_action(obs, info)
-    four = red_two.compute_action(obs, info)
-    five = red_three.compute_action(obs, info)
-    zero = blue_one.compute_action(obs, info)
-    one = blue_two.compute_action(obs, info)
-    two = blue_three.compute_action(obs, info)
+step = 0
+while True:
+    new_obs = {}
+    for k in obs:
+        new_obs[k] = env.agent_obs_normalizer.unnormalized(obs[k])
+
+    three = H_one.compute_action(new_obs)
+    four = H_two.compute_action(new_obs)
+    five = H_three.compute_action(new_obs)
+    zero = R_one.compute_action(new_obs)
+    one = R_two.compute_action(new_obs)
+    two = R_three.compute_action(new_obs)
 
     obs, reward, term, trunc, info = env.step(
-        {0: zero, 1: one, 2: two, 3: three, 4: four, 5: five}
+        {'agent_0': zero, 'agent_1': one, 'agent_2': two, 'agent_3': three, 'agent_4': four, 'agent_5': five}
     )
 
 env.close()
