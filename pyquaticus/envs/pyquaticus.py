@@ -345,7 +345,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         max_score, min_score = [self.max_score], [0.0]
 
         for player in self.players.values():
-            player_name = f"player_{player.id}"
+            player_name = player.id
 
             global_state_normalizer.register((player_name, "pos"), pos_max, pos_min)
             global_state_normalizer.register((player_name, "heading"), max_heading)
@@ -628,7 +628,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
         # agent info
         for i, player in enumerate(self.players.values()):
-            player_name = f"player_{player.id}"
+            player_name = player.id
             pos = np.array(player.pos)
 
             scrimmage_line_closest_point = closest_point_on_line(
@@ -839,7 +839,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     dt=self.dt,
                     id=f'agent_{i}',
                     team=Team.BLUE_TEAM,
-                    render_radius=getattr(self, "agent_render_radius", [None] * self.num_agents)[i],
+                    render_radius=getattr(self, "agent_render_radius", [None] * 2 * team_size)[i],
                     render_mode=render_mode,
                 )
             )
@@ -851,13 +851,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     dt=self.dt,
                     id=f'agent_{i}',
                     team=Team.RED_TEAM,
-                    render_radius=getattr(self, "agent_render_radius", [None] * self.num_agents)[i],
+                    render_radius=getattr(self, "agent_render_radius", [None] * 2 * team_size)[i],
                     render_mode=render_mode,
                 )
             )
 
-        self.players = {player.id: player for player in itertools.chain(b_players, r_players)}  #maps player ids (or names) to player objects
-        self.agents = [agent_id for agent_id in self.players] #maps agent indices to ids
+        self.players = {player.id: player for player in itertools.chain(b_players, r_players)}  # maps player ids (or names) to player objects
+        self.agents = [agent_id for agent_id in self.players] # maps agent indices to ids
         self.possible_agents = [agent_id for agent_id in self.players]
         self.max_speeds = [player.get_max_speed() for player in self.players.values()]
 
@@ -2261,11 +2261,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         """
         if seed is not None:
             self.seed(seed=seed)
-
-        if return_info:
-            raise DeprecationWarning(
-                "return_info has been deprecated by PettingZoo -- https://github.com/Farama-Foundation/PettingZoo/pull/890"
-            )
 
         if options is not None:
             self.normalize_obs = options.get("normalize_obs", self.normalize_obs)
@@ -4145,7 +4140,7 @@ when gps environment bounds are specified in meters"
                         rotated_surface,
                         opp_color,
                         0.5 * rotated_surface_size,
-                        radius=0.55 * self.agent_render_radius[player.id],
+                        radius=0.55 * self.agent_render_radius[self.agents.index(player.id)],
                     )
 
                 # agent id
