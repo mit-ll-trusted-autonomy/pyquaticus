@@ -42,7 +42,7 @@ class KeyTest:
             red_policy: if set to None, then red doesn't move unless controlled
                         if passed a policy, then controls the red team with the policy
         '''
-        self.obs = env.reset()
+        self.obs, _ = env.reset()
         self.env = env
         self.policy = None
         if red_policy is not None:

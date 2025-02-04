@@ -42,7 +42,7 @@ class KeyTest:
             red_policy: if set to None, then red doesn't move unless controlled
                         if passed a policy, then controls the red team with the policy
         '''
-        self.obs = env.reset()
+        self.obs, _ = env.reset()
         self.env = env
         self.policy = None
         if red_policy is not None:
@@ -152,10 +152,10 @@ def main():
     config["render_traj_mode"] = "traj_history"
     config["render_traj_freq"] = 50
     config["max_speed"] = 1.5
-    config["short_hist_length"] = 4
-    config["short_hist_interval"] = 5
-    config["long_hist_length"] = 5
-    config["long_hist_interval"] = 20
+    config["short_obs_hist_length"] = 4
+    config["short_obs_hist_interval"] = 5
+    config["long_obs_hist_length"] = 5
+    config["long_obs_hist_interval"] = 20
     config["render_traj_cutoff"] = 100
     # config["tag_on_oob"] = True
 

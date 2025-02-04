@@ -42,7 +42,7 @@ class KeyTest:
             red_policy: if set to None, then red doesn't move unless controlled
                         if passed a policy, then controls the red team with the policy
         '''
-        self.obs = env.reset()
+        self.obs, _ = env.reset()
         self.env = env
         self.policy = None
         if red_policy is not None:
@@ -96,12 +96,16 @@ class KeyTest:
                 if truncated[k]==True:
                     time.sleep(1.)
                     last_obs = copy.deepcopy(self.obs)
-                    self.obs = self.env.reset(options = {'state_dict':self.env.state})
-                    #TODO: check that last obs is the same as self.obs
+                    self.obs, _ = self.env.reset(options = {'state_dict':self.env.state})
+                    success = np.all([np.all(last_obs[agent_id] == self.obs[agent_id]) for agent_id in self.obs])
+                    if success:
+                        print("Passed")
+                    else:
+                        print("Failed")
                     break
                 elif terminated[k] == True:
                     time.sleep(1.)
-                    self.obs = self.env.reset()
+                    self.obs, _ = self.env.reset()
                     break
 
 
