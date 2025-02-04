@@ -873,8 +873,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.flags = []
         for team in Team:
             self.flags.append(Flag(team))
+            self.flags[int(team)].home = self.flag_homes[team]
 
         self.team_flag_capture = [False for _ in Team] #this is False except at the timestep that the flag is captured
+
+        # Team wall orientation
+        self._determine_team_wall_orient()
 
         # Obstacles and Lidar
         self.set_geom_config(config_dict)
@@ -1052,7 +1056,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             team_idx = int(player.team)
             other_team_idx = int(not team_idx)
 
-            flag_loc = self.flags[team_idx].home
+            flag_home = self.flags[team_idx].home
 
             # Check if agent is on their own side
             player.on_own_side = self._check_on_sides(player.pos, player.team)
@@ -1086,7 +1090,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             # If agent is tagged, drive at max speed towards home
             if player.is_tagged:
-                flag_home = self.flags[team_idx].home
                 _, heading_error = mag_bearing_to(player.pos, flag_home, player.heading)
                 desired_speed = player.get_max_speed()
 
@@ -1109,7 +1112,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             player._move_agent(desired_speed, heading_error)
 
             # Check if agent is in keepout region for their own flag
-            ag_dis_2_flag = self.get_distance_between_2_points(player.pos, np.asarray(flag_loc))
+            ag_dis_2_flag = self.get_distance_between_2_points(player.pos, np.asarray(flag_home))
             if (
                 ag_dis_2_flag < self.flag_keepout_radius
                 and not self.state["flag_taken"][team_idx]
@@ -1117,14 +1120,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             ):
                 ag_pos = rc_intersection(
                     np.array([player.pos, player.prev_pos]),
-                    np.asarray(flag_loc),
+                    np.asarray(flag_home),
                     self.flag_keepout_radius,
                 )  # point where agent center first intersected with keepout zone
                 vel = mag_heading_to_vec(player.speed, player.heading)
 
-                ag_vel = reflect_vector(ag_pos, vel, np.asarray(flag_loc))
+                ag_vel = reflect_vector(ag_pos, vel, np.asarray(flag_home))
 
-                crd_ref_angle = get_rot_angle(np.asarray(flag_loc), ag_pos)
+                crd_ref_angle = get_rot_angle(np.asarray(flag_home), ag_pos)
                 vel_ref = rot2d(ag_vel, -crd_ref_angle)
                 vel_ref[1] = 0.0  # convention is that vector pointing from keepout intersection to flag center is y' axis in new reference frame
 
@@ -2258,7 +2261,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self._set_state_from_init_dict(init_dict)
             else:
                 flag_homes = list(self.flag_homes.values())
-                agent_positions, agent_spd_hdg, agent_on_sides = self._generate_agent_starts(flag_homes=flag_homes)
+                agent_positions, agent_spd_hdg, agent_on_sides = self._generate_agent_starts(flag_homes)
 
                 self.state = {
                     "agent_position":            agent_positions,
@@ -2301,9 +2304,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             #for starting with flag on-sides and state_dict initialization would not start with capture
             #(it would have been detected in the step function checks).
 
-            # team wall orientation
-            self._determine_team_wall_orient()
-
             # obstacles
             self._get_dist_bearing_to_obstacles()
 
@@ -2315,7 +2315,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.state["lidar_distances"] = dict()
 
                 for agent_id in self.players:
-                    self.state["lidar_labels"][agent_id] = np.zeros(self.num_lidar_rays, dtype='int8')
+                    self.state["lidar_labels"][agent_id] = np.zeros(self.num_lidar_rays, dtype=int)
                     self.state["lidar_ends"][agent_id] = np.zeros((self.num_lidar_rays, 2))
                     self.state["lidar_distances"][agent_id] = np.zeros(self.num_lidar_rays)
                     self._update_lidar()
@@ -2516,7 +2516,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         flag_homes_not_picked_up = [flag_home for i, flag_home in enumerate(flag_homes) if not self.state['flag_taken'][i]]
 
         agent_positions, agent_spd_hdg, agent_on_sides = self._generate_agent_starts(
-            flag_homes=flag_homes_not_picked_up,
+            flag_homes_not_picked_up,
             agent_pos_dict=agent_pos_dict,
             agent_spd_dict=agent_spd_dict,
             agent_hdg_dict=agent_hdg_dict,
@@ -2575,12 +2575,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     def _set_flag_attributes_from_state(self):
         for flag in self.flags:
             team_idx = int(flag.team)
-            flag.home = self.state['flag_home'][team_idx]
-            flag.pos = self.state['flag_position'][team_idx]
+            flag.pos = self.state['flag_position'][int(flag.team)]
+
+            #note: we do not set flag.home because this should already
+            #be set and match what is in the state dictionary
 
     def _generate_agent_starts(
         self,
-        flag_homes: Union[list, np.ndarray],
+        flag_homes_not_picked_up: Union[list, np.ndarray],
         agent_pos_dict: Optional[dict] = None,
         agent_spd_dict: Optional[dict] = None,
         agent_hdg_dict: Optional[dict] = None,
@@ -2591,7 +2593,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         Note: assumes two teams, and one flag per team.
 
         Args:
-            flag_homes: The home location of all flags that are not picked up
+            flag_homes_not_picked_up: The home location of all flags that are not picked up
             agent_pos_dict: positions of a subset of the agents with id's as keys
             agent_spd_dict: speeds of a subset of the agents with id's as keys
             agent_hdg_dict: headings of a subset of the agents with id's as keys
@@ -2646,15 +2648,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                             pos = self.valid_init_poses[start_pos_idx]
 
                         #check if valid pos
-                        valid_pos, _ = self._check_valid_pos(pos, agent_positions, flag_homes)
+                        valid_pos, _ = self._check_valid_pos(pos, agent_positions, flag_homes_not_picked_up)
                 else:
                     if agent_has_flag[i]:
                         valid_pos = False
                         while not valid_pos:
                             pos = np.random.choice((-1,1), size=2) * np.random.rand(2) * (self.env_size/2 - self.agent_radius) + self.env_size/2
-                            valid_pos = self._check_valid_pos(pos, agent_positions, flag_homes)[0] and not self._check_on_sides(pos, player.team)
+                            valid_pos = self._check_valid_pos(pos, agent_positions, flag_homes_not_picked_up)[0] and not self._check_on_sides(pos, player.team)
                     elif self.default_init:
-                        flag_home = self.flag_homes[player.team]
+                        flag_home = self.flags[int(player.team)].home
                         closest_scrim_line_point = closest_point_on_line(*self.scrimmage_coords, flag_home)
                         halfway_point = (flag_home + closest_scrim_line_point)/2
 
@@ -2673,21 +2675,21 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         pos[0] = max(self.agent_radius, min(self.env_size[0] - self.agent_radius, pos[0])) #project out-of-bounds pos back into the environment
                         pos[1] = max(self.agent_radius, min(self.env_size[1] - self.agent_radius, pos[1])) #project out-of-bounds pos back into the environment
 
-                        valid_pos = self._check_valid_pos(pos, agent_positions, flag_homes)[0] and self._check_on_sides(pos, player.team)
+                        valid_pos = self._check_valid_pos(pos, agent_positions, flag_homes_not_picked_up)[0] and self._check_on_sides(pos, player.team)
                         while not valid_pos:
                             pos = np.random.choice((-1,1), size=2) * np.random.rand(2) * (self.env_size/2 - self.agent_radius) + self.env_size/2
-                            valid_pos = self._check_valid_pos(pos, agent_positions, flag_homes)[0] and self._check_on_sides(pos, player.team)
+                            valid_pos = self._check_valid_pos(pos, agent_positions, flag_homes_not_picked_up)[0] and self._check_on_sides(pos, player.team)
                     else:
                         valid_pos = False
                         while not valid_pos:
                             pos = np.random.choice((-1,1), size=2) * np.random.rand(2) * (self.env_size/2 - self.agent_radius) + self.env_size/2
-                            valid_pos, _ = self._check_valid_pos(pos, agent_positions, flag_homes)
+                            valid_pos, _ = self._check_valid_pos(pos, agent_positions, flag_homes_not_picked_up)
                 # save pos
                 agent_positions.append(pos)
                 agent_pos_dict[player.id] = pos
             else:
                 # check if specified initial pos is in collision
-                valid_pos, collision_type = self._check_valid_pos(agent_pos_dict[player.id], [], flag_homes) #does not check for collisions with agents
+                valid_pos, collision_type = self._check_valid_pos(agent_pos_dict[player.id], [], flag_homes_not_picked_up) #does not check for collisions with agents
                 if not valid_pos:
                     raise Exception(
                         f"Specified initial pos ({agent_pos_dict[player.id]}) for agent {player.id} is in collision with environment object type '{collision_type}'"
@@ -3745,18 +3747,18 @@ when gps environment bounds are specified in meters"
         flag_water_pixel_colors = topo_img[flag_water_ys, flag_water_xs]
         for flag_water_pixel_color in flag_water_pixel_colors: 
             if not (
-                np.all(flag_water_pixel_color == 38) or # DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
-                np.all(flag_water_pixel_color == 39) or # DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
-                np.all(flag_water_pixel_color == 40)    # DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)! 
+                np.all(flag_water_pixel_color == 38) or #DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
+                np.all(flag_water_pixel_color == 39) or #DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
+                np.all(flag_water_pixel_color == 40)    #DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)! 
             ):
                 raise Exception(
                     f"One of the flags ({flag_homes}) is not in the the water."
                 )
 
         mask = (
-            np.all(topo_img == 38, axis=-1) | # DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
-            np.all(topo_img == 39, axis=-1) | # DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
-            np.all(topo_img == 40, axis=-1)   # DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
+            np.all(topo_img == 38, axis=-1) | #DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
+            np.all(topo_img == 39, axis=-1) | #DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
+            np.all(topo_img == 40, axis=-1)   #DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
         ) 
         water_connectivity = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]])
         labeled_mask, _ = label(mask, structure=water_connectivity)
@@ -4117,7 +4119,7 @@ when gps environment bounds are specified in meters"
                     else:
                         font_color = "white" if team == Team.BLUE_TEAM else "black"
 
-                    player_number_label = self.agent_font.render(str(player.id[-1]), True, font_color)
+                    player_number_label = self.agent_font.render(str(self.agents.index(player.id)), True, font_color)
                     player_number_label_rect = player_number_label.get_rect()
                     player_number_label_rect.center = (0.5 * rotated_surface_size[0], 0.52 * rotated_surface_size[1]) # Using 0.52 for the y-coordinate because it looks nicer than 0.5
                     rotated_surface.blit(player_number_label, player_number_label_rect)

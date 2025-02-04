@@ -40,86 +40,94 @@
         agents (list): list of agent ID's (this is used to map agent_id's to agent indices and viceversa)
         agent_inds_of_team (dict): mapping from team to agent indices of that team
         state (dict):
-            'agent_position' (array): list of agent positions (in the order of agents list)
+            'agent_position' (array): list of agent positions (indexed in the order of agents list)
 
                         Ex. Usage: Get agent's current position
                         agent_id = 'agent_1'
                         position = state['agent_position'][agents.index(agent_id)]
 
-            'prev_agent_position' (array): list of agent positions (in the order of agents list) at the previous timestep
+            'prev_agent_position' (array): list of agent positions (indexed in the order of agents list) at the previous timestep
 
                         Ex. Usage: Get agent's previous position
                         agent_id = 'agent_1'
                         prev_position = state['prev_agent_position'][agents.index(agent_id)]
 
-            'agent_speed' (array): list of agent speeds (in the order of agents list)
+            'agent_speed' (array): list of agent speeds (indexed in the order of agents list)
 
                         Ex. Usage: Get agent's speed
                         agent_id = 'agent_1'
                         speed = state
 
-            'agent_heading' (array): list of agent headings (in the order of agents list)
+            'agent_heading' (array): list of agent headings (indexed in the order of agents list)
 
                         Ex. Usage: Get agent's heading
                         agent_id = 'agent_1'
                         heading = state['agent_heading'][agents.index(agent_id)]
 
-            'agent_on_sides' (array): list of booleans (in the order of agents list) where True means the agent
-                                      is on its own side, and False means the agent is not on its own side
+            'agent_on_sides' (array): list of booleans (indexed in the order of agents list) where True means the
+                                      agent is on its own side, and False means the agent is not on its own side
 
                         Ex. Usage: Check if agent is on its own side
                         agent_id = 'agent_1'
                         on_own_side = state['agent_on_sides'][agents.index(agent_id)]
 
-            'agent_oob' (array): list of booleans (in the order of agents list) where True means the agent
-                                 is out-of-bounds (OOB), and False means the agent is not out-of-bounds
+            'agent_oob' (array): list of booleans (indexed in the order of agents list) where True means the
+                                 agent is out-of-bounds (OOB), and False means the agent is not out-of-bounds
                         
                         Ex. Usage: Check if agent is out-of-bounds
                         agent_id = 'agent_1'
                         num_oob = state['agent_oob'][agents.index(agent_id)]
             
-            'agent_has_flag' (list): list of booleans (in the order of agents list) where True means the
+            'agent_has_flag' (array): list of booleans (indexed in the order of agents list) where True means the
                                      agent has a flag, and False means the agent does not have a flag
 
                         Ex. Usage: Check if agent has a flag
                         agent_id = 'agent_1'
-                        has_flag = state['agent_has_flag'][agents.index(agent_id)] == 1
+                        has_flag = state['agent_has_flag'][agents.index(agent_id)]
 
-            'agent_is_tagged' (array): list of booleans (in the order of agents list) where True means
+            'agent_is_tagged' (array): list of booleans (indexed in the order of agents list) where True means
                                        the agent is tagged, and False means the agent is not tagged
 
-            'agent_made_tag' (list): list of all agents and if that agent tagged something at the current timestep (will be index of tagged agent if so) otherwise None
-
-                        Ex. Usage: Check of agent_id has tagged an agent
+                        Ex. Usage: Check if agent is tagged
                         agent_id = 'agent_1'
-                        tagged_opponent = state['agent_made_tag'][agents.index(agent_id)]
+                        is_tagged = state['agent_is_tagged'][agents.index(agent_id)]
 
-            'agent_tagging_cooldown' (list): Current tagging cooldown for all agents in the agents list order
-                        Note: Agent is able to tag when this value is equal to tagging_cooldown                    
+            'agent_made_tag' (array): list (indexed in the order of agents list) where the value at an entry is the index of a different
+                                     agent which the agent at the given index has tagged at the current timestep, otherwise None
+
+                        Ex. Usage: Check if agent has tagged an agent
+                        agent_id = 'agent_1'
+                        tagged_opponent_idx = state['agent_made_tag'][agents.index(agent_id)]
+
+            'agent_tagging_cooldown' (array): current agent tagging cooldowns (indexed in the order of agents list)
+                        Note: agent is able to tag when this value is equal to tagging_cooldown
     
-                        Ex. Usage: Get agent_id current tagging cooldown
+                        Ex. Usage: Get agent's current tagging cooldown
                         agent_id = 'agent_1'
                         cooldown = self.state['agent_tagging_cooldown'][agents.index(agent_id)]
 
-            'dist_bearing_to_obstacles' (dict): For each agent in game list out distances and bearings to all obstacles in game in order of obstacles list
+            'dist_bearing_to_obstacles' (dict): For each agent in game list out distances and bearings
+                                                to all obstacles in game in order of obstacles list
 
-            'flag_home' (list):
+            'flag_home' (array): list of flag homes (indexed by team number)
 
-            'flag_position' (list):
+            'flag_position' (array): list of flag homes (indexed by team number)
 
-            'flag_taken' (list):
+            'flag_taken' (array): list of booleans (indexed by team number) where True means the team's flag
+                                  is taken (picked up by an opponent), and False means the flag is not taken 
 
-            'team_has_flag' (list):
+            'team_has_flag' (array): list of booleans (indexed by team number) where True means an agent of the
+                                     team has a flag, and False means that no agents are in possesion of a flag
 
-            'captures' (list):
+            'captures' (array): list of total captures made by each team (indexed by team number)
 
-            'tags' (list):
+            'tags' (array): list of total tags made by each team (indexed by team number)
 
-            'grabs' (list):
+            'grabs' (array): list of total flag grabs made by each team (indexed by team number)
 
-            'agent_collisions' (array):
+            'agent_collisions' (array): list of total agent collisions  for each agent (indexed in the order of agents list)
 
-            'agent_dynamics' (array): List of dictionaries containing agent-specific dynamics information (state attribute of a dynamics class - see dynamics.py)
+            'agent_dynamics' (array): list of dictionaries containing agent-specific dynamics information (state attribute of a dynamics class - see dynamics.py)
 
             ######################################################################################
             ##### The following keys will exist in the state dictionary if lidar_obs is True #####
@@ -136,17 +144,17 @@
 
         prev_state (dict): Contains the state information from the previous step
 
-        env_size (array):
+        env_size (array): field dimensions [horizontal, vertical]
 
-        agent_radii (array):
+        agent_radii (array): list of agent radii (indexed in the order of agents list)
 
-        catch_radius (float):
+        catch_radius (float): tag and flag grab radius
 
-        scrimmage_coords (array):
+        scrimmage_coords (array): endpoints [x,y] of the scrimmage line
 
-        max_speeds (list):
+        max_speeds (list): list of agent max speeds (indexed in the order of agents list)
 
-        tagging_cooldown (float):
+        tagging_cooldown (float): tagging cooldown time
 """
 
 import math

@@ -152,6 +152,7 @@ def main():
     config["lidar_range"] = 1000
     config["render_agent_ids"] = True
     config["render_lidar_mode"] = "detection"
+    config["catch_radius"] = 250
     # config["render_traj_mode"] = "traj_agent"
     config["render_traj_freq"] = 50
     config["render_traj_cutoff"] = 100
