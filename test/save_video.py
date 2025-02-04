@@ -141,7 +141,6 @@ def main():
     config["sim_speedup_factor"] = 8
     config["render_traj_freq"] = 10
     config["render_traj_cutoff"] = 55
-
     config["blue_flag_home"] = [140,40]
     config["red_flag_home"] = [20,40]
     config["flag_homes_unit"] = "m"
