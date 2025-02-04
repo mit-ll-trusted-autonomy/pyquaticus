@@ -2037,7 +2037,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             # agents
             for agent_id in self.agents:
-                vertices = list(Point(0.0, 0.0).buffer(self.agent_radius[int(agent_id)], quad_segs=n_quad_segs).exterior.coords)[:-1]  # approximate circle with an octagon
+                vertices = list(Point(0.0, 0.0).buffer(self.agent_radius[self.agents.index(agent_id)], quad_segs=n_quad_segs).exterior.coords)[:-1]  # approximate circle with an octagon
                 segments = [[*vertex, *vertices[(i + 1) % len(vertices)]] for i, vertex in enumerate(vertices)]
                 ray_int_seg_labels.extend(len(segments) * [self.ray_int_label_map[agent_id]])
                 self.seg_label_type_to_inds["agent"].extend(np.arange(len(ray_int_segments), len(ray_int_segments) + len(segments)))
@@ -2863,7 +2863,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             player_dists_to_obstacles = list()
             for obstacle in self.obstacles:
                 # TODO: vectorize
-                dist_to_obstacle = obstacle.distance_from(player_pos, radius=self.agent_radius[player.id], heading=player.heading)
+                dist_to_obstacle = obstacle.distance_from(player_pos, radius=self.agent_radius[self.agents.index(player.id)], heading=player.heading)
                 player_dists_to_obstacles.append(dist_to_obstacle)
             dist_bearing_to_obstacles[player.id] = player_dists_to_obstacles
         self.state["dist_bearing_to_obstacles"] = dist_bearing_to_obstacles

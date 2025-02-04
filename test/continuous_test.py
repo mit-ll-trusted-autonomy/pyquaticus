@@ -43,50 +43,50 @@ env = pyquaticus_v0.PyQuaticusEnv(
     team_size=2, config_dict=config_dict, render_mode="human"
 )
 
-obs, info = env.reset()
+obs, info = env.reset(return_info=True)
 
-H_one = BaseDefender(
-    2,
+R_two = BaseDefender(
+    "agent_2",
     Team.RED_TEAM,
     env,
     mode="medium",
 )
-H_two = BaseDefender(
-    3,
+R_three = BaseDefender(
+    "agent_3",
     Team.RED_TEAM,
     env,
     mode="medium",
 )
 
-R_one = WaypointPolicy(
-    0,
+B_zero = WaypointPolicy(
+    "agent_0",
     Team.BLUE_TEAM,
     env,
     capture_radius=4,
     slip_radius=8,
     avoid_radius=4,
 )
-R_two = BaseAttacker(
-    1,
+B_one = BaseAttacker(
+    "agent_1",
     Team.BLUE_TEAM,
     env,
     mode="nothing",
 )
 
-R_one.update_state(obs, info)
+B_zero.update_state(obs, info)
 
-R_one.plan(
+B_zero.plan(
     wp=env.flag_homes[Team.RED_TEAM], num_iters=500
 )
 
 while True:
 
-    two = H_one.compute_action(obs, info)
-    three = H_two.compute_action(obs, info)
-    zero = R_one.compute_action(obs, info)
-    one = R_two.compute_action(obs, info)
+    two = R_two.compute_action(obs, info)
+    three = R_three.compute_action(obs, info)
+    zero = B_zero.compute_action(obs, info)
+    one = B_one.compute_action(obs, info)
 
-    obs, reward, term, trunc, info = env.step({0: zero, 1: one, 2: two, 3: three})
+    obs, reward, term, trunc, info = env.step({'agent_0':zero,'agent_1':one, 'agent_2':two, 'agent_3':three})
     k = list(term.keys())
 
     if term[k[0]] or trunc[k[0]]:

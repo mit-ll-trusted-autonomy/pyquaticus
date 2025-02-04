@@ -35,9 +35,10 @@ class BaseDefender(BaseAgentPolicy):
 
     def __init__(
         self,
-        agent_id: int,
+        agent_id: str,
         team: Team,
         env: PyQuaticusEnv,
+        continuous: bool = False,
         mode: str = "easy",
     ):
         super().__init__(agent_id, team, env)
@@ -46,7 +47,7 @@ class BaseDefender(BaseAgentPolicy):
             raise ValueError(f"mode {mode} not in set of valid modes {modes}")
         self.mode = mode
 
-        self.continuous = env.action_type == "continuous"
+        self.continuous = continuous
         self.flag_keepout = env.flag_keepout_radius
         self.catch_radius = env.catch_radius
         self.goal = "PM"
@@ -78,7 +79,7 @@ class BaseDefender(BaseAgentPolicy):
         """
         self.update_state(obs, info)
 
-        global_state = info["global_state"]
+        global_state = info[self.id]
 
         # Unnormalize state, if necessary
         if not isinstance(global_state, dict):
@@ -101,7 +102,7 @@ class BaseDefender(BaseAgentPolicy):
 
                 # Convert the vector to a heading, and then pick the best discrete action to perform
             try:
-                heading_error = self.angle180(self.vec_to_heading(ag_vect))
+                heading_error = self.angle180(self.vec_to_heading(ag_vect) - self.heading)
 
                 if self.continuous:
                     if np.isnan(heading_error):
@@ -299,7 +300,7 @@ class BaseDefender(BaseAgentPolicy):
             # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
             # Convert the vector to a heading, and then pick the best discrete action to perform
             try:
-                heading_error = self.angle180(self.vec_to_heading(ag_vect))
+                heading_error = self.angle180(self.vec_to_heading(ag_vect) - self.heading)
 
                 if self.continuous:
                     if np.isnan(heading_error):
@@ -349,7 +350,7 @@ class BaseDefender(BaseAgentPolicy):
 
                     # Convert the vector to a heading, and then pick the best discrete action to perform
             try:
-                heading_error = self.angle180(self.vec_to_heading(ag_vect))
+                heading_error = self.angle180(self.vec_to_heading(ag_vect) - self.heading)
 
                 if self.continuous:
                     if np.isnan(heading_error):
@@ -383,7 +384,7 @@ class BaseDefender(BaseAgentPolicy):
 
             # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid
             wall_pos = []
-            if self.wall_distances[0] < 7 and (-90 < self.wall_bearings[0] < 90):
+            if self.wall_distances[0] < 7 and (-90 < self.angle180(self.wall_bearings[0] - self.heading) < 90):
                 wall_0_unit_vec = self.rb_to_rect(
                     np.array((self.wall_distances[0], self.wall_bearings[0]))
                 )
@@ -393,7 +394,7 @@ class BaseDefender(BaseAgentPolicy):
                         self.wall_distances[0] * wall_0_unit_vec[1],
                     )
                 )
-            elif self.wall_distances[2] < 7 and (-90 < self.wall_bearings[2] < 90):
+            elif self.wall_distances[2] < 7 and (-90 < self.angle180(self.wall_bearings[2] - self.heading) < 90):
                 wall_2_unit_vec = self.rb_to_rect(
                     np.array((self.wall_distances[2], self.wall_bearings[2]))
                 )
@@ -403,7 +404,7 @@ class BaseDefender(BaseAgentPolicy):
                         self.wall_distances[2] * wall_2_unit_vec[1],
                     )
                 )
-            if self.wall_distances[1] < 7 and (-90 < self.wall_bearings[1] < 90):
+            if self.wall_distances[1] < 7 and (-90 < self.angle180(self.wall_bearings[1] - self.heading) < 90):
                 wall_1_unit_vec = self.rb_to_rect(
                     np.array((self.wall_distances[1], self.wall_bearings[1]))
                 )
@@ -413,7 +414,7 @@ class BaseDefender(BaseAgentPolicy):
                         self.wall_distances[1] * wall_1_unit_vec[1],
                     )
                 )
-            elif self.wall_distances[3] < 7 and (-90 < self.wall_bearings[3] < 90):
+            elif self.wall_distances[3] < 7 and (-90 < self.angle180(self.wall_bearings[3] - self.heading) < 90):
                 wall_3_unit_vec = self.rb_to_rect(
                     np.array((self.wall_distances[3], self.wall_bearings[3]))
                 )
@@ -450,6 +451,9 @@ class BaseDefender(BaseAgentPolicy):
                 # If flag is closest point on line, then unit_def_flag is NaN,
                 # which causes agent to stop (act_index is never updated from 16)
                 # Is this the desired behavior?
+                # print(self.opp_team_pos_dict[closest_enemy])
+                # print(self.my_flag_loc)
+                # print(enemy_loc)
                 defend_pt = self.closest_point_on_line(
                     self.my_flag_loc, enemy_loc, [0, 0]
                 )
@@ -475,6 +479,7 @@ class BaseDefender(BaseAgentPolicy):
                             self.my_flag_loc[0] + (unit_def_flag[0] * defense_perim),
                             self.my_flag_loc[1] + (unit_def_flag[1] * defense_perim),
                         ]
+                        # print(guide_pt)
                     else:
                         guide_pt = defend_pt
                 else:
@@ -485,12 +490,14 @@ class BaseDefender(BaseAgentPolicy):
                 ag_vect = self.bearing_to_vec(self.my_flag_bearing)
 
             if wall_pos is not None:
+                # print(wall_pos)
                 ag_vect = ag_vect + self.get_avoid_vect(wall_pos)
+                #print(self.get_avoid_vect(wall_pos))
 
             # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
             # Convert the vector to a heading, and then pick the best discrete action to perform
             try:
-                heading_error = self.angle180(self.vec_to_heading(ag_vect))
+                heading_error = self.angle180(-1 * self.vec_to_heading(ag_vect) + 90 - self.heading)
 
                 if self.continuous:
                     if np.isnan(heading_error):

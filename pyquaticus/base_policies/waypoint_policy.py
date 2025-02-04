@@ -41,9 +41,10 @@ class WaypointPolicy(BaseAgentPolicy):
 
     def __init__(
         self,
-        agent_id: int,
+        agent_id: str,
         team: Team,
         env: PyQuaticusEnv,
+        continuous: bool = False,
         capture_radius: float = 1,
         slip_radius: Optional[float] = None,
         avoid_radius: float = 2,
@@ -61,7 +62,7 @@ class WaypointPolicy(BaseAgentPolicy):
 
         self.wps = wps
 
-        self.continuous = env.action_type == "continuous"
+        self.continuous = continuous
 
         self.plan_process = Pool(processes=1)
 

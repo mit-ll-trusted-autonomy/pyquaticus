@@ -51,36 +51,37 @@ term_g = {'agent_0': False, 'agent_1': False}
 truncated_g = {'agent_0': False, 'agent_1': False}
 term = term_g
 trunc = truncated_g
-obs,_ = env.reset()
+obs, info = env.reset(return_info=True)
 
 temp_captures = env.state["captures"]
 temp_grabs = env.state["grabs"]
 temp_tags = env.state["tags"]
 
 
-H_one = Heuristic_CTF_Agent('agent_3', Team.RED_TEAM, mode="hard")
-H_two = Heuristic_CTF_Agent('agent_4', Team.RED_TEAM, mode="hard")
-H_three = Heuristic_CTF_Agent('agent_5', Team.RED_TEAM, mode="hard")
+H_one = Heuristic_CTF_Agent('agent_3', Team.RED_TEAM, env, mode="hard")
+H_two = Heuristic_CTF_Agent('agent_4', Team.RED_TEAM, env, mode="hard")
+H_three = Heuristic_CTF_Agent('agent_5', Team.RED_TEAM, env, mode="hard")
 
-R_one = Heuristic_CTF_Agent('agent_0', Team.BLUE_TEAM, mode="hard")
-R_two = Heuristic_CTF_Agent('agent_1', Team.BLUE_TEAM, mode="hard")
-R_three = Heuristic_CTF_Agent('agent_2', Team.BLUE_TEAM, mode="hard")
+R_one = Heuristic_CTF_Agent('agent_0', Team.BLUE_TEAM, env, mode="hard")
+R_two = Heuristic_CTF_Agent('agent_1', Team.BLUE_TEAM, env, mode="hard")
+R_three = Heuristic_CTF_Agent('agent_2', Team.BLUE_TEAM, env, mode="hard")
 
 step = 0
 while True:
-    new_obs = {}
-    for k in obs:
-        new_obs[k] = env.agent_obs_normalizer.unnormalized(obs[k])
 
-    three = H_one.compute_action(new_obs)
-    four = H_two.compute_action(new_obs)
-    five = H_three.compute_action(new_obs)
-    zero = R_one.compute_action(new_obs)
-    one = R_two.compute_action(new_obs)
-    two = R_three.compute_action(new_obs)
+    three = H_one.compute_action(obs, info)
+    four = H_two.compute_action(obs, info)
+    five = H_three.compute_action(obs, info)
+    zero = R_one.compute_action(obs, info)
+    one = R_two.compute_action(obs, info)
+    two = R_three.compute_action(obs, info)
 
     obs, reward, term, trunc, info = env.step(
         {'agent_0': zero, 'agent_1': one, 'agent_2': two, 'agent_3': three, 'agent_4': four, 'agent_5': five}
     )
+    k =  list(term.keys())
+
+    if term[k[0]] == True or trunc[k[0]]==True:
+        break
 
 env.close()

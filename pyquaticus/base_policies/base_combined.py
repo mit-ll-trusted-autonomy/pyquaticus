@@ -34,9 +34,10 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
 
     def __init__(
         self,
-        agent_id: int,
+        agent_id: str,
         team: Team,
         env: PyQuaticusEnv,
+        continuous: bool = False,
         mode="easy",
         defensiveness=20.0,
     ):
@@ -50,18 +51,20 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         self.mode = mode
         self.defensiveness = defensiveness
         self.id = agent_id
-        self.continuous = env.action_type == "continuous"
+        self.continuous = continuous
         self.flag_keepout = env.flag_keepout_radius
         self.base_attacker = attack_policy.BaseAttacker(
             self.id,
             team,
             env,
+            continuous,
             mode,
         )
         self.base_defender = defend_policy.BaseDefender(
             self.id,
             team,
             env,
+            continuous,
             mode,
         )
         self.scrimmage = None

@@ -33,9 +33,10 @@ class BaseAttacker(BaseAgentPolicy):
 
     def __init__(
         self,
-        agent_id: int,
+        agent_id: str,
         team: Team,
         env: PyQuaticusEnv,
+        continuous: bool = False,
         mode: str = "easy",
     ):
         super().__init__(agent_id, team, env)
@@ -47,8 +48,7 @@ class BaseAttacker(BaseAgentPolicy):
         if team not in Team:
             raise AttributeError(f"Invalid team {team}")
 
-        self.continuous = env.action_type == "continuous"
-
+        self.continuous = continuous
         self.goal = "SC"
 
         self.aquaticus_field_points = env.config_dict["aquaticus_field_points"]
@@ -74,7 +74,7 @@ class BaseAttacker(BaseAgentPolicy):
         """
         self.update_state(obs, info)
 
-        global_state = info["global_state"]
+        global_state = info[self.id]
 
         # Unnormalize state, if necessary
         if not isinstance(global_state, dict):
@@ -94,7 +94,7 @@ class BaseAttacker(BaseAgentPolicy):
 
             # Convert the vector to a heading, and then pick the best discrete action to perform
             try:
-                heading_error = self.angle180(self.vec_to_heading(goal_vect))
+                heading_error = self.angle180(self.vec_to_heading(goal_vect) - self.heading)
 
                 if self.continuous:
                     if np.isnan(heading_error):
@@ -241,7 +241,7 @@ class BaseAttacker(BaseAgentPolicy):
 
             # Convert the heading to a discrete action to follow
             try:
-                heading_error = self.angle180(self.vec_to_heading(my_action))
+                heading_error = self.angle180(self.vec_to_heading(my_action) - self.heading)
 
                 if self.continuous:
                     if np.isnan(heading_error):
@@ -273,8 +273,8 @@ class BaseAttacker(BaseAgentPolicy):
 
             desired_speed = self.max_speed
 
-            # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid
-            if self.wall_distances[0] < 10 and (-90 < self.wall_bearings[0] < 90):
+            # If I'm close to a wall and driving towards it, add the closest point to the wall as an obstacle to avoid
+            if self.wall_distances[0] < 10 and (-90 < self.angle180(self.wall_bearings[0] - self.heading) < 90):
                 wall_0_unit_vec = self.rb_to_rect(
                     np.array(
                         (
@@ -289,7 +289,7 @@ class BaseAttacker(BaseAgentPolicy):
                         self.wall_distances[0] * wall_0_unit_vec[1],
                     )
                 )
-            elif self.wall_distances[2] < 10 and (-90 < self.wall_bearings[2] < 90):
+            elif self.wall_distances[2] < 10 and (-90 < self.angle180(self.wall_bearings[2] - self.heading) < 90):
                 wall_2_unit_vec = self.rb_to_rect(
                     np.array(
                         (
@@ -304,7 +304,7 @@ class BaseAttacker(BaseAgentPolicy):
                         self.wall_distances[2] * wall_2_unit_vec[1],
                     )
                 )
-            if self.wall_distances[1] < 10 and (-90 < self.wall_bearings[1] < 90):
+            if self.wall_distances[1] < 10 and (-90 < self.angle180(self.wall_bearings[1] - self.heading) < 90):
                 wall_1_unit_vec = self.rb_to_rect(
                     np.array(
                         (
@@ -319,7 +319,7 @@ class BaseAttacker(BaseAgentPolicy):
                         self.wall_distances[1] * wall_1_unit_vec[1],
                     )
                 )
-            elif self.wall_distances[3] < 10 and (-90 < self.wall_bearings[3] < 90):
+            elif self.wall_distances[3] < 10 and (-90 < self.angle180(self.wall_bearings[3] - self.heading) < 90):
                 wall_3_unit_vec = self.rb_to_rect(
                     np.array(
                         (
@@ -386,7 +386,7 @@ class BaseAttacker(BaseAgentPolicy):
 
             # Try to convert the heading to a discrete action
             try:
-                heading_error = self.angle180(self.vec_to_heading(my_action))
+                heading_error = self.angle180(self.vec_to_heading(my_action) - self.heading)
                 # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
                 if self.continuous:
                     if np.isnan(heading_error):
@@ -419,7 +419,7 @@ class BaseAttacker(BaseAgentPolicy):
             desired_speed = self.max_speed
 
             # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid
-            if self.wall_distances[0] < 10 and (-90 < self.wall_bearings[0] < 90):
+            if self.wall_distances[0] < 10 and (-90 < self.angle180(self.wall_bearings[0] - self.heading) < 90):
                 wall_0_unit_vec = self.rb_to_rect(
                     np.array(
                         (
@@ -434,7 +434,7 @@ class BaseAttacker(BaseAgentPolicy):
                         self.wall_distances[0] * wall_0_unit_vec[1],
                     )
                 )
-            elif self.wall_distances[2] < 10 and (-90 < self.wall_bearings[2] < 90):
+            elif self.wall_distances[2] < 10 and (-90 < self.angle180(self.wall_bearings[2] - self.heading) < 90):
                 wall_2_unit_vec = self.rb_to_rect(
                     np.array(
                         (
@@ -449,7 +449,7 @@ class BaseAttacker(BaseAgentPolicy):
                         self.wall_distances[2] * wall_2_unit_vec[1],
                     )
                 )
-            if self.wall_distances[1] < 10 and (-90 < self.wall_bearings[1] < 90):
+            if self.wall_distances[1] < 10 and (-90 < self.angle180(self.wall_bearings[1] - self.heading) < 90):
                 wall_1_unit_vec = self.rb_to_rect(
                     np.array(
                         (
@@ -464,7 +464,7 @@ class BaseAttacker(BaseAgentPolicy):
                         self.wall_distances[1] * wall_1_unit_vec[1],
                     )
                 )
-            elif self.wall_distances[3] < 10 and (-90 < self.wall_bearings[3] < 90):
+            elif self.wall_distances[3] < 10 and (-90 < self.angle180(self.wall_bearings[3] - self.heading) < 90):
                 wall_3_unit_vec = self.rb_to_rect(
                     np.array(
                         (
@@ -530,7 +530,7 @@ class BaseAttacker(BaseAgentPolicy):
 
             # Try to convert the heading to a discrete action
             try:
-                heading_error = self.angle180(self.vec_to_heading(my_action))
+                heading_error = self.angle180(self.vec_to_heading(my_action) - self.heading)
                 # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
                 if self.continuous:
                     if np.isnan(heading_error):
