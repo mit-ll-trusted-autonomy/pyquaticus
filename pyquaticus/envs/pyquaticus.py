@@ -839,7 +839,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     dt=self.dt,
                     id=f'agent_{i}',
                     team=Team.BLUE_TEAM,
-                    render_radius=getattr(self, "agent_render_radius", [None] * 2 * team_size)[i],
+                    render_radius=getattr(self, "agent_render_radius", [None] * 2*team_size)[i],
                     render_mode=render_mode,
                 )
             )
@@ -851,13 +851,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     dt=self.dt,
                     id=f'agent_{i}',
                     team=Team.RED_TEAM,
-                    render_radius=getattr(self, "agent_render_radius", [None] * 2 * team_size)[i],
+                    render_radius=getattr(self, "agent_render_radius", [None] * 2*team_size)[i],
                     render_mode=render_mode,
                 )
             )
 
-        self.players = {player.id: player for player in itertools.chain(b_players, r_players)}  # maps player ids (or names) to player objects
-        self.agents = [agent_id for agent_id in self.players] # maps agent indices to ids
+        self.players = {player.id: player for player in itertools.chain(b_players, r_players)}  #maps player ids (or names) to player objects
+        self.agents = [agent_id for agent_id in self.players] #maps agent indices to ids
         self.possible_agents = [agent_id for agent_id in self.players]
         self.max_speeds = [player.get_max_speed() for player in self.players.values()]
 
@@ -906,7 +906,16 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # RRT policies for driving back home
         self.rrt_policies = []
         for i in range(self.num_agents):
-            self.rrt_policies.append(EnvWaypointPolicy(self.obstacles, self.env_size, self.max_speeds[i], capture_radius=0.45 * self.catch_radius, slip_radius=4 * self.catch_radius, avoid_radius=2 * self.agent_radius[i]))
+            self.rrt_policies.append(
+                EnvWaypointPolicy(
+                    self.obstacles,
+                    self.env_size,
+                    self.max_speeds[i],
+                    capture_radius=0.45 * self.catch_radius,
+                    slip_radius=4 * self.catch_radius,
+                    avoid_radius=2 * self.agent_radius[i]
+                )
+            )
 
     def seed(self, seed=None):
         """
@@ -1095,8 +1104,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             # If agent is tagged, drive at max speed towards home
             if player.is_tagged:
-
-                # If we are in a non-default environment, use RRT*
+                #if we are in a non-default environment, use RRT*
                 if len(self.obstacles) > 0:
                     policy = self.rrt_policies[i]
                     assert isinstance(policy, EnvWaypointPolicy)
@@ -1106,12 +1114,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         heading_error = 0
                     else:
                         desired_speed, heading_error = policy.compute_action(player.pos, player.heading)
-
-                # Or else just use PID
+                #or else just use PID
                 else:
-                    flag_home = self.flags[team_idx].home
                     _, heading_error = mag_bearing_to(player.pos, flag_home, player.heading)
                     desired_speed = player.get_max_speed()
+
             # If agent is out of bounds, drive back in bounds at fraction of max speed
             elif self.state["agent_oob"][i]:
                 #compute the closest env edge and steer towards heading perpendicular to edge
@@ -1772,15 +1779,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             if len(agent_radius) != self.team_size * 2:
                 raise Warning("Dynamics list incorrect length")
             
-        if not isinstance(agent_radius, list):
+        if not isinstance(agent_radius, (list, tuple, np.ndarray)):
             try:
                 agent_radius = float(agent_radius)
             except Exception:
                 raise Warning("agent_radius must be convertible to a float")
             agent_radius = [agent_radius for _ in range(self.team_size * 2)]
-
-        
-
 
         flag_radius = config_dict.get("flag_radius", config_dict_std["flag_radius"])
         flag_keepout_radius = config_dict.get("flag_keepout", config_dict_std["flag_keepout"])
@@ -2677,13 +2681,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                             pos = self.valid_init_poses[start_pos_idx]
 
                         #check if valid pos
-                        valid_pos, _ = self._check_valid_pos(pos, agent_positions, flag_homes_not_picked_up, i)
+                        valid_pos, _ = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)
                 else:
                     if agent_has_flag[i]:
                         valid_pos = False
                         while not valid_pos:
                             pos = np.random.choice((-1,1), size=2) * np.random.rand(2) * (self.env_size/2 - self.agent_radius) + self.env_size/2
-                            valid_pos = self._check_valid_pos(pos, agent_positions, flag_homes_not_picked_up, i)[0] and not self._check_on_sides(pos, player.team)
+                            valid_pos = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)[0] and not self._check_on_sides(pos, player.team)
                     elif self.default_init:
                         flag_home = self.flags[int(player.team)].home
                         closest_scrim_line_point = closest_point_on_line(*self.scrimmage_coords, flag_home)
@@ -2704,21 +2708,21 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         pos[0] = max(self.agent_radius[i], min(self.env_size[0] - self.agent_radius[i], pos[0])) #project out-of-bounds pos back into the environment
                         pos[1] = max(self.agent_radius[i], min(self.env_size[1] - self.agent_radius[i], pos[1])) #project out-of-bounds pos back into the environment
 
-                        valid_pos = self._check_valid_pos(pos, agent_positions, flag_homes_not_picked_up, i)[0] and self._check_on_sides(pos, player.team)
+                        valid_pos = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)[0] and self._check_on_sides(pos, player.team)
                         while not valid_pos:
                             pos = np.random.choice((-1,1), size=2) * np.random.rand(2) * (self.env_size/2 - self.agent_radius[i]) + self.env_size/2
-                            valid_pos = self._check_valid_pos(pos, agent_positions, flag_homes_not_picked_up, i)[0] and self._check_on_sides(pos, player.team)
+                            valid_pos = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)[0] and self._check_on_sides(pos, player.team)
                     else:
                         valid_pos = False
                         while not valid_pos:
                             pos = np.random.choice((-1,1), size=2) * np.random.rand(2) * (self.env_size/2 - self.agent_radius[i]) + self.env_size/2
-                            valid_pos, _ = self._check_valid_pos(pos, agent_positions, flag_homes_not_picked_up, i)
+                            valid_pos, _ = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)
                 # save pos
                 agent_positions.append(pos)
                 agent_pos_dict[player.id] = pos
             else:
                 # check if specified initial pos is in collision
-                valid_pos, collision_type = self._check_valid_pos(agent_pos_dict[player.id], [], flag_homes_not_picked_up, player.id) #does not check for collisions with agents
+                valid_pos, collision_type = self._check_valid_pos(agent_pos_dict[player.id], i, [], flag_homes_not_picked_up) #does not check for collisions with agents
                 if not valid_pos:
                     raise Exception(
                         f"Specified initial pos ({agent_pos_dict[player.id]}) for agent {player.id} is in collision with environment object type '{collision_type}'"
@@ -2770,7 +2774,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         return np.array(agent_positions), np.array(agent_spd_hdg), np.array(agent_on_sides, dtype=bool)
 
-    def _check_valid_pos(self, new_pos, agent_positions, flag_homes, i):
+    def _check_valid_pos(self, new_pos, agent_idx, agent_positions, flag_homes):
         """
         Returns
         -------
@@ -2785,7 +2789,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if len(agent_positions) > 0:
             ag_distance = np.linalg.norm(agent_positions - new_pos, axis=-1)
             radii = np.array(self.agent_radius[:len(agent_positions)])
-            if np.any(ag_distance <= self.agent_radius[i] + radii):
+            if np.any(ag_distance <= self.agent_radius[agent_idx] + radii):
                 return False, "agent"
 
         #flags
@@ -2795,11 +2799,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         #obstacles
         ## TODO: add check to make sure agent isn't spawned inside an obstacle
-        if detect_collision(new_pos, self.agent_radius[i], self.obstacle_geoms):
+        if detect_collision(new_pos, self.agent_radius[agent_idx], self.obstacle_geoms):
             return False, "obstacle"
 
         #out-of-bounds
-        if not np.all((self.agent_radius[i] < new_pos) & (new_pos < (self.env_size - self.agent_radius[i]))):
+        if not np.all((self.agent_radius[agent_idx] < new_pos) & (new_pos < (self.env_size - self.agent_radius[agent_idx]))):
             return False, "oob"
 
         return True, None

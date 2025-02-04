@@ -22,6 +22,7 @@
 import numpy as np
 
 from pyquaticus.envs.pyquaticus import Team, PyQuaticusEnv
+from pyquaticus.moos.pyquaticus_moos_bridge import PyQuaticusMoosBridge
 from pyquaticus.utils.utils import closest_point_on_line, mag_bearing_to
 
 from typing import Any, Union
@@ -37,7 +38,7 @@ class BaseAgentPolicy:
         self,
         agent_id: str,
         team: Team,
-        env: PyQuaticusEnv,
+        env: Union[PyQuaticusEnv, PyQuaticusMoosBridge],
         suppress_numpy_warnings=True,
     ):
         self.id = agent_id
