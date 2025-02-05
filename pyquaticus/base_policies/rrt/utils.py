@@ -18,7 +18,8 @@ def get_near(
     point: Point,
     points: list[Point],
     radius: float,
-    seglist: Optional[np.ndarray],
+    ungrouped_seglist: Optional[np.ndarray],
+    circles: Optional[np.ndarray],
     agent_radius: float,
 ) -> list[Point]:
     """
@@ -27,7 +28,10 @@ def get_near(
     """
     seg_array = np.array([np.array([p.pos, point.pos]) for p in points])
     dist_array = np.linalg.norm(seg_array[:, 0, :] - seg_array[:, 1, :], axis=1)
-    int_array = intersect(seg_array, seglist, agent_radius)
+    int_array = intersect(seg_array, ungrouped_seglist, agent_radius)
+    int_array = np.logical_or(
+        int_array, intersect_circles(seg_array, circles, agent_radius)
+    )
 
     near_array = (dist_array <= radius) & (np.logical_not(int_array))
     near_points = []
@@ -64,7 +68,8 @@ def rewire(potential_parent: Point, near_points: list[Point]):
 
 def draw_result(
     points: list[Point],
-    obstacles: Optional[list[np.ndarray]],
+    poly_obstacles: Optional[list[np.ndarray]],
+    circle_obstacles: Optional[list[tuple[float, float, float]]],
 ):
     fig, ax = plt.subplots()
     for point in points:
@@ -75,11 +80,16 @@ def draw_result(
                 "b",
             )
 
-    if obstacles is not None:
-        for obstacle in obstacles:
+    if poly_obstacles is not None:
+        for obstacle in poly_obstacles:
             for i in range(obstacle.shape[0]):
                 seg = obstacle[(i - 1, i), :]
                 ax.plot(seg[:, 0], seg[:, 1], "r")
+
+    if circle_obstacles is not None:
+        for circle in circle_obstacles:
+            circ = plt.Circle(circle[:2], circle[2], color="r", fill=False)
+            ax.add_patch(circ)
 
     return fig, ax
 
@@ -87,18 +97,21 @@ def draw_result(
 def get_nearest(
     point: Point,
     points: list[Point],
-    seglist: Optional[np.ndarray],
+    ungrouped_seglist: Optional[np.ndarray],
+    circles: Optional[np.ndarray],
     agent_radius: float,
 ) -> Optional[Point]:
     """
     Returns the point in the tree nearest to the given point and
     whose path to the given point is obstacle-free.
     """
-    if seglist is None:
-        return min(points, key=lambda p: dist(p, point))
+
     seg_array = np.array([np.array([p.pos, point.pos]) for p in points])
     dist_array = np.linalg.norm(seg_array[:, 0, :] - seg_array[:, 1, :], axis=1)
-    int_array = intersect(seg_array, seglist, agent_radius)
+    int_array = intersect(seg_array, ungrouped_seglist, agent_radius)
+    int_array = np.logical_or(
+        int_array, intersect_circles(seg_array, circles, agent_radius)
+    )
 
     if np.all(int_array):
         return None
@@ -112,6 +125,7 @@ def get_random_point(
     area: np.ndarray,
     grouped_seglist: Optional[np.ndarray],
     ungrouped_seglist: Optional[np.ndarray],
+    circles: Optional[np.ndarray],
     points: list[Point],
     max_step_size: float,
     agent_radius: float,
@@ -134,24 +148,33 @@ def get_random_point(
     else:
         rand_point = Point(np.random.uniform(area[0], area[1], (2)))
 
-    if grouped_seglist is None:
-        nearest = get_nearest(rand_point, points, ungrouped_seglist, agent_radius)
-        assert nearest is not None
-        new_point = bound(rand_point, nearest, max_step_size)
-        return new_point, nearest
-
-    nearest = get_nearest(rand_point, points, ungrouped_seglist, agent_radius)
+    # Sample until we get a point that can be reached
+    nearest = get_nearest(rand_point, points, ungrouped_seglist, circles, agent_radius)
     while nearest is None:
         rand_point = Point(np.random.uniform(area[0], area[1], (2)))
-        nearest = get_nearest(rand_point, points, ungrouped_seglist, agent_radius)
+        nearest = get_nearest(
+            rand_point, points, ungrouped_seglist, circles, agent_radius
+        )
+
+    # Sample until the new point is not inside any obstacles
     new_point = bound(rand_point, nearest, max_step_size)
-    while point_in_polygons(new_point.pos, grouped_seglist, agent_radius):
+    while point_in_polygons(
+        new_point.pos, grouped_seglist, agent_radius
+    ) or point_in_circles(new_point.pos, circles, agent_radius):
+
         rand_point = Point(np.random.uniform(area[0], area[1], (2)))
-        nearest = get_nearest(rand_point, points, ungrouped_seglist, agent_radius)
+
+        nearest = get_nearest(
+            rand_point, points, ungrouped_seglist, circles, agent_radius
+        )
         while nearest is None:
             rand_point = Point(np.random.uniform(area[0], area[1], (2)))
-            nearest = get_nearest(rand_point, points, ungrouped_seglist, agent_radius)
+            nearest = get_nearest(
+                rand_point, points, ungrouped_seglist, circles, agent_radius
+            )
+
         new_point = bound(rand_point, nearest, max_step_size)
+
     return new_point, nearest
 
 
@@ -250,23 +273,39 @@ def pad(seglist: np.ndarray, length: int) -> np.ndarray:
         constant_values=np.nan,
     )
 
+def point_in_circles(point: np.ndarray, circles: Optional[np.ndarray], radius: float = 1e-9):
+    point = point.reshape((2))
+
+    if circles is None:
+        return False
+    
+    circles = circles.reshape((-1, 3))
+
+    centers = circles[:, :2]
+
+    radii = circles[:, 2] + radius
+
+    dists = np.linalg.norm(point - centers, axis=1)
+    
+    return np.any(dists < radii)
+
 
 def point_in_polygons(
-    point: np.ndarray, seglists: Optional[np.ndarray], radius: float = 1e-9
+    point: np.ndarray, grouped_seglist: Optional[np.ndarray], radius: float = 1e-9
 ):
     """
     Determines if a single point is in any of the polygons, provided as an array of segments.
 
-    seglists can be obstained via get_grouped_seglist()
+    grouped_seglist can be obstained via get_grouped_seglist()
 
     point.shape should be (2)
 
-    seglists.shape should be (n, k, 2, 2), where there are n polygons with a maximum of k edges
+    grouped_seglist.shape should be (n, k, 2, 2), where there are n polygons with a maximum of k edges
 
     Args:
         point (np.ndarray): (x, y)
 
-        seglists (np.ndarray):
+        grouped_seglist (np.ndarray):
                                ((((x1, y1), (x2, y2)), ((x2, y2), (x3, y3)), ... , ((xk, yk), (x1, y1))                 -> first polygon
 
                                 (((x1, y1), (x2, y2)), ((x2, y2), (x3, y3)), ... , ((np.nan, np.nan), (np.nan, np.nan)) -> second polygon
@@ -282,7 +321,7 @@ def point_in_polygons(
     """
     point = point.reshape((2))
 
-    if seglists is None:
+    if grouped_seglist is None:
         return False
 
     x1, y1 = (
@@ -290,10 +329,10 @@ def point_in_polygons(
         point[1],
     )
     x2, y2, x3, y3 = (
-        seglists[:, :, 0, 0],
-        seglists[:, :, 0, 1],
-        seglists[:, :, 1, 0],
-        seglists[:, :, 1, 1],
+        grouped_seglist[:, :, 0, 0],
+        grouped_seglist[:, :, 0, 1],
+        grouped_seglist[:, :, 1, 0],
+        grouped_seglist[:, :, 1, 1],
     )
 
     vertex_dists = np.linalg.norm(
@@ -317,7 +356,7 @@ def point_in_polygons(
 
 
 def intersect(
-    segs_to_check: np.ndarray, seglist: Optional[np.ndarray], radius: float = 1e-9
+    seg: np.ndarray, ungrouped_seglist: Optional[np.ndarray], radius: float = 1e-9
 ):
     """
     Determines which segments in an array of segments intersect any of the segments in another array of segments
@@ -326,85 +365,18 @@ def intersect(
     This does not pose a problem when checking if a segment intersects a polygon as an intersection will
     be detected with adjacent edges.
 
-    Note: when using for detecting intersections with polygons, this algorithm will not detect "corner cutting,"
-    as it merely extends the segments - it does not check the distance from the endpoints to the segments.
-    This can be avoided by using a larger agent radius, or by using the (slower) alternate intersection function below.
-
     Args:
         seg (np.ndarray of shape (n, 2, 2)): (((x1, y1), (x2, y2)), ((x1, y1), (x2, y2)), ... )
-        seglist (np.ndarray of shape (m, 2, 2)): (((x1, y1), (x2, y2)), ((x1, y1), (x2, y2)), ... )
+        ungrouped_seglist (np.ndarray of shape (m, 2, 2)): (((x1, y1), (x2, y2)), ((x1, y1), (x2, y2)), ... )
 
     Returns:
         intersect (np.ndarray of shape (n)): intersect[i] is True if the i-th segment in the first array
         intersects any of the m segments in the second array
     """
-    if seglist is None:
-        return False
-
-    seglist = seglist.reshape((-1, 2, 2))
-    segs_to_check = segs_to_check.reshape((-1, 2, 2))
-
-    x1, y1, x2, y2 = (
-        segs_to_check[:, 0, 0].reshape((-1, 1)),
-        segs_to_check[:, 0, 1].reshape((-1, 1)),
-        segs_to_check[:, 1, 0].reshape((-1, 1)),
-        segs_to_check[:, 1, 1].reshape((-1, 1)),
-    )
-    x3, y3, x4, y4 = (
-        seglist[:, 0, 0],
-        seglist[:, 0, 1],
-        seglist[:, 1, 0],
-        seglist[:, 1, 1],
-    )
-
-    denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
-    intersect_x = (
-        (x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)
-    ) / denom
-    intersect_y = (
-        (x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)
-    ) / denom
-
-    intersect = (
-        (denom != 0)
-        & (intersect_x >= np.minimum(x1, x2) - radius)
-        & (intersect_x <= np.maximum(x1, x2) + radius)
-        & (intersect_y >= np.minimum(y1, y2) - radius)
-        & (intersect_y <= np.maximum(y1, y2) + radius)
-        & (intersect_x >= np.minimum(x3, x4) - radius)
-        & (intersect_x <= np.maximum(x3, x4) + radius)
-        & (intersect_y >= np.minimum(y3, y4) - radius)
-        & (intersect_y <= np.maximum(y3, y4) + radius)
-    )
-
-    return np.any(intersect, axis=1)
-
-
-def intersect_slow(
-    seg: np.ndarray, seglist: Optional[np.ndarray], radius: float = 1e-9
-):
-    """
-    Determines which segments in an array of segments intersect any of the segments in another array of segments
-
-    Note: if two segments are parallel, this function will not detect an intersection.
-    This does not pose a problem when checking if a segment intersects a polygon as an intersection will
-    be detected with adjacent edges.
-
-    Note: when using for detecting intersections with polygons, this algorithm will detect "corner cutting,"
-    but is much slower than the algorithm above.
-
-    Args:
-        seg (np.ndarray of shape (n, 2, 2)): (((x1, y1), (x2, y2)), ((x1, y1), (x2, y2)), ... )
-        seglist (np.ndarray of shape (m, 2, 2)): (((x1, y1), (x2, y2)), ((x1, y1), (x2, y2)), ... )
-
-    Returns:
-        intersect (np.ndarray of shape (n)): intersect[i] is True if the i-th segment in the first array
-        intersects any of the m segments in the second array
-    """
-    if seglist is None:
+    if ungrouped_seglist is None:
         return np.full((seg.shape[0]), False)
 
-    pts = seglist[:, 0, :]
+    pts = ungrouped_seglist[:, 0, :]
 
     past1 = (
         np.matmul(
@@ -440,7 +412,7 @@ def intersect_slow(
 
     distfinal = past1 * dist1 + past0 * dist0 + between * distline
 
-    seglist = seglist.reshape((-1, 2, 2))
+    ungrouped_seglist = ungrouped_seglist.reshape((-1, 2, 2))
     seg = seg.reshape((-1, 2, 2))
 
     x1, y1, x2, y2 = (
@@ -450,10 +422,10 @@ def intersect_slow(
         seg[:, 1, 1].reshape((-1, 1)),
     )
     x3, y3, x4, y4 = (
-        seglist[:, 0, 0],
-        seglist[:, 0, 1],
-        seglist[:, 1, 0],
-        seglist[:, 1, 1],
+        ungrouped_seglist[:, 0, 0],
+        ungrouped_seglist[:, 0, 1],
+        ungrouped_seglist[:, 1, 0],
+        ungrouped_seglist[:, 1, 1],
     )
 
     denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
@@ -477,3 +449,50 @@ def intersect_slow(
     )
 
     return np.logical_or(np.any(intersect, axis=1), np.any(distfinal < radius, axis=1))
+
+
+def intersect_circles(
+    seg_array: np.ndarray, circles: Optional[np.ndarray], agent_radius: float
+) -> np.ndarray:
+    if circles is None:
+        return np.full((seg_array.shape[0]), False)
+
+    pts = circles[:, :2].reshape((-1, 2))
+    seg = seg_array.reshape((-1, 2, 2))
+
+    past1 = (
+        np.matmul(
+            pts - seg[:, 1, :].reshape((-1, 1, 2)),
+            (seg[:, 1, :] - seg[:, 0, :]).reshape((-1, 2, 1)),
+        )
+        > 0
+    ).reshape((seg.shape[0], pts.shape[0]))
+    past0 = (
+        np.matmul(
+            pts - seg[:, 0, :].reshape((-1, 1, 2)),
+            (seg[:, 1, :] - seg[:, 0, :]).reshape((-1, 2, 1)),
+        )
+        < 0
+    ).reshape((seg.shape[0], pts.shape[0]))
+    between = np.logical_and(np.logical_not(past1), np.logical_not(past0))
+
+    num = np.abs(
+        np.cross(
+            (pts - seg[:, 0, :].reshape((-1, 1, 2)))
+            .transpose((0, 2, 1))
+            .ravel(order="F")
+            .reshape((-1, 2, seg.shape[0]))
+            .transpose((0, 2, 1)),
+            seg[:, 1, :] - seg[:, 0, :],
+        )
+    )
+    denom = np.linalg.norm(seg[:, 1, :] - seg[:, 0, :], axis=1)
+
+    dist0 = np.linalg.norm(pts - seg[:, 0, :].reshape((-1, 1, 2)), axis=2)
+    dist1 = np.linalg.norm(pts - seg[:, 1, :].reshape((-1, 1, 2)), axis=2)
+    distline = (num / denom).transpose((1, 0))
+
+    distfinal = past1 * dist1 + past0 * dist0 + between * distline
+    radius = circles[:, 2] + agent_radius
+
+    return np.any(distfinal < radius, axis=1)

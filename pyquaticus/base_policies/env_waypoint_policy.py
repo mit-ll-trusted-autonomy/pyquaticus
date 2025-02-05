@@ -23,7 +23,7 @@ import numpy as np
 
 from pyquaticus.base_policies.rrt.utils import Point
 from pyquaticus.base_policies.rrt.rrt_star import rrt_star
-from pyquaticus.structs import PolygonObstacle
+from pyquaticus.structs import PolygonObstacle, CircleObstacle
 
 
 from typing import Optional
@@ -59,7 +59,7 @@ class EnvWaypointPolicy:
 
         self.plan_process = Pool(processes=1)
 
-        self.obstacles = self.get_env_geom(obstacles)
+        self.poly_obstacles, self.circle_obstacles = self.get_env_geom(obstacles)
 
         self.env_bounds = np.array(((0, 0), env_size))
 
@@ -69,16 +69,24 @@ class EnvWaypointPolicy:
 
         self.planning = False
 
-    def get_env_geom(self, obstacles: list) -> Optional[list[np.ndarray]]:
+    def get_env_geom(self, obstacles: list) -> tuple[Optional[list[np.ndarray]], Optional[list[tuple[float, float, float]]]]:
         final_obstacles = []
+        circle_obstacles = []
         for obstacle in obstacles:
-            assert isinstance(obstacle, PolygonObstacle)
-            poly = np.array(obstacle.anchor_points).reshape(-1, 2)
-            final_obstacles.append(poly)
-        if len(final_obstacles) == 0:
-            return None
+            assert isinstance(obstacle, (PolygonObstacle, CircleObstacle))
+            if isinstance(obstacle, PolygonObstacle):
+                poly = np.array(obstacle.anchor_points).reshape(-1, 2)
+                final_obstacles.append(poly)
+            else:
+                circle = (*obstacle.center_point, obstacle.radius)
+                circle_obstacles.append(circle)
 
-        return final_obstacles
+        if len(final_obstacles) == 0:
+            final_obstacles = None
+        if len(circle_obstacles) == 0:
+            circle_obstacles = None
+
+        return final_obstacles, circle_obstacles
 
     def compute_action(self, pos: np.ndarray, heading: float):
         """
@@ -142,7 +150,8 @@ class EnvWaypointPolicy:
         self,
         pos: np.ndarray,
         wp: np.ndarray,
-        obstacles: Optional[list[np.ndarray]] = None,
+        poly_obstacles: Optional[list[np.ndarray]] = None,
+        circle_obstacles: Optional[list[tuple[float, float, float]]] = None,
         area: Optional[np.ndarray] = None,
         max_step_size: Optional[float] = None,
         num_iters: int = 400,
@@ -153,8 +162,11 @@ class EnvWaypointPolicy:
 
         self.planning = True
 
-        if obstacles is None:
-            obstacles = self.obstacles
+        if poly_obstacles is None:
+            poly_obstacles = self.poly_obstacles
+
+        if circle_obstacles is None:
+            circle_obstacles = self.circle_obstacles
 
         if area is None:
             area = self.env_bounds
@@ -165,7 +177,8 @@ class EnvWaypointPolicy:
         kwargs = dict(
             start=pos,
             goal=wp,
-            obstacles=obstacles,
+            poly_obstacles=poly_obstacles,
+            circle_obstacles=circle_obstacles,
             area=area,
             max_step_size=max_step_size,
             num_iters=num_iters,

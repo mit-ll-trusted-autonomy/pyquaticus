@@ -26,7 +26,7 @@ from pyquaticus.envs.pyquaticus import Team
 from pyquaticus.envs.pyquaticus import PyQuaticusEnv
 from pyquaticus.base_policies.rrt.utils import Point
 from pyquaticus.base_policies.rrt.rrt_star import rrt_star
-from pyquaticus.structs import PolygonObstacle
+from pyquaticus.structs import PolygonObstacle, CircleObstacle
 
 
 from typing import Optional
@@ -74,17 +74,26 @@ class WaypointPolicy(BaseAgentPolicy):
             raise AttributeError(f"Invalid team {team}")
 
     def get_env_geom(self, env: PyQuaticusEnv):
-        obstacles = []
+        poly_obstacles = []
+        circle_obstacles = []
         for obstacle in env.obstacles:
-            assert isinstance(obstacle, PolygonObstacle)
-            poly = np.array(obstacle.anchor_points).reshape(-1, 2)
-            obstacles.append(poly)
-        if len(obstacles) == 0:
-            self.obstacles = None
+            assert isinstance(obstacle, (PolygonObstacle, CircleObstacle))
+            if isinstance(obstacle, PolygonObstacle):
+                poly = np.array(obstacle.anchor_points).reshape(-1, 2)
+                poly_obstacles.append(poly)
+            else:
+                circle = (*obstacle.center_point, obstacle.radius)
+                circle_obstacles.append(circle)
 
         self.env_bounds = np.array(((0, 0), env.env_size))
 
-        self.obstacles = obstacles
+        if len(poly_obstacles) == 0:
+            poly_obstacles = None
+        if len(circle_obstacles) == 0:
+            circle_obstacles = None
+
+        self.poly_obstacles = poly_obstacles
+        self.circle_obstacles = circle_obstacles
 
     def compute_action(self, obs, info):
         """
@@ -173,7 +182,8 @@ class WaypointPolicy(BaseAgentPolicy):
     def plan(
         self,
         wp: np.ndarray,
-        obstacles: Optional[list[np.ndarray]] = None,
+        poly_obstacles: Optional[list[np.ndarray]] = None,
+        circle_obstacles: Optional[list[tuple[float, float, float]]] = None,
         area: Optional[np.ndarray] = None,
         max_step_size: Optional[float] = None,
         num_iters: int = 1000,
@@ -185,8 +195,11 @@ class WaypointPolicy(BaseAgentPolicy):
 
         # Use obstacles, area, and step size from environment if not provided
 
-        if obstacles is None:
-            obstacles = self.obstacles
+        if poly_obstacles is None:
+            poly_obstacles = self.poly_obstacles
+
+        if circle_obstacles is None:
+            circle_obstacles = self.circle_obstacles
 
         if area is None:
             area = self.env_bounds
@@ -199,7 +212,8 @@ class WaypointPolicy(BaseAgentPolicy):
         kwargs = dict(
             start=self.pos,
             goal=wp,
-            obstacles=obstacles,
+            poly_obstacles=poly_obstacles,
+            circle_obstacles=circle_obstacles,
             area=area,
             max_step_size=max_step_size,
             num_iters=num_iters,
