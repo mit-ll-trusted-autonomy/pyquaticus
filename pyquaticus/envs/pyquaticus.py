@@ -2705,8 +2705,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         agent_idx_within_team = np.where(self.agent_inds_of_team[player.team] == i)[0]
                         pos = spawn_line_env_intersection_1 + (spawn_line_mag * (agent_idx_within_team + 1)/(self.team_size + 1)) * spawn_line_unit_vec
 
-                        pos[0] = max(self.agent_radius[i], min(self.env_size[0] - self.agent_radius[i], pos[0])) #project out-of-bounds pos back into the environment
-                        pos[1] = max(self.agent_radius[i], min(self.env_size[1] - self.agent_radius[i], pos[1])) #project out-of-bounds pos back into the environment
+                        pos[0] = max(2*self.agent_radius[i], min(self.env_size[0] - 2*self.agent_radius[i], pos[0])) #project out-of-bounds pos back into the environment (with buffer)
+                        pos[1] = max(2*self.agent_radius[i], min(self.env_size[1] - 2*self.agent_radius[i], pos[1])) #project out-of-bounds pos back into the environment (with buffer)
 
                         valid_pos = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)[0] and self._check_on_sides(pos, player.team)
                         while not valid_pos:
