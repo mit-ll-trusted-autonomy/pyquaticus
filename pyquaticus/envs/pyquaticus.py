@@ -4110,7 +4110,7 @@ when gps environment bounds are specified in meters"
                 if self.lidar_obs and self.render_lidar_mode:
                     ray_headings_global = np.deg2rad((heading_angle_conversion(player.heading) + self.lidar_ray_headings) % 360)
                     ray_vecs = np.array([np.cos(ray_headings_global), np.sin(ray_headings_global)]).T
-                    lidar_starts = player.pos + self.agent_radius[player.id] * ray_vecs
+                    lidar_starts = player.pos + self.agent_radius[self.agents.index(player.id)] * ray_vecs
                     for i in range(self.num_lidar_rays):
                         if (
                             self.render_lidar_mode == "full" or
