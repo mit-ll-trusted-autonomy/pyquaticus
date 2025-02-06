@@ -2033,7 +2033,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             # flags
             for i, _ in enumerate(self.flags):
-                vertices = list(Point(0.0, 0.0).buffer(self.flag_radius, quad_segs=n_quad_segs).exterior.coords)[:-1]  # approximate circle with an octagon
+                vertices = list(Point(0.0, 0.0).buffer(self.flag_radius, quad_segs=n_quad_segs).exterior.coords)[:-1]
                 segments = [[*vertex, *vertices[(i + 1) % len(vertices)]] for i, vertex in enumerate(vertices)]
                 ray_int_seg_labels.extend(len(segments) * [self.ray_int_label_map[f"flag_{i}"]])
                 self.seg_label_type_to_inds["flag"].extend(np.arange(len(ray_int_segments), len(ray_int_segments) + len(segments)))
@@ -2041,7 +2041,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             # agents
             for agent_id in self.agents:
-                vertices = list(Point(0.0, 0.0).buffer(self.agent_radius[self.agents.index(agent_id)], quad_segs=n_quad_segs).exterior.coords)[:-1]  # approximate circle with an octagon
+                vertices = list(Point(0.0, 0.0).buffer(self.agent_radius[self.agents.index(agent_id)], quad_segs=n_quad_segs).exterior.coords)[:-1]
                 segments = [[*vertex, *vertices[(i + 1) % len(vertices)]] for i, vertex in enumerate(vertices)]
                 ray_int_seg_labels.extend(len(segments) * [self.ray_int_label_map[agent_id]])
                 self.seg_label_type_to_inds["agent"].extend(np.arange(len(ray_int_segments), len(ray_int_segments) + len(segments)))
@@ -3956,7 +3956,7 @@ when gps environment bounds are specified in meters"
         else:  # CircleObstacle
             radius = obstacle.radius
             center = obstacle.center_point
-            vertices = list(Point(*center).buffer(radius, quad_segs=n_quad_segs).exterior.coords)[:-1] # approximate circle with an octagon
+            vertices = list(Point(*center).buffer(radius, quad_segs=n_quad_segs).exterior.coords)[:-1]
 
         segments = [[vertex, vertices[(i + 1) % len(vertices)]] for i, vertex in enumerate(vertices)]
 
