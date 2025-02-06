@@ -14,7 +14,8 @@ config_dict = config_dict_std
 config_dict["max_time"] = 600.0
 config_dict["max_score"] = 100
 config_dict["render_agent_ids"] = True
-config_dict["dynamics"] = ["si", "si", "si", "drone"]
+config_dict["dynamics"] = ["si", "si", "si", "si"]
+config_dict["sim_speedup_factor"] = 3
 
 env = pyquaticus_v0.PyQuaticusEnv(team_size=2, config_dict=config_dict,render_mode='human')
 term_g = {'agent_0':False,'agent_1':False}
@@ -52,6 +53,13 @@ while True:
     step += 1
     if term[k[0]] == True or trunc[k[0]]==True:
         break
+for i in range(len(env.state["captures"])):
+    temp_captures[i] += env.state["captures"][i]
+for i in range(len(env.state["grabs"])):
+    temp_grabs[i] += env.state["grabs"][i]
+for i in range(len(env.state["tags"])):
+    temp_tags[i] += env.state["tags"][i]
+
 for i in range(len(env.state["captures"])):
     temp_captures[i] += env.state["captures"][i]
 for i in range(len(env.state["grabs"])):
