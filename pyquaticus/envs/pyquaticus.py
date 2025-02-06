@@ -1307,7 +1307,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         """Checks if players are out of bounds and updates their states (and any flags in their possesion) accordingly."""
         # Set out-of-bounds
         agent_poses = self.state['agent_position']
-        agent_radius = np.array(self.agent_radius)[:, None]
+        agent_radius = self.agent_radius.reshape(-1, 1)
         agent_oob = np.any((agent_poses <= agent_radius) | ((self.env_size - agent_radius) <= agent_poses), axis=-1)
 
         self.state['agent_oob'] = agent_oob
@@ -1775,16 +1775,16 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         scrimmage_coords_unit = config_dict.get("scrimmage_coords_unit", config_dict_std["scrimmage_coords_unit"])
 
         agent_radius = config_dict.get("agent_radius", config_dict_std["agent_radius"])
-        if isinstance(agent_radius, list):
-            if len(agent_radius) != self.team_size * 2:
+        if isinstance(agent_radius, (list, tuple, np.ndarray)):
+            if len(agent_radius) != 2*self.team_size:
                 raise Warning("Dynamics list incorrect length")
-            
-        if not isinstance(agent_radius, (list, tuple, np.ndarray)):
+            agent_radius = np.array(agent_radius, dtype=float)
+        else:
             try:
                 agent_radius = float(agent_radius)
             except Exception:
                 raise Warning("agent_radius must be convertible to a float")
-            agent_radius = [agent_radius for _ in range(self.team_size * 2)]
+            agent_radius = np.array([agent_radius for _ in range(2*self.team_size)])
 
         flag_radius = config_dict.get("flag_radius", config_dict_std["flag_radius"])
         flag_keepout_radius = config_dict.get("flag_keepout", config_dict_std["flag_keepout"])
@@ -1866,10 +1866,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             # environemnt element sizes in pixels
             self.arena_width, self.arena_height = self.pixel_size * self.env_size
             self.arena_buffer = self.pixel_size * arena_buffer
-            self.boundary_width = 2  # pixels
-            self.a2a_line_width = 5  # pixels
-            self.flag_render_radius = np.clip(self.flag_radius * self.pixel_size, 10, None)  # pixels
-            self.agent_render_radius = np.clip(np.array(self.agent_radius) * self.pixel_size, 15, None)  # pixels
+            self.boundary_width = 2  #pixels
+            self.a2a_line_width = 5  #pixels
+            self.flag_render_radius = np.clip(self.pixel_size * self.flag_radius, 10, None)  #pixels
+            self.agent_render_radius = np.clip(self.pixel_size * self.agent_radius, 15, None)  #pixels
 
             # miscellaneous
             self.num_renders_per_step = int(self.render_fps * self.tau)
@@ -2686,7 +2686,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     if agent_has_flag[i]:
                         valid_pos = False
                         while not valid_pos:
-                            pos = np.random.choice((-1,1), size=2) * np.random.rand(2) * (self.env_size/2 - self.agent_radius) + self.env_size/2
+                            pos = np.random.choice((-1,1), size=2) * np.random.rand(2) * (self.env_size/2 - self.agent_radius[i]) + self.env_size/2
                             valid_pos = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)[0] and not self._check_on_sides(pos, player.team)
                     elif self.default_init:
                         flag_home = self.flags[int(player.team)].home
@@ -2694,7 +2694,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         halfway_point = (flag_home + closest_scrim_line_point)/2
 
                         mag, _ = vec_to_mag_heading(halfway_point - flag_home)
-                        if mag < self.flag_keepout_radius:
+                        max_team_radius = np.max(self.agent_radius[self.agent_inds_of_team[player.team]])
+                        if mag < (self.flag_keepout_radius + max_team_radius):
                             raise Exception("Flag is too close to scrimmage line.")
 
                         spawn_line_env_intersection_1 = self._get_polygon_intersection(halfway_point, self.scrimmage_vec, self.env_corners)[1]
@@ -2880,7 +2881,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         env_bounds_unit: str,
         flag_homes_unit: str,
         scrimmage_coords_unit: str,
-        agent_radius: list[float],
+        agent_radius: np.ndarray,
         flag_radius: float,
         flag_keepout_radius: float,
         catch_radius: float,
