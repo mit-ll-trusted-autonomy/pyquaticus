@@ -1140,14 +1140,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             # Check if agent is in keepout region for their own flag
             ag_dis_2_flag = self.get_distance_between_2_points(player.pos, np.asarray(flag_home))
             if (
-                ag_dis_2_flag < self.flag_keepout_radius
+                ag_dis_2_flag < self.flag_keepout_radius + self.agent_radius[i]
                 and not self.state["flag_taken"][team_idx]
                 and self.flag_keepout_radius > 0.
             ):
                 ag_pos = rc_intersection(
                     np.array([player.pos, player.prev_pos]),
                     np.asarray(flag_home),
-                    self.flag_keepout_radius,
+                    self.flag_keepout_radius + self.agent_radius[i],
                 )  # point where agent center first intersected with keepout zone
                 vel = mag_heading_to_vec(player.speed, player.heading)
 
