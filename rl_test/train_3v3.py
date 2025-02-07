@@ -128,4 +128,5 @@ if __name__ == '__main__':
         if np.mod(i, 500) == 0:
             print("Saving Checkpoint: ", i)
             chkpt_file = algo.save('./ray_test/iter_'+str(i)+'/')
-        break
+    
+        #break
