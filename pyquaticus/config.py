@@ -25,6 +25,10 @@ config_dict_std = {
     "scrimmage_coords_unit": "m",  # "m" (meters relative to environment origin), "wm_xy" (web mercator xy), or "ll" (lat/lon)
     "topo_contour_eps":    0.001,  # tolerance for error between approximate and true contours dividing water and land
     "agent_radius":          2.0,  # meters
+
+    # note: if different radii are desired for different agents, provide a list like
+    # [2.0, 4.0, 2.5, 3.5]
+    
     "flag_radius":           2.0,  # meters
     "flag_keepout":          3.0,  # minimum distance (meters) between agent and flag centers
     "catch_radius":         10.0,  # distance (meters) for tagging and flag pickup

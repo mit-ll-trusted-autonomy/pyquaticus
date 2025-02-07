@@ -13,6 +13,7 @@ from pyquaticus.config import config_dict_std, ACTION_MAP
 config_dict = config_dict_std
 config_dict["max_time"] = 600.0
 config_dict["max_score"] = 100
+config_dict["sim_speedup_factor"] = 5
 
 env = pyquaticus_v0.PyQuaticusEnv(team_size=2, config_dict=config_dict,render_mode='human')
 term_g = {0:False,1:False}
@@ -20,42 +21,30 @@ truncated_g = {0:False,1:False}
 term = term_g
 trunc = truncated_g
 
-obs,_ = env.reset()
+obs, info = env.reset(return_info=True)
 
 temp_captures = env.state["captures"]
 temp_grabs = env.state["grabs"]
 temp_tags = env.state["tags"]
 
-r_one = BaseAttacker('agent_2', Team.RED_TEAM, mode='competition_easy')
-r_two = BaseDefender('agent_3', Team.RED_TEAM, mode='competition_easy')
+r_one = BaseAttacker('agent_2', Team.RED_TEAM, env, mode='competition_easy')
+r_two = BaseDefender('agent_3', Team.RED_TEAM, env, mode='competition_easy')
 
-b_one = BaseDefender('agent_0', Team.BLUE_TEAM, mode='competition_easy')
-b_two = BaseAttacker('agent_1', Team.BLUE_TEAM, mode='competition_easy')
+b_one = BaseDefender('agent_0', Team.BLUE_TEAM, env, mode='competition_easy')
+b_two = BaseAttacker('agent_1', Team.BLUE_TEAM, env, mode='competition_easy')
 step = 0
 while True:
-    new_obs = {}
-    for k in obs:
-        new_obs[k] = env.agent_obs_normalizer.unnormalized(obs[k])
 
-    two = r_one.compute_action(new_obs)
-    three = r_two.compute_action(new_obs)
-    zero = r_one.compute_action(new_obs)
-    one = r_two.compute_action(new_obs)
+    two = r_one.compute_action(obs, info)
+    three = r_two.compute_action(obs, info)
+    zero = b_one.compute_action(obs, info)
+    one = b_two.compute_action(obs, info)
 
     
     obs, reward, term, trunc, info = env.step({'agent_0':zero,'agent_1':one, 'agent_2':two, 'agent_3':three})
     k =  list(term.keys())
 
-    step += 1
     if term[k[0]] == True or trunc[k[0]]==True:
         break
-for i in range(len(env.state["captures"])):
-    temp_captures[i] += env.state["captures"][i]
-for i in range(len(env.state["grabs"])):
-    temp_grabs[i] += env.state["grabs"][i]
-for i in range(len(env.state["tags"])):
-    temp_tags[i] += env.state["tags"][i]
-
-
 
 env.close()
