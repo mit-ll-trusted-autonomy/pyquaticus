@@ -189,7 +189,7 @@ LIDAR_DETECTION_CLASS_MAP = {class_name: i for i, class_name in enumerate(lidar_
 # maps discrete action id to (speed, heading)
 ACTION_MAP = []
 
-for spd in [3.0, 1.5]:
+for spd in [1.0, 0.5]:
     for hdg in range(180, -180, -45):
         ACTION_MAP.append([spd, hdg])
 # add a none action

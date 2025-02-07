@@ -1751,8 +1751,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         flag_radius = config_dict.get("flag_radius", config_dict_std["flag_radius"])
         flag_keepout_radius = config_dict.get("flag_keepout", config_dict_std["flag_keepout"])
         catch_radius = config_dict.get("catch_radius", config_dict_std["catch_radius"])
-        if flag_keepout_radius > (catch_radius - agent_radius):
-            raise Warning("Agent keepout radius is grater than the catch radius")
+        if flag_keepout_radius >= (catch_radius - agent_radius):
+            raise Warning("Flag keepout radius is >= than the catch radius")
 
         lidar_range = config_dict.get("lidar_range", config_dict_std["lidar_range"])
 

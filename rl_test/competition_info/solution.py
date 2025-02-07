@@ -25,7 +25,7 @@ class solution:
         self.policy_three = Policy.from_checkpoint(os.path.dirname(os.path.realpath(__file__))+ '<Your Policy Path Here>')
 
 	#Given an observation return a valid action agent_id is agent that needs an action, observation space is the current normalized observation space for the specific agent
-    def compute_action(self,agent_id:int, full_obs_normalized:dict, full_obs:dict, global_state:dict):
+    def compute_action(self,agent_id:str, full_obs_normalized:dict, full_obs:dict, global_state:dict):
         #WARNING: If using global state you must ensure your entry can run on both RED and BLUE sides
         # State includes actual coordinate positions which are not the same on each side
         if agent_id == 0:

@@ -179,6 +179,7 @@ def example_reward(
     tagging_cooldown: float
 ):
     return 0.0
+
 def caps_and_grabs(
     agent_id: str,
     team: Team,
