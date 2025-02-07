@@ -24,9 +24,9 @@ import numpy as np
 import pyquaticus.base_policies.base_attack as attack_policy
 import pyquaticus.base_policies.base_defend as defend_policy
 from pyquaticus.base_policies.base import BaseAgentPolicy
-from pyquaticus.envs.pyquaticus import config_dict_std, Team
+from pyquaticus.envs.pyquaticus import config_dict_std, Team, PyQuaticusEnv
 
-modes = {"easy", "medium", "hard"}
+modes = {"easy", "medium", "hard", "nothing"}
 
 
 class Heuristic_CTF_Agent(BaseAgentPolicy):
@@ -34,15 +34,14 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
 
     def __init__(
         self,
-        agent_id: int,
+        agent_id: str,
         team: Team,
+        env: PyQuaticusEnv,
+        continuous: bool = False,
         mode="easy",
-        flag_keepout=10.0,
-        catch_radius=config_dict_std["catch_radius"],
-        using_pyquaticus=True,
         defensiveness=20.0,
     ):
-        super().__init__(agent_id, team)
+        super().__init__(agent_id, team, env)
 
         if mode not in modes:
             raise ValueError(f"mode {mode} not a valid mode out of {modes}")
@@ -50,38 +49,25 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         if mode not in modes:
             raise ValueError(f"Invalid mode {mode}, valid modes are {modes}")
         self.mode = mode
-        self.flag_keepout = flag_keepout
         self.defensiveness = defensiveness
-        self.using_pyquaticus = using_pyquaticus
         self.id = agent_id
+        self.continuous = continuous
+        self.flag_keepout = env.flag_keepout_radius
         self.base_attacker = attack_policy.BaseAttacker(
-            self.id, team, mode=mode, using_pyquaticus=using_pyquaticus
+            self.id,
+            team,
+            env,
+            continuous,
+            mode,
         )
         self.base_defender = defend_policy.BaseDefender(
             self.id,
             team,
-            mode=mode,
-            using_pyquaticus=using_pyquaticus,
-            catch_radius=catch_radius,
-            flag_keepout=flag_keepout,
+            env,
+            continuous,
+            mode,
         )
         self.scrimmage = None
-
-        # My state
-        self.my_pos = None
-        self.my_hdg = None
-        self.has_flag = False
-        self.on_sides = False
-
-        # State of my team
-        self.friendly_team_pos = None
-        self.friendly_team_density = None
-        self.my_team_has_flag = False
-
-        # State of the opp team
-        self.opp_team_pos = None
-        self.opp_team_density = None
-        self.opp_team_has_flag = False
 
     def set_mode(self, mode="easy"):
         """
@@ -94,62 +80,60 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             raise ValueError(f"Invalid mode {mode}")
         self.mode = mode
 
-    def compute_action(self, obs):
+    def compute_action(self, obs, info):
         """
-        **THIS FUNCTION REQUIRES UNNORMALIZED OBSERVATIONS**.
-
-        Upates the state of the agent using the observation `obs` and then computes
-        an action to take based on the new state.
+        Compute an action from the given observation and global state.
 
         Args:
-            obs: Dictionary of raw observations for teams -- containing the regular
-                    observations
+            obs: observation from the gym
+            info: info from the gym
 
         Returns
         -------
-            action: A discrete action index representing the agents choice.
-
+            action: if continuous, a tuple containing desired speed and heading error.
+            if discrete, an action index corresponding to ACTION_MAP in config.py
         """
         # Update the state based on this observation
-        my_obs = self.update_state(obs)
+        self.update_state(obs, info)
 
-        # Default no_op action in case somehow none of the below actions are triggered.
-        action = 16
+        if self.mode == "nothing":
+            if self.continuous:
+                return (0, 0)
+            else:
+                return -1
 
         if self.mode == "easy":
             # Opp is close - needs to defend:
             if self.is_close_to_flag() and False in self.opp_team_tag:
-                action = self.base_defender.compute_action(obs)
+                return self.base_defender.compute_action(obs, info)
 
             # Opp on defensive - needs to attack
             else:
-                action = self.base_attacker.compute_action(obs)
+                return self.base_attacker.compute_action(obs, info)
 
         else:
             # If I have the flag, just bring it back to base
             if self.has_flag:
-                action = self.base_attacker.compute_action(obs)
+                return self.base_attacker.compute_action(obs, info)
 
             elif self.opp_team_has_flag:
-                action = self.base_defender.compute_action(obs)
+                return self.base_defender.compute_action(obs, info)
 
             # Opp is close - go on defensive
             elif self.is_close_to_flag() and (False in self.opp_team_tag):
-                action = self.base_defender.compute_action(obs)
+                return self.base_defender.compute_action(obs, info)
 
             # Opp on defensive - needs to attack
             elif self.is_far_from_flag():
-                action = self.base_attacker.compute_action(obs)
+                return self.base_attacker.compute_action(obs, info)
 
             else:
                 if self.mode == "hard":
-                    action = self.base_attacker.compute_action(obs)
+                    return self.base_attacker.compute_action(obs, info)
                 else:
-                    action = self.random_defense_action(self.opp_team_pos, my_obs)
+                    return self.random_defense_action(self.opp_team_pos)
 
-        return action
-
-    def update_state(self, obs):
+    def update_state(self, obs, info):
         """
         Method to convert the observation space into one more relative to the
         agent.
@@ -158,7 +142,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             obs: The observation from the gym
 
         """
-        my_obs = super().update_state(obs)
+        super().update_state(obs, info)
 
         # Initialize the scrimmage line as the mid point between the two flags
         if self.scrimmage is None:
@@ -168,23 +152,28 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             self.my_team_pos, self.opp_team_pos
         )
 
-        return my_obs
-
-    def random_defense_action(self, enem_positions, my_obs):
+    def random_defense_action(self, enem_positions):
         """
         Randomly compute an action that steers the agent to it's own side of the field and sometimes
         towards its flag.
         """
+        if self.scrimmage is None:
+            raise RuntimeWarning(
+                "Must call update_state() before trying to get an action."
+            )
+
         if np.random.random() < 0.25:
             span_len = self.scrimmage
             goal_vec = [np.random.random() * span_len, 0]
         else:
-            near_enemy_dist = 1000
+            near_enemy_dist = np.inf
+            nearest_enemy = None
             for en in enem_positions:
                 temp_enem_dist = en[0]
                 if temp_enem_dist < near_enemy_dist:
                     near_enemy_dist = temp_enem_dist
                     nearest_enemy = en
+            assert nearest_enemy is not None
             if np.random.random() < 0.5:
                 goal_vec = self.bearing_to_vec(nearest_enemy[1])
             else:
@@ -200,31 +189,45 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
                 self.opp_team_pos, avoid_threshold=15
             )
 
-        act_index = 16
+        desired_speed = self.max_speed
 
         try:
-            act_heading = self.angle180(self.vec_to_heading(direction))
+            heading_error = self.angle180(self.vec_to_heading(direction))
 
-            if self.mode != "hard":
-                if 1 >= act_heading >= -1:
-                    act_index = 12
-                elif act_heading < -1:
-                    act_index = 14
-                elif act_heading > 1:
-                    act_index = 10
+            if self.continuous:
+                if np.isnan(heading_error):
+                    heading_error = 0
+
+                if np.abs(heading_error) < 5:
+                    heading_error = 0
+
+                if self.mode != "hard":
+                    desired_speed = self.max_speed / 2
+
+                return (desired_speed, heading_error)
+
             else:
-                # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
-                if 1 >= act_heading >= -1:
-                    act_index = 4
-                elif act_heading < -1:
-                    act_index = 6
-                elif act_heading > 1:
-                    act_index = 2
-        except:
-            # print(f'Failed to convert vector to heading')
-            act_index = 4
-
-        return act_index
+                if self.mode != "hard":
+                    if 1 >= heading_error >= -1:
+                        return 12
+                    elif heading_error < -1:
+                        return 14
+                    elif heading_error > 1:
+                        return 10
+                else:
+                    # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
+                    if 1 >= heading_error >= -1:
+                        return 4
+                    elif heading_error < -1:
+                        return 6
+                    elif heading_error > 1:
+                        return 2
+        except Exception:
+            # Drive straights
+            if self.continuous:
+                return (desired_speed, 0)
+            else:
+                return 4
 
     def get_team_density(self, friendly_positions, enemy_positions):
         """This function returns the center of mass and varience of all the agents in the team."""
@@ -263,6 +266,11 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             True if the center of mass of the opposing team is within
             ``threshold`` units of the flag, False otherwise
         """
+        if self.opp_team_density is None:
+            raise RuntimeWarning(
+                "Must call update_state() before trying to get an action."
+            )
+
         dist_to_flag = self.get_distance_between_2_points(
             self.opp_team_density[0], self.my_flag_loc
         )
@@ -280,6 +288,12 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             True if the center of mass of the opposing team is further than
             ``threshold`` units of the flag, False otherwise
         """
+
+        if self.opp_team_density is None:
+            raise RuntimeWarning(
+                "Must call update_state() before trying to get an action."
+            )
+
         dist_to_flag = self.get_distance_between_2_points(
             self.opp_team_density[0], self.my_flag_loc
         )

@@ -33,7 +33,7 @@ class Player:
 
     Attributes
     ----------
-        id: The ID of the agent (also used as an index)
+        id: The ID of the agent
         team: The team of the agent (red or blue)
         pos: The position of the agent [x, y]
         speed: The speed of the agent (m / s)
@@ -47,7 +47,7 @@ class Player:
         oob: Indicator for whether or not this player is out-of-bounds
     """
 
-    id: Hashable
+    id: str
     team: Team
     pos: list[float] = field(init=False, default_factory=list)
     speed: float = field(init=False, default_factory=float)

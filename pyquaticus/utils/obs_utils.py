@@ -20,7 +20,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 from collections import OrderedDict
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 from gymnasium.spaces import Box
@@ -67,7 +67,7 @@ class ObsNormalizer:
         key: str,
         upper_bounds: List[float],
         lower_bounds: Optional[List[float]] = None,
-        shape: Optional[Tuple[float]] = None,
+        shape: Optional[Tuple[int]] = None,
     ):
         """
         Registers an observation component with certain bounds and shape.
@@ -143,7 +143,7 @@ class ObsNormalizer:
         norm_obs = np.clip((state_array - avg) / r, a_min=-1, a_max=1)
         return norm_obs.reshape(self.normalized_space.shape)
 
-    def unnormalized(self, norm_obs: np.ndarray) -> Dict[str, np.ndarray]:
+    def unnormalized(self, norm_obs: np.ndarray) -> Dict[Union[str, tuple], Union[np.ndarray, float]]:
         """
         Reverses normalization and returns dictionary version of the full observation.
 
@@ -165,7 +165,7 @@ class ObsNormalizer:
             r = (high - low) / 2.0
             assert len(low.shape) == 1
             num_entries = low.shape[0]
-            obs_slice = norm_obs[idx : idx + num_entries]
+            obs_slice = norm_obs[idx: idx + num_entries]
             new_entry = (r * obs_slice + avg).reshape(bound.low.shape)
             if num_entries == 1:
                 # unpack

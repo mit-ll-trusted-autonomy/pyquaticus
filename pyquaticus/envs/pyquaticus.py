@@ -64,7 +64,7 @@ from pyquaticus.structs import (
     Flag,
     PolygonObstacle,
     RenderingPlayer,
-    Team,
+    Team
 )
 from pyquaticus.utils.obs_utils import ObsNormalizer
 from pyquaticus.utils.pid import PID
@@ -89,6 +89,7 @@ from pyquaticus.utils.utils import (
     wrap_mercator_x,
     wrap_mercator_x_dist,
 )
+from pyquaticus.base_policies.env_waypoint_policy import EnvWaypointPolicy
 from scipy.ndimage import label
 from shapely import intersection, LineString, Point, Polygon
 from typing import Optional, Union
@@ -179,29 +180,24 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
     def _to_speed_heading(self, action_dict):
         """
-        Processes the raw discrete actions.
+        Processes the raw actions.
 
         Returns:
             dict from agent id -> (speed, relative heading)
             Note: we use relative heading here so that it can be used directly
-                  to the heading error in the PID controller
+                  as the heading error in the PID controller
         """
         processed_action_dict = OrderedDict()
         for player in self.players.values():
             if player.id in action_dict:
-                default_action = True
-                try:
-                    action_dict[player.id] / 2
-                except:
-                    default_action = False
-                if default_action:
-                    speed, heading = self._discrete_action_to_speed_relheading(
-                        action_dict[player.id]
-                    )
-                    # Scale speed to agent's max speed
-                    speed = self.max_speeds[player.id] * speed
-                else:
-                    # Make point system the same on both blue and red side
+                # Continuous actions
+                if isinstance(action_dict[player.id], (list, tuple, np.ndarray)):
+                    speed = action_dict[player.id][0]
+                    rel_heading = action_dict[player.id][1]
+
+                # Aquaticus Point Field
+                elif isinstance(action_dict[player.id], str):
+                    #make aquaticus point field the same on both blue and red sides
                     if player.team == Team.BLUE_TEAM:
                         if "P" in action_dict[player.id]:
                             action_dict[player.id] = "S" + action_dict[player.id][1:]
@@ -212,7 +208,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                         elif action_dict[player.id] not in ["SC", "CC", "PC"]:
                             action_dict[player.id] = action_dict[player.id][:-1]
 
-                    _, heading = mag_bearing_to(
+                    _, rel_heading = mag_bearing_to(
                         player.pos,
                         self.config_dict["aquaticus_field_points"][action_dict[player.id]],
                         player.heading,
@@ -224,12 +220,19 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                     ):
                         speed = 0.0
                     else:
-                        speed = self.max_speeds[player.id]
-            else:
-                # if no action provided, stop moving
-                speed, heading = 0.0, player.heading
+                        speed = self.max_speeds[self.agents.index(player.id)]
 
-            processed_action_dict[player.id] = np.array([speed, heading], dtype=np.float32)
+                # Discrete action space
+                else:
+                    speed, rel_heading = self._discrete_action_to_speed_relheading(
+                        action_dict[player.id]
+                    )
+                    speed = self.max_speeds[self.agents.index(player.id)] * speed #scale speed to agent's max speed
+            else:
+                # If no action provided, stop moving
+                speed, rel_heading = 0.0, 0.0
+
+            processed_action_dict[player.id] = np.array([speed, rel_heading], dtype=np.float32)
 
         return processed_action_dict
 
@@ -333,8 +336,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         ### Global State Normalizer ###
         max_heading = [180]
         max_bearing = [180]
-        pos_max = self.env_size + 5*self.agent_radius #add a buffer
-        pos_min = len(self.env_size) * [-5*self.agent_radius] #add a buffer
+        pos_max = self.env_size + 5*max(self.agent_radius) #add a buffer
+        pos_min = len(self.env_size) * [-5*max(self.agent_radius)] #add a buffer
         max_dist = [self.env_diag]
         min_dist = [0.0]
         max_bool, min_bool = [1.0], [0.0]
@@ -342,7 +345,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         max_score, min_score = [self.max_score], [0.0]
 
         for player in self.players.values():
-            player_name = f"player_{player.id}"
+            player_name = player.id
 
             global_state_normalizer.register((player_name, "pos"), pos_max, pos_min)
             global_state_normalizer.register((player_name, "heading"), max_heading)
@@ -625,7 +628,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
         # agent info
         for i, player in enumerate(self.players.values()):
-            player_name = f"player_{player.id}"
+            player_name = player.id
             pos = np.array(player.pos)
 
             scrimmage_line_closest_point = closest_point_on_line(
@@ -668,15 +671,18 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         else:
             return global_state
 
+    def action_space(self, agent):
+        return self.action_spaces[agent]
+
+    def observation_space(self, agent):
+        return self.observation_spaces[agent]
+
     def get_agent_observation_space(self):
         """Overridden method inherited from `Gym`."""
-        if self.normalize:
+        if self.normalize_obs:
             agent_obs_space = self.agent_obs_normalizer.normalized_space
         else:
             agent_obs_space = self.agent_obs_normalizer.unnormalized_space
-            raise Warning(
-                "Unnormalized observation space has not been thoroughly tested"
-            )
         return agent_obs_space
 
     def get_agent_action_space(self):
@@ -804,10 +810,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.reset_count = 0
         self.current_time = 0
 
-        self.state = {}
+        self.state = None
+        self.prev_state = None
         self.dones = {}
+        self.return_info = False
 
         self.seed()
+        
+        self.active_collisions = [] #list that contains all new collisions between agents prevents counting a collision multiple times
 
         # Set variables from config
         self.set_config_values(config_dict)
@@ -821,16 +831,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # Create players, use IDs from [0, (2 * team size) - 1] so their IDs can also be used as indices.
         b_players = []
         r_players = []
-
         for i in range(0, self.num_blue):
             b_players.append(
                 dynamics_registry[self.dynamics[i]](
                     gps_env=self.gps_env,
                     meters_per_mercator_xy=getattr(self, "meters_per_mercator_xy", None),
                     dt=self.dt,
-                    id=i,
+                    id=f'agent_{i}',
                     team=Team.BLUE_TEAM,
-                    render_radius=self.agent_render_radius,
+                    render_radius=getattr(self, "agent_render_radius", [None] * 2*team_size)[i],
                     render_mode=render_mode,
                 )
             )
@@ -840,37 +849,33 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     gps_env=self.gps_env,
                     meters_per_mercator_xy=getattr(self, "meters_per_mercator_xy", None),
                     dt=self.dt,
-                    id=i,
+                    id=f'agent_{i}',
                     team=Team.RED_TEAM,
-                    render_radius=self.agent_render_radius,
+                    render_radius=getattr(self, "agent_render_radius", [None] * 2*team_size)[i],
                     render_mode=render_mode,
                 )
             )
 
-        self.players = {player.id: player for player in itertools.chain(b_players, r_players)}  # maps player ids (or names) to player objects
-        self.agents = [agent_id for agent_id in self.players]
-
+        self.players = {player.id: player for player in itertools.chain(b_players, r_players)}  #maps player ids (or names) to player objects
+        self.agents = [agent_id for agent_id in self.players] #maps agent indices to ids
+        self.possible_agents = [agent_id for agent_id in self.players]
         self.max_speeds = [player.get_max_speed() for player in self.players.values()]
 
         # Agents (player objects) of each team
         self.agents_of_team = {Team.BLUE_TEAM: b_players, Team.RED_TEAM: r_players}
         self.agent_ids_of_team = {team: np.array([player.id for player in self.agents_of_team[team]]) for team in Team}
-        self.agent_inds_of_team = {team: np.array([self.agents.index(player.id) for player in self.agents_of_team[team]]) for team in Team}
-
-        # Mappings from agent ids to team member ids and opponent ids
-        self.agent_to_team_ids = {
-            agent_id: np.array([p.id for p in self.agents_of_team[player.team]]) for agent_id, player in self.players.items()
-        }
-        self.agent_to_opp_ids = {
-            agent_id: np.array([p.id for p in self.agents_of_team[Team(not player.team.value)]]) for agent_id, player in self.players.items()
-        }
+        self.agent_inds_of_team = {team: np.array([self.agents.index(agent_id) for agent_id in self.agent_ids_of_team[team]]) for team in Team}
 
         # Create the list of flags that are indexed by self.flags[int(player.team)]
         self.flags = []
         for team in Team:
             self.flags.append(Flag(team))
+            self.flags[int(team)].home = self.flag_homes[team]
 
         self.team_flag_capture = [False for _ in Team] #this is False except at the timestep that the flag is captured
+
+        # Team wall orientation
+        self._determine_team_wall_orient()
 
         # Obstacles and Lidar
         self.set_geom_config(config_dict)
@@ -882,13 +887,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.agent_obs_normalizer, self.global_state_normalizer = self._register_state_elements(team_size, len(self.obstacles))
         self.observation_spaces = {agent_id: self.get_agent_observation_space() for agent_id in self.players}
 
-        # Setup rewards and params
+        # Set up rewards
         for a in self.players:
             if a not in self.reward_config:
                 self.reward_config[a] = None
-
-        self.params = {agent_id: {} for agent_id in self.players}
-        self.prev_params = {agent_id: {} for agent_id in self.players}
 
         # Pygame
         self.screen = None
@@ -900,6 +902,20 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         if self.render_mode:
             self.create_background_image()  # create background pygame surface (for faster rendering)
+
+        # RRT policies for driving back home
+        self.rrt_policies = []
+        for i in range(self.num_agents):
+            self.rrt_policies.append(
+                EnvWaypointPolicy(
+                    self.obstacles,
+                    self.env_size,
+                    self.max_speeds[i],
+                    capture_radius=0.45 * self.catch_radius,
+                    slip_radius=4 * self.catch_radius,
+                    avoid_radius=2 * self.agent_radius[i]
+                )
+            )
 
     def seed(self, seed=None):
         """
@@ -942,6 +958,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 f" {raw_action_dict.keys()}"
             )
 
+        # Previous state
+        self.prev_state = copy.deepcopy(self.state)
+
+        # Tagging cooldown
         for i, player in enumerate(self.players.values()):
             if player.tagging_cooldown != self.tagging_cooldown:
                 # player is still under a cooldown from tagging, advance their cooldown timer, clip at the configured tagging cooldown
@@ -950,18 +970,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     self.tagging_cooldown,
                 )
                 self.state["agent_tagging_cooldown"][i] = player.tagging_cooldown
+        
+        # Process incoming actions
+        action_dict = self._to_speed_heading(raw_action_dict)
 
-        self.flag_collision_bool = np.zeros(self.num_agents, dtype=bool)
-
-        if self.action_type == "discrete":
-            action_dict = self._to_speed_heading(raw_action_dict)
-        elif self.action_type == "continuous":
-            action_dict = raw_action_dict
-        else:
-            raise ValueError(
-                f"action_type must be either 'discrete' or 'continuous'. Got '{self.action_type}' instead."
-            )
-
+        # Move agents and render
         if self.render_mode:
             for _i in range(self.num_renders_per_step):
                 for _j in range(self.sim_speedup_factor):
@@ -975,11 +988,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             if self.lidar_obs:
                 self._update_lidar()
 
-        # set the time
+        # Set the time
         self.current_time += self.sim_speedup_factor * self.tau
 
-        # agent and flag capture checks and more
-        #TODO: re-profile how fast the new vectorized and unvectorized functions run to adjust switchoff point
+        # Agent and flag checks and more
         self._check_oob_vectorized()
         self._check_flag_pickups_vectorized() if self.team_size >= 7 else self._check_flag_pickups()
         self._check_agent_made_tag_vectorized() if self.team_size >= 14 else self._check_agent_made_tag()
@@ -987,6 +999,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self._check_untag_vectorized() if self.team_size >= 5 else self._check_untag()
         self._set_dones()
         self._get_dist_bearing_to_obstacles()
+        self._check_collisions_vectorized()
 
         if self.lidar_obs:
             for team in self.agents_of_team:
@@ -1000,21 +1013,22 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     elif player.has_flag:
                         detection_class_name += "_has_flag"
 
-                    self.obj_ray_detection_states[team][self.ray_int_label_map[f"agent_{agent_id}"]] = LIDAR_DETECTION_CLASS_MAP[detection_class_name]
+                    self.obj_ray_detection_states[team][self.ray_int_label_map[agent_id]] = LIDAR_DETECTION_CLASS_MAP[detection_class_name]
 
+        # Message
         if self.message and self.render_mode:
             print(self.message)
 
         # Rewards
-        rewards = {agent_id: self.compute_rewards(agent_id) for agent_id in self.players}
+        rewards = {agent_id: self.compute_rewards(agent_id, player.team) for agent_id, player in self.players.items()}
 
         # Observations
         for agent_id in raw_action_dict:
             self.state["obs_hist_buffer"][agent_id][1:] = self.state["obs_hist_buffer"][agent_id][:-1]
-            self.state["obs_hist_buffer"][agent_id][0] = self.state_to_obs(agent_id, self.normalize)
+            self.state["obs_hist_buffer"][agent_id][0] = self.state_to_obs(agent_id, self.normalize_obs)
 
-        if self.hist_len > 1:
-            obs = {agent_id: self.state["obs_hist_buffer"][agent_id][self.hist_buffer_inds] for agent_id in self.players}
+        if self.obs_hist_len > 1:
+            obs = {agent_id: self.state["obs_hist_buffer"][agent_id][self.obs_hist_buffer_inds] for agent_id in self.players}
         else:
             obs = {agent_id: self.state["obs_hist_buffer"][agent_id][0] for agent_id in self.players}
 
@@ -1028,17 +1042,22 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             else:
                 truncated = True
 
-        terminated = {agent: terminated for agent in raw_action_dict}
-        truncated = {agent: truncated for agent in raw_action_dict}
+        terminated = {agent_id: terminated for agent_id in self.players}
+        truncated = {agent_id: truncated for agent_id in self.players}
+        terminated["__all__"] = self.dones["__all__"]
+        truncated["__all__"] = self.dones["__all__"]
 
         # Info
         self.state["global_state_hist_buffer"][1:] = self.state["global_state_hist_buffer"][:-1]
-        self.state["global_state_hist_buffer"][0] = self.state_to_global_state(self.normalize)
+        self.state["global_state_hist_buffer"][0] = self.state_to_global_state(self.normalize_state)
 
-        if self.hist_len > 1:
-            info = {"global_state": self.state["global_state_hist_buffer"][self.hist_buffer_inds]}
+        if self.return_info:
+            if self.state_hist_len > 1:
+                info = {agent_id: self.state["global_state_hist_buffer"][self.state_hist_buffer_inds] for agent_id in self.players}
+            else:
+                info = {agent_id: self.state["global_state_hist_buffer"][0] for agent_id in self.players}
         else:
-            info = {"global_state": self.state["global_state_hist_buffer"][0]}
+            info = {agent_id: {} for agent_id in self.players}
 
         return obs, rewards, terminated, truncated, info
 
@@ -1048,21 +1067,19 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             team_idx = int(player.team)
             other_team_idx = int(not team_idx)
 
-            flag_loc = self.flags[team_idx].home
+            flag_home = self.flags[team_idx].home
 
             # Check if agent is on their own side
             player.on_own_side = self._check_on_sides(player.pos, player.team)
             self.state["agent_on_sides"][i] = player.on_own_side
 
-            # If the player hits a boundary, return them to their original starting position and skip
-            # to the next agent.
-            player_hit_obstacle = detect_collision(player.pos, self.agent_radius, self.obstacle_geoms)
+            # If the player hits an obstacle, send back to previous position and rotate, then skip to next agent
+            player_hit_obstacle = detect_collision(player.pos, self.agent_radius[i], self.obstacle_geoms)
 
             if player_hit_obstacle:
                 if self.tag_on_collision:
                     player.is_tagged = True
                     self.state['agent_is_tagged'][i] = 1
-                    self.state['tags'][team_idx] += 1
 
                 if player.has_flag:
                     # If they have a flag, return the flag to it's home area
@@ -1079,13 +1096,28 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.state['prev_agent_position'][i] = player.prev_pos
                 self.state['agent_speed'][i] = player.speed
                 self.state['agent_heading'][i] = player.heading
+                self.state['agent_dynamics'][i] = player.state
                 continue
+
+            if len(self.rrt_policies[i].wps) > 0 and not player.is_tagged:
+                self.rrt_policies[i].wps = []
 
             # If agent is tagged, drive at max speed towards home
             if player.is_tagged:
-                flag_home = self.flags[team_idx].home
-                _, heading_error = mag_bearing_to(player.pos, flag_home, player.heading)
-                desired_speed = player.get_max_speed()
+                #if we are in a non-default environment, use RRT*
+                if len(self.obstacles) > 0:
+                    policy = self.rrt_policies[i]
+                    assert isinstance(policy, EnvWaypointPolicy)
+                    if len(policy.wps) == 0 and not policy.planning:
+                        policy.plan(player.pos, self.flags[team_idx].home)
+                        desired_speed = 0
+                        heading_error = 0
+                    else:
+                        desired_speed, heading_error = policy.compute_action(player.pos, player.heading)
+                #or else just use PID
+                else:
+                    _, heading_error = mag_bearing_to(player.pos, flag_home, player.heading)
+                    desired_speed = player.get_max_speed()
 
             # If agent is out of bounds, drive back in bounds at fraction of max speed
             elif self.state["agent_oob"][i]:
@@ -1106,24 +1138,22 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             player._move_agent(desired_speed, heading_error)
 
             # Check if agent is in keepout region for their own flag
-            ag_dis_2_flag = self.get_distance_between_2_points(player.pos, np.asarray(flag_loc))
+            ag_dis_2_flag = self.get_distance_between_2_points(player.pos, np.asarray(flag_home))
             if (
-                ag_dis_2_flag < self.flag_keepout_radius
+                ag_dis_2_flag < self.flag_keepout_radius + self.agent_radius[i]
                 and not self.state["flag_taken"][team_idx]
                 and self.flag_keepout_radius > 0.
             ):
-                self.flag_collision_bool[i] = True
-
                 ag_pos = rc_intersection(
                     np.array([player.pos, player.prev_pos]),
-                    np.asarray(flag_loc),
-                    self.flag_keepout_radius,
+                    np.asarray(flag_home),
+                    self.flag_keepout_radius + self.agent_radius[i],
                 )  # point where agent center first intersected with keepout zone
                 vel = mag_heading_to_vec(player.speed, player.heading)
 
-                ag_vel = reflect_vector(ag_pos, vel, np.asarray(flag_loc))
+                ag_vel = reflect_vector(ag_pos, vel, np.asarray(flag_home))
 
-                crd_ref_angle = get_rot_angle(np.asarray(flag_loc), ag_pos)
+                crd_ref_angle = get_rot_angle(np.asarray(flag_home), ag_pos)
                 vel_ref = rot2d(ag_vel, -crd_ref_angle)
                 vel_ref[1] = 0.0  # convention is that vector pointing from keepout intersection to flag center is y' axis in new reference frame
 
@@ -1242,7 +1272,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         """Checks if players are out of bounds and updates their states (and any flags in their possesion) accordingly."""
         for i, player in enumerate(self.players.values()): 
             if not np.all(
-                (self.agent_radius < player.pos) & (player.pos < (self.env_size - self.agent_radius))
+                (self.agent_radius[i] < player.pos) & (player.pos < (self.env_size - self.agent_radius[i]))
             ):
                 team_idx = int(player.team)
                 other_team_idx = int(not team_idx)
@@ -1252,8 +1282,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.state['agent_oob'][i] = 1
 
                 # Set tag (if applicable)
-                if self.tag_on_oob and not player.is_tagged:
-                    self.state['tags'][team_idx] += 1
+                if self.tag_on_oob:
                     self.state['agent_is_tagged'][i] = 1
                     player.is_tagged = True
 
@@ -1278,7 +1307,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         """Checks if players are out of bounds and updates their states (and any flags in their possesion) accordingly."""
         # Set out-of-bounds
         agent_poses = self.state['agent_position']
-        agent_oob = np.any((agent_poses <= self.agent_radius) | ((self.env_size - self.agent_radius) <= agent_poses), axis=-1)
+        agent_radius = self.agent_radius.reshape(-1, 1)
+        agent_oob = np.any((agent_poses <= agent_radius) | ((self.env_size - agent_radius) <= agent_poses), axis=-1)
 
         self.state['agent_oob'] = agent_oob
         for i, oob in enumerate(agent_oob):
@@ -1291,9 +1321,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Set tag (if applicable)
         if self.tag_on_oob:
-            for team, agent_inds in self.agent_inds_of_team.items():
-                self.state['tags'][int(team)] += np.sum(agent_oob[agent_inds] & np.logical_not(self.state["agent_is_tagged"][agent_inds]))
-
             self.state['agent_is_tagged'][agent_oob_inds] = 1
             for i in agent_oob_inds:
                 self.players[self.agents[i]].is_tagged = True
@@ -1401,7 +1428,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 player.tagging_cooldown == self.tagging_cooldown
             ):
                 for j, other_player in enumerate(self.players.values()):
-                    # Only continue logic if the other agent is NOT on sides and they are not on the same team
+                    # Only continue logic if the other agent is NOT on sides, not already tagged, and not on the same team
                     if (
                         not other_player.on_own_side and
                         not other_player.is_tagged
@@ -1416,8 +1443,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
                             other_player.is_tagged = True
                             self.state['agent_is_tagged'][j] = 1
-                            self.state['agent_made_tag'][i] = other_player.id
-                            self.state['tags'][other_team_idx] += 1
+                            self.state['agent_made_tag'][i] = j
+                            self.state['tags'][team_idx] += 1
 
                             if other_player.has_flag:
                                 #update tagged agent
@@ -1456,9 +1483,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             team_agent_cantag = team_agent_on_sides & \
                 np.logical_not(team_agent_oob) & \
                 np.logical_not(team_agent_is_tagged) & \
-                team_agent_tagging_cooldown == self.tagging_cooldown
+                (team_agent_tagging_cooldown == self.tagging_cooldown)
 
-            # Determine which agents of the other team(s) can be tagged
+            # Determine which agents on the other team can be tagged
             other_agent_on_sides = self.state['agent_on_sides'][other_agent_inds]
             other_agent_is_tagged = self.state['agent_is_tagged'][other_agent_inds]
 
@@ -1481,19 +1508,18 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     player = self.players[agent_id]
 
                     tagged_agent_idx = other_agent_inds[other_agents_tagged[0]]
-                    tagged_agent_id = self.agents[tagged_agent_idx]
-                    tagged_player = self.players[tagged_agent_id]
+                    tagged_player = self.players[self.agents[tagged_agent_idx]]
                     tagged_player_team_idx = int(tagged_player.team)
 
                     # update tagger agent
                     player.tagging_cooldown = 0.0
-                    self.state['agent_made_tag'][agent_idx] = tagged_agent_id
+                    self.state['agent_made_tag'][agent_idx] = tagged_agent_idx
                     self.state['agent_tagging_cooldown'][agent_idx] = 0.0
 
                     # update tagged agent
                     tagged_player.is_tagged = True
                     self.state['agent_is_tagged'][tagged_agent_idx] = 1
-                    self.state['tags'][tagged_player_team_idx] += 1
+                    self.state['tags'][team_idx] += 1
 
                     if tagged_player.has_flag:
                         tagged_player.has_flag = False
@@ -1571,6 +1597,52 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.team_flag_capture[team_idx] = True
                 self.state['captures'][team_idx] += 1
 
+    def _check_collisions_vectorized(self): 
+        agent_poses = self.state['agent_position']
+        dists = np.linalg.norm(agent_poses[:, np.newaxis, :] - agent_poses[np.newaxis, :, :], axis=-1)
+        np.fill_diagonal(dists, np.inf)
+        new_collisions = np.argwhere((dists >= 0.0) & (dists <= 2.5))
+        inactive_collisions = np.argwhere(dists > 3.0)
+        for i, j in new_collisions:
+            pair = (self.agents[i], self.agents[j])
+            if pair not in self.active_collisions:
+                #Append new collisions to tracked active collisions
+                self.active_collisions.append(pair)
+                self.active_collisions.append((self.agents[j], self.agents[i]))
+                #Update state to reflect new collisions
+                self.state['agent_collisions'][i] += 1
+                self.state['agent_collisions'][j] += 1
+
+        #Remove Inactive Collisions from active list
+        for i,j in inactive_collisions:
+            pair = (self.agents[i], self.agents[j])
+            if pair in self.active_collisions:
+                self.active_collisions.remove(pair)
+                self.active_collisions.remove((self.agents[j], self.agents[i]))
+
+    def _check_collisions(self):
+        """
+        Updates game state attribute agent_collisions
+        Note: Checks collisions between all players teammates and opponents
+        """
+        for player_id in self.players:
+            for other_id in self.players:
+                if player_id == other_id:
+                    continue
+                else:
+                    dist_between_agents = self.get_distance_between_2_points(
+                            self.players[player_id].pos, self.players[other_id].pos)
+                    if not ((player_id, other_id) in self.active_collisions):
+                        if dist_between_agents >= 0.0 and dist_between_agents <= 2.5:
+                            self.active_collisions.append((player_id, other_id))
+                            self.active_collisions.append((other_id, player_id))
+                            self.state['agent_collisions'][self.agents.index(player_id)] += 1
+                            self.state['agent_collisions'][self.agents.index(other_id)] += 1
+                    else:
+                        if dist_between_agents > 3.0:
+                            self.active_collisions.remove((player_id, other_id))
+                            self.active_collisions.remove((other_id, player_id))
+
     def set_config_values(self, config_dict):
         """
         Sets initial configuration parameters for the environment.
@@ -1587,21 +1659,22 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # Dynamics parameters
         self.dynamics = config_dict.get("dynamics", config_dict_std["dynamics"])
 
-        if isinstance(self.dynamics, list):
-            if len(self.dynamics) != self.team_size * 2:
-                raise Warning("Dynamics list incorrect length")
-
-        if not isinstance(self.dynamics, list):
-            self.dynamics = [self.dynamics for i in range(self.team_size * 2)]
+        if isinstance(self.dynamics, (list, tuple, np.ndarray)):
+            if len(self.dynamics) != 2*self.team_size:
+                raise Warning(f"Length of dynamics config list must match total number of agents ({2*self.team_size})")
+        elif isinstance(self.dynamics, str):
+            self.dynamics = [self.dynamics for i in range(2*self.team_size)]
+        else:
+            raise Exception(f"Dynamics config improperly specified. Please see config.py for instructions.")
 
         for dynamics in self.dynamics:
-            if dynamics not in dynamics_registry.keys():
+            if dynamics not in dynamics_registry:
                 raise Warning(
                     f"{dynamics} is not a valid dynamics class. Please check dynamics_registry.py"
                 )
 
+        # Dynamics parameters
         self.oob_speed_frac = config_dict.get("oob_speed_frac", config_dict_std["oob_speed_frac"])
-        self.action_type = config_dict.get("action_type", config_dict_std["action_type"])
 
         # Simulation parameters
         self.tau = config_dict.get("tau", config_dict_std["tau"])
@@ -1615,13 +1688,22 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.tag_on_oob = config_dict.get("tag_on_oob", config_dict_std["tag_on_oob"])
 
         # Observation and state parameters
-        self.normalize = config_dict.get("normalize", config_dict_std["normalize"])
+        self.normalize_obs = config_dict.get("normalize_obs", config_dict_std["normalize_obs"])
+        self.short_obs_hist_length = config_dict.get("short_obs_hist_length", config_dict_std["short_obs_hist_length"])
+        self.short_obs_hist_interval = config_dict.get("short_obs_hist_interval", config_dict_std["short_obs_hist_interval"])
+        self.long_obs_hist_length = config_dict.get("long_obs_hist_length", config_dict_std["long_obs_hist_length"])
+        self.long_obs_hist_interval = config_dict.get("long_obs_hist_interval", config_dict_std["long_obs_hist_interval"])
+
+        # Lidar-specific observation parameters
         self.lidar_obs = config_dict.get("lidar_obs", config_dict_std["lidar_obs"])
         self.num_lidar_rays = config_dict.get("num_lidar_rays", config_dict_std["num_lidar_rays"])
-        self.short_hist_length = config_dict.get("short_hist_length", config_dict_std["short_hist_length"])
-        self.short_hist_interval = config_dict.get("short_hist_interval", config_dict_std["short_hist_interval"])
-        self.long_hist_length = config_dict.get("long_hist_length", config_dict_std["long_hist_length"])
-        self.long_hist_interval = config_dict.get("long_hist_interval", config_dict_std["long_hist_interval"])
+
+        # Global state parameters
+        self.normalize_state = config_dict.get("normalize_state", config_dict_std["normalize_state"])
+        self.short_state_hist_length = config_dict.get("short_state_hist_length", config_dict_std["short_state_hist_length"])
+        self.short_state_hist_interval = config_dict.get("short_state_hist_interval", config_dict_std["short_state_hist_interval"])
+        self.long_state_hist_length = config_dict.get("long_state_hist_length", config_dict_std["long_state_hist_length"])
+        self.long_state_hist_interval = config_dict.get("long_state_hist_interval", config_dict_std["long_state_hist_interval"])
 
         # Rendering parameters
         self.render_fps = config_dict.get("render_fps", config_dict_std["render_fps"])
@@ -1636,7 +1718,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.render_saving = config_dict.get("render_saving", config_dict_std["render_saving"])
         self.render_transparency_alpha = config_dict.get("render_transparency_alpha", config_dict_std["render_transparency_alpha"])
 
-        # agent spawn parameters
+        # Agent spawn parameters
         self.default_init = config_dict.get("default_init", config_dict_std["default_init"])
 
         # Miscellaneous parameters
@@ -1645,20 +1727,38 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             np.seterr(all="ignore")
 
         ### Environment History ###
-        short_hist_buffer_inds = np.arange(0, self.short_hist_length * self.short_hist_interval, self.short_hist_interval)
-        long_hist_buffer_inds = np.arange(0, self.long_hist_length * self.long_hist_interval, self.long_hist_interval)
-        self.hist_buffer_inds = np.unique(
-            np.concatenate((short_hist_buffer_inds, long_hist_buffer_inds))
+        # Observations
+        short_obs_hist_buffer_inds = np.arange(0, self.short_obs_hist_length * self.short_obs_hist_interval, self.short_obs_hist_interval)
+        long_obs_hist_buffer_inds = np.arange(0, self.long_obs_hist_length * self.long_obs_hist_interval, self.long_obs_hist_interval)
+        self.obs_hist_buffer_inds = np.unique(
+            np.concatenate((short_obs_hist_buffer_inds, long_obs_hist_buffer_inds))
         )  # indices of history buffer corresponding to history entries
 
-        self.hist_len = len(self.hist_buffer_inds)
-        self.hist_buffer_len = self.hist_buffer_inds[-1] + 1
+        self.obs_hist_len = len(self.obs_hist_buffer_inds)
+        self.obs_hist_buffer_len = self.obs_hist_buffer_inds[-1] + 1
 
-        short_hist_oldest_timestep = (self.short_hist_length * self.short_hist_interval - self.short_hist_interval)
-        long_hist_oldest_timestep = (self.long_hist_length * self.long_hist_interval - self.long_hist_interval)
-        if short_hist_oldest_timestep > long_hist_oldest_timestep:
+        short_obs_hist_oldest_timestep = self.short_obs_hist_length * self.short_obs_hist_interval - self.short_obs_hist_interval
+        long_obs_hist_oldest_timestep = self.long_obs_hist_length * self.long_obs_hist_interval - self.long_obs_hist_interval
+        if short_obs_hist_oldest_timestep > long_obs_hist_oldest_timestep:
             raise Warning(
-                f"The short term history contains older timestep (-{short_hist_oldest_timestep}) than the long term history (-{long_hist_oldest_timestep})."
+                f"The short term obs history contains older timestep (-{short_obs_hist_oldest_timestep}) than the long term obs history (-{long_obs_hist_oldest_timestep})."
+            )
+        
+        # Global State
+        short_state_hist_buffer_inds = np.arange(0, self.short_state_hist_length * self.short_state_hist_interval, self.short_state_hist_interval)
+        long_state_hist_buffer_inds = np.arange(0, self.long_state_hist_length * self.long_state_hist_interval, self.long_state_hist_interval)
+        self.state_hist_buffer_inds = np.unique(
+            np.concatenate((short_state_hist_buffer_inds, long_state_hist_buffer_inds))
+        )  # indices of history buffer corresponding to history entries
+
+        self.state_hist_len = len(self.state_hist_buffer_inds)
+        self.state_hist_buffer_len = self.state_hist_buffer_inds[-1] + 1
+
+        short_state_hist_oldest_timestep = self.short_state_hist_length * self.short_state_hist_interval - self.short_state_hist_interval
+        long_state_hist_oldest_timestep = self.long_state_hist_length * self.long_state_hist_interval - self.long_state_hist_interval
+        if short_state_hist_oldest_timestep > long_state_hist_oldest_timestep:
+            raise Warning(
+                f"The short term state history contains older timestep (-{short_state_hist_oldest_timestep}) than the long term state history (-{long_state_hist_oldest_timestep})."
             )
 
         ### Environment Geometry Construction ###
@@ -1675,6 +1775,17 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         scrimmage_coords_unit = config_dict.get("scrimmage_coords_unit", config_dict_std["scrimmage_coords_unit"])
 
         agent_radius = config_dict.get("agent_radius", config_dict_std["agent_radius"])
+        if isinstance(agent_radius, (list, tuple, np.ndarray)):
+            if len(agent_radius) != 2*self.team_size:
+                raise Warning("Dynamics list incorrect length")
+            agent_radius = np.array(agent_radius, dtype=float)
+        else:
+            try:
+                agent_radius = float(agent_radius)
+            except Exception:
+                raise Warning("agent_radius must be convertible to a float")
+            agent_radius = np.array([agent_radius for _ in range(2*self.team_size)])
+
         flag_radius = config_dict.get("flag_radius", config_dict_std["flag_radius"])
         flag_keepout_radius = config_dict.get("flag_keepout", config_dict_std["flag_keepout"])
         catch_radius = config_dict.get("catch_radius", config_dict_std["catch_radius"])
@@ -1755,10 +1866,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             # environemnt element sizes in pixels
             self.arena_width, self.arena_height = self.pixel_size * self.env_size
             self.arena_buffer = self.pixel_size * arena_buffer
-            self.boundary_width = 2  # pixels
-            self.a2a_line_width = 5  # pixels
-            self.flag_render_radius = np.clip(self.flag_radius * self.pixel_size, 10, None)  # pixels
-            self.agent_render_radius = np.clip(self.agent_radius * self.pixel_size, 15, None)  # pixels
+            self.boundary_width = 2  #pixels
+            self.a2a_line_width = 5  #pixels
+            self.flag_render_radius = np.clip(self.pixel_size * self.flag_radius, 10, None)  #pixels
+            self.agent_render_radius = np.clip(self.pixel_size * self.agent_radius, 15, None)  #pixels
 
             # miscellaneous
             self.num_renders_per_step = int(self.render_fps * self.tau)
@@ -1922,7 +2033,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             # flags
             for i, _ in enumerate(self.flags):
-                vertices = list(Point(0.0, 0.0).buffer(self.flag_radius, quad_segs=n_quad_segs).exterior.coords)[:-1]  # approximate circle with an octagon
+                vertices = list(Point(0.0, 0.0).buffer(self.flag_radius, quad_segs=n_quad_segs).exterior.coords)[:-1]
                 segments = [[*vertex, *vertices[(i + 1) % len(vertices)]] for i, vertex in enumerate(vertices)]
                 ray_int_seg_labels.extend(len(segments) * [self.ray_int_label_map[f"flag_{i}"]])
                 self.seg_label_type_to_inds["flag"].extend(np.arange(len(ray_int_segments), len(ray_int_segments) + len(segments)))
@@ -1930,9 +2041,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             # agents
             for agent_id in self.agents:
-                vertices = list(Point(0.0, 0.0).buffer(self.agent_radius, quad_segs=n_quad_segs).exterior.coords)[:-1]  # approximate circle with an octagon
+                vertices = list(Point(0.0, 0.0).buffer(self.agent_radius[self.agents.index(agent_id)], quad_segs=n_quad_segs).exterior.coords)[:-1]
                 segments = [[*vertex, *vertices[(i + 1) % len(vertices)]] for i, vertex in enumerate(vertices)]
-                ray_int_seg_labels.extend(len(segments) * [self.ray_int_label_map[f"agent_{agent_id}"]])
+                ray_int_seg_labels.extend(len(segments) * [self.ray_int_label_map[agent_id]])
                 self.seg_label_type_to_inds["agent"].extend(np.arange(len(ray_int_segments), len(ray_int_segments) + len(segments)))
                 ray_int_segments.extend(segments)
 
@@ -2088,111 +2199,24 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             else:
                 self.message = "Game Over. No Winner"
 
-    def update_params(self, agent_id):
-        """Note: assumes two teams, and one flag per team."""
-        # Important Note: Be sure to deep copy anything other than plain-old-data, e.g.,
-        # lists from self.state
-        # Otherwise it will point to the same object and prev_params/params will be identical
-        agent = self.players[agent_id]
-        obs = self.state_to_obs(agent.id, False)
-
-        team_idx = int(agent.team)
-        other_team_idx = int(not team_idx)
-
-        self.params[agent.id]["team"] = agent.team
-        self.params[agent.id]["num_teammates"] = len(self.agents_of_team[team])
-        self.params[agent.id]["num_opponents"] =  np.sum(
-            [len(players) for other_team, players in self.agents_of_team.items() if int(other_team) != team_idx]
-        ) 
-        self.params[agent.id]["capture_radius"] = self.catch_radius
-        self.params[agent.id]["agent_id"] = agent.id
-        self.params[agent.id]["agent_oob"] = copy.deepcopy(self.state["agent_oob"])
-
-        # Obstacle Distance/Bearing
-        for i, obstacle in enumerate(self.state["dist_bearing_to_obstacles"][agent.id]):
-            self.params[agent.id][f"obstacle_{i}_distance"] = obstacle[0]
-            self.params[agent.id][f"obstacle_{i}_bearing"] = obstacle[1]
-
-        # Game Events
-        self.params[agent.id]["team_has_flag"] = self.state["team_has_flag"][team_idx]
-        self.params[agent.id]["opponent_flag_pickup"] = self.state["team_has_flag"][other_team_idx]
-        self.params[agent.id]["team_flag_capture"] = self.team_flag_capture[team_idx]
-        self.params[agent.id]["opponent_flag_capture"] = self.team_flag_capture[other_team_idx]
-
-        # Elements
-        self.params[agent.id]["team_flag_home"] = self.get_distance_between_2_points(
-                agent.pos, copy.deepcopy(self.state["flag_home"][team_idx])
-            )
-        self.params[agent.id]["team_flag_bearing"] = obs["own_home_bearing"]
-        self.params[agent.id]["team_flag_distance"] = obs["own_home_distance"]
-        self.params[agent.id]["opponent_flag_bearing"] = obs["opponent_home_bearing"]
-        self.params[agent.id]["opponent_flag_distance"] = obs["opponent_home_distance"]
-
-        # Agents
-        self.params[agent.id]["num_players"] = self.num_agents
-        self.params[agent.id]["speed"] = agent.speed
-        self.params[agent.id]["tagging_cooldown"] = not agent.tagging_cooldown >= 10.0
-        self.params[agent.id]["has_flag"] = agent.has_flag
-        self.params[agent.id]["on_own_side"] = agent.on_own_side
-        self.params[agent.id]["heading"] = agent.heading
-
-        # Distances to boundaries
-        self.params[agent.id]["wall_0_bearing"] = obs["wall_0_bearing"]
-        self.params[agent.id]["wall_0_distance"] = obs["wall_0_distance"]
-        self.params[agent.id]["wall_1_bearing"] = obs["wall_1_bearing"]
-        self.params[agent.id]["wall_1_distance"] = obs["wall_1_distance"]
-        self.params[agent.id]["wall_2_bearing"] = obs["wall_2_bearing"]
-        self.params[agent.id]["wall_2_distance"] = obs["wall_2_distance"]
-        self.params[agent.id]["wall_3_bearing"] = obs["wall_3_bearing"]
-        self.params[agent.id]["wall_3_distance"] = obs["wall_3_distance"]
-        self.params[agent.id]["wall_distances"] =  self._get_dists_to_boundary()[agent.id]
-        self.params[agent.id]["agent_is_tagged"] = copy.deepcopy(self.state["agent_is_tagged"])
-        self.params[agent.id]["agent_made_tag"] = copy.deepcopy(self.state["agent_made_tag"])
-        
-        # Add Teamate and Opponent Information
-        own_team = agent.team
-        other_team = Team.BLUE_TEAM if own_team == Team.RED_TEAM else Team.RED_TEAM
-
-        for team in [own_team, other_team]:
-            dif_agents = filter(lambda a: a.id != agent.id, self.agents_of_team[team])
-            for i, dif_agent in enumerate(dif_agents):
-                entry_name = f"teammate_{i}" if team == own_team else f"opponent_{i}"
-                status = "teammate" if team == own_team else "opponent"
-                # bearing relative to the bearing to you
-                self.params[agent.id][f"{status}_{dif_agent.id}_bearing"] = obs[
-                    (entry_name, "bearing")
-                ]
-                self.params[agent.id][f"{status}_{dif_agent.id}_distance"] = obs[
-                    (entry_name, "distance")
-                ]
-                self.params[agent.id][f"{status}_{dif_agent.id}_relative_heading"] = (
-                    obs[(entry_name, "relative_heading")]
-                )
-                self.params[agent.id][f"{status}_{dif_agent.id}_speed"] = obs[
-                    (entry_name, "speed")
-                ]
-                self.params[agent.id][f"{status}_{dif_agent.id}_has_flag"] = obs[
-                    (entry_name, "has_flag")
-                ]
-                self.params[agent.id][f"{status}_{dif_agent.id}_on_side"] = obs[
-                    (entry_name, "on_side")
-                ]
-                self.params[agent.id][f"{status}_{dif_agent.id}_tagging_cooldown"] = (
-                    obs[(entry_name, "tagging_cooldown")]
-                )
-
-    def compute_rewards(self, agent_id):
+    def compute_rewards(self, agent_id, team):
         if self.reward_config[agent_id] is None:
-            return 0
-        # Update Prev Params
-        self.prev_params[agent_id] = copy.deepcopy(self.params[agent_id])
-        # Update Params
-        self.update_params(agent_id)
-        if self.prev_params[agent_id] == {}:
-            self.prev_params[agent_id] = copy.deepcopy(self.params[agent_id])
+            return 0.0
+
         # Get reward based on the passed in reward function
         return self.reward_config[agent_id](
-            agent_id, self.params[agent_id], self.prev_params[agent_id]
+            agent_id=agent_id,
+            team=team,
+            agents=self.agents,
+            agent_inds_of_team=self.agent_inds_of_team,
+            state=self.state,
+            prev_state=self.prev_state,
+            env_size=self.env_size,
+            agent_radius=self.agent_radius,
+            catch_radius=self.catch_radius,
+            scrimmage_coords=self.scrimmage_coords,
+            max_speeds=self.max_speeds,
+            tagging_cooldown=self.tagging_cooldown
         )
 
     def _reset_dones(self):
@@ -2210,8 +2234,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         Args:
             seed (optional): Starting seed.
             options (optional): Additonal options for resetting the environment:
-                -"normalize": Whether or not to normalize observations and global state
+                -"normalize_obs": whether or not to normalize observations
+                -"normalize_state": whether or not to normalize the global state
                 -"state_dict": self.state dictionary from a previous episode
+
+                    note: state_dict should be produced by the same (or an equivalently configured) instance of
+                          the Pyquaticus class, otherwise the obervations and global state may be inconsistent
+
                 -"init_dict": partial state dictionary for initializing the environment with the following optional keys:
                     -'agent_position'*, 'agent_pos_unit'**,
                     -'agent_speed'*, 'agent_heading'*,
@@ -2237,13 +2266,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if seed is not None:
             self.seed(seed=seed)
 
-        if return_info:
-            raise DeprecationWarning(
-                "return_info has been deprecated by PettingZoo -- https://github.com/Farama-Foundation/PettingZoo/pull/890"
-            )
-
         if options is not None:
-            self.normalize = options.get("normalize", config_dict_std["normalize"])
+            self.normalize_obs = options.get("normalize_obs", self.normalize_obs)
+            self.normalize_state = options.get("normalize_state", self.normalize_state)
+
             state_dict = options.get("state_dict", None)
             init_dict = options.get("init_dict", None)
             if state_dict != None and init_dict != None:
@@ -2253,12 +2279,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             init_dict = None
 
         if state_dict != None:
-            # reset env from state_dict (a self.state value from a previous episode)
-            # note: state_dict should be produced by the same or equivalent instance
-            # of the Pyquaticus class, otherwise the obervations may be inconsistent
+            # reset env from state_dict
             if self.reset_count == 0:
                 raise Exception(
-                    "Resetting from state_dict should only be done for environment that has been previously reset"
+                    "Resetting from state_dict should only be done for an environment that has been previously reset."
                 )
             self.state = copy.deepcopy(state_dict)
             self._set_player_attributes_from_state()
@@ -2270,7 +2294,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self._set_state_from_init_dict(init_dict)
             else:
                 flag_homes = list(self.flag_homes.values())
-                agent_positions, agent_spd_hdg, agent_on_sides = self._generate_agent_starts(flag_homes=flag_homes)
+                agent_positions, agent_spd_hdg, agent_on_sides = self._generate_agent_starts(flag_homes)
 
                 self.state = {
                     "agent_position":            agent_positions,
@@ -2288,9 +2312,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     "flag_position":             np.array(flag_homes),
                     "flag_taken":                np.zeros(len(self.flags), dtype=bool),
                     "team_has_flag":             np.zeros(len(self.agents_of_team), dtype=bool), #whether a member of this team has a flag of the other team's
-                    "captures":                  np.zeros(len(self.agents_of_team)), #number of flag captures made by this team
-                    "tags":                      np.zeros(len(self.agents_of_team)), #number of tags made by this team
-                    "grabs":                     np.zeros(len(self.agents_of_team)), #number of flag grabs made by this team
+                    "captures":                  np.zeros(len(self.agents_of_team), dtype=int), #total number of flag captures made by this team
+                    "tags":                      np.zeros(len(self.agents_of_team), dtype=int), #total number of tags made by this team
+                    "grabs":                     np.zeros(len(self.agents_of_team), dtype=int), #total number of flag grabs made by this team
+                    "agent_collisions":          np.zeros(len(self.players), dtype=int), #total number of collisions per agent
                 }
 
             # set player and flag attributes
@@ -2301,20 +2326,16 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             
             self.state['agent_dynamics'] = np.array([player.state for player in self.players.values()])
 
-            #run event checks
-            #TODO: re-profile how fast the new vectorized and unvectorized functions run to adjust switchoff point
-            self._check_flag_pickups_vectorized() if self.team_size >= 40 else self._check_flag_pickups()
-            self._check_agent_made_tag_vectorized() if self.team_size >= 10 else self._check_agent_made_tag()
-            self._check_untag_vectorized() if self.team_size >= 10 else self._check_untag()
+            # run event checks
+            self._check_flag_pickups_vectorized() if self.team_size >= 7 else self._check_flag_pickups()
+            self._check_agent_made_tag_vectorized() if self.team_size >= 14 else self._check_agent_made_tag()
+            self._check_untag_vectorized() if self.team_size >= 5 else self._check_untag()
             #note 1: _check_oob is not currently necessary b/c initializtion does not allow 
             #for out-of-bounds, and state_dict initialization will have up-to-date out-of-bounds info.
 
             #note 2: _check_flag_captures is not currently necessary b/c initialization does not allow
             #for starting with flag on-sides and state_dict initialization would not start with capture
             #(it would have been detected in the step function checks).
-
-            # team wall orientation
-            self._determine_team_wall_orient()
 
             # obstacles
             self._get_dist_bearing_to_obstacles()
@@ -2327,7 +2348,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.state["lidar_distances"] = dict()
 
                 for agent_id in self.players:
-                    self.state["lidar_labels"][agent_id] = np.zeros(self.num_lidar_rays, dtype='int8')
+                    self.state["lidar_labels"][agent_id] = np.zeros(self.num_lidar_rays, dtype=int)
                     self.state["lidar_ends"][agent_id] = np.zeros((self.num_lidar_rays, 2))
                     self.state["lidar_distances"][agent_id] = np.zeros(self.num_lidar_rays)
                     self._update_lidar()
@@ -2343,13 +2364,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             # observation history
             self.state["obs_hist_buffer"] = dict()
-            reset_obs = {agent_id: self.state_to_obs(agent_id, self.normalize) for agent_id in self.players}
+            reset_obs = {agent_id: self.state_to_obs(agent_id, self.normalize_obs) for agent_id in self.players}
             for agent_id in self.players:
-                self.state["obs_hist_buffer"][agent_id] = np.array(self.hist_buffer_len * [reset_obs[agent_id]])
+                self.state["obs_hist_buffer"][agent_id] = np.array(self.obs_hist_buffer_len * [reset_obs[agent_id]])
 
             # global state history
-            reset_global_state = self.state_to_global_state(self.normalize)
-            self.state["global_state_hist_buffer"] = np.array(self.hist_buffer_len * [reset_global_state])
+            reset_global_state = self.state_to_global_state(self.normalize_state)
+            self.state["global_state_hist_buffer"] = np.array(self.state_hist_buffer_len * [reset_global_state])
 
         self.message = ""
         self.current_time = 0
@@ -2368,22 +2389,23 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self._render()
 
         # Observations
-        if self.hist_len > 1:
-            obs = {agent_id: self.state["obs_hist_buffer"][agent_id][self.hist_buffer_inds] for agent_id in self.players}
+        if self.obs_hist_len > 1:
+            obs = {agent_id: self.state["obs_hist_buffer"][agent_id][self.obs_hist_buffer_inds] for agent_id in self.players}
         else:
             obs = {agent_id: self.state["obs_hist_buffer"][agent_id][0] for agent_id in self.players}
+        
+        # Info
+        self.return_info = return_info
 
-        # Return
-        if return_info:
-            # Info
-            if self.hist_len > 1:
-                info = {"global_state": self.state["global_state_hist_buffer"][self.hist_buffer_inds]}
+        if self.return_info:
+            if self.state_hist_len > 1:
+                info = {agent_id: self.state["global_state_hist_buffer"][self.state_hist_buffer_inds] for agent_id in self.players}
             else:
-                info = {"global_state": self.state["global_state_hist_buffer"][0]}
-
-            return obs, info
+                info = {agent_id: self.state["global_state_hist_buffer"][0] for agent_id in self.players}
         else:
-            return obs
+            info = {agent_id: {} for agent_id in self.players}
+
+        return obs, info
 
     def _set_state_from_init_dict(self, init_dict: dict):
         """
@@ -2527,7 +2549,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         flag_homes_not_picked_up = [flag_home for i, flag_home in enumerate(flag_homes) if not self.state['flag_taken'][i]]
 
         agent_positions, agent_spd_hdg, agent_on_sides = self._generate_agent_starts(
-            flag_homes=flag_homes_not_picked_up,
+            flag_homes_not_picked_up,
             agent_pos_dict=agent_pos_dict,
             agent_spd_dict=agent_spd_dict,
             agent_hdg_dict=agent_hdg_dict,
@@ -2586,12 +2608,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     def _set_flag_attributes_from_state(self):
         for flag in self.flags:
             team_idx = int(flag.team)
-            flag.home = self.state['flag_home'][team_idx]
-            flag.pos = self.state['flag_position'][team_idx]
+            flag.pos = self.state['flag_position'][int(flag.team)]
+
+            #note: we do not set flag.home because this should already
+            #be set and match what is in the state dictionary
 
     def _generate_agent_starts(
         self,
-        flag_homes: Union[list, np.ndarray],
+        flag_homes_not_picked_up: Union[list, np.ndarray],
         agent_pos_dict: Optional[dict] = None,
         agent_spd_dict: Optional[dict] = None,
         agent_hdg_dict: Optional[dict] = None,
@@ -2602,7 +2626,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         Note: assumes two teams, and one flag per team.
 
         Args:
-            flag_homes: The home location of all flags that are not picked up
+            flag_homes_not_picked_up: The home location of all flags that are not picked up
             agent_pos_dict: positions of a subset of the agents with id's as keys
             agent_spd_dict: speeds of a subset of the agents with id's as keys
             agent_hdg_dict: headings of a subset of the agents with id's as keys
@@ -2657,20 +2681,21 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                             pos = self.valid_init_poses[start_pos_idx]
 
                         #check if valid pos
-                        valid_pos, _ = self._check_valid_pos(pos, agent_positions, flag_homes)
+                        valid_pos, _ = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)
                 else:
                     if agent_has_flag[i]:
                         valid_pos = False
                         while not valid_pos:
-                            pos = np.random.choice((-1,1), size=2) * np.random.rand(2) * (self.env_size/2 - self.agent_radius) + self.env_size/2
-                            valid_pos = self._check_valid_pos(pos, agent_positions, flag_homes)[0] and not self._check_on_sides(pos, player.team)
+                            pos = np.random.choice((-1,1), size=2) * np.random.rand(2) * (self.env_size/2 - self.agent_radius[i]) + self.env_size/2
+                            valid_pos = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)[0] and not self._check_on_sides(pos, player.team)
                     elif self.default_init:
-                        flag_home = self.flag_homes[player.team]
+                        flag_home = self.flags[int(player.team)].home
                         closest_scrim_line_point = closest_point_on_line(*self.scrimmage_coords, flag_home)
                         halfway_point = (flag_home + closest_scrim_line_point)/2
 
                         mag, _ = vec_to_mag_heading(halfway_point - flag_home)
-                        if mag < self.flag_keepout_radius:
+                        max_team_radius = np.max(self.agent_radius[self.agent_inds_of_team[player.team]])
+                        if mag < (self.flag_keepout_radius + max_team_radius):
                             raise Exception("Flag is too close to scrimmage line.")
 
                         spawn_line_env_intersection_1 = self._get_polygon_intersection(halfway_point, self.scrimmage_vec, self.env_corners)[1]
@@ -2678,27 +2703,27 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         spawn_line_mag = np.linalg.norm(spawn_line_env_intersection_1 - spawn_line_env_intersection_2)
                         spawn_line_unit_vec = (spawn_line_env_intersection_2 - spawn_line_env_intersection_1)/spawn_line_mag
 
-                        agent_idx_within_team = np.where(self.agent_ids_of_team[player.team] == player.id)[0] + 1
-                        pos = spawn_line_env_intersection_1 + (spawn_line_mag * agent_idx_within_team/(self.team_size + 1)) * spawn_line_unit_vec
+                        agent_idx_within_team = np.where(self.agent_inds_of_team[player.team] == i)[0]
+                        pos = spawn_line_env_intersection_1 + (spawn_line_mag * (agent_idx_within_team + 1)/(self.team_size + 1)) * spawn_line_unit_vec
 
-                        pos[0] = max(self.agent_radius, min(self.env_size[0] - self.agent_radius, pos[0])) #project out-of-bounds pos back into the environment
-                        pos[1] = max(self.agent_radius, min(self.env_size[1] - self.agent_radius, pos[1])) #project out-of-bounds pos back into the environment
+                        pos[0] = max(2*self.agent_radius[i], min(self.env_size[0] - 2*self.agent_radius[i], pos[0])) #project out-of-bounds pos back into the environment (with buffer)
+                        pos[1] = max(2*self.agent_radius[i], min(self.env_size[1] - 2*self.agent_radius[i], pos[1])) #project out-of-bounds pos back into the environment (with buffer)
 
-                        valid_pos = self._check_valid_pos(pos, agent_positions, flag_homes)[0] and self._check_on_sides(pos, player.team)
+                        valid_pos = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)[0] and self._check_on_sides(pos, player.team)
                         while not valid_pos:
-                            pos = np.random.choice((-1,1), size=2) * np.random.rand(2) * (self.env_size/2 - self.agent_radius) + self.env_size/2
-                            valid_pos = self._check_valid_pos(pos, agent_positions, flag_homes)[0] and self._check_on_sides(pos, player.team)
+                            pos = np.random.choice((-1,1), size=2) * np.random.rand(2) * (self.env_size/2 - self.agent_radius[i]) + self.env_size/2
+                            valid_pos = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)[0] and self._check_on_sides(pos, player.team)
                     else:
                         valid_pos = False
                         while not valid_pos:
-                            pos = np.random.choice((-1,1), size=2) * np.random.rand(2) * (self.env_size/2 - self.agent_radius) + self.env_size/2
-                            valid_pos, _ = self._check_valid_pos(pos, agent_positions, flag_homes)
+                            pos = np.random.choice((-1,1), size=2) * np.random.rand(2) * (self.env_size/2 - self.agent_radius[i]) + self.env_size/2
+                            valid_pos, _ = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)
                 # save pos
                 agent_positions.append(pos)
                 agent_pos_dict[player.id] = pos
             else:
                 # check if specified initial pos is in collision
-                valid_pos, collision_type = self._check_valid_pos(agent_pos_dict[player.id], [], flag_homes) #does not check for collisions with agents
+                valid_pos, collision_type = self._check_valid_pos(agent_pos_dict[player.id], i, [], flag_homes_not_picked_up) #does not check for collisions with agents
                 if not valid_pos:
                     raise Exception(
                         f"Specified initial pos ({agent_pos_dict[player.id]}) for agent {player.id} is in collision with environment object type '{collision_type}'"
@@ -2722,7 +2747,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 if self.default_init:
                     speed = 0.0
                 else:
-                    speed = self.max_speeds[player.id] * np.random.rand()
+                    speed = self.max_speeds[self.agents.index(player.id)] * np.random.rand()
                 
                 # save speed
                 agent_spd_dict[player.id] = speed
@@ -2750,7 +2775,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         return np.array(agent_positions), np.array(agent_spd_hdg), np.array(agent_on_sides, dtype=bool)
 
-    def _check_valid_pos(self, new_pos, agent_positions, flag_homes):
+    def _check_valid_pos(self, new_pos, agent_idx, agent_positions, flag_homes):
         """
         Returns
         -------
@@ -2764,7 +2789,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         #agents
         if len(agent_positions) > 0:
             ag_distance = np.linalg.norm(agent_positions - new_pos, axis=-1)
-            if np.any(ag_distance <= 2*self.agent_radius):
+            radii = np.array(self.agent_radius[:len(agent_positions)])
+            if np.any(ag_distance <= self.agent_radius[agent_idx] + radii):
                 return False, "agent"
 
         #flags
@@ -2774,11 +2800,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         #obstacles
         ## TODO: add check to make sure agent isn't spawned inside an obstacle
-        if detect_collision(new_pos, self.agent_radius, self.obstacle_geoms):
+        if detect_collision(new_pos, self.agent_radius[agent_idx], self.obstacle_geoms):
             return False, "obstacle"
 
         #out-of-bounds
-        if not np.all((self.agent_radius < new_pos) & (new_pos < (self.env_size - self.agent_radius))):
+        if not np.all((self.agent_radius[agent_idx] < new_pos) & (new_pos < (self.env_size - self.agent_radius[agent_idx]))):
             return False, "oob"
 
         return True, None
@@ -2842,7 +2868,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             player_dists_to_obstacles = list()
             for obstacle in self.obstacles:
                 # TODO: vectorize
-                dist_to_obstacle = obstacle.distance_from(player_pos, radius=self.agent_radius, heading=player.heading)
+                dist_to_obstacle = obstacle.distance_from(player_pos, radius=self.agent_radius[self.agents.index(player.id)], heading=player.heading)
                 player_dists_to_obstacles.append(dist_to_obstacle)
             dist_bearing_to_obstacles[player.id] = player_dists_to_obstacles
         self.state["dist_bearing_to_obstacles"] = dist_bearing_to_obstacles
@@ -2855,7 +2881,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         env_bounds_unit: str,
         flag_homes_unit: str,
         scrimmage_coords_unit: str,
-        agent_radius: float,
+        agent_radius: np.ndarray,
         flag_radius: float,
         flag_keepout_radius: float,
         catch_radius: float,
@@ -3756,18 +3782,18 @@ when gps environment bounds are specified in meters"
         flag_water_pixel_colors = topo_img[flag_water_ys, flag_water_xs]
         for flag_water_pixel_color in flag_water_pixel_colors: 
             if not (
-                np.all(flag_water_pixel_color == 38) or # DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
-                np.all(flag_water_pixel_color == 39) or # DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
-                np.all(flag_water_pixel_color == 40)    # DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)! 
+                np.all(flag_water_pixel_color == 38) or #DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
+                np.all(flag_water_pixel_color == 39) or #DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
+                np.all(flag_water_pixel_color == 40)    #DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)! 
             ):
                 raise Exception(
                     f"One of the flags ({flag_homes}) is not in the the water."
                 )
 
         mask = (
-            np.all(topo_img == 38, axis=-1) | # DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
-            np.all(topo_img == 39, axis=-1) | # DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
-            np.all(topo_img == 40, axis=-1)   # DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
+            np.all(topo_img == 38, axis=-1) | #DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
+            np.all(topo_img == 39, axis=-1) | #DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
+            np.all(topo_img == 40, axis=-1)   #DO NOT CHANGE (specific to CartoDB.DarkMatterNoLabels)!
         ) 
         water_connectivity = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]])
         labeled_mask, _ = label(mask, structure=water_connectivity)
@@ -3931,7 +3957,7 @@ when gps environment bounds are specified in meters"
         else:  # CircleObstacle
             radius = obstacle.radius
             center = obstacle.center_point
-            vertices = list(Point(*center).buffer(radius, quad_segs=n_quad_segs).exterior.coords)[:-1] # approximate circle with an octagon
+            vertices = list(Point(*center).buffer(radius, quad_segs=n_quad_segs).exterior.coords)[:-1]
 
         segments = [[vertex, vertices[(i + 1) % len(vertices)]] for i, vertex in enumerate(vertices)]
 
@@ -3950,13 +3976,13 @@ when gps environment bounds are specified in meters"
         # Create a list of valid positions
         poses_in_collision = detect_collision(
             water_coords_env,
-            self.agent_radius,
+            max(self.agent_radius),
             self.obstacle_geoms
         )
         valid_init_poses = water_coords_env[np.where(np.logical_not(poses_in_collision))[0]]
         self.valid_init_poses = valid_init_poses[np.where(
             np.all(
-                (self.agent_radius < valid_init_poses) & (valid_init_poses < (self.env_size - self.agent_radius)), #on-sides
+                (max(self.agent_radius) < valid_init_poses) & (valid_init_poses < (self.env_size - max(self.agent_radius))), #on-sides
                 axis=-1
             )
         )[0]]
@@ -3985,7 +4011,7 @@ when gps environment bounds are specified in meters"
             pygame.init()
 
             if self.render_mode:
-                self.agent_font = pygame.font.SysFont(None, int(2 * self.agent_render_radius))
+                self.agent_font = pygame.font.SysFont(None, int(2 * min(self.agent_render_radius)))
 
                 if self.render_mode == "human":
                     pygame.display.set_caption("Capture The Flag")
@@ -4001,8 +4027,8 @@ when gps environment bounds are specified in meters"
         if self.clock is None:
             self.clock = pygame.time.Clock()
 
-        if self.state == {}:
-            return None
+        if self.state is None:
+            return
 
         # Background
         self.screen.blit(self.pygame_background_img, (0, 0))
@@ -4026,7 +4052,7 @@ when gps environment bounds are specified in meters"
                     self.screen,
                     color,
                     flag_pos_screen,
-                    radius=(self.flag_keepout_radius - self.agent_radius) * self.pixel_size,
+                    radius=(self.flag_keepout_radius) * self.pixel_size,
                     width=self.boundary_width,
                 )
 
@@ -4063,11 +4089,11 @@ when gps environment bounds are specified in meters"
                         self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
             # history
             elif self.render_traj_mode.endswith("history"):
-                for i in reversed(self.hist_buffer_inds[1:] - 1): #current state of agent is not included in history buffer
+                for i in reversed(self.obs_hist_buffer_inds[1:] - 1): #current state of agent is not included in history buffer
                     for agent_id in self.players:
                         if i < len(self.traj_render_buffer[agent_id]["history"]):
                             prev_rot_blit_pos, prev_agent_surf = self.traj_render_buffer[agent_id]["history"][i]
-                            render_tranparency = 255 - ((255 - self.render_transparency_alpha) * (i+1) / (self.hist_buffer_len-1))
+                            render_tranparency = 255 - ((255 - self.render_transparency_alpha) * (i+1) / (self.obs_hist_buffer_len-1))
                             prev_agent_surf.set_alpha(render_tranparency)
                             self.screen.blit(prev_agent_surf, prev_rot_blit_pos)
 
@@ -4078,13 +4104,14 @@ when gps environment bounds are specified in meters"
             opp_color = "red" if team == Team.BLUE_TEAM else "blue"
 
             for player in teams_players:
+                assert isinstance(player, RenderingPlayer)
                 blit_pos = self.env_to_screen(player.pos)
 
                 # lidar
                 if self.lidar_obs and self.render_lidar_mode:
                     ray_headings_global = np.deg2rad((heading_angle_conversion(player.heading) + self.lidar_ray_headings) % 360)
                     ray_vecs = np.array([np.cos(ray_headings_global), np.sin(ray_headings_global)]).T
-                    lidar_starts = player.pos + self.agent_radius * ray_vecs
+                    lidar_starts = player.pos + self.agent_radius[self.agents.index(player.id)] * ray_vecs
                     for i in range(self.num_lidar_rays):
                         if (
                             self.render_lidar_mode == "full" or
@@ -4118,7 +4145,7 @@ when gps environment bounds are specified in meters"
                         rotated_surface,
                         opp_color,
                         0.5 * rotated_surface_size,
-                        radius=0.55 * self.agent_render_radius,
+                        radius=0.55 * self.agent_render_radius[self.agents.index(player.id)],
                     )
 
                 # agent id
@@ -4128,7 +4155,7 @@ when gps environment bounds are specified in meters"
                     else:
                         font_color = "white" if team == Team.BLUE_TEAM else "black"
 
-                    player_number_label = self.agent_font.render(str(player.id), True, font_color)
+                    player_number_label = self.agent_font.render(str(self.agents.index(player.id)), True, font_color)
                     player_number_label_rect = player_number_label.get_rect()
                     player_number_label_rect.center = (0.5 * rotated_surface_size[0], 0.52 * rotated_surface_size[1]) # Using 0.52 for the y-coordinate because it looks nicer than 0.5
                     rotated_surface.blit(player_number_label, player_number_label_rect)
@@ -4171,7 +4198,7 @@ when gps environment bounds are specified in meters"
                             )
                             self.traj_render_buffer[player.id]["agent"] = self.traj_render_buffer[player.id]["agent"][: agent_render_cutoff]
 
-                    self.traj_render_buffer[player.id]["history"] = self.traj_render_buffer[player.id]["history"][: self.hist_buffer_len]
+                    self.traj_render_buffer[player.id]["history"] = self.traj_render_buffer[player.id]["history"][: self.obs_hist_buffer_len]
 
         # Agent-to-agent distances
         for blue_player in self.agents_of_team[Team.BLUE_TEAM]:

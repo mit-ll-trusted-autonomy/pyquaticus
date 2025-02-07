@@ -32,7 +32,7 @@ from pyquaticus.base_policies.base_defend import BaseDefender
 from pyquaticus import pyquaticus_v0
 from pygame import QUIT, KEYDOWN, K_ESCAPE, K_LEFT, K_UP, K_RIGHT
 from collections import OrderedDict
-
+import pyquaticus.utils.rewards as rew
 RENDER_MODE = 'human'
 
 runtime = 120 # seconds
@@ -47,10 +47,9 @@ class KeyTest:
                         if passed a policy, then controls the red team with the policy
         '''
         reset_opts = {'normalize': False}
-        self.obs = env.reset(options=reset_opts)
+        self.obs,_ = env.reset(options=reset_opts)
         self.env = env
-        
-        self.blue_policy = BaseAttacker(env.players[0].id, env.players[0].team, mode='competition_easy')
+        self.blue_policy = BaseAttacker(env.agents_of_team[Team.BLUE_TEAM][0].id, Team.BLUE_TEAM, mode='competition_easy')
         
 
         self.quittable = quittable
@@ -69,8 +68,8 @@ class KeyTest:
                                  K_UP + K_RIGHT : straightright
                                 }
 
-        self.blue_agent_id = self.env.agents_of_team[Team.BLUE_TEAM][0].id
-        self.red_agent_id  = self.env.agents_of_team[Team.RED_TEAM][0].id
+        self.blue_agent_id = env.agents_of_team[Team.BLUE_TEAM][0].id
+        self.red_agent_id  = env.agents_of_team[Team.RED_TEAM][0].id
 
 
     def begin(self):
@@ -78,7 +77,7 @@ class KeyTest:
             action_dict = self.process_event(self.quittable)
             
             self.obs, rewards, terminated, truncated, info = self.env.step(action_dict)
-            # time.sleep(1.)
+            print(rewards)
             for k in terminated:
                 if terminated[k] == True or truncated[k]==True:
                     self.env.reset()
@@ -111,6 +110,7 @@ if __name__ == '__main__':
     config_dict['normalize'] = False
 
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
-    env = pyquaticus_v0.PyQuaticusEnv(render_mode='human', team_size=1)
+    reward_config = {'agent_0':rew.sparse,'agent_1':rew.sparse}
+    env = pyquaticus_v0.PyQuaticusEnv(render_mode='human',reward_config=reward_config, team_size=1)
     kt = KeyTest(env)
     kt.begin()

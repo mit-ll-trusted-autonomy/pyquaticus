@@ -135,7 +135,7 @@ class KeyTest:
 
 def main():
     parser = argparse.ArgumentParser(description='Play CTF manually (optionally against a policy)')
-    parser.add_argument('--red-policy', default=None, choices=[], help='Select a red policy to play against.')
+    parser.add_argument('--red_policy', default=None, choices=[], help='Select a red policy to play against.')
     args = parser.parse_args()
 
     config = copy.deepcopy(pyquaticus.config.config_dict_std)

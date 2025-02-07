@@ -140,6 +140,7 @@ def main():
     config["gps_env"] = True
     # config["env_bounds"] = (179, -1, -179, 1)
     # config["env_bounds_unit"] = "ll"
+
     config["env_bounds"] = "auto"
     config["blue_flag_home"] = (42.352229714597705, -70.99992567997114)
     config["red_flag_home"] = (42.32710627259394, -70.96739585043458)
@@ -151,6 +152,7 @@ def main():
     config["lidar_range"] = 1000
     config["render_agent_ids"] = True
     config["render_lidar_mode"] = "detection"
+    config["catch_radius"] = 250
     # config["render_traj_mode"] = "traj_agent"
     config["render_traj_freq"] = 50
     config["render_traj_cutoff"] = 100
@@ -158,6 +160,7 @@ def main():
     config["default_init"] = False
     # config["render_fps"] = 10
     # config["normalize"] = False
+    config["agent_radius"] = [2, 2, 2, 2, 2, 100]
     
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
     env = pyquaticus_v0.PyQuaticusEnv(team_size=3, render_mode='human', config_dict=config)
