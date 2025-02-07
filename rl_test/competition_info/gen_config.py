@@ -61,6 +61,11 @@ config_dict_competition = {
     "tagging_cooldown":  60.0,  # cooldown on an agent (seconds) after they tag another agent, to prevent consecutive tags
     "tag_on_collision": False,  # option for setting the agent to a tagged state upon collsion with an obstacle
     "tag_on_oob":        True,  # option for setting the agent to a tagged state upon driving out-of-bounds
+    
+
+    # Parameters to Change #
+    
+
 
     # Observation parameters
     "normalize_obs":        True,  # flag for normalizing the observation space
@@ -68,18 +73,24 @@ config_dict_competition = {
     "short_obs_hist_interval": 1,  # number of steps in between entries in the short-term observation history
     "long_obs_hist_length":    1,  # number of timesteps to include for the long-term observation history
     "long_obs_hist_interval":  4,  # number of steps in between entries in the long-term observation history
-
-    # Lidar observation parameters
-    "lidar_obs":       False,  # option to use lidar (ray casting model) observations
-    "lidar_range":     200.0,  # meters
-    "num_lidar_rays":     50,  # number of rays for lidar
-
     # Global state parameters
     "normalize_state":        True,  # flag for normalizing the global state
     "short_state_hist_length":   1,  # number of timesteps to include for the short-term global state history
     "short_state_hist_interval": 1,  # number of steps in between entries in the short-term global state history
     "long_state_hist_length":    1,  # number of timesteps to include for the long-term global state history
     "long_state_hist_interval":  4,  # number of steps in between entries in the long-term global state history
+
+
+
+    # End Params to Change
+
+
+
+    # WARNING: Lidar OBS is not available for use in the 2025 MCTF Competition 
+    # Lidar observation parameters
+    "lidar_obs":       False,  # option to use lidar (ray casting model) observations
+    "lidar_range":     200.0,  # meters
+    "num_lidar_rays":     50,  # number of rays for lidar
 
     # Rendering parameters
     "render_fps":                 30,  # target number of frames per second
@@ -178,7 +189,7 @@ LIDAR_DETECTION_CLASS_MAP = {class_name: i for i, class_name in enumerate(lidar_
 # maps discrete action id to (speed, heading)
 ACTION_MAP = []
 
-for spd in [1.0, 0.5]:
+for spd in [3.0, 1.5]:
     for hdg in range(180, -180, -45):
         ACTION_MAP.append([spd, hdg])
 # add a none action

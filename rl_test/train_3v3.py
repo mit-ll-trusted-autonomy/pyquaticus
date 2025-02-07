@@ -97,6 +97,8 @@ if __name__ == '__main__':
             return "agent-1-policy"
         if agent_id == 'agent_2':
             return "agent-2-policy"
+        if agent_id == 'agent_3':
+            return 'easy-defend-policy'
         return "random"
         #elif agent_id == 2 or agent_id == 'agent-2':
             # change this to agent-1-policy to train both agents at once
@@ -107,9 +109,9 @@ if __name__ == '__main__':
     policies = {'agent-0-policy':(None, obs_space, act_space, {}), 
                 'agent-1-policy':(None, obs_space, act_space, {}),
                 'agent-2-policy':(None, obs_space, act_space, {}),
-                'random':(RandPolicy, obs_space, act_space, {})}
+                'random':(RandPolicy, obs_space, act_space, {"no_checkpoint": True}),
                 #Examples of Heuristic Opponents in Rllib Training (See two lines below)
-                #'easy-defend-policy': (DefendGen(2, Team.RED_TEAM, 'easy', 2, env.par_env.agent_obs_normalizer), obs_space, act_space, {}),
+                'easy-defend-policy': (DefendGen(2, Team.RED_TEAM, 'easy', 2, env.par_env.agent_obs_normalizer), obs_space, act_space, {"no_checkpoint": True})}#,
                 #'easy-attack-policy': (AttackGen(3, Team.RED_TEAM, 'easy', 2, env.par_env.agent_obs_normalizer), obs_space, act_space, {})}
     env.close()
     #Not using the Alpha Rllib (api_stack False) 
