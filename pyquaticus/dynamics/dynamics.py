@@ -365,7 +365,7 @@ class Heron(Dynamics):
 
     def __init__(
         self,
-        max_speed: float = 3.5,  # meters / s
+        max_speed: float = 1.5,  # meters / s
         speed_factor: float = 20.0,  # multiplicative factor for desired_speed -> desired_thrust
         thrust_map: np.ndarray = np.array(  # piecewise linear mapping from desired_thrust to speed
             [[-100, 0, 20, 40, 60, 80, 100], [-2, 0, 1, 2, 3, 5, 5]]

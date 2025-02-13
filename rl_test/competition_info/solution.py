@@ -1,7 +1,7 @@
 import numpy as np
 import os
 from ray.rllib.policy.policy import Policy
-#Need an added import for codalab competition submission?
+#Need an added import for competition submission?
 #Post an issue to the github and we will work to get it added into the system!
 
 #NOTE: You are only allowed to change the gen_config OBS params specified
