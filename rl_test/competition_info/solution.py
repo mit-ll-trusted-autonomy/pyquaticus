@@ -28,9 +28,10 @@ class solution:
     def compute_action(self,agent_id:str, full_obs_normalized:dict, full_obs:dict, global_state:dict):
         #WARNING: If using global state you must ensure your entry can run on both RED and BLUE sides
         # State includes actual coordinate positions which are not the same on each side
-        if agent_id == 0:
+        return 0 #Remove this Line and replace the lines below with your implementation
+        if agent_id == 'agent_0' or agent_id == 'agent_3':
             return self.policy_one.compute_single_action(observation_normalized[agent_id], explore=False)[0]
-        elif agent_id == 2:
+        elif agent_id == 'agent_1' or agent_id == 'agent_4':
             return self.policy_two.compute_single_action(observation_normalized[agent_id], explore=False)[0]
         else:
             return self.policy_three.compute_single_action(observation_normalized[agent_id], explore=False)[0]
