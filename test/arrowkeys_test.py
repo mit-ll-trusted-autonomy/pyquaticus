@@ -141,7 +141,7 @@ def main():
         "circle": [(4, (6, 5))],
         "polygon": [((70, 10), (85, 21), (83, 51), (72, 35))]
     }
-    config["sim_speedup_factor"] = 8
+    config["sim_speedup_factor"] = 16
     # config["normalize"] = False
     config["max_time"] = 1000
     config["lidar_obs"] = True
@@ -151,7 +151,6 @@ def main():
     config["render_agent_ids"] = True
     config["render_traj_mode"] = "traj_history"
     config["render_traj_freq"] = 50
-    config["max_speed"] = 1.5
     config["short_obs_hist_length"] = 4
     config["short_obs_hist_interval"] = 5
     config["long_obs_hist_length"] = 5
