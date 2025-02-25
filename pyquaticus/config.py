@@ -166,6 +166,7 @@ def get_afp() -> dict:
     """Gets a copy of the Aquaticus Field Points. For scaling to different environment sizes."""
     return copy.deepcopy(AQUATICUS_FIELD_POINTS)
 
+
 ### Lidar Detection Label Map ###
 lidar_detection_classes = [
     "nothing",

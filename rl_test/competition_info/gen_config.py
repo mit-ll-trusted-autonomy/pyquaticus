@@ -166,7 +166,7 @@ def get_std_config() -> dict:
 #    PPB o---------o----------o---------o----------o SSB   Row B
 inc_x = 1/8
 inc_y = 1/4
-config_dict_std["aquaticus_field_points"] = {
+AQUATICUS_FIELD_POINTS = {
     "PPB": [0,       inc_y*4], "PB": [0,       inc_y*3], "CB": [0,       inc_y*2], "SB": [0,       inc_y], "SSB": [0,       0],
     "PPF": [inc_x,   inc_y*4], "PF": [inc_x,   inc_y*3], "CF": [inc_x,   inc_y*2], "SF": [inc_x,   inc_y], "SSF": [inc_x,   0],
     "PPH": [inc_x*2, inc_y*4], "PH": [inc_x*2, inc_y*3], "CH": [inc_x*2, inc_y*2], "SH": [inc_x*2, inc_y], "SSH": [inc_x*2, 0],
@@ -177,6 +177,11 @@ config_dict_std["aquaticus_field_points"] = {
     "PPFX":[inc_x*7, inc_y*4], "PFX":[inc_x*7, inc_y*3], "CFX":[inc_x*7, inc_y*2], "SFX":[inc_x*7, inc_y], "SSFX":[inc_x*7, 0],
     "PPBX":[inc_x*8, inc_y*4], "PBX":[inc_x*8, inc_y*3], "CBX":[inc_x*8, inc_y*2], "SBX":[inc_x*8, inc_y], "SSBX":[inc_x*8, 0]
 }
+
+
+def get_afp() -> dict:
+    """Gets a copy of the Aquaticus Field Points. For scaling to different environment sizes."""
+    return copy.deepcopy(AQUATICUS_FIELD_POINTS)
 
 
 ### Lidar Detection Label Map ###
