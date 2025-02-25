@@ -31,9 +31,19 @@ config_dict_competition = {
     "scrimmage_coords_unit": "m",  # "m" (meters relative to environment origin), "wm_xy" (web mercator xy), or "ll" (lat/lon)
     "topo_contour_eps":    0.001,  # tolerance for error between approximate and true contours dividing water and land
     "agent_radius":          2.0,  # meters
+
+    # note: if different radii are desired for different agents, provide a list like:
+    # [2.0, 4.0, 2.5, 3.5]
+
     "flag_radius":           2.0,  # meters
     "flag_keepout":          3.0,  # minimum distance (meters) between agent and flag centers
     "catch_radius":         10.0,  # distance (meters) for tagging and flag pickup
+    "slip_radius":          10.0,  # meters (tolerance for reaching RRT* waypoint for auto-driving home on tag)
+
+    # note 1: slip radius has no affect on any BasePolicies providing actions externally.
+    # note 2: if different radii are desired for different agents, provide a list like:
+    # [40.0, 40.0, 10.0, 10.0]
+
     "n_circle_segments":       8,  # default is to approximate circles as an octagon
     "obstacles":            None,  # optional dictionary of obstacles in the enviornment
 

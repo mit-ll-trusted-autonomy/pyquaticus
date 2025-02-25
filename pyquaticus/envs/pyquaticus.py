@@ -53,6 +53,7 @@ from pyquaticus.config import (
     EQUATORIAL_RADIUS,
     EPSG_3857_EXT_X,
     EPSG_3857_EXT_Y,
+    get_afp,
     LINE_INTERSECT_TOL,
     lidar_detection_classes,
     LIDAR_DETECTION_CLASS_MAP,
@@ -210,12 +211,12 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
                     _, rel_heading = mag_bearing_to(
                         player.pos,
-                        self.config_dict["aquaticus_field_points"][action_dict[player.id]],
+                        self.aquaticus_field_points[action_dict[player.id]],
                         player.heading,
                     )
                     if (-0.3 <= self.get_distance_between_2_points(
                             player.pos,
-                            self.config_dict["aquaticus_field_points"][action_dict[player.id]],
+                            self.aquaticus_field_points[action_dict[player.id]],
                         ) <= 0.3
                     ):
                         speed = 0.0
@@ -912,7 +913,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     self.env_size,
                     self.max_speeds[i],
                     capture_radius=0.45 * self.catch_radius,
-                    slip_radius=self.catch_radius,
+                    slip_radius=self.slip_radius[i],
                     avoid_radius=2 * self.agent_radius[i]
                 )
             )
@@ -1652,6 +1653,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             with the standard configuration value.
         """
         ### Set Variables from Configuration Dictionary ###
+        # Check for unrecognized variables
+        for k in config_dict:
+            if k not in config_dict_std:
+                print(f"Warning! Config variable '{k}' not recognized (it will have no effect).")
+                print("Please consult config.py for variable names.")
+                print()
+
         # Geometry parameters
         self.gps_env = config_dict.get("gps_env", config_dict_std["gps_env"])
         self.topo_contour_eps = config_dict.get("topo_contour_eps", config_dict_std["topo_contour_eps"])
@@ -1775,22 +1783,16 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         scrimmage_coords_unit = config_dict.get("scrimmage_coords_unit", config_dict_std["scrimmage_coords_unit"])
 
         agent_radius = config_dict.get("agent_radius", config_dict_std["agent_radius"])
-        if isinstance(agent_radius, (list, tuple, np.ndarray)):
-            if len(agent_radius) != 2*self.team_size:
-                raise Warning("Dynamics list incorrect length")
-            agent_radius = np.array(agent_radius, dtype=float)
-        else:
-            try:
-                agent_radius = float(agent_radius)
-            except Exception:
-                raise Warning("agent_radius must be convertible to a float")
-            agent_radius = np.array([agent_radius for _ in range(2*self.team_size)])
+        agent_radius = self.multiagent_var(agent_radius, "agent_radius")
 
         flag_radius = config_dict.get("flag_radius", config_dict_std["flag_radius"])
         flag_keepout_radius = config_dict.get("flag_keepout", config_dict_std["flag_keepout"])
         catch_radius = config_dict.get("catch_radius", config_dict_std["catch_radius"])
         if flag_keepout_radius >= (catch_radius - max(agent_radius)):
             raise Warning("Flag keepout radius is >= than the catch radius")
+
+        slip_radius = config_dict.get("slip_radius", config_dict_std["catch_radius"])
+        slip_radius = self.multiagent_var(slip_radius, "slip_radius")
 
         lidar_range = config_dict.get("lidar_range", config_dict_std["lidar_range"])
 
@@ -1805,17 +1807,19 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             flag_radius=flag_radius,
             flag_keepout_radius=flag_keepout_radius,
             catch_radius=catch_radius,
+            slip_radius=slip_radius,
             lidar_range=lidar_range
         )
 
         # Scale the aquaticus point field by env size
         if not self.gps_env:
-            for k in self.config_dict["aquaticus_field_points"]:
-                self.config_dict["aquaticus_field_points"][k][0] = (
-                    self.config_dict["aquaticus_field_points"][k][0] * self.env_size[0]
+            self.aquaticus_field_points = get_afp()
+            for k in self.aquaticus_field_points:
+                self.aquaticus_field_points[k][0] = (
+                    self.aquaticus_field_points[k][0] * self.env_size[0]
                 )
-                self.config_dict["aquaticus_field_points"][k][1] = (
-                    self.config_dict["aquaticus_field_points"][k][1] * self.env_size[1]
+                self.aquaticus_field_points[k][1] = (
+                    self.aquaticus_field_points[k][1] * self.env_size[1]
                 )
 
         # Environment corners and edges
@@ -2159,11 +2163,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Aquaticus field points
         if self.render_field_points and not self.gps_env:
-            for v in self.config_dict["aquaticus_field_points"]:
+            for v in self.aquaticus_field_points:
                 draw.circle(
                     self.pygame_background_img,
                     (128, 0, 128),
-                    self.env_to_screen(self.config_dict["aquaticus_field_points"][v]),
+                    self.env_to_screen(self.aquaticus_field_points[v]),
                     radius=5,
                 )
 
@@ -2887,6 +2891,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         flag_radius: float,
         flag_keepout_radius: float,
         catch_radius: float,
+        slip_radius: np.ndarray,
         lidar_range: float,
     ):
         #### Basic Checks ####
@@ -3312,6 +3317,7 @@ when gps environment bounds are specified in meters"
             flag_radius /= self.meters_per_mercator_xy
             catch_radius /= self.meters_per_mercator_xy
             flag_keepout_radius /= self.meters_per_mercator_xy
+            slip_radius /= self.meters_per_mercator_xy
             lidar_range /= self.meters_per_mercator_xy
 
         else:
@@ -3543,6 +3549,7 @@ when gps environment bounds are specified in meters"
         self.flag_radius = flag_radius
         self.catch_radius = catch_radius
         self.flag_keepout_radius = flag_keepout_radius
+        self.slip_radius = slip_radius
 
     def _get_line_intersection(
         self, origin: np.ndarray, vec: np.ndarray, line: np.ndarray
@@ -4356,3 +4363,17 @@ when gps environment bounds are specified in meters"
             orig_obs = self.agent_obs_normalizer.normalized(orig_obs)
 
         return orig_obs
+
+    def multiagent_var(self, val, name):
+        if isinstance(val, (list, tuple, np.ndarray)):
+            if len(val) != 2*self.team_size:
+                raise Warning(f"{name} list incorrect length")
+            val = np.array(val, dtype=float)
+        else:
+            try:
+                val = float(val)
+            except Exception:
+                raise Warning(f"{name} must be convertible to a float")
+            val = np.array([val for _ in range(2*self.team_size)])
+
+        return val

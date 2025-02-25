@@ -35,54 +35,41 @@ import pyquaticus.utils.rewards as reward
 
 class KeyTest:
 
-    def __init__(self, env, red_policy=None, quittable=True):
+    def __init__(self, env, quittable=True):
         '''
         Args:
-            env:        the pyquaticus environment
-            red_policy: if set to None, then red doesn't move unless controlled
-                        if passed a policy, then controls the red team with the policy
+            env: the pyquaticus environment
         '''
         self.obs, _ = env.reset()
         self.env = env
-        self.policy = None
-        if red_policy is not None:
-            self.policy = red_policy(env.observation_space, env.action_space, {})
 
         self.quittable = quittable
 
-        if 'PyQuaticusEnv' in str(env):
-            no_op = 16
-            straight = 4
-            left = 6
-            right = 2
-            straightleft = 5
-            straightright = 3
-        else:
-            assert 'ctf' in str(env)
-            no_op = 0
-            straight = 1
-            left = 2
-            right = 3
-            straightleft = 4
-            straightright = 5
+        no_op = 16
+        straight = 4
+        left = 6
+        right = 2
+        straightleft = 5
+        straightright = 3
 
         self.no_op_action = no_op
 
-        self.blue_keys_to_action={0         : no_op,
-                                  K_w       : straight,
-                                  K_a       : left,
-                                  K_d       : right,
-                                  K_w + K_a : straightleft,
-                                  K_w + K_d : straightright
-                                }
-
-        self.red_keys_to_action={0              : no_op,
-                                 K_UP           : straight,
-                                 K_LEFT         : left,
-                                 K_RIGHT        : right,
-                                 K_UP + K_LEFT  : straightleft,
-                                 K_UP + K_RIGHT : straightright
-                                }
+        self.blue_keys_to_action = {
+            0         : no_op,
+            K_w       : straight,
+            K_a       : left,
+            K_d       : right,
+            K_w + K_a : straightleft,
+            K_w + K_d : straightright
+        }
+        self.red_keys_to_action={
+            0              : no_op,
+            K_UP           : straight,
+            K_LEFT         : left,
+            K_RIGHT        : right,
+            K_UP + K_LEFT  : straightleft,
+            K_UP + K_RIGHT : straightright
+        }
 
         self.blue_agent_id = self.env.agents_of_team[Team.BLUE_TEAM][0].id
         self.red_agent_id  = self.env.agents_of_team[Team.RED_TEAM][0].id
@@ -116,31 +103,16 @@ class KeyTest:
         blue_action = self.blue_keys_to_action[blue_keys]
         action_dict[self.blue_agent_id] = blue_action
 
-        if self.policy is not None:
-            action_dict[self.red_agent_id] = self.policy.compute_action(self.obs[self.red_agent_id])
+        # red keys
+        red_keys = K_RIGHT*is_key_pressed[K_RIGHT] + K_LEFT*is_key_pressed[K_LEFT]*(is_key_pressed[K_LEFT] - is_key_pressed[K_RIGHT]) + K_UP*is_key_pressed[K_UP]
+        red_action = self.red_keys_to_action[red_keys]
+        action_dict[self.red_agent_id] = red_action
 
-        else:
-            # red keys
-            red_keys = K_RIGHT*is_key_pressed[K_RIGHT] + K_LEFT*is_key_pressed[K_LEFT]*(is_key_pressed[K_LEFT] - is_key_pressed[K_RIGHT]) + K_UP*is_key_pressed[K_UP]
-            red_action = self.red_keys_to_action[red_keys]
-            action_dict[self.red_agent_id] = red_action
         return action_dict
 
 def main():
-    parser = argparse.ArgumentParser(description='Play CTF manually (optionally against a policy)')
-    parser.add_argument('--red-policy', default=None, choices=[], help='Select a red policy to play against.')
-    args = parser.parse_args()
-
-    #Setup for 1 blue player and 1 red player with sparse rewards
-    reward_config = {0:None, 1:None}
-    #Alternative
-    #reward_config = {0:reward.sparse, 1:reward.sparse}
-
-    config = copy.deepcopy(pyquaticus.config.config_dict_std)
+    config = {}
     config["gps_env"] = True
-    # config["env_bounds"] = (179, -1, -179, 1)
-    # config["env_bounds_unit"] = "ll"
-
     config["env_bounds"] = "auto"
     config["blue_flag_home"] = (42.352229714597705, -70.99992567997114)
     config["red_flag_home"] = (42.32710627259394, -70.96739585043458)
@@ -153,24 +125,11 @@ def main():
     config["render_agent_ids"] = True
     config["render_lidar_mode"] = "detection"
     config["catch_radius"] = 250
-    # config["render_traj_mode"] = "traj_agent"
-    config["render_traj_freq"] = 50
-    config["render_traj_cutoff"] = 100
-    # config["render_saving"] = True
     config["default_init"] = False
-    # config["render_fps"] = 10
-    # config["normalize"] = False
-    config["agent_radius"] = [2, 2, 2, 2, 2, 100]
     
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
     env = pyquaticus_v0.PyQuaticusEnv(team_size=3, render_mode='human', config_dict=config)
-    # try:
-    #     env = pyquaticus_v0.PyQuaticusEnv(team_size=3, render_mode='human', config_dict=config)
-    # except Warning as err:
-    #     ...
-    red_policy = args.red_policy
-
-    kt = KeyTest(env, red_policy)
+    kt = KeyTest(env)
     kt.begin()
 
 if __name__ == "__main__":
