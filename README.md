@@ -61,7 +61,7 @@ You can then activate the environment with: `conda activate env-light/` or `cond
 
 ## Configurable Reward
 
-`Pyquaticus` comes with a simple sparse reward, but it can be extended with different reward structures. See [rewards.py](https://github.com/mit-ll-trusted-autonomy/pyquaticus/blob/main/pyquaticus/utils/rewards.py) for more information.
+Pyquaticus comes with a simple sparse reward, but it can be extended with different reward structures. See [rewards.py](https://github.com/mit-ll-trusted-autonomy/pyquaticus/blob/main/pyquaticus/utils/rewards.py) for more information.
 
 ## Docker
 
