@@ -503,7 +503,6 @@ class Surveyor(Dynamics):
     def __init__(
         self,
         max_speed: float = 3.5,  # meters / s
-        speed_factor: float = 20.0,  # multiplicative factor for desired_speed -> desired_thrust
         thrust_map: np.ndarray = np.array(  # piecewise linear mapping from desired_thrust to speed
             [[-100, 0, 20, 40, 60, 70, 100], [-2, 0, 1, 1.5, 2, 2.25, 2.75]]
         ),
@@ -519,7 +518,6 @@ class Surveyor(Dynamics):
         super().__init__(**kwargs)
 
         self.max_speed = max_speed
-        self.speed_factor = speed_factor
         self.thrust_map = thrust_map
         self.max_thrust = max_thrust
         self.max_rudder = max_rudder
@@ -595,6 +593,14 @@ class Surveyor(Dynamics):
                 next_speed = (self.max_dec*self.dt*-1) + prev_speed
 
         return next_speed
+    def _propagate_heading(self, rudder, thrust):
+        
+        raw_d_hdg = rudder * (self.turn_rate / 100) * self.dt
+        thrust_d_hdg = raw_d_hdg * (1 + (abs(thrust) - 50) / 50)
+
+        return thrust_d_hdg
+
+
     def _move_agent(self, desired_speed: float, heading_error: float):
         """
         Use MOOS-IVP default dynamics to move the agent given a desired speed and heading error.
@@ -607,10 +613,10 @@ class Surveyor(Dynamics):
 
         # desired heading is relative to current heading
         speed_error = desired_speed - self.speed
-        desired_speed = self._pid_controllers["speed"](speed_error)
+        desired_speed = self.speed + self._pid_controllers["speed"](speed_error)
         desired_rudder = self._pid_controllers["heading"](heading_error)
-
-        desired_speed = clip(desired_speed+self.speed, -self.max_speed, self.max_speed)
+        
+        desired_speed = clip(desired_speed, -self.max_speed, self.max_speed)
         desired_rudder = clip(desired_rudder, -self.max_rudder, self.max_rudder)
         # propagate vehicle speed
         desired_thrust = np.interp(
@@ -618,17 +624,19 @@ class Surveyor(Dynamics):
         )
         new_speed = self._propagate_speed(desired_thrust, desired_rudder)
         new_speed = min(new_speed, self.max_speed)
+        
         # propagate vehicle heading
-        raw_d_hdg = desired_rudder * (self.turn_rate / 100) * self.dt
-        thrust_d_hdg = raw_d_hdg * (1 + (abs(desired_thrust) - 50) / 50)
+        thrust_d_hdg = self._propagate_heading(desired_rudder, desired_thrust)
 
         self.state["thrust"] = desired_thrust
 
+        #Set New Heading
         # if not moving, then can't turn
         if (new_speed + self.speed) / 2.0 < 0.5:
             thrust_d_hdg = 0.0
-        new_heading = angle180(self.heading + thrust_d_hdg)
 
+        new_heading = angle180(self.heading + thrust_d_hdg)
+            
         # Propagate vehicle position based on new_heading and new_speed
         hdg_rad = np.deg2rad(self.heading)
         new_hdg_rad = np.deg2rad(new_heading)
@@ -647,9 +655,7 @@ class Surveyor(Dynamics):
         self.prev_pos = self.pos
         self.pos = np.asarray(new_ag_pos)
         self.speed = clip(new_speed, 0.0, self.max_speed)
-        print("Speed: ", self.speed)
         self.heading = angle180(new_heading)
-
 class Drone(Dynamics):
 
     def __init__(self, max_speed: float = 10, **kwargs):
