@@ -502,16 +502,17 @@ class Surveyor(Dynamics):
 
     def __init__(
         self,
-        max_speed: float = 3.5,  # meters / s
+        max_speed: float = 3.0,  # meters / s
         thrust_map: np.ndarray = np.array(  # piecewise linear mapping from desired_thrust to speed
             [[-100, 0, 20, 40, 60, 70, 100], [-2, 0, 1, 1.5, 2, 2.25, 2.75]]
         ),
         max_thrust: float = 100,  # limit on vehicle thrust
         max_rudder: float = 100,  # limit on vehicle rudder actuation
         turn_loss: float = 0.85, # From plug_uSimMarine
-        turn_rate: float = 70, # From plug_uSimMarine
-        max_acc: float = 1,  # meters / s**2
-        max_dec: float = 1,  # meters / s**2
+        turn_rate: float = 10, # From plug_uSimMarine
+        max_acc: float = 0.15,  # meters / s**2
+        max_dec: float = 0.25,  # meters / s**2
+        rotate_speed: float = 1.0, # deg/sec (attempt at a thruster bias)
         **kwargs,
     ):
 
