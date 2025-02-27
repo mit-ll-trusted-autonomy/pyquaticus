@@ -175,11 +175,10 @@ def main():
     # reward_config = {0:reward.sparse, 1:reward.sparse}
 
     config = copy.deepcopy(pyquaticus.config.config_dict_std)
-    config["sim_speedup_factor"] = 1
     # config["normalize"] = False
     config["max_time"] = 200.0
     config["tau"] = 0.1
-    config["sim_speedup_factor"] = 3
+    config["sim_speedup_factor"] = 4
     config["render_agent_ids"] = True
     config["render_traj_mode"] = "traj"
     config["render_traj_cutoff"] = 100

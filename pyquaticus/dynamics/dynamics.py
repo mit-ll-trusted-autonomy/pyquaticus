@@ -526,6 +526,7 @@ class Surveyor(Dynamics):
         self.turn_rate = turn_rate
         self.max_acc = max_acc
         self.max_dec = max_dec
+        self.rotate_speed = rotate_speed
 
         self.state["thrust"] = 0
 
@@ -593,13 +594,35 @@ class Surveyor(Dynamics):
             if self.max_dec > 0 and deceleration > self.max_dec:
                 next_speed = (self.max_dec*self.dt*-1) + prev_speed
 
-        return next_speed
-    def _propagate_heading(self, rudder, thrust):
-        
-        raw_d_hdg = rudder * (self.turn_rate / 100) * self.dt
-        thrust_d_hdg = raw_d_hdg * (1 + (abs(thrust) - 50) / 50)
+        return round(next_speed, 5)
+    def _propagate_heading(self,new_speed, rudder, thrust):
+        """
+        This is based on SimEngine propagateHeading() function from Moos-Ivp
+        Adapted for use in pyquaticus from https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/uSimMarineV23/SimEngine.cpp
 
-        return thrust_d_hdg
+        Args:
+            thrust:
+            rudder:
+        """
+        
+        if new_speed == 0:
+            rudder = 0
+
+        rudder = clip(rudder, -100, 100)
+        self.turn_rate = clip(self.turn_rate, 0, 100)
+        
+        # Step 1: Calculate raw delta change in heading
+        delta_deg = rudder * (self.turn_rate/100) * self.dt
+        
+        # Step 2: Calculate change inheading factoring thrust
+        delta_deg = (1 + ((thrust-50)/50))*delta_deg
+        # Step 3: Calculate change in heading factoring external drift
+        #TODO: Understand how this works in MOOS-IvP if rudder is zero and speed is zero
+        #       We update the heading by 0.1 * 1  = 0.1 causing turning when doing nothing
+        #delta_deg += (self.dt * self.rotate_speed)
+        
+        # Step 4: Calculate final new heading in the range [0,359]
+        return angle180(self.heading + delta_deg)
 
 
     def _move_agent(self, desired_speed: float, heading_error: float):
@@ -625,18 +648,16 @@ class Surveyor(Dynamics):
         )
         new_speed = self._propagate_speed(desired_thrust, desired_rudder)
         new_speed = min(new_speed, self.max_speed)
-        
-        # propagate vehicle heading
-        thrust_d_hdg = self._propagate_heading(desired_rudder, desired_thrust)
 
         self.state["thrust"] = desired_thrust
-
-        #Set New Heading
+        
+        #Propagate Heading
+        # Set New Heading
         # if not moving, then can't turn
-        if (new_speed + self.speed) / 2.0 < 0.5:
-            thrust_d_hdg = 0.0
-
-        new_heading = angle180(self.heading + thrust_d_hdg)
+        #if (new_speed + self.speed) / 2.0 < 0.5:
+        #    new_heading = self.heading
+        #else:
+        new_heading = self._propagate_heading(new_speed, desired_rudder, desired_thrust)
             
         # Propagate vehicle position based on new_heading and new_speed
         hdg_rad = np.deg2rad(self.heading)
