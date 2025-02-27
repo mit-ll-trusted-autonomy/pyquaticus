@@ -498,6 +498,157 @@ class Heron(Dynamics):
         self.heading = angle180(new_heading)
 
 
+class Surveyor(Dynamics):
+
+    def __init__(
+        self,
+        max_speed: float = 3.5,  # meters / s
+        speed_factor: float = 20.0,  # multiplicative factor for desired_speed -> desired_thrust
+        thrust_map: np.ndarray = np.array(  # piecewise linear mapping from desired_thrust to speed
+            [[-100, 0, 20, 40, 60, 70, 100], [-2, 0, 1, 1.5, 2, 2.25, 2.75]]
+        ),
+        max_thrust: float = 100,  # limit on vehicle thrust
+        max_rudder: float = 100,  # limit on vehicle rudder actuation
+        turn_loss: float = 0.85, # From plug_uSimMarine
+        turn_rate: float = 70, # From plug_uSimMarine
+        max_acc: float = 1,  # meters / s**2
+        max_dec: float = 1,  # meters / s**2
+        **kwargs,
+    ):
+
+        super().__init__(**kwargs)
+
+        self.max_speed = max_speed
+        self.speed_factor = speed_factor
+        self.thrust_map = thrust_map
+        self.max_thrust = max_thrust
+        self.max_rudder = max_rudder
+        self.turn_loss = turn_loss
+        self.turn_rate = turn_rate
+        self.max_acc = max_acc
+        self.max_dec = max_dec
+
+        self.state["thrust"] = 0
+
+        self._pid_controllers = {
+            "speed": PID(dt=kwargs["dt"], kp=0.5, ki=0.0, kd=0.0, integral_max=0.00),
+            "heading": PID(
+                dt=kwargs["dt"], kp=1.2, ki=0.0, kd=3.0, integral_max=0.00
+            ),
+        }
+
+    def reset(self):
+        """
+        Set all time-varying state/control values to their default initialization values.
+        Do not change pos, speed, heading, is_tagged, has_flag, or on_own_side.
+        """
+
+        self.state["thrust"] = 0
+
+    def rotate(self, theta=180):
+        """
+        Set all time-varying state/control values to their default initialization values as in reset().
+        Set speed to 0.
+        Rotate heading theta degrees.
+        Place agent at previous position.
+        Do not change is_tagged, has_flag, or on_own_side.
+        """
+
+        prev_pos = self.prev_pos
+        self.prev_pos = self.pos
+        self.pos = prev_pos
+        self.speed = 0
+        self.heading = angle180(self.heading + theta)
+
+        self.state["thrust"] = 0
+
+    def get_max_speed(self) -> float:
+        return self.max_speed
+    def _propagate_speed(self, thrust, rudder):
+        """
+        This is based on SimEngine propagateSpeed() function from Moos-Ivp
+        Adapted for use in pyquaticus from https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/uSimMarineV23/SimEngine.cpp
+
+        Args:
+            thrust:
+            rudder:
+        """
+        next_speed = np.interp(
+            thrust, self.thrust_map[0, :], self.thrust_map[1, :]
+        )
+
+        prev_speed = self.speed
+
+        rudder = clip(rudder, -self.max_rudder, self.max_rudder)
+        rudder_mag = abs(rudder)
+
+        vpct = (rudder_mag/100)*self.turn_loss
+        next_speed *= (1.0-vpct)
+
+        if next_speed > prev_speed:
+            acceleration = (next_speed - prev_speed) / self.dt
+            if self.max_acc > 0 and acceleration > self.max_acc:
+                next_speed = (self.max_acc*self.dt) + prev_speed
+        elif next_speed < prev_speed:
+            deceleration = (prev_speed - next_speed) / self.dt
+            if self.max_dec > 0 and deceleration > self.max_dec:
+                next_speed = (self.max_dec*self.dt*-1) + prev_speed
+
+        return next_speed
+    def _move_agent(self, desired_speed: float, heading_error: float):
+        """
+        Use MOOS-IVP default dynamics to move the agent given a desired speed and heading error.
+        Adapted from https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarineV22
+
+        Args:
+            desired speed: desired speed, in m/s
+            heading_error: heading error, in deg
+        """
+
+        # desired heading is relative to current heading
+        speed_error = desired_speed - self.speed
+        desired_speed = self._pid_controllers["speed"](speed_error)
+        desired_rudder = self._pid_controllers["heading"](heading_error)
+
+        desired_speed = clip(desired_speed+self.speed, -self.max_speed, self.max_speed)
+        desired_rudder = clip(desired_rudder, -self.max_rudder, self.max_rudder)
+        # propagate vehicle speed
+        desired_thrust = np.interp(
+            desired_speed, self.thrust_map[1, :], self.thrust_map[0, :]
+        )
+        new_speed = self._propagate_speed(desired_thrust, desired_rudder)
+        new_speed = min(new_speed, self.max_speed)
+        # propagate vehicle heading
+        raw_d_hdg = desired_rudder * (self.turn_rate / 100) * self.dt
+        thrust_d_hdg = raw_d_hdg * (1 + (abs(desired_thrust) - 50) / 50)
+
+        self.state["thrust"] = desired_thrust
+
+        # if not moving, then can't turn
+        if (new_speed + self.speed) / 2.0 < 0.5:
+            thrust_d_hdg = 0.0
+        new_heading = angle180(self.heading + thrust_d_hdg)
+
+        # Propagate vehicle position based on new_heading and new_speed
+        hdg_rad = np.deg2rad(self.heading)
+        new_hdg_rad = np.deg2rad(new_heading)
+        avg_speed = (new_speed + self.speed) / 2.0
+        if self.gps_env:
+            avg_speed = avg_speed / self.meters_per_mercator_xy
+
+        s = np.sin(new_hdg_rad) + np.sin(hdg_rad)
+        c = np.cos(new_hdg_rad) + np.cos(hdg_rad)
+        avg_hdg = np.arctan2(s, c)
+        # Note: sine/cos swapped because of the heading / angle difference
+        new_ag_pos = [
+            self.pos[0] + np.sin(avg_hdg) * avg_speed * self.dt,
+            self.pos[1] + np.cos(avg_hdg) * avg_speed * self.dt,
+        ]
+        self.prev_pos = self.pos
+        self.pos = np.asarray(new_ag_pos)
+        self.speed = clip(new_speed, 0.0, self.max_speed)
+        print("Speed: ", self.speed)
+        self.heading = angle180(new_heading)
 
 class Drone(Dynamics):
 
