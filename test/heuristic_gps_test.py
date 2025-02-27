@@ -9,9 +9,9 @@ from pyquaticus.base_policies.base_combined import Heuristic_CTF_Agent
 from pyquaticus.base_policies.waypoint_policy import WaypointPolicy
 from pyquaticus.envs.pyquaticus import Team
 from collections import OrderedDict
-from pyquaticus.config import config_dict_std, ACTION_MAP
+from pyquaticus.config import get_std_config, ACTION_MAP
 
-config = config_dict_std
+config = get_std_config()
 config["gps_env"] = True
 config["default_init"] = False
 config["env_bounds"] = "auto"
@@ -22,8 +22,8 @@ config["red_flag_home"] = (49.3051, -93.5048)
 config["flag_homes_unit"] = "ll"
 config["sim_speedup_factor"] = 80
 config["max_time"] = 2400
-config["action_type"] = "continuous"
 config["dynamics"] = "large_usv"
+config["catch_radius"] = 200
 
 init_dict = {
     "agent_pos_unit": "ll",
@@ -58,13 +58,13 @@ temp_grabs = env.state["grabs"]
 temp_tags = env.state["tags"]
 
 
-H_one = Heuristic_CTF_Agent('agent_3', Team.RED_TEAM, env, mode="hard")
-H_two = Heuristic_CTF_Agent('agent_4', Team.RED_TEAM, env, mode="hard")
-H_three = Heuristic_CTF_Agent('agent_5', Team.RED_TEAM, env, mode="hard")
+H_one = Heuristic_CTF_Agent('agent_3', Team.RED_TEAM, env, mode="hard", continuous=True)
+H_two = Heuristic_CTF_Agent('agent_4', Team.RED_TEAM, env, mode="hard", continuous=True)
+H_three = Heuristic_CTF_Agent('agent_5', Team.RED_TEAM, env, mode="hard", continuous=True)
 
-R_one = Heuristic_CTF_Agent('agent_0', Team.BLUE_TEAM, env, mode="hard")
-R_two = Heuristic_CTF_Agent('agent_1', Team.BLUE_TEAM, env, mode="hard")
-R_three = Heuristic_CTF_Agent('agent_2', Team.BLUE_TEAM, env, mode="hard")
+R_one = Heuristic_CTF_Agent('agent_0', Team.BLUE_TEAM, env, mode="hard", continuous=True)
+R_two = Heuristic_CTF_Agent('agent_1', Team.BLUE_TEAM, env, mode="hard", continuous=True)
+R_three = Heuristic_CTF_Agent('agent_2', Team.BLUE_TEAM, env, mode="hard", continuous=True)
 
 step = 0
 while True:

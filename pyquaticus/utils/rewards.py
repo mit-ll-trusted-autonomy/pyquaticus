@@ -175,8 +175,41 @@ def example_reward(
     agent_radius: np.ndarray,
     catch_radius: float,
     scrimmage_coords: np.ndarray,
+    max_speeds: list,
     tagging_cooldown: float
 ):
     return 0.0
+
+def caps_and_grabs(
+    agent_id: str,
+    team: Team,
+    agents: list,
+    agent_inds_of_team: dict,
+    state: dict,
+    prev_state: dict,
+    env_size: np.ndarray,
+    agent_radius: np.ndarray,
+    catch_radius: float,
+    scrimmage_coords: np.ndarray,
+    max_speeds: list,
+    tagging_cooldown: float
+):
+    reward = 0.0
+    prev_num_oob = state['agent_oob'][agents.index(agent_id)]
+    num_oob = state['agent_oob'][agents.index(agent_id)]
+    if num_oob > prev_num_oob:
+        reward += -1.0
+    for t in state['grabs']:
+        prev_num_grabs = state['grabs'][t]
+        num_grabs = state['grabs'][t]
+        if num_grabs > prev_num_grabs:
+            reward += 0.25 if t == team else -0.25
+
+        prev_num_caps = state['captures'][t]
+        num_caps = state['captures'][t]
+        if num_caps > prev_num_caps:
+            reward += 1.0 if t == team else -1.0
+
+    return reward
 
 ### Add Custom Reward Functions Here ###
