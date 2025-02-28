@@ -502,9 +502,9 @@ class Surveyor(Dynamics):
 
     def __init__(
         self,
-        max_speed: float = 3.0,  # meters / s
+        max_speed: float = 3.5,  # meters / s
         thrust_map: np.ndarray = np.array(  # piecewise linear mapping from desired_thrust to speed
-            [[-100, 0, 20, 40, 60, 70, 100], [-2, 0, 1, 1.5, 2, 2.25, 2.75]]
+            [[-100, 0, 20, 40, 60, 70, 100], [-2, 0, 1, 1.5, 2, 2.25, 3.0]]
         ),
         max_thrust: float = 100,  # limit on vehicle thrust
         max_rudder: float = 100,  # limit on vehicle rudder actuation
@@ -607,20 +607,15 @@ class Surveyor(Dynamics):
         
         if new_speed == 0:
             rudder = 0
-
         rudder = clip(rudder, -100, 100)
         self.turn_rate = clip(self.turn_rate, 0, 100)
-        
         # Step 1: Calculate raw delta change in heading
         delta_deg = rudder * (self.turn_rate/100) * self.dt
-        
         # Step 2: Calculate change inheading factoring thrust
         delta_deg = (1 + ((thrust-50)/50))*delta_deg
         # Step 3: Calculate change in heading factoring external drift
-        #TODO: Understand how this works in MOOS-IvP if rudder is zero and speed is zero
-        #       We update the heading by 0.1 * 1  = 0.1 causing turning when doing nothing
+        # This aims to compensate for different thruster capabilities on hardware (afe to ignore this step)
         #delta_deg += (self.dt * self.rotate_speed)
-        
         # Step 4: Calculate final new heading in the range [0,359]
         return angle180(self.heading + delta_deg)
 
@@ -637,26 +632,27 @@ class Surveyor(Dynamics):
 
         # desired heading is relative to current heading
         speed_error = desired_speed - self.speed
-        desired_speed = self.speed + self._pid_controllers["speed"](speed_error)
-        desired_rudder = self._pid_controllers["heading"](heading_error)
+
+        # Calculate Desired Thrust 
+        # Based on https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/lib_marine_pid/PIDEngine.cpp 
+        # Function: setDesiredThrust
+        delta_thrust = self._pid_controllers["speed"](speed_error)
+        desired_thrust = self.state['thrust'] + delta_thrust
         
-        desired_speed = clip(desired_speed, -self.max_speed, self.max_speed)
+        # Calculate Desired Rudder
+        # Based on PIDEngine.cpp in MOOS
+        # Function setDesiredRudder
+        desired_rudder = self._pid_controllers["heading"](heading_error)
         desired_rudder = clip(desired_rudder, -self.max_rudder, self.max_rudder)
-        # propagate vehicle speed
-        desired_thrust = np.interp(
-            desired_speed, self.thrust_map[1, :], self.thrust_map[0, :]
-        )
+
+
+        # Propagate Speed
         new_speed = self._propagate_speed(desired_thrust, desired_rudder)
         new_speed = min(new_speed, self.max_speed)
 
-        self.state["thrust"] = desired_thrust
-        
-        #Propagate Heading
-        # Set New Heading
-        # if not moving, then can't turn
-        #if (new_speed + self.speed) / 2.0 < 0.5:
-        #    new_heading = self.heading
-        #else:
+        self.state["thrust"]  = desired_thrust
+
+        # Set New Vehicle Heading
         new_heading = self._propagate_heading(new_speed, desired_rudder, desired_thrust)
             
         # Propagate vehicle position based on new_heading and new_speed

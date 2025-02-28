@@ -197,7 +197,7 @@ def main():
         #"circle": [(4*2, (6*2, 5*2))],
         "polygon": [((70, 10), (85, 21), (83, 51), (72, 35))]
     }
-    config["agent_radius"] = [2, 4]
+    config["agent_radius"] = [2, 2]
 
     # PyQuaticusEnv is a Parallel Petting Zoo Environment
     env = pyquaticus_v0.PyQuaticusEnv(
