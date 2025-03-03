@@ -38,7 +38,7 @@ from typing import Optional
 
 from multiprocessing.dummy import Pool
 from multiprocessing.pool import ThreadPool
-from multiprocessing import TimeoutError
+from functools import partial
 
 
 class WaypointPolicy(BaseAgentPolicy):
@@ -264,15 +264,9 @@ class WaypointPolicy(BaseAgentPolicy):
 
         assert isinstance(self.plan_process, ThreadPool)
 
-        try:
-            tree = self.plan_process.apply_async(rrt_star, kwds=kwargs).get(
-                timeout=timeout
-            )
-
-            self.get_path(tree, wp)
-
-        except TimeoutError:
-            print("Planning timed out.")
+        self.plan_process.apply_async(
+            rrt_star, kwds=kwargs, callback=partial(self.get_path, wp=wp)
+        )
 
     def get_path(self, tree: list[Point], wp: np.ndarray):
         """
