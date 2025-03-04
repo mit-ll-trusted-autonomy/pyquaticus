@@ -21,12 +21,12 @@
 
 
 
-#See MOOS-IvP PID ScalarPID and PIDEngine for full Implementation
+# See MOOS-IvP PID ScalarPID and PIDEngine for full Implementation:
 # https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/lib_marine_pid/ScalarPID.cpp
-#https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/lib_marine_pid/PIDEngine.cpp
+# https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/lib_marine_pid/PIDEngine.cpp
 class PID:
     """Simple class for scalar PID control."""
-    # The full moos implementatiion includes noise filtering for our simulation purposes this is not needed
+    # The full moos implementatiion includes noise filtering. For our simulation purposes, this is not needed.
     def __init__(self, dt, kp, ki, kd, integral_max=float("inf")):
         self._dt = dt
         self._kp = kp

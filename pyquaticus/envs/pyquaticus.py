@@ -1878,8 +1878,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.agent_render_radius = np.clip(self.pixel_size * self.agent_radius, 15, None)  #pixels
 
             # miscellaneous
-            self.num_renders_per_step = int(self.render_fps * self.tau)
-            self.render_boundary_rect = True  # standard rectangular boundary
+            self.num_renders_per_step = round(self.render_fps * self.tau)
 
             # check that time between frames (1/render_fps) is not larger than timestep (tau)
             frame_rate_err_msg = (
