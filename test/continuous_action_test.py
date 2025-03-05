@@ -8,13 +8,14 @@ from pyquaticus.base_policies.base_defend import BaseDefender
 from pyquaticus.base_policies.base_combined import Heuristic_CTF_Agent
 from pyquaticus.envs.pyquaticus import Team
 from collections import OrderedDict
-from pyquaticus.config import config_dict_std, ACTION_MAP
+from pyquaticus.config import ACTION_MAP
+import copy
 
-config_dict = config_dict_std
+config_dict = {}
 config_dict["max_time"] = 600.0
+config_dict["sim_speedup_factor"] = 16
 config_dict["max_score"] = 100
 config_dict["render_agent_ids"] = True
-config_dict["action_type"] = "continuous"
 
 env = pyquaticus_v0.PyQuaticusEnv(team_size=1, config_dict=config_dict,render_mode='human')
 term_g = {'agent_0':False,'agent_1':False}

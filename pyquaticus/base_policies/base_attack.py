@@ -51,7 +51,8 @@ class BaseAttacker(BaseAgentPolicy):
         self.continuous = continuous
         self.goal = "SC"
 
-        self.aquaticus_field_points = env.config_dict["aquaticus_field_points"]
+        if not env.gps_env:
+            self.aquaticus_field_points = env.aquaticus_field_points
 
     def set_mode(self, mode: str):
         """Sets difficulty mode."""
