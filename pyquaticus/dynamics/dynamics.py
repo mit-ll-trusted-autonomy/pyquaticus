@@ -500,28 +500,31 @@ class Surveyor(Dynamics):
     are adapted from MOOS-IVP missions and docs:
         (1) https://oceanai.mit.edu/svn/moos-ivp-aquaticus-oai/trunk/missions/wp_2024/surveyor/meta_surveyor.moos
             -speed_factor
-                *changed from 20 to 0.0 because non-zero speed_factor overrides use of speed PID controller and thrust_map
-                *also referred to as thrust_factor in https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarineV22
+                *changed from default 20 to 0.0 because non-zero speed_factor overrides use of speed PID controller and thrust_map
+                *referred to as thrust_factor in https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarine
             -max_thrust
             -max_rudder
             -speed PID gains
             -heading (yaw) PID gains
 
         (2) https://oceanai.mit.edu/svn/moos-ivp-aquaticus-oai/trunk/missions/wp_2024/surveyor/plug_uSimMarine.moos
-            -max_speed (from thrust_map) 
-            -thrust_map (top speed changed from 2.75 to 3.0 based on wp_2024 experimental data)
+            -max_speed
+                *max(thrust_map[1]) + 0.5 buffer for normalization 
+            -thrust_map
+                *top speed changed from 2.75 to 3.0 based on wp_2024 experimental data
             -turn_rate
             -max_acc
             -max_dec
-            -rotate_speed (changed from 1.0 to 0.0 to assume equal thruster capabilites in simulation)
+            -rotate_speed
+                *changed from 1.0 to 0.0 to assume equal thruster capabilites in simulation
 
-        (3) https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarineV22
+        (3) https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarine
             -turn_loss     
     """
     def __init__(
         self,
-        max_speed:float = 3.0,  # meters / s (0.5 buffer added to max thrust_map speed for normalization)
-        speed_factor:float = 0.0,  # scalar correlation between thrust and speed
+        max_speed:float = 3.0,  # meters / s
+        speed_factor:float = 0.0,  # [0,inf) scalar correlation between thrust and speed (default is 20)
         thrust_map:np.ndarray = np.array(  # piecewise linear mapping from desired_thrust to speed
             [[-100, 0, 20,  40,  60,   70, 100],
              [-2.0, 0,  1, 1.5, 2.0, 2.25, 3.0]]
@@ -530,8 +533,8 @@ class Surveyor(Dynamics):
         max_rudder:float = 100,  # limit on vehicle rudder actuation
         turn_loss:float = 0.85, # [0, 1] affecting speed lost during a turn
         turn_rate:float = 10, # [0, 100] affecting vehicle turn radius, e.g., 0 is an infinite turn radius
-        max_acc:float = 0.15,  # meters / s**2
-        max_dec:float = 0.25,  # meters / s**2
+        max_acc:float = 0.15, # [0, inf) meters / s**2
+        max_dec:float = 0.25, # [0, inf) meters / s**2
         rotate_speed:float = 0.0, # deg/sec (attempt at a thruster bias to account for different thruster capabilities on hardware)
         **kwargs
     ):
@@ -543,12 +546,13 @@ class Surveyor(Dynamics):
         self.max_thrust = max_thrust
         self.max_rudder = max_rudder
         self.turn_loss = turn_loss
-        self.turn_rate = turn_rate
+        self.turn_rate = clip(turn_rate, 0, 100)
         self.max_acc = max_acc
         self.max_dec = max_dec
         self.rotate_speed = rotate_speed
 
         self.state["thrust"] = 0
+        self.state["rudder"] = 0
 
         # PID 
         self._pid_controllers = {
@@ -579,6 +583,7 @@ class Surveyor(Dynamics):
         self.heading = angle180(self.heading + theta)
 
         self.state['thrust'] = 0
+        self.state['rudder'] = 0
 
     def get_max_speed(self) -> float:
         return self.max_speed
@@ -586,14 +591,37 @@ class Surveyor(Dynamics):
     def _move_agent(self, desired_speed: float, heading_error: float):
         """
         Use MOOS-IVP default dynamics to move the agent given a desired speed and heading error.
-        Adapted from https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarineV22
+        Adapted for use in pyquaticus from:
+            (1) https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarine
+            (2) https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/dep_uSimMarine/SimEngine.cpp
 
         Args:
             desired speed: desired speed, in m/s
             heading_error: heading error (relative to current heading), in deg
         """
-        # Calculate Desired Thrust 
-        # Based on setDesiredThrust() function in https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/lib_marine_pid/PIDEngine.cpp
+        # Calculate Desired Thrust and Desired Rudder
+        # Based on setDesiredValues() in https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/lib_marine_pid/PIDEngine.cpp
+        self._set_desired_thrust(desired_speed)
+        if self.state['thrust'] > 0:
+            self._set_desired_rudder(heading_error)
+            self.state['rudder'] = clip(self.state['rudder'], -100, 100) #clip in case abs(self.max_rudder) > 100
+
+        # Propagate Speed, Heading, and Position
+        new_speed = self._propagate_speed()
+        new_heading = self._propagate_heading(new_speed)
+        new_pos, new_speed = self._propagate_pos(new_speed, new_heading) #propagate vehicle pos based on new_speed and new_heading
+
+        # Set New Speed, Heading, and Position Values
+        self.speed = clip(new_speed, 0.0, self.max_speed)
+        self.heading = angle180(new_heading)
+        self.prev_pos = self.pos
+        self.pos = np.asarray(new_pos)
+
+    def _set_desired_thrust(self, desired_speed):
+        """
+        This is based on setDesiredThrust() function from Moos-Ivp PIDEngine
+        Adapted for use in pyquaticus from https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/lib_marine_pid/PIDEngine.cpp
+        """
         if self.speed_factor != 0:
             desired_thrust = desired_speed * self.speed_factor
         else:
@@ -601,23 +629,71 @@ class Surveyor(Dynamics):
             delta_thrust = self._pid_controllers['speed'](speed_error)
             desired_thrust = self.state['thrust'] + delta_thrust
 
-        desired_thrust = clip(desired_thrust, -self.max_thrust, self.max_thrust) #enforce limit on desired thrust
-        self.state['thrust'] = desired_thrust
+        if desired_thrust < 0.01:
+            desired_thrust = 0
 
-        # Calculate Desired Rudder
-        # Based on setDesiredRudder() function in https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/lib_marine_pid/PIDEngine.cpp
+        self.state['thrust'] = clip(desired_thrust, -self.max_thrust, self.max_thrust) #enforce limit on desired thrust
+
+    def _set_desired_rudder(self, heading_error):
+        """
+        This is based on setDesiredRudder() function from Moos-Ivp PIDEngine
+        Adapted for use in pyquaticus from https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/lib_marine_pid/PIDEngine.cpp
+        """
         desired_rudder = self._pid_controllers["heading"](heading_error)
-        desired_rudder = clip(desired_rudder, -self.max_rudder, self.max_rudder) #enforce limit on desired rudder
+        self.state['rudder'] = clip(desired_rudder, -self.max_rudder, self.max_rudder) #enforce limit on desired rudder
 
-        # Propagate Speed
-        new_speed = self._propagate_speed(desired_thrust, desired_rudder)
-        new_speed = min(new_speed, self.max_speed)
+    def _propagate_speed(self):
+        """
+        This is based on propagateSpeed() function from Moos-Ivp SimEngine
+        Adapted for use in pyquaticus from:
+            (1) https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarine
+            (2) https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/dep_uSimMarine/SimEngine.cpp
+        """
+        # Calulate the new raw speed based on the thrust
+        next_speed = np.interp(self.state['thrust'], self.thrust_map[0, :], self.thrust_map[1, :])
 
-        # Propagate Heading
-        new_heading = self._propagate_heading(new_speed, desired_rudder, desired_thrust)
-            
-        # Propagate vehicle position based on new_heading and new_speed
-        # Based on propegate() function in https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/uSimMarineV23/SimEngine.cpp
+        # Apply a slowing penalty proportional to the rudder/turn
+        next_speed *= 1 - ((abs(self.state['rudder']) / 100) * self.turn_loss)
+
+        # Clip new speed based on max acceleration and deceleration
+        if (next_speed - self.speed) / self.dt > self.max_acc:
+            next_speed = self.speed + self.max_acc * self.dt
+        elif (self.speed - next_speed) / self.dt > self.max_dec:
+            next_speed = self.speed - self.max_dec * self.dt
+
+        return next_speed
+
+    def _propagate_heading(self, speed):
+        """
+        This is based on propagateHeading() function from Moos-Ivp SimEngine
+        Adapted for use in pyquaticus from:
+            (1) https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarine
+            (2) https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/dep_uSimMarine/SimEngine.cpp
+        """
+        if speed == 0:
+            self.state['rudder'] = 0
+
+        # Calculate raw delta change in heading
+        delta_deg = self.state['rudder'] * (self.turn_rate/100) * self.dt
+
+        # Calculate change in heading factoring in thrust
+        delta_deg *= 1 + (abs(self.state['thrust'])-50) / 50
+        if self.state['thrust'] < 0:
+            delta_deg = -delta_deg
+
+        # Calculate change in heading factoring external drift
+        delta_deg += self.rotate_speed * self.dt
+
+        # Calculate final new heading
+        return angle180(self.heading + delta_deg)
+
+    def _propagate_pos(self, new_speed, new_heading):
+        """
+        This is based on propagate() function from Moos-Ivp SimEngine
+        Adapted for use in pyquaticus from:
+            (1) https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarine
+            (2) https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/dep_uSimMarine/SimEngine.cpp
+        """
         hdg_rad = np.deg2rad(self.heading)
         new_hdg_rad = np.deg2rad(new_heading)
         avg_speed = (new_speed + self.speed) / 2.0
@@ -627,56 +703,17 @@ class Surveyor(Dynamics):
         s = np.sin(new_hdg_rad) + np.sin(hdg_rad)
         c = np.cos(new_hdg_rad) + np.cos(hdg_rad)
         avg_hdg = np.arctan2(s, c)
+
+        xdot = np.sin(avg_hdg) * avg_speed
+        ydot = np.cos(avg_hdg) * avg_speed
         # Note: sine/cos swapped because of the heading / angle difference
         new_ag_pos = [
-            self.pos[0] + np.sin(avg_hdg) * avg_speed * self.dt,
-            self.pos[1] + np.cos(avg_hdg) * avg_speed * self.dt,
+            self.pos[0] + xdot * self.dt,
+            self.pos[1] + ydot * self.dt,
         ]
-        self.prev_pos = self.pos
-        self.pos = np.asarray(new_ag_pos)
-        self.speed = clip(new_speed, 0.0, self.max_speed)
-        self.heading = angle180(new_heading)
+        new_speed = np.linalg.norm([xdot, ydot])
 
-    def _propagate_speed(self, thrust, rudder):
-        """
-        This is based on SimEngine propagateSpeed() function from Moos-Ivp
-        Adapted for use in pyquaticus from:
-            (1) https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarineV22
-            (2) https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/uSimMarineV23/SimEngine.cpp
-        """
-        next_speed = np.interp(
-            thrust, self.thrust_map[0, :], self.thrust_map[1, :]
-        )
-        next_speed *= 1 - ((abs(desired_rudder) / 100) * self.turn_loss)
-
-        if (next_speed - self.speed) / self.dt > self.max_acc:
-            next_speed = self.speed + self.max_acc * self.dt
-        elif (self.speed - next_speed) / self.dt > self.max_dec:
-            next_speed = self.speed - self.max_dec * self.dt
-
-        return next_speed
-
-    def _propagate_heading(self, speed, rudder, thrust):
-        """
-        This is based on SimEngine propagateHeading() function from Moos-Ivp
-        Adapted for use in pyquaticus from https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/uSimMarineV23/SimEngine.cpp
-        """
-        if speed == 0:
-            rudder = 0
-
-        
-
-        self.turn_rate = clip(self.turn_rate, 0, 100)
-
-        # Step 1: Calculate raw delta change in heading
-        delta_deg = rudder * (self.turn_rate/100) * self.dt
-        # Step 2: Calculate change inheading factoring thrust
-        delta_deg = (1 + ((thrust-50)/50))*delta_deg
-        # Step 3: Calculate change in heading factoring external drift
-        # This aims to compensate for different thruster capabilities on hardware (afe to ignore this step)
-        #delta_deg += (self.dt * self.rotate_speed)
-        # Step 4: Calculate final new heading in the range [0,359]
-        return angle180(self.heading + delta_deg)
+        return new_ag_pos, new_speed
 
 
 class Drone(Dynamics):

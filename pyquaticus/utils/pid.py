@@ -21,7 +21,7 @@
 
 
 
-# See MOOS-IvP PID ScalarPID and PIDEngine for full Implementation:
+# Adapted from MOOS-IvP ScalarPID and PIDEngine:
 # https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/lib_marine_pid/ScalarPID.cpp
 # https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/lib_marine_pid/PIDEngine.cpp
 class PID:
