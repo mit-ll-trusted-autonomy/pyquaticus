@@ -607,8 +607,15 @@ class Surveyor(Dynamics):
             self.state['rudder'] = clip(self.state['rudder'], -100, 100) #clip in case abs(self.max_rudder) > 100
 
         # Propagate Speed, Heading, and Position
-        new_speed = self._propagate_speed()
-        new_heading = self._propagate_heading(new_speed)
+        new_speed = self._propagate_speed(
+            thrust=self.state['thrust'],
+            rudder=self.state['rudder']
+        )
+        new_heading = self._propagate_heading(
+            speed=new_speed,
+            thrust=self.state['thrust'],
+            rudder=self.state['rudder']
+        )
         new_pos, new_speed = self._propagate_pos(new_speed, new_heading) #propagate vehicle pos based on new_speed and new_heading
 
         # Set New Speed, Heading, and Position Values
@@ -642,7 +649,7 @@ class Surveyor(Dynamics):
         desired_rudder = self._pid_controllers["heading"](heading_error)
         self.state['rudder'] = clip(desired_rudder, -self.max_rudder, self.max_rudder) #enforce limit on desired rudder
 
-    def _propagate_speed(self):
+    def _propagate_speed(self, thrust, rudder):
         """
         This is based on propagateSpeed() function from Moos-Ivp SimEngine
         Adapted for use in pyquaticus from:
@@ -650,10 +657,10 @@ class Surveyor(Dynamics):
             (2) https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/dep_uSimMarine/SimEngine.cpp
         """
         # Calulate the new raw speed based on the thrust
-        next_speed = np.interp(self.state['thrust'], self.thrust_map[0, :], self.thrust_map[1, :])
+        next_speed = np.interp(thrust, self.thrust_map[0, :], self.thrust_map[1, :])
 
         # Apply a slowing penalty proportional to the rudder/turn
-        next_speed *= 1 - ((abs(self.state['rudder']) / 100) * self.turn_loss)
+        next_speed *= 1 - ((abs(rudder) / 100) * self.turn_loss)
 
         # Clip new speed based on max acceleration and deceleration
         if (next_speed - self.speed) / self.dt > self.max_acc:
@@ -663,7 +670,7 @@ class Surveyor(Dynamics):
 
         return next_speed
 
-    def _propagate_heading(self, speed):
+    def _propagate_heading(self, speed, thrust, rudder):
         """
         This is based on propagateHeading() function from Moos-Ivp SimEngine
         Adapted for use in pyquaticus from:
@@ -671,14 +678,14 @@ class Surveyor(Dynamics):
             (2) https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/dep_uSimMarine/SimEngine.cpp
         """
         if speed == 0:
-            self.state['rudder'] = 0
+            rudder = 0
 
         # Calculate raw delta change in heading
-        delta_deg = self.state['rudder'] * (self.turn_rate/100) * self.dt
+        delta_deg = rudder * (self.turn_rate/100) * self.dt
 
         # Calculate change in heading factoring in thrust
-        delta_deg *= 1 + (abs(self.state['thrust'])-50) / 50
-        if self.state['thrust'] < 0:
+        delta_deg *= 1 + (abs(thrust)-50) / 50
+        if thrust < 0:
             delta_deg = -delta_deg
 
         # Calculate change in heading factoring external drift
@@ -694,26 +701,28 @@ class Surveyor(Dynamics):
             (1) https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarine
             (2) https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/dep_uSimMarine/SimEngine.cpp
         """
-        hdg_rad = np.deg2rad(self.heading)
-        new_hdg_rad = np.deg2rad(new_heading)
+        # Calculate average speed
         avg_speed = (new_speed + self.speed) / 2.0
         if self.gps_env:
-            avg_speed = avg_speed / self.meters_per_mercator_xy
+            avg_speed /= self.meters_per_mercator_xy
+
+        # Calculate average heading
+        hdg_rad = np.deg2rad(self.heading)
+        new_hdg_rad = np.deg2rad(new_heading)
 
         s = np.sin(new_hdg_rad) + np.sin(hdg_rad)
         c = np.cos(new_hdg_rad) + np.cos(hdg_rad)
         avg_hdg = np.arctan2(s, c)
 
-        xdot = np.sin(avg_hdg) * avg_speed
-        ydot = np.cos(avg_hdg) * avg_speed
-        # Note: sine/cos swapped because of the heading / angle difference
-        new_ag_pos = [
-            self.pos[0] + xdot * self.dt,
-            self.pos[1] + ydot * self.dt,
-        ]
-        new_speed = np.linalg.norm([xdot, ydot])
+        # Calculate new position and speed
+        vel = avg_speed * np.asarray(
+            [np.sin(avg_hdg), np.cos(avg_hdg)] #sine/cos swapped because of the heading / angle difference
+        )
 
-        return new_ag_pos, new_speed
+        new_pos = self.pos + vel * self.dt
+        new_speed = np.linalg.norm(vel)
+
+        return new_pos, new_speed
 
 
 class Drone(Dynamics):
