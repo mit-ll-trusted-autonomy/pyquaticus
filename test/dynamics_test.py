@@ -176,7 +176,7 @@ def main():
 
     config = copy.deepcopy(pyquaticus.config.config_dict_std)
     # config["normalize"] = False
-    config["max_time"] = 1000.0
+    config["max_time"] = 600.0
     config["max_score"] = 3
     config["tau"] = 0.1
     config["sim_speedup_factor"] = 4
