@@ -13,4 +13,5 @@ dynamics_registry = {
     "di": DoubleIntegrator,
     "drone": Drone,
     "fixed_wing": FixedWing,
+    "surveyor": Surveyor,
 }

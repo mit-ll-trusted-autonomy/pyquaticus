@@ -175,15 +175,15 @@ def main():
     # reward_config = {0:reward.sparse, 1:reward.sparse}
 
     config = copy.deepcopy(pyquaticus.config.config_dict_std)
-    config["sim_speedup_factor"] = 1
     # config["normalize"] = False
-    config["max_time"] = 200.0
+    config["max_time"] = 600.0
+    config["max_score"] = 3
     config["tau"] = 0.1
-    config["sim_speedup_factor"] = 3
+    config["sim_speedup_factor"] = 4
     config["render_agent_ids"] = True
     config["render_traj_mode"] = "traj"
     config["render_traj_cutoff"] = 100
-    config["dynamics"] = ["si", "si"]
+    config["dynamics"] = ["surveyor", "surveyor"]#si
     config["render_saving"] = False
     # config["lidar_obs"] = True
     # config["render_lidar_mode"] = "detection"
@@ -198,7 +198,7 @@ def main():
         #"circle": [(4*2, (6*2, 5*2))],
         "polygon": [((70, 10), (85, 21), (83, 51), (72, 35))]
     }
-    config["agent_radius"] = [2, 4]
+    config["agent_radius"] = [2, 2]
 
     # PyQuaticusEnv is a Parallel Petting Zoo Environment
     env = pyquaticus_v0.PyQuaticusEnv(

@@ -507,4 +507,3 @@ def closest_line(
         closest_line = closest_line.item()
 
     return closest_line
-    

@@ -51,7 +51,9 @@ class BaseDefender(BaseAgentPolicy):
         self.flag_keepout = env.flag_keepout_radius
         self.catch_radius = env.catch_radius
         self.goal = "PM"
-        self.aquaticus_field_points = env.config_dict["aquaticus_field_points"]
+
+        if not env.gps_env:
+            self.aquaticus_field_points = env.aquaticus_field_points
 
     def set_mode(self, mode: str):
         """

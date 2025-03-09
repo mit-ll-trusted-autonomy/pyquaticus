@@ -22,17 +22,18 @@
 import argparse
 import gymnasium as gym
 import pygame
-from pygame import KEYDOWN, QUIT, K_ESCAPE
 import sys
+import time
+
+from collections import OrderedDict
+from pygame import KEYDOWN, QUIT, K_ESCAPE, K_LEFT, K_UP, K_RIGHT
 from pyquaticus.config import get_std_config, ACTION_MAP
 from pyquaticus.envs.pyquaticus import Team
 from pyquaticus.base_policies.base_combined import Heuristic_CTF_Agent
 from pyquaticus.base_policies.base_attack import BaseAttacker
 from pyquaticus.base_policies.base_defend import BaseDefender
 from pyquaticus import pyquaticus_v0
-from pygame import QUIT, KEYDOWN, K_ESCAPE, K_LEFT, K_UP, K_RIGHT
-from collections import OrderedDict
-import pyquaticus.utils.rewards as rew
+
 RENDER_MODE = 'human'
 
 runtime = 120 # seconds
@@ -42,17 +43,21 @@ class KeyTest:
     def __init__(self, env, quittable=True):
         '''
         Args:
-            env:        the pyquaticus environment
-            red_policy: if set to None, then red doesn't move unless controlled
-                        if passed a policy, then controls the red team with the policy
+            env: the pyquaticus environment
         '''
-        reset_opts = {'normalize': False}
-        self.obs,_ = env.reset(options=reset_opts)
+        reset_opts = {'normalize_obs': False, 'normalize_state': False}
+        self.obs, self.info = env.reset(return_info=True, options=reset_opts)
         self.env = env
-        self.blue_policy = BaseAttacker(env.agents_of_team[Team.BLUE_TEAM][0].id, Team.BLUE_TEAM, mode='competition_easy')
-        
+        self.blue_policy = BaseAttacker(
+            env.agents_of_team[Team.BLUE_TEAM][0].id,
+            Team.BLUE_TEAM,
+            env,
+            mode='competition_medium',
+            continuous=True
+        )
 
         self.quittable = quittable
+
         self.no_op_action = 16
         straight = 4
         left = 6
@@ -76,11 +81,12 @@ class KeyTest:
         while True:
             action_dict = self.process_event(self.quittable)
             
-            self.obs, rewards, terminated, truncated, info = self.env.step(action_dict)
-            print(rewards)
+            self.obs, rewards, terminated, truncated, self.info = self.env.step(action_dict)
             for k in terminated:
                 if terminated[k] == True or truncated[k]==True:
-                    self.env.reset()
+                    time.sleep(1.)
+                    reset_opts = {'normalize_obs': False, 'normalize_state': False}
+                    self.obs, self.info = self.env.reset(return_info=True, options=reset_opts)
                     break
 
     def process_event(self, quittable):
@@ -95,7 +101,7 @@ class KeyTest:
         is_key_pressed = pygame.key.get_pressed()
 
         # blue policy
-        blue_action = self.blue_policy.compute_action(self.obs)
+        blue_action = self.blue_policy.compute_action(self.obs, self.info)
         action_dict[self.blue_agent_id] = blue_action
 
         # red keys
@@ -106,11 +112,10 @@ class KeyTest:
         return action_dict
     
 if __name__ == '__main__':
-    config_dict = get_std_config()
-    config_dict['normalize'] = False
+    config = get_std_config()
+    config['sim_speedup_factor'] = 16
 
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
-    reward_config = {'agent_0':rew.sparse,'agent_1':rew.sparse}
-    env = pyquaticus_v0.PyQuaticusEnv(render_mode='human',reward_config=reward_config, team_size=1)
+    env = pyquaticus_v0.PyQuaticusEnv(render_mode='human', team_size=1, config_dict=config)
     kt = KeyTest(env)
     kt.begin()

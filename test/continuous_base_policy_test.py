@@ -9,20 +9,18 @@ from pyquaticus.base_policies.base_combined import Heuristic_CTF_Agent
 from pyquaticus.base_policies.waypoint_policy import WaypointPolicy
 from pyquaticus.envs.pyquaticus import Team
 from collections import OrderedDict
-from pyquaticus.config import config_dict_std, ACTION_MAP
+from pyquaticus.config import ACTION_MAP
 import numpy as np
 
-config_dict = config_dict_std
+config_dict = {}
 config_dict["max_time"] = 600.0
 config_dict["max_score"] = 100
 config_dict["render_agent_ids"] = True
 config_dict["dynamics"] = "si"
-config_dict["action_type"] = "continuous"
 continuous = True
 config_dict["lidar_obs"] = True
 config_dict["sim_speedup_factor"] = 4
 config_dict["tau"] = 0.05
-config_dict["normalize"] = False
 # config_dict["catch_radius"] = 1
 config_dict["obstacles"] = {
     "polygon": [
@@ -50,12 +48,14 @@ R_two = BaseDefender(
     Team.RED_TEAM,
     env,
     mode="medium",
+    continuous=True
 )
 R_three = BaseDefender(
     "agent_3",
     Team.RED_TEAM,
     env,
     mode="medium",
+    continuous=True
 )
 
 B_zero = WaypointPolicy(
@@ -65,12 +65,14 @@ B_zero = WaypointPolicy(
     capture_radius=4,
     slip_radius=8,
     avoid_radius=4,
+    continuous=True
 )
 B_one = BaseAttacker(
     "agent_1",
     Team.BLUE_TEAM,
     env,
     mode="nothing",
+    continuous=True
 )
 
 B_zero.update_state(obs, info)
