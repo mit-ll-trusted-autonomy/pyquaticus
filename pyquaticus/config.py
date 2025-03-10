@@ -64,7 +64,7 @@ config_dict_std = {
     "max_time":         600.0,  # maximum time (seconds) per episode
     "tagging_cooldown":  60.0,  # cooldown on an agent (seconds) after they tag another agent, to prevent consecutive tags
     "tag_on_collision": False,  # option for setting the agent to a tagged state upon collsion with an obstacle
-    "tag_on_oob":       False,  # option for setting the agent to a tagged state upon driving out-of-bounds
+    "tag_on_oob":       True,  # option for setting the agent to a tagged state upon driving out-of-bounds
 
     # Observation parameters
     "normalize_obs":        True,  # flag for normalizing the observation space
