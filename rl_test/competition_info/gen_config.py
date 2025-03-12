@@ -1,12 +1,6 @@
 import copy
 import numpy as np
-#######
 
-#This is the configuration which will be used to setup the observation space for your agent
-#You need to update the config_dict_competition to match your observation space requirements!!!
-#Changing other settings which are not Observation parameters will result in DISQUALIFICATION of that submission
-
-######
 
 ### Constants ###
 EQUATORIAL_RADIUS = 6378137.0  # meters (https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html)
@@ -17,7 +11,7 @@ EPSG_3857_EXT_Y = 20048966.104014594 # meters (https://epsg.io/3857)
 
 LINE_INTERSECT_TOL = 1e-9
 
-### Competition Configuration ###
+### Standard Configuration Dictionary ###
 config_dict_competition = {
 
     # Geometry parameters
@@ -47,15 +41,15 @@ config_dict_competition = {
     "n_circle_segments":       8,  # default is to approximate circles as an octagon
     "obstacles":            None,  # optional dictionary of obstacles in the enviornment
 
-    # note: obstacles are specified via dictionary. Keys are the obstacle type ("circle" or "polygon").
+    # note 1: obstacles are specified via dictionary. Keys are the obstacle type ("circle" or "polygon").
     # values are the parameters for the obstacle.
-    # note: for circles, it should be a list of tuples: (radius, (center_x, center_y)) all in meters
-    # note: for polygons, it should be a list of tuples: ((x1, y1), (x2, y2), (x3, y3), ..., (xn, yn)) all in meters
-    # note: for polygons, there is an implied edge between (xn, yn) and (x1, y1), to complete the polygon.
+    # note 2: for circles, it should be a list of tuples: (radius, (center_x, center_y)) all in meters
+    # note 3: for polygons, it should be a list of tuples: ((x1, y1), (x2, y2), (x3, y3), ..., (xn, yn)) all in meters
+    # note 4: for polygons, there is an implied edge between (xn, yn) and (x1, y1), to complete the polygon.
 
     # Dynamics parameters
     "oob_speed_frac":     0.5,  # proportion
-    "dynamics":       "heron",  # dynamics to use for agents (from dynamics_registry.py)
+    "dynamics":       "surveyor",  # dynamics to use for agents (from dynamics_registry.py)
 
     # note: if different dynamics are desired for different agents, provide a list / tuple / numpy.ndarray like
     # ["heron", "large_usv", "heron", "drone", "fixed_wing", "fixed_wing"]
@@ -66,16 +60,11 @@ config_dict_competition = {
 
     # Game parameters
     "default_init":      True,  # Spawn agents programmatically, rather than randomly
-    "max_score":            1,  # maximum score per episode (until a winner is declared)
+    "max_score":            20,  # maximum score per episode (until a winner is declared)
     "max_time":         600.0,  # maximum time (seconds) per episode
     "tagging_cooldown":  60.0,  # cooldown on an agent (seconds) after they tag another agent, to prevent consecutive tags
     "tag_on_collision": False,  # option for setting the agent to a tagged state upon collsion with an obstacle
-    "tag_on_oob":        True,  # option for setting the agent to a tagged state upon driving out-of-bounds
-    
-
-    # Parameters to Change #
-    
-
+    "tag_on_oob":       True,  # option for setting the agent to a tagged state upon driving out-of-bounds
 
     # Observation parameters
     "normalize_obs":        True,  # flag for normalizing the observation space
@@ -83,24 +72,18 @@ config_dict_competition = {
     "short_obs_hist_interval": 1,  # number of steps in between entries in the short-term observation history
     "long_obs_hist_length":    1,  # number of timesteps to include for the long-term observation history
     "long_obs_hist_interval":  4,  # number of steps in between entries in the long-term observation history
+
+    # Lidar observation parameters
+    "lidar_obs":       False,  # option to use lidar (ray casting model) observations
+    "lidar_range":     200.0,  # meters
+    "num_lidar_rays":     50,  # number of rays for lidar
+
     # Global state parameters
     "normalize_state":        True,  # flag for normalizing the global state
     "short_state_hist_length":   1,  # number of timesteps to include for the short-term global state history
     "short_state_hist_interval": 1,  # number of steps in between entries in the short-term global state history
     "long_state_hist_length":    1,  # number of timesteps to include for the long-term global state history
     "long_state_hist_interval":  4,  # number of steps in between entries in the long-term global state history
-
-
-
-    # End Params to Change
-
-
-
-    # WARNING: Lidar OBS is not available for use in the 2025 MCTF Competition 
-    # Lidar observation parameters
-    "lidar_obs":       False,  # option to use lidar (ray casting model) observations
-    "lidar_range":     200.0,  # meters
-    "num_lidar_rays":     50,  # number of rays for lidar
 
     # Rendering parameters
     "render_fps":                 30,  # target number of frames per second
@@ -203,7 +186,6 @@ LIDAR_DETECTION_CLASS_MAP = {class_name: i for i, class_name in enumerate(lidar_
 ### Action Map ###
 # maps discrete action id to (speed, heading)
 ACTION_MAP = []
-
 for spd in [1.0, 0.5]:
     for hdg in range(180, -180, -45):
         ACTION_MAP.append([spd, hdg])

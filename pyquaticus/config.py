@@ -49,7 +49,7 @@ config_dict_std = {
 
     # Dynamics parameters
     "oob_speed_frac":     0.5,  # proportion
-    "dynamics":       "heron",  # dynamics to use for agents (from dynamics_registry.py)
+    "dynamics":       "surveyor",  # dynamics to use for agents (from dynamics_registry.py)
 
     # note: if different dynamics are desired for different agents, provide a list / tuple / numpy.ndarray like
     # ["heron", "large_usv", "heron", "drone", "fixed_wing", "fixed_wing"]
@@ -60,11 +60,11 @@ config_dict_std = {
 
     # Game parameters
     "default_init":      True,  # Spawn agents programmatically, rather than randomly
-    "max_score":            1,  # maximum score per episode (until a winner is declared)
+    "max_score":            20,  # maximum score per episode (until a winner is declared)
     "max_time":         600.0,  # maximum time (seconds) per episode
     "tagging_cooldown":  60.0,  # cooldown on an agent (seconds) after they tag another agent, to prevent consecutive tags
     "tag_on_collision": False,  # option for setting the agent to a tagged state upon collsion with an obstacle
-    "tag_on_oob":       False,  # option for setting the agent to a tagged state upon driving out-of-bounds
+    "tag_on_oob":       True,  # option for setting the agent to a tagged state upon driving out-of-bounds
 
     # Observation parameters
     "normalize_obs":        True,  # flag for normalizing the observation space
