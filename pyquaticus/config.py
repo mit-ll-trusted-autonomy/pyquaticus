@@ -60,7 +60,7 @@ config_dict_std = {
 
     # Game parameters
     "default_init":      True,  # Spawn agents programmatically, rather than randomly
-    "max_score":            50,  # maximum score per episode (until a winner is declared)
+    "max_score":            20,  # maximum score per episode (until a winner is declared)
     "max_time":         600.0,  # maximum time (seconds) per episode
     "tagging_cooldown":  60.0,  # cooldown on an agent (seconds) after they tag another agent, to prevent consecutive tags
     "tag_on_collision": False,  # option for setting the agent to a tagged state upon collsion with an obstacle
