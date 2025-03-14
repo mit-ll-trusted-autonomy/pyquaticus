@@ -433,8 +433,6 @@ class BaseUSV(Dynamics):
         """
         # Calculate average speed
         avg_speed = (new_speed + self.speed) / 2.0
-        if self.gps_env:
-            avg_speed /= self.meters_per_mercator_xy
 
         # Calculate average heading
         hdg_rad = np.deg2rad(self.heading)
@@ -448,9 +446,12 @@ class BaseUSV(Dynamics):
         vel = avg_speed * np.asarray(
             [np.sin(avg_hdg), np.cos(avg_hdg)] #sine/cos swapped because of the heading / angle difference
         )
-
-        new_pos = self.pos + vel * self.dt
         new_speed = np.linalg.norm(vel)
+
+        if self.gps_env:
+            new_pos = self.pos + (vel / self.meters_per_mercator_xy) * self.dt
+        else:
+            new_pos = self.pos + vel * self.dt
 
         return new_pos, new_speed
 

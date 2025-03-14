@@ -116,7 +116,7 @@ def main():
         "circle": [(4, (6, 5))],
         "polygon": [((70, 10), (85, 21), (83, 51), (72, 35))]
     }
-    config["sim_speedup_factor"] = 16
+    config["sim_speedup_factor"] = 8
     config["max_time"] = 1000
     config["lidar_obs"] = True
     config["num_lidar_rays"] = 100
