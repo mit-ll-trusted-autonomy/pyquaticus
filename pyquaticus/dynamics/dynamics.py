@@ -446,8 +446,8 @@ class BaseUSV(Dynamics):
         vel = avg_speed * np.asarray(
             [np.sin(avg_hdg), np.cos(avg_hdg)] #sine/cos swapped because of the heading / angle difference
         )
-
         new_speed = np.linalg.norm(vel)
+
         if self.gps_env:
             new_pos = self.pos + (vel / self.meters_per_mercator_xy) * self.dt
         else:
