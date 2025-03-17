@@ -54,7 +54,7 @@ if __name__ == '__main__':
     parser.add_argument('policy_one', help='Please enter the path to the model you would like to load in Ex. ./ray_test/checkpoint_00001/policies/agent-0-policy')
     parser.add_argument('policy_two', help='Please enter the path to the model you would like to load in Ex. ./ray_test/checkpoint_00001/policies/agent-1-policy') 
     parser.add_argument('policy_three', help='Please enter the path to the model you would like to load in Ex. ./ray_test/checkpoint_00001/policies/agent-2-policy')
-    reward_config = {'agent_0':rew.sparse, 'agent_1':rew.sparse, 'agent_2':rew.sparse}
+    reward_config = {}
     args = parser.parse_args()
     config_dict = config_dict_std
     config_dict['sim_speedup_factor'] = 4
