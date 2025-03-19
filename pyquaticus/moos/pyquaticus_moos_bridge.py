@@ -48,9 +48,9 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.timewarp = timewarp
         self.tagging_cooldown = tagging_cooldown
         self.normalize = normalize
-
+        self.lidar_obs = False # Hardcoded to False for now just to get it working on boats
         self.set_config(moos_config)
-
+        self.world_size=[180,160]
         self.game_score = {'blue_captures':0, 'red_captures':0}
 
         if isinstance(team, str) and team.lower() in {"red", "blue"}:
@@ -69,8 +69,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         opp_team_len = len(self._opponent_names)
         if own_team_len != opp_team_len:
             raise ValueError(f"Expecting equal team sizes but got: {own_team_len} vs {opp_team_len}")
-
-        self.agent_obs_normalizer = self._register_state_elements(own_team_len,0)
+        #No obstacles hard coded 0
+        self.agent_obs_normalizer = self._register_state_elements(own_team_len, 0)
 
         self.observation_space = self.get_agent_observation_space()
         self.action_space = self.get_agent_action_space()
@@ -124,7 +124,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         missing_agents = [p.id for p in filter(lambda p: None in p.pos, self.players.values())]
         num_iters = 0
         while missing_agents:
-            print("Waiting for other players to connect...")
+            print(f" {self._agent_name} Waiting for other players to connect...")
             print(f"\tMissing Agents: {','.join(missing_agents)}")
             time.sleep(wait_time)
             missing_agents = [p.id for p in filter(lambda p: None in p.pos, self.players.values())]
@@ -249,6 +249,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
         def _on_connect():
             for vname in self._moos_vars:
+                print(f"{self._agent_name} registering: {vname}")
                 self._moos_comm.register(vname, 0)
             self._moos_comm.register('DEPLOY_ALL', 0)
             return True
@@ -472,11 +473,11 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.boundary_ur = np.asarray(self._moos_config.boundary_ur, dtype=np.float32)
         self.boundary_ll = np.asarray(self._moos_config.boundary_ll, dtype=np.float32)
         self.boundary_lr = np.asarray(self._moos_config.boundary_lr, dtype=np.float32)
-        self.world_size  = np.array([np.linalg.norm(self.boundary_lr - self.boundary_ll),
+        self.env_size  = np.array([np.linalg.norm(self.boundary_lr - self.boundary_ll),
                                      np.linalg.norm(self.boundary_ul - self.boundary_ll)])
         
         # save the horizontal location of scrimmage line (relative to world/ playing field)
-        self.scrimmage = 0.5*self.world_size[0]
+        self.scrimmage = 0.5*self.env_size[0]
         
         if self.timewarp is not None:
             self._moos_config.moos_timewarp = self.timewarp

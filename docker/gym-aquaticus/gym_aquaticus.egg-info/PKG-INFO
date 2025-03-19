@@ -1,0 +1,6 @@
+Metadata-Version: 2.1
+Name: gym_aquaticus
+Version: 1.0.3
+Requires-Dist: gym
+Requires-Dist: pymoos
+Requires-Dist: inputs
