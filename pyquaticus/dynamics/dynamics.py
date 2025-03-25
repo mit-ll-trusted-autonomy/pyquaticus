@@ -235,35 +235,37 @@ class BaseUSV(Dynamics):
             -speed PID gains
             -heading (yaw) PID gains
 
-        (2) https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarine
+        (2) https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/dep_uSimMarine/USM_Model.cpp
+            -turn_rate
+            -max_acc
+            -max_decc
+            -rotate_speed 
+
+        (3) https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarine
             -max_speed
                 *max(thrust_map[1])
             -speed_factor
                 *also referred to as thrust_factor
-                *changed from default 20 to 0.0 because non-zero speed_factor overrides use of speed PID controller
+                *changed from default 20 to 0 because non-zero speed_factor overrides use of speed PID controller
             -thrust_map
                 *see section 8.5 for default thrust_map
-            -turn_loss
-            -turn_rate
-            -max_acc
-            -max_dec
-            -rotate_speed  
+            -turn_loss 
     """
     def __init__(
         self,
         max_speed:float = 5.0,  # meters / s
-        speed_factor:float = 0.0,  # [0,inf) scalar correlation between thrust and speed (default is 20)
-        thrust_map:np.ndarray = np.array(  # piecewise linear mapping from desired_thrust to speed
-            [[-100, 0, 100],
-             [   0, 0, 5.0]]
+        speed_factor:float = 0,  # [0,inf) scalar correlation between thrust and speed
+        thrust_map:np.ndarray = np.array(  # piecewise linear mapping from desired_thrust to speed (meters/s)
+            [[0, 100],
+             [0,   5]]
         ),
         max_thrust:float = 100,  # limit on vehicle thrust
         max_rudder:float = 100,  # limit on vehicle rudder actuation
         turn_loss:float = 0.85,  # [0, 1] affecting speed lost during a turn
         turn_rate:float = 70,  # [0, 100] affecting vehicle turn radius, e.g., 0 is an infinite turn radius
-        max_acc:float = 0.5,  # [0, inf) meters / s**2
-        max_dec:float = 0.5,  # [0, inf) meters / s**2
-        rotate_speed:float = 0.0,  # deg/sec (attempt at a thruster bias to account for different thruster capabilities on hardware)
+        max_acc:float = 0,  # meters / s**2 (if 0, no limit on acceleration)
+        max_dec:float = 0.5,  # meters / s**2 (if 0, no limit on decceleration)
+        rotate_speed:float = 0,  # deg/sec (attempt at a thruster bias to account for different thruster capabilities on hardware)
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -284,8 +286,8 @@ class BaseUSV(Dynamics):
 
         # PID 
         self._pid_controllers = {
-            "speed": PID(dt=kwargs["dt"], kp=0.8, ki=0.11, kd=0.1, integral_max=0.07),
-            "heading": PID(dt=kwargs["dt"], kp=0.5, ki=0.012, kd=0.1, integral_max=0.07)
+            "speed": PID(dt=kwargs["dt"], kp=0.8, ki=0.11, kd=0.1, integral_limit=0.07),
+            "heading": PID(dt=kwargs["dt"], kp=0.5, ki=0.012, kd=0.1, integral_limit=0.2)
         }
 
     def reset(self):
@@ -305,7 +307,6 @@ class BaseUSV(Dynamics):
         Place agent at previous position.
         Do not change is_tagged, has_flag, or on_own_side.
         """
-
         prev_pos = self.prev_pos
         self.prev_pos = self.pos
         self.pos = prev_pos
@@ -364,6 +365,7 @@ class BaseUSV(Dynamics):
         else:
             speed_error = desired_speed - self.speed
             delta_thrust = self._pid_controllers['speed'](speed_error)
+            
             desired_thrust = self.state['thrust'] + delta_thrust
 
         if desired_thrust < 0.01:
@@ -393,9 +395,15 @@ class BaseUSV(Dynamics):
         next_speed *= 1 - ((abs(rudder) / 100) * self.turn_loss)
 
         # Clip new speed based on max acceleration and deceleration
-        if (next_speed - self.speed) / self.dt > self.max_acc:
+        if (
+            self.max_acc > 0 and
+            (next_speed - self.speed) / self.dt > self.max_acc
+        ):
             next_speed = self.speed + self.max_acc * self.dt
-        elif (self.speed - next_speed) / self.dt > self.max_dec:
+        elif (
+            self.max_dec > 0 and
+            (self.speed - next_speed) / self.dt > self.max_dec
+        ):
             next_speed = self.speed - self.max_dec * self.dt
 
         return next_speed
@@ -456,23 +464,148 @@ class BaseUSV(Dynamics):
         return new_pos, new_speed
 
 
+class Heron(BaseUSV):
+    """
+    Dynamics class for Clearpath Robotics Heron M300 USV (https://oceanai.mit.edu/autonomylab/pmwiki/pmwiki.php?n=Robot.Heron).
+    
+    Parameters for dynamics and control were provided by the MIT Marine Autonomy Lab (https://oceanai.mit.edu/pavlab/pmwiki/pmwiki.php):
+        -max_speed
+            *max(thrust_map[1])
+        -thrust_map
+        -max_thrust
+        -max_rudder
+        -turn_rate
+        -speed PID gains
+        -heading (yaw) PID gains 
+    """
+    def __init__(
+        self,
+        max_speed:float = 2.0,
+        thrust_map:np.ndarray = np.array(
+            [[0, 40, 100],
+             [0,  1,   2]]
+        ),
+        max_thrust:float = 100,
+        max_rudder:float = 100,
+        turn_rate:float = 60,
+        **kwargs
+    ):
+        super().__init__(
+            max_speed=max_speed,
+            thrust_map=thrust_map,
+            max_thrust=max_thrust,
+            max_rudder=max_rudder,
+            turn_rate=turn_rate,
+            **kwargs
+        )
+
+        # PID 
+        self._pid_controllers = {
+            "speed": PID(
+                dt=kwargs["dt"],
+                kp=1.0,
+                ki=0.0,
+                kd=0.0,
+                integral_limit=0.07,
+                output_limit=max_thrust
+            ),
+            "heading": PID(
+                dt=kwargs["dt"],
+                kp=0.9,
+                ki=0.3,
+                kd=0.6,
+                integral_limit=0.3,
+                output_limit=max_rudder
+            )
+        }
+
+
+class Surveyor(BaseUSV):
+    """
+    Dynamics class for SeaRobotics SR-Surveyor M1.8 USV (https://www.searobotics.com/products/autonomous-surface-vehicles/sr-surveyor-class).
+    
+    Parameters for dynamics and control are adapted from MOOS-IVP software/docs and missions:
+        (1) https://oceanai.mit.edu/svn/moos-ivp-aquaticus-oai/trunk/missions/wp_2024/surveyor/meta_surveyor.moos
+            -max_thrust
+            -max_rudder
+            -speed PID gains
+            -heading (yaw) PID gains
+
+        (2) https://oceanai.mit.edu/svn/moos-ivp-aquaticus-oai/trunk/missions/wp_2024/surveyor/plug_uSimMarine.moos
+            -max_speed
+                *max(thrust_map[1])
+            -thrust_map
+                *top speed changed from 2.75 to 3.0 based on wp_2024 experimental data
+            -turn_rate
+            -max_acc
+            -max_dec
+            -rotate_speed
+                *changed from 1.0 to 0.0 to assume equal thruster capabilites in simulation   
+    """
+    def __init__(
+        self,
+        max_speed:float = 3.0,
+        thrust_map:np.ndarray = np.array(
+            [[-100, 0, 20,  40,  60,   70, 100],
+             [-2.0, 0,  1, 1.5, 2.0, 2.25, 3.0]]
+        ),
+        max_thrust:float = 100,
+        max_rudder:float = 100,
+        turn_rate:float = 10,
+        max_acc:float = 0.15,
+        max_dec:float = 0.25,
+        rotate_speed:float = 0.0,
+        **kwargs
+    ):
+        super().__init__(
+            max_speed=max_speed,
+            thrust_map=thrust_map,
+            max_thrust=max_thrust,
+            max_rudder=max_rudder,
+            turn_rate=turn_rate,
+            max_acc=max_acc,
+            max_dec=max_dec,
+            rotate_speed=rotate_speed,
+            **kwargs
+        )
+
+        # PID 
+        self._pid_controllers = {
+            "speed": PID(
+                dt=kwargs["dt"],
+                kp=0.5,
+                ki=0.0,
+                kd=0.0,
+                integral_limit=0.00,
+                output_limit=max_thrust
+            ),
+            "heading": PID(
+                dt=kwargs["dt"],
+                kp=1.2,
+                ki=0.0,
+                kd=3.0,
+                integral_limit=0.00,
+                output_limit=max_rudder
+            )
+        }
+
+
 class LargeUSV(BaseUSV):
     def __init__(
         self,
-        max_speed: float = 12,  # meters / s
-        speed_factor: float = (
-            20.0 / 3
-        ),  # multiplicative factor for desired_speed -> desired_thrust
-        thrust_map: np.ndarray = np.array(  # piecewise linear mapping from desired_thrust to speed
-            [[-100, 0, 20, 40, 60, 80, 100], [-3, 0, 3, 6, 9, 12, 12]]
+        max_speed: float = 12,
+        speed_factor: float = (20.0 / 3),
+        thrust_map: np.ndarray = np.array(
+            [[-100, 0, 20, 40, 60, 80, 100],
+             [  -3, 0,  3,  6,  9, 12,  12]]
         ),
-        max_thrust: float = 70,  # limit on vehicle thrust
-        max_rudder: float = 100,  # limit on vehicle rudder actuation
+        max_thrust: float = 70,
+        max_rudder: float = 100,
         turn_loss: float = 0.85,
         turn_rate: float = 50,
-        max_acc: float = 0.5,  # meters / s**2
-        max_dec: float = 0.5,  # meters / s**2
-        **kwargs,
+        max_acc: float = 0.5,
+        max_dec: float = 0.5,
+        **kwargs
     ):
         super().__init__(
             max_speed=max_speed,
@@ -489,112 +622,8 @@ class LargeUSV(BaseUSV):
 
         # PID
         self._pid_controllers = {
-            "speed": PID(dt=kwargs["dt"], kp=1.0, ki=0.0, kd=0.0, integral_max=0.07),
-            "heading": PID(dt=kwargs["dt"], kp=0.35, ki=0.0, kd=0.07, integral_max=0.07)
-        }
-
-
-class Heron(BaseUSV):
-    def __init__(
-        self,
-        max_speed: float = 1.5,  # meters / s
-        speed_factor: float = 20.0,  # multiplicative factor for desired_speed -> desired_thrust
-        thrust_map: np.ndarray = np.array(  # piecewise linear mapping from desired_thrust to speed
-            [[-100, 0, 20, 40, 60, 80, 100], [-2, 0, 1, 2, 3, 5, 5]]
-        ),
-        max_thrust: float = 70,  # limit on vehicle thrust
-        max_rudder: float = 100,  # limit on vehicle rudder actuation
-        turn_loss: float = 0.85,
-        turn_rate: float = 70,
-        max_acc: float = 1,  # meters / s**2
-        max_dec: float = 1,  # meters / s**2
-        **kwargs
-    ):
-        super().__init__(
-            max_speed=max_speed,
-            speed_factor=speed_factor,
-            thrust_map=thrust_map,
-            max_thrust=max_thrust,
-            max_rudder=max_rudder,
-            turn_loss=turn_loss,
-            turn_rate=turn_rate,
-            max_acc=max_acc,
-            max_dec=max_dec,
-            **kwargs
-        )
-
-        # PID 
-        self._pid_controllers = {
-            "speed": PID(dt=kwargs["dt"], kp=1.0, ki=0.0, kd=0.0, integral_max=0.07),
-            "heading": PID(dt=kwargs["dt"], kp=0.35, ki=0.0, kd=0.07, integral_max=0.07)
-        }
-
-
-class Surveyor(BaseUSV):
-    """
-    Dynamics class for SeaRobotics SR-Surveyor M1.8 USV (https://www.searobotics.com/products/autonomous-surface-vehicles/sr-surveyor-class).
-    
-    Parameters for dynamics and control are adapted from MOOS-IVP software/docs and missions:
-        (1) https://oceanai.mit.edu/svn/moos-ivp-aquaticus-oai/trunk/missions/wp_2024/surveyor/meta_surveyor.moos
-            -speed_factor
-                *changed from default 20 to 0.0 because non-zero speed_factor overrides use of speed PID controller and thrust_map
-                *referred to as thrust_factor in:
-                    (a) https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarine
-                    (b) https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/dep_uSimMarine/uSimMarine.moos
-            -max_thrust
-            -max_rudder
-            -speed PID gains
-            -heading (yaw) PID gains
-
-        (2) https://oceanai.mit.edu/svn/moos-ivp-aquaticus-oai/trunk/missions/wp_2024/surveyor/plug_uSimMarine.moos
-            -max_speed
-                *max(thrust_map[1])
-            -thrust_map
-                *top speed changed from 2.75 to 3.0 based on wp_2024 experimental data
-            -turn_rate
-            -max_acc
-            -max_dec
-            -rotate_speed
-                *changed from 1.0 to 0.0 to assume equal thruster capabilites in simulation
-
-        (3) https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarine
-            -turn_loss     
-    """
-    def __init__(
-        self,
-        max_speed:float = 3.0,  # meters / s
-        speed_factor:float = 0.0,  # [0,inf) scalar correlation between thrust and speed (default is 20)
-        thrust_map:np.ndarray = np.array(  # piecewise linear mapping from desired_thrust to speed
-            [[-100, 0, 20,  40,  60,   70, 100],
-             [-2.0, 0,  1, 1.5, 2.0, 2.25, 3.0]]
-        ),
-        max_thrust:float = 100,  # limit on vehicle thrust
-        max_rudder:float = 100,  # limit on vehicle rudder actuation
-        turn_loss:float = 0.85, # [0, 1] affecting speed lost during a turn
-        turn_rate:float = 10, # [0, 100] affecting vehicle turn radius, e.g., 0 is an infinite turn radius
-        max_acc:float = 0.15, # [0, inf) meters / s**2
-        max_dec:float = 0.25, # [0, inf) meters / s**2
-        rotate_speed:float = 0.0, # deg/sec (attempt at a thruster bias to account for different thruster capabilities on hardware)
-        **kwargs
-    ):
-        super().__init__(
-            max_speed=max_speed,
-            speed_factor=speed_factor,
-            thrust_map=thrust_map,
-            max_thrust=max_thrust,
-            max_rudder=max_rudder,
-            turn_loss=turn_loss,
-            turn_rate=turn_rate,
-            max_acc=max_acc,
-            max_dec=max_dec,
-            rotate_speed=rotate_speed,
-            **kwargs
-        )
-
-        # PID 
-        self._pid_controllers = {
-            "speed": PID(dt=kwargs["dt"], kp=0.5, ki=0.0, kd=0.0, integral_max=0.00),
-            "heading": PID(dt=kwargs["dt"], kp=1.2, ki=0.0, kd=3.0, integral_max=0.00),
+            "speed": PID(dt=kwargs["dt"], kp=1.0, ki=0.0, kd=0.0, integral_limit=0.07),
+            "heading": PID(dt=kwargs["dt"], kp=0.35, ki=0.0, kd=0.07, integral_limit=0.07)
         }
 
 
