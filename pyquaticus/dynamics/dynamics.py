@@ -286,8 +286,8 @@ class BaseUSV(Dynamics):
 
         # PID 
         self._pid_controllers = {
-            "speed": PID(dt=kwargs["dt"], kp=0.8, ki=0.11, kd=0.1, integral_limit=0.07),
-            "heading": PID(dt=kwargs["dt"], kp=0.5, ki=0.012, kd=0.1, integral_limit=0.2)
+            "speed": PID(dt=kwargs["dt"], kp=0.8, ki=0.11, kd=0.1, integral_limit=0.07, output_limit=max_thrust),
+            "heading": PID(dt=kwargs["dt"], kp=0.5, ki=0.012, kd=0.1, integral_limit=0.2, output_limit=max_rudder)
         }
 
     def reset(self):
