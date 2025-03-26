@@ -123,13 +123,17 @@ current_path=$(pwd)
 mkdir $current_path/$LOGPATH
 
 if [[ -z $NO_HERON ]]; then
-  cd /home/john/moos-ivp-aquaticus/missions/wp_2024/surveyor/
+  cd ~/moos-ivp-aquaticus/missions/wp_2024/surveyor/
   if [ "$BOAT_ROLE" == "blue_one" ]; then
     # New
     ./launch_surveyor.sh -v$BOAT_NAME -b1 $TIME_WARP --logpath=$current_path/$LOGPATH $SIMULATION --start=100,81.49,21.3 --role=CONTROL --shore=$SHORE_IP --ip=$HOST_IP > /dev/null &
   elif [ "$BOAT_ROLE" == "blue_two" ]; then
     # New
     ./launch_surveyor.sh -v$BOAT_NAME -b2 $TIME_WARP --logpath=$current_path/$LOGPATH $SIMULATION --start=100,77.85,21.3 --role=CONTROL --shore=$SHORE_IP --ip=$HOST_IP > /dev/null &
+  fi
+  elif [ "$BOAT_ROLE" == "blue_three" ]; then
+    # New
+    ./launch_surveyor.sh -v$BOAT_NAME -b3 $TIME_WARP --logpath=$current_path/$LOGPATH $SIMULATION --start=100,77.85,21.3 --role=CONTROL --shore=$SHORE_IP --ip=$HOST_IP > /dev/null &
   fi
 
   if [ "$BOAT_ROLE" == "red_one" ]; then
@@ -138,6 +142,10 @@ if [[ -z $NO_HERON ]]; then
   elif [ "$BOAT_ROLE" == "red_two" ]; then
       # New
     ./launch_surveyor.sh -v$BOAT_NAME -r2 $TIME_WARP --logpath=$current_path/$LOGPATH $SIMULATION --start=70,152.39,201.3 --role=CONTROL --shore=$SHORE_IP --ip=$HOST_IP > /dev/null &
+  fi
+  elif [ "$BOAT_ROLE" == "red_three" ]; then
+      # New
+    ./launch_surveyor.sh -v$BOAT_NAME -r3 $TIME_WARP --logpath=$current_path/$LOGPATH $SIMULATION --start=70,152.39,201.3 --role=CONTROL --shore=$SHORE_IP --ip=$HOST_IP > /dev/null &
   fi
 fi
 sleep 3

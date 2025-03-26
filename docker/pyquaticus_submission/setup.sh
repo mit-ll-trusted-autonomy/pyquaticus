@@ -5,7 +5,7 @@ echo "Setting up..."
 
 # Add the RL_agent behavior to the jervis mission
 #UPDATE STHIS
-FILE="/home/john/moos-ivp-aquaticus/missions/wp_2024/surveyor/meta_surveyor.bhv"
+FILE="~/moos-ivp-aquaticus/missions/wp_2024/surveyor/meta_surveyor.bhv"
 
 
 if ! grep -q "name\s*=\s*BHV_RLAgent" "$FILE"; then
