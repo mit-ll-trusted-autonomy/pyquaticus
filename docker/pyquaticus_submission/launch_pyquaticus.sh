@@ -6,9 +6,9 @@
 
 THISDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
-SHORE_IP="$(python-c 'import config;print(config.get_shore_ip())')"
+SHORE_IP="localhost"
 
-HOST_IP="$(python-c 'import config;print(config.get_boat_ip())')"
+HOST_IP="localhost"
 
 
 # Typical format for SHORE/HOST IP

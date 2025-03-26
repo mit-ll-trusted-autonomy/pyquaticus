@@ -1,0 +1,21 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% LOG FILE:       /home/john/pyquaticus/docker/pyquaticus_submission/./logs/C000_LOG_URSULA_BLUE_ONE_26_3_2025_____08_55_38/C000_LOG_URSULA_BLUE_ONE_26_3_2025_____08_55_38.ylog
+%% FILE OPENED ON  Wed Dec 31 19:00:00 1969
+%% LOGSTART             6971974954.2974
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+1.472651   MOOS_DEBUG           pMarinePID           ** NEW CONTROLLER GAINS ARE ** 
+1.472695   MOOS_DEBUG           pMarinePID           YAW_PID_KP             = 1.200 
+1.472719   MOOS_DEBUG           pMarinePID           YAW_PID_KD             = 3.000 
+1.472728   MOOS_DEBUG           pMarinePID           YAW_PID_KI             = 0.000 
+1.472739   MOOS_DEBUG           pMarinePID           YAW_PID_INTEGRAL_LIMIT = 0.000 
+1.472752   MOOS_DEBUG           pMarinePID           MAXRUDDER              = 100.000 
+1.476631   MOOS_DEBUG           pMarinePID           SPEED_PID_KP           = 0.500 
+1.476644   MOOS_DEBUG           pMarinePID           SPEED_PID_KD           = 0.000 
+1.476651   MOOS_DEBUG           pMarinePID           SPEED_PID_KI           = 0.000 
+1.47666    MOOS_DEBUG           pMarinePID           SPEED_PID_INTEGRAL_LIMIT = 0.000 
+1.476671   MOOS_DEBUG           pMarinePID           MAXTHRUST              = 100.000 
+1.578099   MOOS_DEBUG           pMarinePID           Paused Due To Tardy HELM Input: THRUST=0 
+1.578099   MOOS_DEBUG           pMarinePID           Paused Due To Tardy HELM Input: THRUST=0 
+1.578099   MOOS_DEBUG           pMarinePID           Paused Due To Tardy HELM Input: THRUST=0 
+1.578099   MOOS_DEBUG           pMarinePID           Paused Due To Tardy HELM Input: THRUST=0 
+1.578099   MOOS_DEBUG           pMarinePID           Paused Due To Tardy HELM Input: THRUST=0 

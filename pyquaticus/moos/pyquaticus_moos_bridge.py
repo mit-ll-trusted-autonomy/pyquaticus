@@ -370,6 +370,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         Handles node reports about the state of other agents.
         """
         agent_name = msg.key().removeprefix("NODE_REPORT_").lower()
+
         data = {field: val
                 for field, val in (entry.split("=") for entry in msg.string().split(","))}
         assert agent_name == data["NAME"]
