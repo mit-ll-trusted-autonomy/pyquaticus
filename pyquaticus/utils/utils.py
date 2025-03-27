@@ -335,9 +335,9 @@ def wrap_mercator_x(wm, x_only:bool = False) -> np.ndarray:
     (will not exceed a difference in longitude of 180 degrees).
     """
     if x_only:
-        wm = np.asarray(wm).reshape(-1, 1)
+        wm = np.array(wm).reshape(-1, 1)
     else:
-        wm = np.asarray(wm).reshape(-1, 2)
+        wm = np.array(wm).reshape(-1, 2)
 
     over = wm[:, 0] > EPSG_3857_EXT_X
     while np.any(over):
@@ -363,9 +363,9 @@ def wrap_mercator_x_dist(wm, x_only:bool = False) -> np.ndarray:
     therefore will be normalized to [0, 2*EPSG_3857_EXT_X].
     """
     if x_only:
-        wm = np.asarray(wm, dtype=float).reshape(-1, 1)
+        wm = np.array(wm, dtype=float).reshape(-1, 1)
     else:
-        wm = np.asarray(wm, dtype=float).reshape(-1, 2)
+        wm = np.array(wm, dtype=float).reshape(-1, 2)
 
     under = np.where(wm[:, 0] < 0)[0]
     wm[under, 0] += 2*EPSG_3857_EXT_X

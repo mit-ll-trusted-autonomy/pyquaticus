@@ -1105,7 +1105,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             # If agent is tagged, drive at max speed towards home
             if player.is_tagged:
-                #if we are in a non-default environment, use RRT*
+                #if we are in an environment with obstacles, use RRT*
                 if len(self.obstacles) > 0:
                     policy = self.rrt_policies[i]
                     assert isinstance(policy, EnvWaypointPolicy)
@@ -1115,20 +1115,22 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         heading_error = 0
                     else:
                         desired_speed, heading_error = policy.compute_action(player.pos, player.heading)
-                #or else just use PID
+                        if self.state["agent_oob"][i]:
+                            desired_speed = player.get_max_speed() * self.oob_speed_frac
+
+                #if agent is out of bounds, drive back in bounds at fraction of max speed
+                elif self.state["agent_oob"][i]:
+                    heading_error = self._get_oob_recover_rel_heading(player.pos, player.heading)
+                    desired_speed = player.get_max_speed() * self.oob_speed_frac
+            
+                #else go directly to home
                 else:
                     _, heading_error = mag_bearing_to(player.pos, flag_home, player.heading)
                     desired_speed = player.get_max_speed()
 
             # If agent is out of bounds, drive back in bounds at fraction of max speed
             elif self.state["agent_oob"][i]:
-                #compute the closest env edge and steer towards heading perpendicular to edge
-                closest_env_edge_idx = closest_line(player.pos, self.env_edges)
-                edge_vec = np.diff(self.env_edges[closest_env_edge_idx], axis=0)[0]
-                desired_vec = np.array([-edge_vec[1], edge_vec[0]]) #this points inwards because edges are defined ccw
-                _, desired_heading = vec_to_mag_heading(desired_vec)
-                
-                heading_error = angle180((desired_heading - player.heading) % 360)
+                heading_error = self._get_oob_recover_rel_heading(player.pos, player.heading)
                 desired_speed = player.get_max_speed() * self.oob_speed_frac
 
             # Else get desired speed and heading from action_dict
@@ -1182,6 +1184,17 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         cp_sign = np.sign(np.cross(self.scrimmage_vec, scrim2pos))
 
         return (cp_sign == self.on_sides_sign[team]) | (cp_sign == 0)
+
+    def _get_oob_recover_rel_heading(self, pos, heading):
+        #compute the closest env edge and steer towards heading perpendicular to edge
+        closest_env_edge_idx = closest_line(pos, self.env_edges)
+        edge_vec = np.diff(self.env_edges[closest_env_edge_idx], axis=0)[0]
+        desired_vec = np.array([-edge_vec[1], edge_vec[0]]) #this points inwards because edges are defined ccw
+        _, desired_heading = vec_to_mag_heading(desired_vec)
+        
+        heading_error = angle180((desired_heading - heading) % 360)
+
+        return heading_error
 
     def _update_lidar(self):
         ray_int_segments = np.copy(self.ray_int_segments)
@@ -2306,6 +2319,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     "prev_agent_position":       copy.deepcopy(agent_positions),
                     "agent_speed":               agent_spd_hdg[:, 0],
                     "agent_heading":             agent_spd_hdg[:, 1],
+                    "prev_agent_action":         np.zeros((self.num_agents, 2)), #desired speed and relative heading for each agent
                     "agent_on_sides":            agent_on_sides,
                     "agent_oob":                 np.zeros(self.num_agents, dtype=bool), #if this agent is out of bounds
                     "agent_has_flag":            np.zeros(self.num_agents, dtype=bool),
@@ -2447,6 +2461,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             "prev_agent_position":       None, #to be set with init_dict and _generate_agent_starts()
             "agent_speed":               None, #to be set with init_dict and _generate_agent_starts()
             "agent_heading":             None, #to be set with init_dict and _generate_agent_starts()
+            "prev_agent_action":         np.zeros((self.num_agents, 2)), #desired speed and relative heading for each agent
             "agent_on_sides":            np.zeros(self.num_agents, dtype=bool),
             "agent_oob":                 np.zeros(self.num_agents, dtype=bool), 
             "agent_has_flag":            np.zeros(self.num_agents, dtype=bool),
@@ -2506,6 +2521,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
                         # position
                         if state_var == "agent_position":
+                            val = np.array(val)
                             if self.gps_env:
                                 if agent_pos_unit == "ll":
                                     val = np.asarray(mt.xy(val[1], val[0]))
@@ -2513,7 +2529,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                                 elif agent_pos_unit == "wm_xy":
                                     val = wrap_mercator_x_dist(val - self.env_bounds[0])
                                 else:
-                                    val = np.asarray(val) / self.meters_per_mercator_xy
+                                    val /= self.meters_per_mercator_xy
                             agent_pos_dict[agent_id] = val
                         # speed
                         elif state_var == "agent_speed":

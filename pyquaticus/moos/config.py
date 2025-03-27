@@ -222,7 +222,7 @@ class FieldReaderConfig:
     This format started with the jervis-2023 mission and continued with the charles-2023
     mission, both included in moos-ivp-aquaticus
     '''
-    def __init__(self, mission_dir:str, script:str =f'{os.path.dirname(__file__)}//get_field.sh', pyquaticus_config:dict =config_dict_std):
+    def __init__(self, mission_dir:str, script:str =f'{os.path.dirname(__file__)}//get_field.sh', pyquaticus_config:dict=config_dict_std):
         print(f"Using field script: {script}")
         subprocess.call([script, mission_dir])
         # get values from saved value
