@@ -466,21 +466,28 @@ class BaseUSV(Dynamics):
 
 class Heron(BaseUSV):
     """
-    Dynamics class for Clearpath Robotics Heron M300 USV (https://oceanai.mit.edu/autonomylab/pmwiki/pmwiki.php?n=Robot.Heron).
+    Dynamics class for Clearpath Robotics Heron M300 USV
     
-    Parameters for dynamics and control were provided by the MIT Marine Autonomy Lab (https://oceanai.mit.edu/pavlab/pmwiki/pmwiki.php):
-        -max_speed
-            *max(thrust_map[1])
-        -thrust_map
-        -max_thrust
-        -max_rudder
-        -turn_rate
-        -speed PID gains
-        -heading (yaw) PID gains 
+    System Resources:
+        (1) https://oceanai.mit.edu/autonomylab/pmwiki/pmwiki.php?n=Robot.Heron
+    
+    Parameters for dynamics and control are adapted from MOOS-IVP software/docs and missions:
+        (1) The following parameters were provided by the MIT Marine Autonomy Lab (https://oceanai.mit.edu/pavlab/pmwiki/pmwiki.php):
+            -thrust_map
+            -max_thrust
+            -max_rudder
+            -turn_rate
+            -speed PID gains
+            -heading (yaw) PID gains
+
+        (2) https://oceanai.mit.edu/svn/moos-ivp-aquaticus-oai/trunk/missions/charles-2023/meta_vehicle.moos
+                -max_speed
+                    *pHelmIvP config speed domain
+                    *max_speed = max(thrust_map[1]) + 0.5 (buffer added for normlization)
     """
     def __init__(
         self,
-        max_speed:float = 2.0,
+        max_speed:float = 2.5,
         thrust_map:np.ndarray = np.array(
             [[0, 40, 100],
              [0,  1,   2]]
@@ -522,7 +529,11 @@ class Heron(BaseUSV):
 
 class Surveyor(BaseUSV):
     """
-    Dynamics class for SeaRobotics SR-Surveyor M1.8 USV (https://www.searobotics.com/products/autonomous-surface-vehicles/sr-surveyor-class).
+    Dynamics class for SeaRobotics SR-Surveyor M1.8 USV
+
+    System Resources:
+        (1) https://www.searobotics.com/products/autonomous-surface-vehicles/sr-surveyor-class
+        (2) https://github.com/westpoint-robotics/mdo-hurt-s
     
     Parameters for dynamics and control are adapted from MOOS-IVP software/docs and missions:
         (1) https://oceanai.mit.edu/svn/moos-ivp-aquaticus-oai/trunk/missions/wp_2024/surveyor/meta_surveyor.moos
@@ -532,19 +543,22 @@ class Surveyor(BaseUSV):
             -heading (yaw) PID gains
 
         (2) https://oceanai.mit.edu/svn/moos-ivp-aquaticus-oai/trunk/missions/wp_2024/surveyor/plug_uSimMarine.moos
-            -max_speed
-                *max(thrust_map[1])
             -thrust_map
                 *top speed changed from 2.75 to 3.0 based on wp_2024 experimental data
             -turn_rate
             -max_acc
             -max_dec
             -rotate_speed
-                *changed from 1.0 to 0.0 to assume equal thruster capabilites in simulation   
+                *changed from 1.0 to 0.0 to assume equal thruster capabilites in simulation
+
+        (3) https://oceanai.mit.edu/svn/moos-ivp-aquaticus-oai/trunk/missions/wp_2024/surveyor/plug_pHelmIvP.moos
+            -max_speed
+                *pHelmIvP config speed domain
+                *max_speed = max(thrust_map[1]) + 0.5 (buffer added for normlization) 
     """
     def __init__(
         self,
-        max_speed:float = 3.0,
+        max_speed:float = 3.5,
         thrust_map:np.ndarray = np.array(
             [[-100, 0, 20,  40,  60,   70, 100],
              [-2.0, 0,  1, 1.5, 2.0, 2.25, 3.0]]

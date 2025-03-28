@@ -29,7 +29,7 @@ config_dict_std = {
     # note: if different radii are desired for different agents, provide a list like:
     # [2.0, 4.0, 2.5, 3.5]
 
-    "flag_radius":           2.0,  # meters
+    "flag_radius":           1.5,  # meters
     "flag_keepout":          3.0,  # minimum distance (meters) between agent and flag centers
     "catch_radius":         10.0,  # distance (meters) for tagging and flag pickup
     "slip_radius":          10.0,  # meters (tolerance for reaching RRT* waypoint for auto-driving home on tag)
@@ -48,7 +48,7 @@ config_dict_std = {
     # note 4: for polygons, there is an implied edge between (xn, yn) and (x1, y1), to complete the polygon.
 
     # Dynamics parameters
-    "oob_speed_frac":     0.5,  # proportion
+    "oob_speed_frac":        0.5,  # proportion
     "dynamics":       "surveyor",  # dynamics to use for agents (from dynamics_registry.py)
 
     # note: if different dynamics are desired for different agents, provide a list / tuple / numpy.ndarray like
@@ -60,11 +60,11 @@ config_dict_std = {
 
     # Game parameters
     "default_init":      True,  # Spawn agents programmatically, rather than randomly
-    "max_score":            20,  # maximum score per episode (until a winner is declared)
+    "max_score":           20,  # maximum score per episode (until a winner is declared)
     "max_time":         600.0,  # maximum time (seconds) per episode
     "tagging_cooldown":  60.0,  # cooldown on an agent (seconds) after they tag another agent, to prevent consecutive tags
     "tag_on_collision": False,  # option for setting the agent to a tagged state upon collsion with an obstacle
-    "tag_on_oob":       True,  # option for setting the agent to a tagged state upon driving out-of-bounds
+    "tag_on_oob":        True,  # option for setting the agent to a tagged state upon driving out-of-bounds
 
     # Observation parameters
     "normalize_obs":        True,  # flag for normalizing the observation space
