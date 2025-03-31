@@ -25,7 +25,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyquaticus"
-description = "Lightweight USV capture-the-flag environment with MOOS-IVP's uSimMarine dynamics"
+description = "Lightweight USV capture-the-flag environment based on MOOS-IVP Aquaticus Competition"
 dynamic = ["version"]
 authors = [
 	{ name = "Makai Mann",      email = "makai.mann@ll.mit.edu" },
