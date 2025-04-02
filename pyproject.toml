@@ -33,7 +33,7 @@ authors = [
 	{ name = "Peter Crowley",   email = "petertc@bu.edu"},
 	{ name = "Zachary Serlin",  email = "zachary.serlin@ll.mit.edu"},
 	{ name = "Andrew Schoer",   email = "andrew.schoer@ll.mit.edu"},
-	{ name = "John Kliem",      email = "john.kliem@nrl.navy.mil"}
+	{ name = "John Kliem",      email = "john.kliem3.civ@us.navy.mil"}
 ]
 readme = "README.md"
 urls = { repository = "https://github.com/mit-ll-trusted-autonomy/pyquaticus" }
@@ -55,13 +55,13 @@ dependencies = [
 	"pygame==2.4.0",
 	"scipy==1.14.1",
 	"shapely==2.0.6",
-	"sympy==1.12",
+	"sympy==1.13.1",
         "pymoos==2022.1; sys_platform == 'linux' or sys_platform == 'darwin'",
 
 ]
 
 [project.optional-dependencies]
-torch = ["torch==1.13.1", "tensorflow-probability==0.19.0"]
+torch = ["torch==2.6.0", "tensorflow-probability==0.19.0"]
 ray = ["ray[rllib]==2.41.0"]
 
 [tool.setuptools.packages.find]
