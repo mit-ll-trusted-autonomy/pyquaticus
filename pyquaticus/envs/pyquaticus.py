@@ -85,6 +85,7 @@ from pyquaticus.utils.utils import (
     mag_heading_to_vec,
     rc_intersection,
     reflect_vector,
+    rigid_transform,
     rot2d,
     vec_to_mag_heading,
     wrap_mercator_x,
@@ -337,8 +338,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         ### Global State Normalizer ###
         max_heading = [180]
         max_bearing = [180]
-        pos_max = self.env_size + 5*max(self.agent_radius) #add a buffer
-        pos_min = len(self.env_size) * [-5*max(self.agent_radius)] #add a buffer
+        pos_max = self.env_size + 5*max(self.agent_radius) #add a normalization buffer
+        pos_min = len(self.env_size) * [-5*max(self.agent_radius)] #add a normalization buffer
         max_dist = [self.env_diag]
         min_dist = [0.0]
         max_bool, min_bool = [1.0], [0.0]
@@ -639,8 +640,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                 pos, scrimmage_line_closest_point, player.heading
             )
 
-            global_state[(player_name, "pos")] = pos
-            global_state[(player_name, "heading")] = player.heading
+            global_state[(player_name, "pos")] = self._standard_pos(pos)
+            global_state[(player_name, "heading")] = self._standard_heading(player.heading)
             global_state[(player_name, "scrimmage_line_bearing")] = scrimmage_line_bearing
             global_state[(player_name, "scrimmage_line_distance")] = scrimmage_line_dist
             global_state[(player_name, "speed")] = player.speed
@@ -658,10 +659,10 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                 global_state[(player_name, f"obstacle_{i}_bearing")] = obstacle[1]
 
         # flag and score info
-        global_state["blue_flag_home"] = np.array(self.flags[int(Team.BLUE_TEAM)].home)
-        global_state["red_flag_home"] = np.array(self.flags[int(Team.RED_TEAM)].home)
-        global_state["blue_flag_pos"] = np.array(self.flags[int(Team.BLUE_TEAM)].pos)
-        global_state["red_flag_pos"] = np.array(self.flags[int(Team.RED_TEAM)].pos)
+        global_state["blue_flag_home"] = self._standard_pos(self.flags[int(Team.BLUE_TEAM)].home)
+        global_state["red_flag_home"] = self._standard_pos(self.flags[int(Team.RED_TEAM)].home)
+        global_state["blue_flag_pos"] = self._standard_pos(self.flags[int(Team.BLUE_TEAM)].pos)
+        global_state["red_flag_pos"] = self._standard_pos(self.flags[int(Team.RED_TEAM)].pos)
         global_state["blue_flag_pickup"] = np.array(self.state["flag_taken"][int(Team.BLUE_TEAM)])
         global_state["red_flag_pickup"] = np.array(self.state["flag_taken"][int(Team.RED_TEAM)])
         global_state["blue_team_score"] = np.array(self.state["captures"][int(Team.BLUE_TEAM)])
@@ -778,6 +779,42 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         self._walls[int(Team.BLUE_TEAM)] = rotate_walls(all_walls, blue_rot_amt)
         self._walls[int(Team.RED_TEAM)] = rotate_walls(all_walls, red_rot_amt)
 
+    def _point_on_which_border(self, p):
+        """
+        p can be a single point or multiple points
+
+        Wall convention:
+         _____________ 3 _____________
+        |                             |
+        |                             |
+        |                             |
+        0                             2
+        |                             |
+        |                             |
+        |_____________ 1 _____________|
+
+        """
+        p = np.asarray(p)
+        p_borders_bool = np.concatenate((p == 0, p == self.env_size), axis=-1)
+
+        if p_borders_bool.ndim == 1:
+            p_borders = np.where(p_borders_bool)[0]
+        else:
+            p_borders = [np.where(pt_borders_bool)[0] for pt_borders_bool in p_borders_bool]
+
+        return p_borders
+
+    def _standard_pos(self, pos):
+        """
+        Converts pos into env reference frame based on the boundary.
+        """
+        return rigid_transform(pos, self.env_ll, self.env_rot_matrix)
+
+    def _standard_heading(self, heading):
+        """
+        Converts heading into env reference frame based on the boundary.
+        """
+        return heading - self.env_rot_angle
 
 class PyQuaticusEnv(PyQuaticusEnvBase):
     """
@@ -825,9 +862,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Set dt (needed for dynamics)
         if self.render_mode:
-            self.dt = 1 / self.render_fps
+            dt = 1 / self.render_fps
         else:
-            self.dt = self.tau
+            dt = self.dt
 
         # Create players, use IDs from [0, (2 * team size) - 1] so their IDs can also be used as indices.
         b_players = []
@@ -837,7 +874,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 dynamics_registry[self.dynamics[i]](
                     gps_env=self.gps_env,
                     meters_per_mercator_xy=getattr(self, "meters_per_mercator_xy", None),
-                    dt=self.dt,
+                    dt=dt,
                     id=f'agent_{i}',
                     team=Team.BLUE_TEAM,
                     render_radius=getattr(self, "agent_render_radius", [None] * 2*team_size)[i],
@@ -849,7 +886,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 dynamics_registry[self.dynamics[i]](
                     gps_env=self.gps_env,
                     meters_per_mercator_xy=getattr(self, "meters_per_mercator_xy", None),
-                    dt=self.dt,
+                    dt=dt,
                     id=f'agent_{i}',
                     team=Team.RED_TEAM,
                     render_radius=getattr(self, "agent_render_radius", [None] * 2*team_size)[i],
@@ -935,7 +972,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
     def step(self, raw_action_dict):
         """
-        Steps the environment forward in time by `tau`, applying actions.
+        Steps the environment forward in time by self.dt seconds, applying actions.
 
         Args:
             raw_action_dict: Actions IDs from discrete action space for agents to apply
@@ -967,7 +1004,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             if player.tagging_cooldown != self.tagging_cooldown:
                 # player is still under a cooldown from tagging, advance their cooldown timer, clip at the configured tagging cooldown
                 player.tagging_cooldown = self._min(
-                    (player.tagging_cooldown + self.sim_speedup_factor * self.tau),
+                    (player.tagging_cooldown + self.sim_speedup_factor * self.dt),
                     self.tagging_cooldown,
                 )
                 self.state["agent_tagging_cooldown"][i] = player.tagging_cooldown
@@ -979,18 +1016,18 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if self.render_mode:
             for _i in range(self.num_renders_per_step):
                 for _j in range(self.sim_speedup_factor):
-                    self._move_agents(action_dict, 1 / self.render_fps)
+                    self._move_agents(action_dict)
                 if self.lidar_obs:
                     self._update_lidar()
                 self._render()
         else:
             for _ in range(self.sim_speedup_factor):
-                self._move_agents(action_dict, self.tau)
+                self._move_agents(action_dict)
             if self.lidar_obs:
                 self._update_lidar()
 
         # Set the time
-        self.current_time += self.sim_speedup_factor * self.tau
+        self.current_time += self.sim_speedup_factor * self.dt
 
         # Agent and flag checks and more
         self._check_oob_vectorized()
@@ -1062,7 +1099,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         return obs, rewards, terminated, truncated, info
 
-    def _move_agents(self, action_dict, dt):
+    def _move_agents(self, action_dict):
         """Moves agents in the space according to the specified speed/heading in `action_dict`."""
         for i, player in enumerate(self.players.values()):
             team_idx = int(player.team)
@@ -1698,7 +1735,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.oob_speed_frac = config_dict.get("oob_speed_frac", config_dict_std["oob_speed_frac"])
 
         # Simulation parameters
-        self.tau = config_dict.get("tau", config_dict_std["tau"])
+        self.dt = config_dict.get("tau", config_dict_std["tau"])
         self.sim_speedup_factor = config_dict.get("sim_speedup_factor", config_dict_std["sim_speedup_factor"])
 
         # Game parameters
@@ -1835,21 +1872,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     self.aquaticus_field_points[k][1] * self.env_size[1]
                 )
 
-        # Environment corners and edges
-        self.env_ll = np.array([0.0, 0.0])
-        self.env_lr = np.array([self.env_size[0], 0.0])
-        self.env_ur = np.array(self.env_size)
-        self.env_ul = np.array([0.0, self.env_size[1]])
-        self.env_corners = np.array([self.env_ll, self.env_lr, self.env_ur, self.env_ul])
-        self.env_edges = np.array([
-            [self.env_ll, self.env_lr],
-            [self.env_lr, self.env_ur],
-            [self.env_ur, self.env_ul],
-            [self.env_ul, self.env_ll]
-        ])
-        # ll = lower left, lr = lower right
-        # ul = upper left, ur = upper right
-
         ### Environment Rendering ###
         if self.render_mode:
             # pygame orientation vector
@@ -1891,14 +1913,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.agent_render_radius = np.clip(self.pixel_size * self.agent_radius, 15, None)  #pixels
 
             # miscellaneous
-            self.num_renders_per_step = round(self.render_fps * self.tau)
+            self.num_renders_per_step = round(self.render_fps * self.dt)
 
-            # check that time between frames (1/render_fps) is not larger than timestep (tau)
+            # check that time between frames (1/render_fps) is not larger than timestep (self.dt)
             frame_rate_err_msg = (
                 "Specified frame rate ({}) creates time intervals between frames larger"
-                " than specified timestep ({})".format(self.render_fps, self.tau)
+                " than specified timestep ({})".format(self.render_fps, self.dt)
             )
-            assert 1 / self.render_fps <= self.tau, frame_rate_err_msg
+            assert 1 / self.render_fps <= self.dt, frame_rate_err_msg
 
             # check that time warp is an integer >= 1
             if self.sim_speedup_factor < 1:
@@ -2918,7 +2940,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             raise Exception(
                 "Either env_bounds or blue AND red flag homes must be set in config_dict (cannot both be 'auto')"
             )
-        ### flag_homes ###
 
         if self.gps_env:
             ### environment bounds ###
@@ -3116,12 +3137,11 @@ when gps environment bounds are specified in meters"
                 env_bounds[1, 0] = EPSG_3857_EXT_X
 
             # clip y bounds
-            #TODO: add a warning if the bounds do need to be clipped
             if np.any(np.abs(env_bounds[:, 1]) > EPSG_3857_EXT_Y):
                 raise Warning(f"Clipping environment latitude bounds {env_bounds[:, 1]} to fall between {[-EPSG_3857_EXT_Y, EPSG_3857_EXT_Y]}")
                 env_bounds[:, 1] = np.clip(env_bounds[:, 1], -EPSG_3857_EXT_Y, EPSG_3857_EXT_Y)
 
-            # environment size, diagonal, corners, and edges
+            # environment size, diagonal, and corners
             self.env_size = wrap_mercator_x_dist(np.diff(env_bounds, axis=0)[0])
             self.env_diag = np.linalg.norm(self.env_size)
 
@@ -3136,21 +3156,15 @@ when gps environment bounds are specified in meters"
                 self.env_ur,
                 self.env_ul
             ])
-            self.env_edges = np.array([
-                [self.env_ll, self.env_lr],
-                [self.env_lr, self.env_ur],
-                [self.env_ur, self.env_ul],
-                [self.env_ul, self.env_ll],
-            ])
 
             ### flags home ###
             # auto home
             if self._is_auto_string(flag_homes[Team.BLUE_TEAM]) and self._is_auto_string(flag_homes[Team.RED_TEAM]):
                 flag_homes[Team.BLUE_TEAM] = wrap_mercator_x(
-                    env_bounds[0] + np.array([7/8 * self.env_size[0], 0.5 * self.env_size[1]])
+                    env_bounds[0] + np.array([1/8 * self.env_size[0], 0.5 * self.env_size[1]])
                 )
                 flag_homes[Team.RED_TEAM] = wrap_mercator_x(
-                    env_bounds[0] + np.array([1/8 * self.env_size[0], 0.5 * self.env_size[1]])
+                    env_bounds[0] + np.array([7/8 * self.env_size[0], 0.5 * self.env_size[1]])
                 )
             elif self._is_auto_string(flag_homes[Team.BLUE_TEAM]) or self._is_auto_string(flag_homes[Team.RED_TEAM]):
                 raise Exception("Flag homes should be either all 'auto', or all specified")
@@ -3377,7 +3391,7 @@ when gps environment bounds are specified in meters"
                             "Environment bounds in meters should be given as [xmax, ymax]"
                         )
 
-            # environment diagonal, corners, and edges
+            # environment diagonal and corners
             self.env_diag = np.linalg.norm(self.env_size)
 
             self.env_ll = np.array([0.0, 0.0])              #ll = lower left
@@ -3391,12 +3405,6 @@ when gps environment bounds are specified in meters"
                 self.env_ur,
                 self.env_ul
             ])
-            self.env_edges = np.array([
-                [self.env_ll, self.env_lr],
-                [self.env_lr, self.env_ur],
-                [self.env_ur, self.env_ul],
-                [self.env_ul, self.env_ll],
-            ])
 
             ### flags home ###
             # auto home
@@ -3405,8 +3413,8 @@ when gps environment bounds are specified in meters"
                     raise Exception(
                         "'ll' (Lat/Long) and 'wm_xy' (web mercator xy) units should only be used when gps_env is True"
                     )
-                flag_homes[Team.BLUE_TEAM] = np.array([7/8*self.env_size[0], 0.5*self.env_size[1]])
-                flag_homes[Team.RED_TEAM] = np.array([1/8*self.env_size[0], 0.5*self.env_size[1]])
+                flag_homes[Team.BLUE_TEAM] = np.array([1/8*self.env_size[0], 0.5*self.env_size[1]])
+                flag_homes[Team.RED_TEAM] = np.array([7/8*self.env_size[0], 0.5*self.env_size[1]])
             elif self._is_auto_string(flag_homes[Team.BLUE_TEAM]) or self._is_auto_string(flag_homes[Team.RED_TEAM]):
                 raise Exception(
                     "Flag homes are either all 'auto', or all specified"
@@ -3516,12 +3524,23 @@ when gps environment bounds are specified in meters"
         self.env_bounds = env_bounds
         self.env_bounds_unit = env_bounds_unit
 
+        self.env_edges = np.array([
+            [self.env_ll, self.env_lr],
+            [self.env_lr, self.env_ur],
+            [self.env_ur, self.env_ul],
+            [self.env_ul, self.env_ll]
+        ])
+
         self.flag_homes = flag_homes
         self.flag_homes_unit = flag_homes_unit
 
         self.scrimmage_coords = scrimmage_coords
         self.scrimmage_coords_unit = scrimmage_coords_unit
         self.scrimmage_vec = scrimmage_coords[1] - scrimmage_coords[0]
+
+        self.env_rot_angle = np.arctan2(self.env_lr[1], self.env_lr[0])
+        s, c = np.sin(-self.env_rot_angle), np.cos(-self.env_rot_angle)
+        self.env_rot_matrix = np.array([[c, -s], [s, c]])
 
         # on sides
         scrim2blue = self.flag_homes[Team.BLUE_TEAM] - scrimmage_coords[0]
@@ -3943,31 +3962,6 @@ when gps environment bounds are specified in meters"
         """p can be a single point or multiple points"""
         p = np.asarray(p)
         return np.any(p == 0, axis=-1) | np.any(p == self.env_size, axis=-1)
-
-    def _point_on_which_border(self, p):
-        """
-        p can be a single point or multiple points
-
-        Wall convention:
-         _____________ 3 _____________
-        |                             |
-        |                             |
-        |                             |
-        0                             2
-        |                             |
-        |                             |
-        |_____________ 1 _____________|
-
-        """
-        p = np.asarray(p)
-        p_borders_bool = np.concatenate((p == 0, p == self.env_size), axis=-1)
-
-        if p_borders_bool.ndim == 1:
-            p_borders = np.where(p_borders_bool)[0]
-        else:
-            p_borders = [np.where(pt_borders_bool)[0] for pt_borders_bool in p_borders_bool]
-
-        return p_borders
 
     def _segment_on_border(self, segment):
         p1_borders, p2_borders = self._point_on_which_border(segment)

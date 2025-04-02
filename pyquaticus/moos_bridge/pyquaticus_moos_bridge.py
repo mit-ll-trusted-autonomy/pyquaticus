@@ -22,16 +22,27 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
     * This class only controls a single agent
         -- run multiple instances (e.g., one per docker) to run multiple agents
     """
-    def __init__(self, server, agent_name, agent_port, team_names, opponent_names, moos_config, \
-                 quiet=True, team=None, timewarp=None, tagging_cooldown=config_dict_std["tagging_cooldown"],
-                 normalize=True):
+    def __init__(
+        self,
+        server: str,
+        agent_name: str,
+        agent_port: int,
+        team_names: list,
+        opponent_names: list,
+        all_agents_in_order: list,
+        moos_config,
+        quiet=True,
+        team=None,
+        timewarp=1
+    ):
         """
         Args:
-            server: server for the MOOS process
+            server: server for the MOOS process (either 'localhost' (if running locally), or vehicle/backseat computer IP address)
             name: the name of the agent
             port: the MOOS port for this agent
             team_names: list of names of team members
             opponent_names: list of names of opponents
+            all_agents_in_order: list of all agents names in the order they should be indexed (keep consistent across all instances of PyQuaticusMoosBridge)
             moos_config: one of the objects from pyquaticus.moos.config
             quiet: tell the pymoos comms object to be quiet
             team: which team this agent is (will infer based on name if not passed)
@@ -43,9 +54,10 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self._agent_port = agent_port
         self._team_names = team_names
         self._opponent_names = opponent_names
+        self._agent_names = all_agents_in_order
         self._quiet = quiet
         # Note: not using _ convention to match pyquaticus
-        self.timewarp = timewarp
+        self.timewarp = timewarp #moos version of sim_speedup_factor
         self.tagging_cooldown = tagging_cooldown
         self.normalize = normalize
 
@@ -397,7 +409,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         goal_flag = self.flags[not int(self.team)]
         flag_dist = np.hypot(goal_flag.home[0]-player.pos[0],
                              goal_flag.home[1]-player.pos[1])
-        if (flag_dist < self.capture_radius):
+        if (flag_dist < self.flag_grab_radius):
             print("SENDING A FLAG GRAB REQUEST!")
             self._moos_comm.notify('FLAG_GRAB_REQUEST', f'vname={self._agent_name}', -1)
 
@@ -485,10 +497,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.time_limit = self._moos_config.sim_time_limit
         self.timewarp = self._moos_config.moos_timewarp
 
-        # add some padding becaus it can end up going faster than requested speed
-        self.max_speed = self._moos_config.speed_bounds[1] + 0.5
-
-        self.capture_radius = self._moos_config.capture_radius
+        self.flag_grab_radius = self._moos_config.flag_grab_radius
 
         # game score
         self.max_score = self._moos_config.max_score

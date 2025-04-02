@@ -507,3 +507,7 @@ def closest_line(
         closest_line = closest_line.item()
 
     return closest_line
+
+def rigid_transform(pos, origin, rot_matrix):
+    """Translate and rotate a position vector (pos) based on origin and rotation matrix"""
+    return np.asarray(rot_matrix) @ (np.asarray(pos) - np.asarray(origin))

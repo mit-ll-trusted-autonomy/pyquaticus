@@ -199,10 +199,10 @@ ProcessConfig = pMarinePID
   ACTIVE_START  = true
 
   // Yaw PID controller (Set for M300)
-  YAW_PID_KP             = 0.35 
-  YAW_PID_KD             = 0.07 
-  YAW_PID_KI             = 0.0  
-  YAW_PID_INTEGRAL_LIMIT = 0.07 
+  YAW_PID_KP             = 0.9 
+  YAW_PID_KD             = 0.6 
+  YAW_PID_KI             = 0.3  
+  YAW_PID_INTEGRAL_LIMIT = 0.3 
 	
   // Speed PID controller
   SPEED_PID_KP           = 1.0
@@ -211,8 +211,8 @@ ProcessConfig = pMarinePID
   SPEED_PID_INTEGRAL_LIMIT = 0.07
 
   // Maximums
-  MAXRUDDER  = 100 // 100
-  MAXTHRUST  = 84
+  MAXRUDDER  = 100
+  MAXTHRUST  = 100
 
   // A non-zero SPEED_FACTOR overrides use of SPEED_PID
   // Will set DESIRED_THRUST = DESIRED_SPEED * SPEED_FACTOR
