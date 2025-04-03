@@ -286,8 +286,8 @@ class BaseUSV(Dynamics):
 
         # PID 
         self._pid_controllers = {
-            "speed": PID(dt=kwargs["dt"], kp=0.8, ki=0.11, kd=0.1, integral_limit=0.07, output_limit=max_thrust),
-            "heading": PID(dt=kwargs["dt"], kp=0.5, ki=0.012, kd=0.1, integral_limit=0.2, output_limit=max_rudder)
+            "speed": PID(dt=kwargs["dt"], kp=0.8, kd=0.1, ki=0.11, integral_limit=0.07, output_limit=max_thrust),
+            "heading": PID(dt=kwargs["dt"], kp=0.5, kd=0.1, ki=0.012, integral_limit=0.2, output_limit=max_rudder)
         }
 
     def reset(self):
@@ -511,16 +511,16 @@ class Heron(BaseUSV):
             "speed": PID(
                 dt=kwargs["dt"],
                 kp=1.0,
-                ki=0.0,
                 kd=0.0,
+                ki=0.0,
                 integral_limit=0.07,
                 output_limit=max_thrust
             ),
             "heading": PID(
                 dt=kwargs["dt"],
                 kp=0.9,
-                ki=0.3,
                 kd=0.6,
+                ki=0.3,
                 integral_limit=0.3,
                 output_limit=max_rudder
             )
@@ -588,16 +588,16 @@ class Surveyor(BaseUSV):
             "speed": PID(
                 dt=kwargs["dt"],
                 kp=0.5,
-                ki=0.0,
                 kd=0.0,
+                ki=0.0,
                 integral_limit=0.00,
                 output_limit=max_thrust
             ),
             "heading": PID(
                 dt=kwargs["dt"],
                 kp=1.2,
-                ki=0.0,
                 kd=3.0,
+                ki=0.0,
                 integral_limit=0.00,
                 output_limit=max_rudder
             )
@@ -636,8 +636,8 @@ class LargeUSV(BaseUSV):
 
         # PID
         self._pid_controllers = {
-            "speed": PID(dt=kwargs["dt"], kp=1.0, ki=0.0, kd=0.0, integral_limit=0.07),
-            "heading": PID(dt=kwargs["dt"], kp=0.35, ki=0.0, kd=0.07, integral_limit=0.07)
+            "speed": PID(dt=kwargs["dt"], kp=1.0, kd=0.0, ki=0.0, integral_limit=0.07, output_limit=max_thrust),
+            "heading": PID(dt=kwargs["dt"], kp=0.35, kd=0.07, ki=0.0, integral_limit=0.07, output_limit=max_rudder)
         }
 
 

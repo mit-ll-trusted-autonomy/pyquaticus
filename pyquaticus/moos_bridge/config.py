@@ -305,22 +305,6 @@ class FieldReaderConfig:
         print(self.scrimmage_coords)
 
         # other geometry parameters
-        self.env_size = np.array([
-            np.linalg.norm(self.env_ll - self.env_lr),
-            np.linalg.norm(self.env_ll - self.env_ul),
-        ])
-        self.env_corners = np.array([
-            self.env_ll,
-            self.env_lr,
-            self.env_ur,
-            self.env_ul
-        ])
-        self.env_diag = np.linalg.norm(self.env_size)
-
-        self.env_rot_angle = np.arctan2(self.env_lr[1], self.env_lr[0])
-        s, c = np.sin(-self.env_rot_angle), np.cos(-self.env_rot_angle)
-        self.env_rot_matrix = np.array([[c, -s], [s, c]])
-
         self.agent_radius = np.array(2 * [2.0])
         self.flag_grab_radius = 10 #meters
 
@@ -334,16 +318,6 @@ class FieldReaderConfig:
         self.max_score = 20 #captures
         self.max_time = 600.0  # moostime (sec) before terminating episode
         self.tagging_cooldown = 60 #seconds
-
-        ####### Observation and State Parameters #######
-        self.normalize_obs = True
-        self.lidar_obs = False
-        self.normalize_state = True
-
-        ####### Simulation Parameters #######
-        self.dt = 0.1 # moostime (sec) between steps
-        self.max_time = 600.0  # moostime (sec) before terminating episode
-        self.moos_timewarp = 1
 
     def _set_boundary_and_scrimmage(self):
         """
@@ -393,7 +367,7 @@ class MITConfig2025(FieldReaderConfig):
         super(str(pyquaticus_root / "moos" / "missions" / "charles-2025"))
 
         ####### Geometry Parameters #######
-        self.agent_radius = np.array(6 * [2.0])
+        self.agent_radius = 6 * [2.0]
 
         ####### Dynamics Parameters #######
-        self.max_speeds = np.array(6 * [2.5])
+        self.max_speeds = 6 * [2.5]

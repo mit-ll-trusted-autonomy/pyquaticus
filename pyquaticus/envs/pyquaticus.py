@@ -57,7 +57,7 @@ from pyquaticus.config import (
     LINE_INTERSECT_TOL,
     lidar_detection_classes,
     LIDAR_DETECTION_CLASS_MAP,
-    POLAR_RADIUS,
+    POLAR_RADIUS
 )
 from pyquaticus.dynamics.dynamics_registry import dynamics_registry
 from pyquaticus.structs import (
@@ -866,7 +866,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         else:
             dt = self.dt
 
-        # Create players, use IDs from [0, (2 * team size) - 1] so their IDs can also be used as indices.
+        # Create players
         b_players = []
         r_players = []
         for i in range(0, self.num_blue):
@@ -1702,7 +1702,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             config_dict: The provided configuration. If a key is missing, it is replaced
             with the standard configuration value.
         """
-        ### Set Variables from Configuration Dictionary ###
+        ### Set Variables from the Configuration Dictionary ###
         # Check for unrecognized variables
         for k in config_dict:
             if k not in config_dict_std:
@@ -1865,12 +1865,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if not self.gps_env:
             self.aquaticus_field_points = get_afp()
             for k in self.aquaticus_field_points:
-                self.aquaticus_field_points[k][0] = (
-                    self.aquaticus_field_points[k][0] * self.env_size[0]
-                )
-                self.aquaticus_field_points[k][1] = (
-                    self.aquaticus_field_points[k][1] * self.env_size[1]
-                )
+                self.aquaticus_field_points[k][0] *= self.env_size[0]
+                self.aquaticus_field_points[k][1] *= self.env_size[1]
 
         ### Environment Rendering ###
         if self.render_mode:

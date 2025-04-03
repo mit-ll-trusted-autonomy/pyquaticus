@@ -6,7 +6,7 @@ import time
 from pyquaticus.envs.pyquaticus import PyQuaticusEnvBase
 from pyquaticus.structs import Player, Team, Flag
 from pyquaticus.config import config_dict_std
-from pyquaticus.utils.utils import mag_bearing_to
+from pyquaticus.utils.utils import get_afp, mag_bearing_to
 
 
 class PyQuaticusMoosBridge(PyQuaticusEnvBase):
@@ -47,8 +47,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             quiet: tell the pymoos comms object to be quiet
             team: which team this agent is (will infer based on name if not passed)
             timewarp: specify the moos timewarp (IMPORTANT for messages to send correctly)
-                      uses moos_config default if not passed
         """
+        # MOOS Parameters
         self._server = server
         self._agent_name = agent_name
         self._agent_port = agent_port
@@ -56,15 +56,17 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self._opponent_names = opponent_names
         self._agent_names = all_agents_in_order
         self._quiet = quiet
-        # Note: not using _ convention to match pyquaticus
-        self.timewarp = timewarp #moos version of sim_speedup_factor
-        self.tagging_cooldown = tagging_cooldown
-        self.normalize = normalize
+        self.timewarp = timewarp
+        self._moos_comm = None
 
+        # Set variables from config
         self.set_config(moos_config)
 
-        self.game_score = {'blue_captures':0, 'red_captures':0}
+        # Create players
 
+        # Agents (player objects) of each team
+
+        # Team info
         if isinstance(team, str) and team.lower() in {"red", "blue"}:
             self.team = Team.RED_TEAM if team == "red" else Team.BLUE_TEAM
         elif "red" in agent_name and "blue" not in agent_name:
@@ -75,13 +77,29 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             raise ValueError(f"Unknown team: please pass team=[red|blue]")
 
         self._opponent_team = Team.BLUE_TEAM if self.team == Team.RED_TEAM else Team.RED_TEAM
-        self._moos_comm = None
 
         own_team_len = len(self._team_names) + 1
         opp_team_len = len(self._opponent_names)
         if own_team_len != opp_team_len:
             raise ValueError(f"Expecting equal team sizes but got: {own_team_len} vs {opp_team_len}")
 
+        # Create the list of flags that are indexed by self.flags[int(team)]
+        self.flags = []
+        for team in Team:
+            flag = Flag(team)
+            if team == Team.BLUE_TEAM:
+                flag.home = np.array(moos_config.blue_flag)
+                flag.pos = np.array(moos_config.blue_flag)
+            else:
+                assert team == Team.RED_TEAM
+                flag.home = np.array(moos_config.red_flag)
+                flag.pos = np.array(moos_config.red_flag)
+
+            self.flags.append(flag)
+
+        # Team wall orientation
+        # Obstacles and Lidar
+        # Setup action and observation spaces
         self.agent_obs_normalizer = self._register_state_elements(own_team_len)
 
         self.observation_space = self.get_agent_observation_space()
@@ -413,31 +431,131 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             print("SENDING A FLAG GRAB REQUEST!")
             self._moos_comm.notify('FLAG_GRAB_REQUEST', f'vname={self._agent_name}', -1)
 
-    def set_config(self, moos_config):
+    def set_config(self, moos_config, obs_config):
         """
-        Reads a configuration object to set the field and other configuration variables
-        See the default moos_config value in the constructor (__init__)
+        Reads moos and observation configuration objects to set the field and other configuration variables
         """
         self._moos_config = moos_config
-        self._blue_flag = np.asarray(self._moos_config.blue_flag, dtype=np.float32)
-        self._red_flag = np.asarray(self._moos_config.red_flag, dtype=np.float32)
 
-        self.flags = []
-        for team in Team:
-            flag = Flag(team)
-            if team == Team.BLUE_TEAM:
-                flag.home = self._blue_flag
-                flag.pos = self._blue_flag
-            else:
-                assert team == Team.RED_TEAM
-                flag.home = self._red_flag
-                flag.pos = self._red_flag
-            self.flags.append(flag)
+        ### Set Variables from Configurations ###
+        # Check for unrecognized variables in obs_config dictionary
+        for k in obs_config:
+            if k not in obs_config_std:
+                print(f"Warning! Config variable '{k}' not recognized (it will have no effect).")
+                print("Please consult /moos_bridge/config.py for variable names.")
+                print()
 
-        self.scrimmage_pnts = np.asarray(self._moos_config.scrimmage_pnts, dtype=np.float32)
-        # save the lower and upper point (used to determine distance to scrimmage line)
-        self.scrimmage_l = self.scrimmage_pnts[0]
-        self.scrimmage_u = self.scrimmage_pnts[1]
+        # Dynamics Parameters
+        self.max_speeds = np.asarray(moos_config.max_speeds)
+        if not (len(self.max_speeds) == len(self._agent_names)):
+            raise Exception(
+                f"max_speeds list length must be equal to the number of agents."
+            )
+
+        # Simulation parameters
+        self.dt = moos_config.dt # moostime (sec) between steps
+
+        # Game parameters
+        self.max_score = moos_config.max_score #captures
+        self.max_time = moos_config.max_time # moostime (sec) before terminating episode
+        self.tagging_cooldown = moos_config.tagging_cooldown #seconds
+
+        # Observation and state parameters
+        self.normalize_obs = obs_config.get("normalize_obs", obs_config_std["normalize_obs"])
+        self.short_obs_hist_length = obs_config.get("short_obs_hist_length", obs_config_std["short_obs_hist_length"])
+        self.short_obs_hist_interval = obs_config.get("short_obs_hist_interval", obs_config_std["short_obs_hist_interval"])
+        self.long_obs_hist_length = obs_config.get("long_obs_hist_length", obs_config_std["long_obs_hist_length"])
+        self.long_obs_hist_interval = obs_config.get("long_obs_hist_interval", obs_config_std["long_obs_hist_interval"])
+
+        # Lidar-specific observation parameters
+        self.lidar_obs = False #not supported at this time
+
+        # Global state parameters
+        self.normalize_state = obs_config.get("normalize_state", obs_config_std["normalize_state"])
+        self.short_state_hist_length = obs_config.get("short_state_hist_length", obs_config_std["short_state_hist_length"])
+        self.short_state_hist_interval = obs_config.get("short_state_hist_interval", obs_config_std["short_state_hist_interval"])
+        self.long_state_hist_length = obs_config.get("long_state_hist_length", obs_config_std["long_state_hist_length"])
+        self.long_state_hist_interval = obs_config.get("long_state_hist_interval", obs_config_std["long_state_hist_interval"])
+
+        ### Environment History ###
+        # Observations
+        short_obs_hist_buffer_inds = np.arange(0, self.short_obs_hist_length * self.short_obs_hist_interval, self.short_obs_hist_interval)
+        long_obs_hist_buffer_inds = np.arange(0, self.long_obs_hist_length * self.long_obs_hist_interval, self.long_obs_hist_interval)
+        self.obs_hist_buffer_inds = np.unique(
+            np.concatenate((short_obs_hist_buffer_inds, long_obs_hist_buffer_inds))
+        )  # indices of history buffer corresponding to history entries
+
+        self.obs_hist_len = len(self.obs_hist_buffer_inds)
+        self.obs_hist_buffer_len = self.obs_hist_buffer_inds[-1] + 1
+
+        short_obs_hist_oldest_timestep = self.short_obs_hist_length * self.short_obs_hist_interval - self.short_obs_hist_interval
+        long_obs_hist_oldest_timestep = self.long_obs_hist_length * self.long_obs_hist_interval - self.long_obs_hist_interval
+        if short_obs_hist_oldest_timestep > long_obs_hist_oldest_timestep:
+            raise Warning(
+                f"The short term obs history contains older timestep (-{short_obs_hist_oldest_timestep}) than the long term obs history (-{long_obs_hist_oldest_timestep})."
+            )
+        
+        # Global State
+        short_state_hist_buffer_inds = np.arange(0, self.short_state_hist_length * self.short_state_hist_interval, self.short_state_hist_interval)
+        long_state_hist_buffer_inds = np.arange(0, self.long_state_hist_length * self.long_state_hist_interval, self.long_state_hist_interval)
+        self.state_hist_buffer_inds = np.unique(
+            np.concatenate((short_state_hist_buffer_inds, long_state_hist_buffer_inds))
+        )  # indices of history buffer corresponding to history entries
+
+        self.state_hist_len = len(self.state_hist_buffer_inds)
+        self.state_hist_buffer_len = self.state_hist_buffer_inds[-1] + 1
+
+        short_state_hist_oldest_timestep = self.short_state_hist_length * self.short_state_hist_interval - self.short_state_hist_interval
+        long_state_hist_oldest_timestep = self.long_state_hist_length * self.long_state_hist_interval - self.long_state_hist_interval
+        if short_state_hist_oldest_timestep > long_state_hist_oldest_timestep:
+            raise Warning(
+                f"The short term state history contains older timestep (-{short_state_hist_oldest_timestep}) than the long term state history (-{long_state_hist_oldest_timestep})."
+            )
+
+        ### Environment Geometry Construction ###
+        # Basic environment features
+        #environment geometries
+        self.env_ll = np.asarray(moos_config.env_ll)
+        self.env_lr = np.asarray(moos_config.env_lr)
+        self.env_ur = np.asarray(moos_config.env_ur)
+        self.env_ul = np.asarray(moos_config.env_ul)
+
+        self.env_size = np.array([
+            np.linalg.norm(self.env_ll - self.env_lr),
+            np.linalg.norm(self.env_ll - self.env_ul),
+        ])
+        self.env_corners = np.array([
+            self.env_ll,
+            self.env_lr,
+            self.env_ur,
+            self.env_ul
+        ])
+        self.env_diag = np.linalg.norm(self.env_size)
+
+        self.scrimmage_coords = np.asarray(moos_config.scrimmage_coords)
+        self.scrimmage_vec = scrimmage_coords[1] - scrimmage_coords[0]
+
+        self.env_rot_angle = np.arctan2(self.env_lr[1], self.env_lr[0])
+        s, c = np.sin(-self.env_rot_angle), np.cos(-self.env_rot_angle)
+        self.env_rot_matrix = np.array([[c, -s], [s, c]])
+
+        #on sides
+        scrim2blue = self.flag_homes[Team.BLUE_TEAM] - scrimmage_coords[0]
+        scrim2red = self.flag_homes[Team.RED_TEAM] - scrimmage_coords[0]
+
+        self.on_sides_sign = {}
+        self.on_sides_sign[Team.BLUE_TEAM] = np.sign(np.cross(self.scrimmage_vec, scrim2blue))
+        self.on_sides_sign[Team.RED_TEAM] = np.sign(np.cross(self.scrimmage_vec, scrim2red))
+
+        #agent and flag geometries
+        self.agent_radius = np.asarray(moos_config.agent_radius)
+        if not (len(self.agent_radius) == len(self._agent_names)):
+            raise Exception(
+                f"agent_radius list length must be equal to the number of agents."
+            )
+        self.flag_grab_radius = moos_config.flag_grab_radius
+
+
         # define function for checking which side an agent is on
         if abs(self.scrimmage_pnts[0][0] - self.scrimmage_pnts[1][0]) < 1e-2:
             # Vertical scrimmage line
@@ -479,29 +597,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
         self._check_on_side = check_side
 
-        # The operating boundary is defined in shoreside/meta_shoreside.moos
-        self.boundary_ul = np.asarray(self._moos_config.boundary_ul, dtype=np.float32)
-        self.boundary_ur = np.asarray(self._moos_config.boundary_ur, dtype=np.float32)
-        self.boundary_ll = np.asarray(self._moos_config.boundary_ll, dtype=np.float32)
-        self.boundary_lr = np.asarray(self._moos_config.boundary_lr, dtype=np.float32)
-        self.env_size  = np.array([np.linalg.norm(self.boundary_lr - self.boundary_ll),
-                                     np.linalg.norm(self.boundary_ul - self.boundary_ll)])
-        
-        # save the horizontal location of scrimmage line (relative to world/ playing field)
-        self.scrimmage = 0.5*self.env_size[0]
-        
-        if self.timewarp is not None:
-            self._moos_config.moos_timewarp = self.timewarp
-            self._moos_config.sim_timestep = self._moos_config.moos_timewarp / 10.0
-        self.steptime = self._moos_config.sim_timestep
-        self.time_limit = self._moos_config.sim_time_limit
-        self.timewarp = self._moos_config.moos_timewarp
-
-        self.flag_grab_radius = self._moos_config.flag_grab_radius
-
-        # game score
-        self.max_score = self._moos_config.max_score
-
-        # mark this function called already
-        # if called again, nothing will happen
-        self._config_set = True
+        # Scale the aquaticus point field by env size
+        self.aquaticus_field_points = get_afp()
+        for k in self.aquaticus_field_points:
+            self.aquaticus_field_points[k][0] *= self.env_size[0]
+            self.aquaticus_field_points[k][1] *= self.env_size[1]

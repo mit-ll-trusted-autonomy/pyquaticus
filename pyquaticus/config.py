@@ -49,7 +49,7 @@ config_dict_std = {
 
     # Dynamics parameters
     "oob_speed_frac":        0.5,  # proportion
-    "dynamics":          "heron",  # dynamics to use for agents (from dynamics_registry.py)
+    "dynamics":       "surveyor",  # dynamics to use for agents (from dynamics_registry.py)
 
     # note: if different dynamics are desired for different agents, provide a list / tuple / numpy.ndarray like
     # ["heron", "large_usv", "heron", "drone", "fixed_wing", "fixed_wing"]
