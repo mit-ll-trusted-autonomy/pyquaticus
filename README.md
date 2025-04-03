@@ -24,6 +24,7 @@ The default vehicle dynamics are based on the [MOOS-IvP](https://oceanai.mit.edu
 
 
 ## Installation
+### Conda
 It is highly recommended to use a `conda` environment. Assuming you have [Anaconda](https://www.anaconda.com/) or [Miniconda](https://docs.conda.io/en/latest/miniconda.html) installed, run the following from the top-level of this repository:
 
 ```
@@ -36,7 +37,20 @@ It is highly recommended to use a `conda` environment. Assuming you have [Anacon
 ./setup-conda-env.sh full
 ```
 
-You can then activate the environment with: `conda activate env-light/` or `conda activate env-full/` 
+You can then activate the environment with: `conda activate env-light/` or `conda activate env-full/`
+### Venv
+Create a virtual environment with Python 3.10
+
+Source the environment
+
+In the pyquaticus root directory, run either
+```
+pip install -e .
+```
+or
+```
+pip install -e .[torch,ray]
+```
 
 ## Basic Tests
 

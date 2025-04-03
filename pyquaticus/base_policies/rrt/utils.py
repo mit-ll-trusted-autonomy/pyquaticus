@@ -133,13 +133,6 @@ def get_random_point(
 ) -> tuple[Point, Point]:
     """
     Gets a random point (and its nearest neighbor) that is not in any of the obstacles.
-
-    Args:
-        area (np.ndarray): ((xmin, ymin), (xmax, ymax))
-        obstacles (np.ndarray): list of obstacles
-
-    Returns:
-        Point: point not in obstacles
     """
 
     # 5% chance to sample goal point, if it exists
@@ -273,12 +266,23 @@ def pad(seglist: np.ndarray, length: int) -> np.ndarray:
         constant_values=np.nan,
     )
 
-def point_in_circles(point: np.ndarray, circles: Optional[np.ndarray], radius: float = 1e-9):
+
+def point_in_circles(
+    point: np.ndarray, circles: Optional[np.ndarray], radius: float = 1e-9
+):
+    """
+    Determines if a single point is in any of the circles.
+
+    Args:
+        point (np.ndarray): (x, y)
+
+        circles (np.ndarray): ((x1, y1, r1), (x2, y2, r2), ... , (xn, yn, rn))
+    """
     point = point.reshape((2))
 
     if circles is None:
         return False
-    
+
     circles = circles.reshape((-1, 3))
 
     centers = circles[:, :2]
@@ -286,7 +290,7 @@ def point_in_circles(point: np.ndarray, circles: Optional[np.ndarray], radius: f
     radii = circles[:, 2] + radius
 
     dists = np.linalg.norm(point - centers, axis=1)
-    
+
     return np.any(dists < radii)
 
 
@@ -454,6 +458,13 @@ def intersect(
 def intersect_circles(
     seg_array: np.ndarray, circles: Optional[np.ndarray], agent_radius: float
 ) -> np.ndarray:
+    """
+    Determines which segments intersect the given circles.
+
+    Args:
+        seg_array (np.ndarray of shape (n, 2, 2)): (((x1, y1), (x2, y2)), ((x1, y1), (x2, y2)), ... )
+        circles (np.ndarray): ((x1, y1, r1), (x2, y2, r2), ... , (xn, yn, rn))
+    """
     if circles is None:
         return np.full((seg_array.shape[0]), False)
 
