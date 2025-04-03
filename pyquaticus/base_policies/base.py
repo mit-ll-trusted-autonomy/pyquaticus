@@ -84,14 +84,16 @@ class BaseAgentPolicy:
 
     def compute_action(self, obs, info) -> Any:
         """
-        Compute an action from the given observation and info.
+        Compute an action from the given observation and global state.
 
         Args:
-            obs: observation from gym
-            info: info from gym
+            obs: observation from the gym
+            info: info from the gym
 
-        Returns:
-            action: either an action index (from ACTION_MAP in config.py) or a tuple (desired_spead, heading_error)
+        Returns
+        -------
+            action: if continuous, a tuple containing desired speed and heading error.
+            if discrete, an action index corresponding to ACTION_MAP in config.py
         """
         pass
 

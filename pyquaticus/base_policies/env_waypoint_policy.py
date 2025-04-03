@@ -35,7 +35,7 @@ from functools import partial
 
 
 class EnvWaypointPolicy:
-    """Waypoint policy for use inside Pyquaticus environment only."""
+    """Lightweight version of WaypointPolicy for use inside Pyquaticus environment only."""
 
     def __init__(
         self,
@@ -69,7 +69,9 @@ class EnvWaypointPolicy:
 
         self.planning = False
 
-    def get_env_geom(self, obstacles: list) -> tuple[Optional[list[np.ndarray]], Optional[list[tuple[float, float, float]]]]:
+    def get_env_geom(
+        self, obstacles: list
+    ) -> tuple[Optional[list[np.ndarray]], Optional[list[tuple[float, float, float]]]]:
         final_obstacles = []
         circle_obstacles = []
         for obstacle in obstacles:
