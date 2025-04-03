@@ -183,8 +183,8 @@ def main():
     config["render_agent_ids"] = True
     config["render_traj_mode"] = "traj"
     config["render_traj_cutoff"] = 100
-    config["dynamics"] = ["surveyor", "surveyor"]#si
-    config["render_saving"] = False
+    config["tag_on_oob"] = False
+    config["dynamics"] = ["surveyor", "surveyor"]
     # config["lidar_obs"] = True
     # config["render_lidar_mode"] = "detection"
     # config["lidar_range"] = 20
