@@ -32,7 +32,6 @@ import pathlib
 import pickle
 import pygame
 import random
-import warnings
 import subprocess
 
 from abc import ABC
@@ -40,7 +39,7 @@ from collections import defaultdict, OrderedDict
 from contextily.tile import _sm2ll
 from datetime import datetime
 from geographiclib.geodesic import Geodesic
-from gymnasium.spaces import Discrete
+from gymnasium.spaces import Box, Discrete
 from gymnasium.utils import seeding
 from math import ceil, floor
 from pettingzoo import ParallelEnv
@@ -94,7 +93,7 @@ from pyquaticus.utils.utils import (
 from pyquaticus.base_policies.env_waypoint_policy import EnvWaypointPolicy
 from scipy.ndimage import label
 from shapely import intersection, LineString, Point, Polygon
-from typing import Optional, Union
+from typing import Optional
 
 
 class PyQuaticusEnvBase(ParallelEnv, ABC):
@@ -110,11 +109,11 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
     1. converting from discrete actions to a desired speed/heading command
     2. converting from raw states in Player objects to a normalized observation space
 
-    ### Action Space
+    ### Action Space Options
 
-    A discrete action space with all combinations of
-    max speed, half speed; and
-    45 degree heading intervals
+    Discrete action space ('discrete'): all combinations of max speed, half speed; and 45 degree heading intervals
+    Continuous action space ('continuous'): speed from 0 to max speed, desired relative headings from -180 to 180
+    Aquaticus field points ('afp'): strings (see config.py) indicating desired pos from aquaticus point field
 
     ### Observation Space
 
@@ -190,7 +189,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                   as the heading error in the PID controller
         """
         processed_action_dict = OrderedDict()
-        for player in self.players.values():
+        for i, player in enumerate(self.players.values()):
             if player.id in action_dict:
                 # Continuous actions
                 if isinstance(action_dict[player.id], (list, tuple, np.ndarray)):
@@ -222,14 +221,14 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                     ):
                         speed = 0.0
                     else:
-                        speed = self.max_speeds[self.agents.index(player.id)]
+                        speed = self.max_speeds[i]
 
                 # Discrete action space
                 else:
                     speed, rel_heading = self._discrete_action_to_speed_relheading(
                         action_dict[player.id]
                     )
-                    speed = self.max_speeds[self.agents.index(player.id)] * speed #scale speed to agent's max speed
+                    speed = self.max_speeds[i] * speed #scale speed to agent's max speed
             else:
                 # If no action provided, stop moving
                 speed, rel_heading = 0.0, 0.0
@@ -239,7 +238,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         return processed_action_dict
 
     def _discrete_action_to_speed_relheading(self, action):
-        return self.action_map[action]
+        return self.discrete_action_map[action]
 
     def _relheading_to_global_heading(self, player_heading, relheading):
         return angle180((player_heading + relheading) % 360)
@@ -673,23 +672,32 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         else:
             return global_state
 
-    def action_space(self, agent):
-        return self.action_spaces[agent]
+    def action_space(self, agent_id: str):
+        return self.action_spaces[agent_id]
 
-    def observation_space(self, agent):
-        return self.observation_spaces[agent]
+    def observation_space(self, agent_id: str):
+        return self.observation_spaces[agent_id]
+
+    def get_agent_action_space(self, action_space: str, agent_idx: int):
+        """Legacy Gym method"""
+        if action_space == "discrete":    
+            return Discrete(len(self.discrete_action_map))
+        elif action_space == "continuous":
+            return Box(
+                low=np.array([0, -180]), #speed, relative heading
+                high=np.array([self.max_speeds[agent_idx], 180]) #speed, relative heading
+            )
+        elif action_space == "afp":
+            return Discrete(len(self.aquaticus_field_points))
+        else:
+            raise Exception(f"Action space type '{action_space}' not recognized. Choose from: 'discrete', 'continuous', or 'afp'")
 
     def get_agent_observation_space(self):
-        """Overridden method inherited from `Gym`."""
+        """Legacy Gym method"""
         if self.normalize_obs:
-            agent_obs_space = self.agent_obs_normalizer.normalized_space
+            return self.agent_obs_normalizer.normalized_space
         else:
-            agent_obs_space = self.agent_obs_normalizer.unnormalized_space
-        return agent_obs_space
-
-    def get_agent_action_space(self):
-        """Overridden method inherited from `Gym`."""
-        return Discrete(len(self.action_map))
+            return self.agent_obs_normalizer.unnormalized_space
 
     def _determine_team_wall_orient(self):
         """
@@ -794,7 +802,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         |_____________ 1 _____________|
 
         """
-        p = np.asarray(p)
+        p = self._standard_pos(p)
         p_borders_bool = np.concatenate((p == 0, p == self.env_size), axis=-1)
 
         if p_borders_bool.ndim == 1:
@@ -808,13 +816,21 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         """
         Converts pos into env reference frame based on the boundary.
         """
-        return rigid_transform(pos, self.env_ll, self.env_rot_matrix)
+        return rigid_transform(pos, self.env_ll, self.env_rot_matrix.T)
 
     def _standard_heading(self, heading):
         """
         Converts heading into env reference frame based on the boundary.
         """
         return heading - self.env_rot_angle
+
+    def _check_on_side(self, pos, team):
+        """pos can be a single point or multiple points"""
+        scrim2pos = np.asarray(pos) - self.scrimmage_coords[0]
+        cp_sign = np.sign(np.cross(self.scrimmage_vec, scrim2pos))
+
+        return (cp_sign == self.on_sides_sign[team]) | (cp_sign == 0)
+
 
 class PyQuaticusEnv(PyQuaticusEnvBase):
     """
@@ -824,7 +840,23 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
     ### Arguments
     team_size: number of agents per team
+    
+    action_space: type of action space for each agent ('discrete', 'continuous', or 'afp')
+        (1) 'discrete': discrete action space with all combinations of max speed, half speed; and 45 degree relative heading intervals
+        (2) 'continuous': continuous action space for speed [0, max speed] and desired relative heading [0, 359]
+        (3) 'afp': discrete action space of target positions from AQUATICUS_FIELD_POINTS (see config.py)
+
+        Note 1: If different action spaces are desired for different agents, provide a list / tuple / array of length 2*team_size like:
+                ['discrete', 'discrete', 'continuous', 'afp']
+                Each action space type will be applied to the agent at the corresponding index in self.agents.
+
+        Note 2: All agents can take each type of action input to the step function regardless of the type action space specified.
+                This parameter is just used to set the PettingZoo standard action_spaces attribute.
+
+        Note 3: Inputs to the step function for the 'afp' action space will be strings AQUATICUS_FIELD_POINTS (see config.py)
+    
     reward_config: a dictionary configuring the reward structure (see rewards.py)
+    
     config_dict: a dictionary configuring the environment (see config_dict_std above)
     """
 
@@ -833,6 +865,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     def __init__(
         self,
         team_size: int = 1,
+        action_space: str | list[str] = "discrete",
         reward_config: dict = None,
         config_dict = config_dict_std,
         render_mode: Optional[str] = None
@@ -860,13 +893,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # Set variables from config
         self.set_config_values(config_dict)
 
-        # Set dt (needed for dynamics)
+        # Create players
         if self.render_mode:
             dt = 1 / self.render_fps
         else:
             dt = self.dt
 
-        # Create players
         b_players = []
         r_players = []
         for i in range(0, self.num_blue):
@@ -919,8 +951,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.set_geom_config(config_dict)
 
         # Setup action and observation spaces
-        self.action_map = [[spd, hdg] for (spd, hdg) in ACTION_MAP]
-        self.action_spaces = {agent_id: self.get_agent_action_space() for agent_id in self.players}
+        action_space = self.multiagent_var(action_space, str, "action_space")
+        self.discrete_action_map = [[spd, hdg] for (spd, hdg) in ACTION_MAP]
+        self.action_spaces = {agent_id: self.get_agent_action_space(action_space[i], i) for i, agent_id in enumerate(self.players)}
 
         self.agent_obs_normalizer, self.global_state_normalizer = self._register_state_elements(team_size, len(self.obstacles))
         self.observation_spaces = {agent_id: self.get_agent_observation_space() for agent_id in self.players}
@@ -1108,7 +1141,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             flag_home = self.flags[team_idx].home
 
             # Check if agent is on their own side
-            player.on_own_side = self._check_on_sides(player.pos, player.team)
+            player.on_own_side = self._check_on_side(player.pos, player.team)
             self.state["agent_on_sides"][i] = player.on_own_side
 
             # If the player hits an obstacle, send back to previous position and rotate, then skip to next agent
@@ -1214,13 +1247,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.state['agent_speed'][i] = player.speed
             self.state['agent_heading'][i] = player.heading
             self.state['agent_dynamics'][i] = player.state
-
-    def _check_on_sides(self, pos, team):
-        """pos can be a single point or multiple points"""
-        scrim2pos = np.asarray(pos) - self.scrimmage_coords[0]
-        cp_sign = np.sign(np.cross(self.scrimmage_vec, scrim2pos))
-
-        return (cp_sign == self.on_sides_sign[team]) | (cp_sign == 0)
 
     def _get_oob_recover_rel_heading(self, pos, heading):
         #compute the closest env edge and steer towards heading perpendicular to edge
@@ -1358,8 +1384,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         """Checks if players are out of bounds and updates their states (and any flags in their possesion) accordingly."""
         # Set out-of-bounds
         agent_poses = self.state['agent_position']
-        agent_radius = self.agent_radius.reshape(-1, 1)
-        agent_oob = np.any((agent_poses <= agent_radius) | ((self.env_size - agent_radius) <= agent_poses), axis=-1)
+        agent_oob = np.any((agent_poses <= 0) | (self.env_size <= agent_poses), axis=-1)
 
         self.state['agent_oob'] = agent_oob
         for i, oob in enumerate(agent_oob):
@@ -1676,8 +1701,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         Updates game state attribute agent_collisions
         Note: Checks collisions between all players teammates and opponents
         """
-        for player_id in self.players:
-            for other_id in self.players:
+        for i, player_id in enumerate(self.players):
+            for j, other_id in enumerate(self.players):
                 if player_id == other_id:
                     continue
                 else:
@@ -1687,8 +1712,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         if dist_between_agents >= 0.0 and dist_between_agents <= 2.5:
                             self.active_collisions.append((player_id, other_id))
                             self.active_collisions.append((other_id, player_id))
-                            self.state['agent_collisions'][self.agents.index(player_id)] += 1
-                            self.state['agent_collisions'][self.agents.index(other_id)] += 1
+                            self.state['agent_collisions'][i] += 1
+                            self.state['agent_collisions'][j] += 1
                     else:
                         if dist_between_agents > 3.0:
                             self.active_collisions.remove((player_id, other_id))
@@ -1719,7 +1744,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         if isinstance(self.dynamics, (list, tuple, np.ndarray)):
             if len(self.dynamics) != 2*self.team_size:
-                raise Warning(f"Length of dynamics config list must match total number of agents ({2*self.team_size})")
+                raise Exception(f"Length of dynamics config list must match total number of agents ({2*self.team_size})")
         elif isinstance(self.dynamics, str):
             self.dynamics = [self.dynamics for i in range(2*self.team_size)]
         else:
@@ -1727,7 +1752,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         for dynamics in self.dynamics:
             if dynamics not in dynamics_registry:
-                raise Warning(
+                raise Exception(
                     f"{dynamics} is not a valid dynamics class. Please check dynamics_registry.py"
                 )
 
@@ -1798,9 +1823,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         short_obs_hist_oldest_timestep = self.short_obs_hist_length * self.short_obs_hist_interval - self.short_obs_hist_interval
         long_obs_hist_oldest_timestep = self.long_obs_hist_length * self.long_obs_hist_interval - self.long_obs_hist_interval
         if short_obs_hist_oldest_timestep > long_obs_hist_oldest_timestep:
-            raise Warning(
-                f"The short term obs history contains older timestep (-{short_obs_hist_oldest_timestep}) than the long term obs history (-{long_obs_hist_oldest_timestep})."
-            )
+            print(f"Warning! The short term obs history contains older timestep (-{short_obs_hist_oldest_timestep}) than the long term obs history (-{long_obs_hist_oldest_timestep}).")
         
         # Global State
         short_state_hist_buffer_inds = np.arange(0, self.short_state_hist_length * self.short_state_hist_interval, self.short_state_hist_interval)
@@ -1815,9 +1838,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         short_state_hist_oldest_timestep = self.short_state_hist_length * self.short_state_hist_interval - self.short_state_hist_interval
         long_state_hist_oldest_timestep = self.long_state_hist_length * self.long_state_hist_interval - self.long_state_hist_interval
         if short_state_hist_oldest_timestep > long_state_hist_oldest_timestep:
-            raise Warning(
-                f"The short term state history contains older timestep (-{short_state_hist_oldest_timestep}) than the long term state history (-{long_state_hist_oldest_timestep})."
-            )
+            print(f"Warning! The short term state history contains older timestep (-{short_state_hist_oldest_timestep}) than the long term state history (-{long_state_hist_oldest_timestep}).")
 
         ### Environment Geometry Construction ###
         # Basic environment features
@@ -1833,16 +1854,16 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         scrimmage_coords_unit = config_dict.get("scrimmage_coords_unit", config_dict_std["scrimmage_coords_unit"])
 
         agent_radius = config_dict.get("agent_radius", config_dict_std["agent_radius"])
-        agent_radius = self.multiagent_var(agent_radius, "agent_radius")
+        agent_radius = self.multiagent_var(agent_radius, float, "agent_radius")
 
         flag_radius = config_dict.get("flag_radius", config_dict_std["flag_radius"])
         flag_keepout_radius = config_dict.get("flag_keepout", config_dict_std["flag_keepout"])
         catch_radius = config_dict.get("catch_radius", config_dict_std["catch_radius"])
         if flag_keepout_radius >= (catch_radius - max(agent_radius)):
-            raise Warning("Flag keepout radius is >= than the catch radius")
+            print(f"Warning! Flag keepout radius is >= than the catch radius")
 
         slip_radius = config_dict.get("slip_radius", config_dict_std["catch_radius"])
-        slip_radius = self.multiagent_var(slip_radius, "slip_radius")
+        slip_radius = self.multiagent_var(slip_radius, float, "slip_radius")
 
         lidar_range = config_dict.get("lidar_range", config_dict_std["lidar_range"])
 
@@ -1920,12 +1941,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             # check that time warp is an integer >= 1
             if self.sim_speedup_factor < 1:
-                print("Warning: sim_speedup_factor must be an integer >= 1! Defaulting to 1.")
+                print("Warning! sim_speedup_factor must be an integer >= 1! Defaulting to 1.")
                 self.sim_speedup_factor = 1
 
             if type(self.sim_speedup_factor) != int:
                 self.sim_speedup_factor = int(np.round(self.sim_speedup_factor))
-                print(f"Warning: Converted sim_speedup_factor to integer: {self.sim_speedup_factor}")
+                print(f"Warning! Converted sim_speedup_factor to integer: {self.sim_speedup_factor}")
 
             # check that render_saving is only True if environment is being rendered
             if self.render_saving:
@@ -1954,7 +1975,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     obstacle_params = {"polygon": []}
                 obstacle_params["polygon"].extend(island_contours)
 
-        self.obstacles = list()
+        self.obstacles = []
         self.obstacle_geoms = (
             dict()
         )  # arrays with geometric info for obstacles to be used for vectorized calculations
@@ -2070,15 +2091,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             # flags
             for i, _ in enumerate(self.flags):
                 vertices = list(Point(0.0, 0.0).buffer(self.flag_radius, quad_segs=n_quad_segs).exterior.coords)[:-1]
-                segments = [[*vertex, *vertices[(i + 1) % len(vertices)]] for i, vertex in enumerate(vertices)]
+                segments = [[*vertex, *vertices[(j + 1) % len(vertices)]] for j, vertex in enumerate(vertices)]
                 ray_int_seg_labels.extend(len(segments) * [self.ray_int_label_map[f"flag_{i}"]])
                 self.seg_label_type_to_inds["flag"].extend(np.arange(len(ray_int_segments), len(ray_int_segments) + len(segments)))
                 ray_int_segments.extend(segments)
 
             # agents
-            for agent_id in self.agents:
-                vertices = list(Point(0.0, 0.0).buffer(self.agent_radius[self.agents.index(agent_id)], quad_segs=n_quad_segs).exterior.coords)[:-1]
-                segments = [[*vertex, *vertices[(i + 1) % len(vertices)]] for i, vertex in enumerate(vertices)]
+            for i, agent_id in enumerate(self.agents):
+                vertices = list(Point(0.0, 0.0).buffer(self.agent_radius[i], quad_segs=n_quad_segs).exterior.coords)[:-1]
+                segments = [[*vertex, *vertices[(j + 1) % len(vertices)]] for j, vertex in enumerate(vertices)]
                 ray_int_seg_labels.extend(len(segments) * [self.ray_int_label_map[agent_id]])
                 self.seg_label_type_to_inds["agent"].extend(np.arange(len(ray_int_segments), len(ray_int_segments) + len(segments)))
                 ray_int_segments.extend(segments)
@@ -2654,7 +2675,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
     def _generate_agent_starts(
         self,
-        flag_homes_not_picked_up: Union[list, np.ndarray],
+        flag_homes_not_picked_up: list | np.ndarray,
         agent_pos_dict: Optional[dict] = None,
         agent_spd_dict: Optional[dict] = None,
         agent_hdg_dict: Optional[dict] = None,
@@ -2726,7 +2747,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         valid_pos = False
                         while not valid_pos:
                             pos = np.random.choice((-1,1), size=2) * np.random.rand(2) * (self.env_size/2 - self.agent_radius[i]) + self.env_size/2
-                            valid_pos = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)[0] and not self._check_on_sides(pos, player.team)
+                            valid_pos = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)[0] and not self._check_on_side(pos, player.team)
                     elif self.default_init:
                         flag_home = self.flags[int(player.team)].home
                         closest_scrim_line_point = closest_point_on_line(*self.scrimmage_coords, flag_home)
@@ -2748,10 +2769,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         pos[0] = max(2*self.agent_radius[i], min(self.env_size[0] - 2*self.agent_radius[i], pos[0])) #project out-of-bounds pos back into the environment (with buffer)
                         pos[1] = max(2*self.agent_radius[i], min(self.env_size[1] - 2*self.agent_radius[i], pos[1])) #project out-of-bounds pos back into the environment (with buffer)
 
-                        valid_pos = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)[0] and self._check_on_sides(pos, player.team)
+                        valid_pos = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)[0] and self._check_on_side(pos, player.team)
                         while not valid_pos:
                             pos = np.random.choice((-1,1), size=2) * np.random.rand(2) * (self.env_size/2 - self.agent_radius[i]) + self.env_size/2
-                            valid_pos = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)[0] and self._check_on_sides(pos, player.team)
+                            valid_pos = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)[0] and self._check_on_side(pos, player.team)
                     else:
                         valid_pos = False
                         while not valid_pos:
@@ -2769,7 +2790,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     )
 
                 # if applicable, check that agent with flag is not on-sides
-                if agent_has_flag[i] and self._check_on_sides(agent_pos_dict[player.id], player.team):
+                if agent_has_flag[i] and self._check_on_side(agent_pos_dict[player.id], player.team):
                     raise Exception(
                         f"Agent {player.id} was specified as having a flag, but its specified initial pos ({agent_pos_dict[player.id]}) is on-sides. This combination is not allowed."
                     )
@@ -2786,7 +2807,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 if self.default_init:
                     speed = 0.0
                 else:
-                    speed = self.max_speeds[self.agents.index(player.id)] * np.random.rand()
+                    speed = self.max_speeds[i] * np.random.rand()
                 
                 # save speed
                 agent_spd_dict[player.id] = speed
@@ -2803,7 +2824,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 agent_hdg_dict[player.id] = heading
 
             ## on-sides ##
-            agent_on_sides.append(self._check_on_sides(pos, player.team))
+            agent_on_sides.append(self._check_on_side(pos, player.team))
 
         ### convert dicts to array in the order of self.agents (which matches self.players) ###
         agent_positions = []
@@ -2848,66 +2869,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         return True, None
 
-    def _get_dists_to_boundary(self):
-        """
-        Returns a list of numbers of length self.num_agents
-        where each number is the corresponding agents min distance to a boundary wall.
-        """
-        distances_to_walls = defaultdict(dict)
-        for player in self.players.values():
-            i = player.id
-            x_pos = player.pos[0]
-            y_pos = player.pos[1]
-
-            distances_to_walls[i]["left_dist"] = x_pos
-            distances_to_walls[i]["right_dist"] = self.env_size[0] - x_pos
-            distances_to_walls[i]["bottom_dist"] = y_pos
-            distances_to_walls[i]["top_dist"] = self.env_size[1] - y_pos
-
-        return distances_to_walls
-
-    def _get_dists_between_agents(self):
-        """Returns dictionary of distances between agents indexed by agent numbers."""
-        agt_to_agt_vecs = {}
-
-        for player in self.players.values():
-            i = player.id
-            agt_to_agt_vecs[i] = {}
-            i_pos = player.pos
-            for other_player in self.players.values():
-                j = other_player.id
-                j_pos = other_player.pos
-                agt_to_agt_vecs[i][j] = [j_pos[0] - i_pos[0], j_pos[1] - i_pos[1]]
-
-        return agt_to_agt_vecs
-
-    def _get_dist_to_flags(self):
-        """Returns a dictionary mapping observation keys to 2d arrays."""
-        flag_vecs = {}
-
-        for player in self.players.values():
-            flag_vecs[player.id] = {}
-            team_idx = int(player.team)
-            i_pos = player.pos
-            proFlag_pos = self.flags[team_idx].pos
-            retFlag_pos = self.flags[int(not team_idx)].pos
-            flag_vecs[player.id]["own_home_dist"] = [proFlag_pos[0] - i_pos[0], proFlag_pos[1] - i_pos[1]]
-            flag_vecs[player.id]["opponent_home_dist"] = [
-                retFlag_pos[0] - i_pos[0],
-                retFlag_pos[1] - i_pos[1],
-            ]
-
-        return flag_vecs
-
     def _get_dist_bearing_to_obstacles(self):
         """Computes the distance and heading from each player to each obstacle"""
         dist_bearing_to_obstacles = dict()
-        for player in self.players.values():
+        for i, player in enumerate(self.players.values()):
             player_pos = player.pos
             player_dists_to_obstacles = list()
             for obstacle in self.obstacles:
                 # TODO: vectorize
-                dist_to_obstacle = obstacle.distance_from(player_pos, radius=self.agent_radius[self.agents.index(player.id)], heading=player.heading)
+                dist_to_obstacle = obstacle.distance_from(player_pos, radius=self.agent_radius[i], heading=player.heading)
                 player_dists_to_obstacles.append(dist_to_obstacle)
             dist_bearing_to_obstacles[player.id] = player_dists_to_obstacles
         self.state["dist_bearing_to_obstacles"] = dist_bearing_to_obstacles
@@ -3134,7 +3104,7 @@ when gps environment bounds are specified in meters"
 
             # clip y bounds
             if np.any(np.abs(env_bounds[:, 1]) > EPSG_3857_EXT_Y):
-                raise Warning(f"Clipping environment latitude bounds {env_bounds[:, 1]} to fall between {[-EPSG_3857_EXT_Y, EPSG_3857_EXT_Y]}")
+                print(f"Warning! Clipping environment latitude bounds {env_bounds[:, 1]} to fall between {[-EPSG_3857_EXT_Y, EPSG_3857_EXT_Y]}")
                 env_bounds[:, 1] = np.clip(env_bounds[:, 1], -EPSG_3857_EXT_Y, EPSG_3857_EXT_Y)
 
             # environment size, diagonal, and corners
@@ -3516,7 +3486,7 @@ when gps environment bounds are specified in meters"
                         )
 
         ### Set Attributes ###
-        # environment geometries
+        # bounds, edges, and scrimmage line
         self.env_bounds = env_bounds
         self.env_bounds_unit = env_bounds_unit
 
@@ -3527,16 +3497,26 @@ when gps environment bounds are specified in meters"
             [self.env_ul, self.env_ll]
         ])
 
-        self.flag_homes = flag_homes
-        self.flag_homes_unit = flag_homes_unit
-
         self.scrimmage_coords = scrimmage_coords
         self.scrimmage_coords_unit = scrimmage_coords_unit
         self.scrimmage_vec = scrimmage_coords[1] - scrimmage_coords[0]
 
+        # environment angle (rotation)
         self.env_rot_angle = np.arctan2(self.env_lr[1], self.env_lr[0])
-        s, c = np.sin(-self.env_rot_angle), np.cos(-self.env_rot_angle)
+        s, c = np.sin(self.env_rot_angle), np.cos(self.env_rot_angle)
         self.env_rot_matrix = np.array([[c, -s], [s, c]])
+
+        # agent and flag geometries
+        self.flag_homes = flag_homes
+        self.flag_homes_unit = flag_homes_unit
+        self.agent_radius = agent_radius
+        self.flag_radius = flag_radius
+        self.flag_keepout_radius = flag_keepout_radius
+        self.catch_radius = catch_radius
+        self.slip_radius = slip_radius
+
+        if self.lidar_obs:
+            self.lidar_range = lidar_range
 
         # on sides
         scrim2blue = self.flag_homes[Team.BLUE_TEAM] - scrimmage_coords[0]
@@ -3570,31 +3550,6 @@ when gps environment bounds are specified in meters"
             raise Exception("The blue flag is too close to the scrimmage line.")
         elif dist_red_flag_to_scrimmage_line < LINE_INTERSECT_TOL:
             raise Exception("The red flag is too close to the scrimmage line.")
-
-        # agent and flag geometries
-        if self.lidar_obs:
-            self.lidar_range = lidar_range
-
-        self.agent_radius = agent_radius
-        self.flag_radius = flag_radius
-        self.catch_radius = catch_radius
-        self.flag_keepout_radius = flag_keepout_radius
-        self.slip_radius = slip_radius
-
-    def _get_line_intersection(
-        self, origin: np.ndarray, vec: np.ndarray, line: np.ndarray
-    ):
-        """
-        origin: a point within the environment (not on environment bounds)
-        """
-        vec_end = origin + self.env_diag * vec / np.linalg.norm(vec)
-        vec_line = LineString((origin, vec_end))
-        inter = intersection(vec_line, LineString(line))
-
-        if inter.is_empty:
-            return None
-        else:
-            return np.asarray(inter.coords[0])
 
     def _get_polygon_intersection(
         self, origin: np.ndarray, vec: np.ndarray, polygon: np.ndarray
@@ -3915,8 +3870,8 @@ when gps environment bounds are specified in meters"
                         cnt_start_borders = self._point_on_which_border(current_obstacle[0])
                         if len(cnt_start_borders) == 2:
                             if 3 in cnt_start_borders and 0 in cnt_start_borders:
-                                #moving counterclockwise, wall 0 comes after wall 3
-                                # (see _point_on_which_border() doc string)
+                                #wall 0 comes after wall 3 (moving counterclockwise)
+                                #(see _point_on_which_border() doc string)
                                 cnt_start_border = 0
                             else:
                                 cnt_start_border = max(cnt_start_borders)
@@ -3927,8 +3882,8 @@ when gps environment bounds are specified in meters"
                         cnt_end_borders = self._point_on_which_border(current_obstacle[-1])
                         if len(cnt_end_borders) == 2:
                             if 3 in cnt_end_borders and 0 in cnt_end_borders:
-                                #moving counterclockwise, wall 0 comes after wall 3
-                                # (see _point_on_which_border() doc string)
+                                #wall 0 comes after wall 3 (moving counterclockwise)
+                                #(see _point_on_which_border() doc string)
                                 cnt_end_border = 0
                             else:
                                 cnt_end_border = max(cnt_end_borders)
@@ -3956,7 +3911,7 @@ when gps environment bounds are specified in meters"
 
     def _point_on_border(self, p):
         """p can be a single point or multiple points"""
-        p = np.asarray(p)
+        p = self._standard_pos(p)
         return np.any(p == 0, axis=-1) | np.any(p == self.env_size, axis=-1)
 
     def _segment_on_border(self, segment):
@@ -4006,7 +3961,7 @@ when gps environment bounds are specified in meters"
         for team in self.agents_of_team:
             self.valid_team_init_poses.append(
                 self.valid_init_poses[
-                    np.where(self._check_on_sides(self.valid_init_poses, team))[0]
+                    np.where(self._check_on_side(self.valid_init_poses, team))[0]
                 ]
             )
 
@@ -4118,7 +4073,6 @@ when gps environment bounds are specified in meters"
             opp_color = "red" if team == Team.BLUE_TEAM else "blue"
 
             for player in teams_players:
-                assert isinstance(player, RenderingPlayer)
                 blit_pos = self.env_to_screen(player.pos)
 
                 # lidar
@@ -4267,7 +4221,7 @@ when gps environment bounds are specified in meters"
     def buffer_to_video(self, recording_compression=False):
         """Convert and save current render buffer as a video"""
         if not self.render_saving:
-            print("Warning: Environment rendering is disabled. Cannot save the video. See the render_saving option in the config dictionary.")
+            print(f"Warning! Environment rendering is disabled. Cannot save the video. See the render_saving option in the config dictionary.")
             print()
         elif self.render_mode is not None:
             if self.render_ctr > 1:
@@ -4311,7 +4265,7 @@ when gps environment bounds are specified in meters"
         """ "Save an image of the most recently rendered env."""
 
         if not self.render_saving:
-            print("Warning: Environment rendering is disabled. Cannot save the screenshot. See the render_saving option in the config dictionary.")
+            print(f"Warning! Environment rendering is disabled. Cannot save the screenshot. See the render_saving option in the config dictionary.")
             print()
         elif self.render_mode is not None:
             image_file_dir = str(pathlib.Path(__file__).resolve().parents[1] / 'screenshots')
@@ -4369,16 +4323,16 @@ when gps environment bounds are specified in meters"
 
         return orig_obs
 
-    def multiagent_var(self, val, name):
+    def multiagent_var(self, val, dtype, name:str):
+        """
+        val: variable value
+        dtype: built-in data type to create array with
+        name: variable name
+        """
         if isinstance(val, (list, tuple, np.ndarray)):
             if len(val) != 2*self.team_size:
-                raise Warning(f"{name} list incorrect length")
-            val = np.array(val, dtype=float)
+                raise Exception(f"{name} list incorrect length")
         else:
-            try:
-                val = float(val)
-            except Exception:
-                raise Warning(f"{name} must be convertible to a float")
-            val = np.array([val for _ in range(2*self.team_size)])
+            val = [val for _ in range(2*self.team_size)]
 
-        return val
+        return np.array(val, dtype=dtype)

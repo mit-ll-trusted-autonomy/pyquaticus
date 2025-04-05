@@ -4,9 +4,10 @@ import pymoos
 import time
 
 from pyquaticus.envs.pyquaticus import PyQuaticusEnvBase
+from pyquaticus.moos_bridge.config import FieldReaderConfig, obs_config_std
 from pyquaticus.structs import Player, Team, Flag
-from pyquaticus.config import config_dict_std
-from pyquaticus.utils.utils import get_afp, mag_bearing_to
+from pyquaticus.config import ACTION_MAP
+from pyquaticus.utils.utils import get_afp, mag_bearing_to, rigid_transform
 
 
 class PyQuaticusMoosBridge(PyQuaticusEnvBase):
@@ -29,11 +30,13 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         agent_port: int,
         team_names: list,
         opponent_names: list,
-        all_agents_in_order: list,
-        moos_config,
-        quiet=True,
-        team=None,
-        timewarp=1
+        all_agent_names: list,
+        moos_config: FieldReaderConfig,
+        obs_config: dict = obs_config_std,
+        action_space: str = "continuous",
+        team = None,
+        quiet = True,
+        timewarp = 1
     ):
         """
         Args:
@@ -42,8 +45,10 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             port: the MOOS port for this agent
             team_names: list of names of team members
             opponent_names: list of names of opponents
-            all_agents_in_order: list of all agents names in the order they should be indexed (keep consistent across all instances of PyQuaticusMoosBridge)
+            all_agent_names: list of all agents names in the order they should be indexed (keep consistent across all instances of PyQuaticusMoosBridge)
             moos_config: one of the objects from pyquaticus.moos.config
+            obs_config: observation configuration dictionary (see pyquaticus/pyquaticus/moos_bridge/config.py for obs_config_std example)
+            action_space: 'discrete', 'continuous', or 'afp' action space for this agent (see pyquaticus/pyquaticus/envs/pyquaticus.py for doc)
             quiet: tell the pymoos comms object to be quiet
             team: which team this agent is (will infer based on name if not passed)
             timewarp: specify the moos timewarp (IMPORTANT for messages to send correctly)
@@ -54,17 +59,12 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self._agent_port = agent_port
         self._team_names = team_names
         self._opponent_names = opponent_names
-        self._agent_names = all_agents_in_order
         self._quiet = quiet
         self.timewarp = timewarp
         self._moos_comm = None
 
         # Set variables from config
-        self.set_config(moos_config)
-
-        # Create players
-
-        # Agents (player objects) of each team
+        self.set_config(moos_config, obs_config)
 
         # Team info
         if isinstance(team, str) and team.lower() in {"red", "blue"}:
@@ -76,55 +76,61 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         else:
             raise ValueError(f"Unknown team: please pass team=[red|blue]")
 
-        self._opponent_team = Team.BLUE_TEAM if self.team == Team.RED_TEAM else Team.RED_TEAM
+        self.opponent_team = Team.BLUE_TEAM if self.team == Team.RED_TEAM else Team.RED_TEAM
 
         own_team_len = len(self._team_names) + 1
         opp_team_len = len(self._opponent_names)
         if own_team_len != opp_team_len:
-            raise ValueError(f"Expecting equal team sizes but got: {own_team_len} vs {opp_team_len}")
+            raise ValueError(f"Expecting equal team sizes but got: {own_team_len} and {opp_team_len}")
+
+        self.team_size = own_team_len
+
+        # Create players
+        self.players = {}
+        for name in all_agent_names:
+            if (
+                name == self._agent_name or
+                name in self._team_names
+            ):
+                self.players[name] = Player(name, self.team)
+            else:
+                self.players[name] = Player(name, self.opponent_team)
+
+        self.agents = all_agent_names
+
+        # Agents (player objects) of each team
+        self.agents_of_team = {t: [] for t in Team}
+        for player in self.players:
+            self.agents_of_team[player.team].append(player)
 
         # Create the list of flags that are indexed by self.flags[int(team)]
         self.flags = []
         for team in Team:
             flag = Flag(team)
-            if team == Team.BLUE_TEAM:
-                flag.home = np.array(moos_config.blue_flag)
-                flag.pos = np.array(moos_config.blue_flag)
-            else:
-                assert team == Team.RED_TEAM
-                flag.home = np.array(moos_config.red_flag)
-                flag.pos = np.array(moos_config.red_flag)
-
+            flag.home = np.array(self.flag_homes[team])
+            flag.pos = np.array(self.flag_homes[team])
             self.flags.append(flag)
 
         # Team wall orientation
-        # Obstacles and Lidar
-        # Setup action and observation spaces
-        self.agent_obs_normalizer = self._register_state_elements(own_team_len)
+        self._determine_team_wall_orient()
 
+        # Obstacles and Lidar
+        self.obstacles = [] #not currently supported
+
+        # Setup action and observation spaces
+        self.discrete_action_map = [[spd, hdg] for (spd, hdg) in ACTION_MAP]
+        self.action_space = self.get_agent_action_space(action_space, self.agents.index(self._agent_name))
+
+        self.agent_obs_normalizer, self.global_state_normalizer = self._register_state_elements(self.team_size, len(self.obstacles))
         self.observation_space = self.get_agent_observation_space()
-        self.action_space = self.get_agent_action_space()
 
     def reset(self):
         """
-        Sets up the players and resets variables.
-        (Re)connects to MOOS node for the provided agent name.
+        Resets variables and (re)connects to MOOS node for the provided agent name.
         """
         self._action_count = 0
         assert isinstance(self.timewarp, int)
         pymoos.set_moos_timewarp(self.timewarp)
-        self.agents_of_team = {t: [] for t in Team}
-
-        self.agents_of_team[self.team].append(Player(self._agent_name, self.team))
-        for name in self._team_names:
-            self.agents_of_team[self.team].append(Player(name, self.team))
-        for name in self._opponent_names:
-            self.agents_of_team[self._opponent_team].append(Player(name, self._opponent_team))
-
-        self.players = {}
-        for agent_list in self.agents_of_team.values():
-            for agent in agent_list:
-                self.players[agent.id] = agent
 
         # reset auto return status
         self._auto_returning_flag = False
@@ -144,8 +150,6 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
         for k in self.game_score:
             self.game_score[k] = 0
-
-        self._determine_team_wall_orient()
 
         return self.state_to_obs(self._agent_name)
 
@@ -187,8 +191,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         Take a single action and sleep until it has taken effect.
 
         Args:
-            action: a discrete action that aligns with Pyquaticus
-                    see pyquaticus.config.ACTION_MAP for the specific mapping
+            action: a discrete, continuous, or string action that aligns with Pyquaticus
 
         Returns (aligns with Gymnasium interface):
             obs: a normalized observation space (this can be "unnormalized" via self.agent_obs_normalizer.unnormalized(obs))
@@ -468,7 +471,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.long_obs_hist_interval = obs_config.get("long_obs_hist_interval", obs_config_std["long_obs_hist_interval"])
 
         # Lidar-specific observation parameters
-        self.lidar_obs = False #not supported at this time
+        self.lidar_obs = False #not currently supported
 
         # Global state parameters
         self.normalize_state = obs_config.get("normalize_state", obs_config_std["normalize_state"])
@@ -513,9 +516,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             )
 
         ### Environment Geometry Construction ###
-        # Basic environment features
-        #environment geometries
-        self.env_ll = np.asarray(moos_config.env_ll)
+        #environment size, diagonal, and corners
+        self.env_ll = np.asarray(moos_config.env_ll) #origin
         self.env_lr = np.asarray(moos_config.env_lr)
         self.env_ur = np.asarray(moos_config.env_ur)
         self.env_ul = np.asarray(moos_config.env_ul)
@@ -524,30 +526,27 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             np.linalg.norm(self.env_ll - self.env_lr),
             np.linalg.norm(self.env_ll - self.env_ul),
         ])
+        self.env_diag = np.linalg.norm(self.env_size)
         self.env_corners = np.array([
             self.env_ll,
             self.env_lr,
             self.env_ur,
             self.env_ul
         ])
-        self.env_diag = np.linalg.norm(self.env_size)
 
         self.scrimmage_coords = np.asarray(moos_config.scrimmage_coords)
         self.scrimmage_vec = scrimmage_coords[1] - scrimmage_coords[0]
 
-        self.env_rot_angle = np.arctan2(self.env_lr[1], self.env_lr[0])
-        s, c = np.sin(-self.env_rot_angle), np.cos(-self.env_rot_angle)
+        # environment angle (rotation)
+        self.env_rot_angle = np.arctan2(self.env_lr[1], self.env_lr[0]) #field angle
+        s, c = np.sin(self.env_rot_angle), np.cos(self.env_rot_angle)
         self.env_rot_matrix = np.array([[c, -s], [s, c]])
 
-        #on sides
-        scrim2blue = self.flag_homes[Team.BLUE_TEAM] - scrimmage_coords[0]
-        scrim2red = self.flag_homes[Team.RED_TEAM] - scrimmage_coords[0]
-
-        self.on_sides_sign = {}
-        self.on_sides_sign[Team.BLUE_TEAM] = np.sign(np.cross(self.scrimmage_vec, scrim2blue))
-        self.on_sides_sign[Team.RED_TEAM] = np.sign(np.cross(self.scrimmage_vec, scrim2red))
-
         #agent and flag geometries
+        self.flag_homes = {
+            Team.BLUE_TEAM: np.array(moos_config.blue_flag),
+            Team.RED_TEAM: np.array(moos_config.red_flag) 
+        }
         self.agent_radius = np.asarray(moos_config.agent_radius)
         if not (len(self.agent_radius) == len(self._agent_names)):
             raise Exception(
@@ -555,50 +554,19 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             )
         self.flag_grab_radius = moos_config.flag_grab_radius
 
+        #on sides
+        scrim2blue = self.flag_homes[Team.BLUE_TEAM] - scrimmage_coords[0]
+        scrim2red = self.flag_homes[Team.RED_TEAM] - scrimmage_coords[0]
 
-        # define function for checking which side an agent is on
-        if abs(self.scrimmage_pnts[0][0] - self.scrimmage_pnts[1][0]) < 1e-2:
-            # Vertical scrimmage line
-            if self._red_flag[0] > self.scrimmage_pnts[0][0]:
-                def check_side(agent):
-                    x, y = agent.pos
-                    if agent.team == Team.RED_TEAM:
-                        return x > self.scrimmage_pnts[0][0]
-                    else:
-                        return x < self.scrimmage_pnts[0][0]
-            else:
-                def check_side(agent):
-                    x, y = agent.pos
-                    if agent.team == Team.RED_TEAM:
-                        return x < self.scrimmage_pnts[0][0]
-                    else:
-                        return x > self.scrimmage_pnts[0][0]
+        self.on_sides_sign = {
+            Team.BLUE_TEAM: np.sign(np.cross(self.scrimmage_vec, scrim2blue)),
+            Team.RED_TEAM: np.sign(np.cross(self.scrimmage_vec, scrim2red))
+        }
 
-        elif abs(self.scrimmage_pnts[0][1] - self.scrimmage_pnts[1][1]) < 1e-2:
-            raise RuntimeError('Horizontal scrimmage lines not yet supported')
-        else:
-            m = (self.scrimmage_pnts[1][1] - self.scrimmage_pnts[0][1]) / (self.scrimmage_pnts[1][0] - self.scrimmage_pnts[0][0])
-            b = self.scrimmage_pnts[0][1] - m*self.scrimmage_pnts[0][0]
-
-            if self._red_flag[1] > m*self._red_flag[0] + b:
-                def check_side(agent):
-                    x, y = agent.pos
-                    if agent.team == Team.RED_TEAM:
-                        return y > m*x + b
-                    else:
-                        return y < m*x + b
-            else:
-                def check_side(agent):
-                    x, y = agent.pos
-                    if agent.team == Team.RED_TEAM:
-                        return y < m*x + b
-                    else:
-                        return y > m*x + b
-
-        self._check_on_side = check_side
-
-        # Scale the aquaticus point field by env size
+        #scale and transform the aquaticus point field to match mission field
         self.aquaticus_field_points = get_afp()
-        for k in self.aquaticus_field_points:
-            self.aquaticus_field_points[k][0] *= self.env_size[0]
-            self.aquaticus_field_points[k][1] *= self.env_size[1]
+        for k, v in self.aquaticus_field_points.items():
+            pt = self.env_rot_matrix @ np.asarray(v)
+            pt += self.env_ll
+            pt *= self.env_size
+            self.aquaticus_field_points[k] = pt

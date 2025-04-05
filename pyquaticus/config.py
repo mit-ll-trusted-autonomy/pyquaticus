@@ -26,7 +26,7 @@ config_dict_std = {
     "topo_contour_eps":    0.001,  # tolerance for error between approximate and true contours dividing water and land
     "agent_radius":          2.0,  # meters
 
-    # note: if different radii are desired for different agents, provide a list like:
+    # note: if different radii are desired for different agents, provide a list / tuple / array like:
     # [2.0, 4.0, 2.5, 3.5]
 
     "flag_radius":           1.5,  # meters
@@ -35,7 +35,7 @@ config_dict_std = {
     "slip_radius":          10.0,  # meters (tolerance for reaching RRT* waypoint for auto-driving home on tag)
 
     # note 1: slip radius has no affect on any BasePolicies providing actions externally.
-    # note 2: if different radii are desired for different agents, provide a list like:
+    # note 2: if different radii are desired for different agents, provide a list / tuple / array like:
     # [40.0, 40.0, 10.0, 10.0]
 
     "n_circle_segments":       8,  # default is to approximate circles as an octagon
@@ -51,7 +51,7 @@ config_dict_std = {
     "oob_speed_frac":        0.5,  # proportion
     "dynamics":       "surveyor",  # dynamics to use for agents (from dynamics_registry.py)
 
-    # note: if different dynamics are desired for different agents, provide a list / tuple / numpy.ndarray like
+    # note: if different dynamics are desired for different agents, provide a list / tuple / array like:
     # ["heron", "large_usv", "heron", "drone", "fixed_wing", "fixed_wing"]
 
     # Simulation parameters
