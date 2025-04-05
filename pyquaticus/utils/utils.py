@@ -509,5 +509,8 @@ def closest_line(
     return closest_line
 
 def rigid_transform(pos, origin, rot_matrix):
-    """Translate and rotate a position vector (pos) based on origin and rotation matrix"""
-    return np.asarray(rot_matrix) @ (np.asarray(pos) - np.asarray(origin))
+    """
+    Translate and rotate position vector(s) based on origin and rotation matrix.
+    pos can be a single point or multiple points.
+    """
+    return (np.asarray(pos) - np.asarray(origin)) @ np.asarray(rot_matrix).T

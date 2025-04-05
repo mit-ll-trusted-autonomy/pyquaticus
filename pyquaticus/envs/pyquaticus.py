@@ -457,7 +457,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         team_idx = int(own_team)
         other_team_idx = int(other_team)
 
-        pos = np.array(agent.pos, dtype=np.float32)
+        pos = np.array(agent.pos)
         own_home_loc = self.flags[team_idx].home
         opponent_home_loc = self.flags[other_team_idx].home
 
@@ -824,12 +824,12 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         """
         return heading - self.env_rot_angle
 
-    def _check_on_side(self, pos, team):
+    def _check_on_sides(self, pos, team):
         """pos can be a single point or multiple points"""
         scrim2pos = np.asarray(pos) - self.scrimmage_coords[0]
         cp_sign = np.sign(np.cross(self.scrimmage_vec, scrim2pos))
 
-        return (cp_sign == self.on_sides_sign[team]) | (cp_sign == 0)
+        return (cp_sign == self._on_sides_sign[team]) | (cp_sign == 0)
 
 
 class PyQuaticusEnv(PyQuaticusEnvBase):
@@ -880,15 +880,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         self.reset_count = 0
         self.current_time = 0
-
         self.state = None
         self.prev_state = None
         self.dones = {}
         self.return_info = False
+        self.active_collisions = [] #list that contains all new collisions between agents prevents counting a collision multiple times
 
         self.seed()
-        
-        self.active_collisions = [] #list that contains all new collisions between agents prevents counting a collision multiple times
 
         # Set variables from config
         self.set_config_values(config_dict)
@@ -939,8 +937,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # Create the list of flags that are indexed by self.flags[int(player.team)]
         self.flags = []
         for team in Team:
-            self.flags.append(Flag(team))
-            self.flags[int(team)].home = self.flag_homes[team]
+            flag = Flag(team)
+            flag.home = np.array(self.flag_homes[team])
+            self.flags.append(flag)
 
         self.team_flag_capture = [False for _ in Team] #this is False except at the timestep that the flag is captured
 
@@ -1141,7 +1140,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             flag_home = self.flags[team_idx].home
 
             # Check if agent is on their own side
-            player.on_own_side = self._check_on_side(player.pos, player.team)
+            player.on_own_side = self._check_on_sides(player.pos, player.team)
             self.state["agent_on_sides"][i] = player.on_own_side
 
             # If the player hits an obstacle, send back to previous position and rotate, then skip to next agent
@@ -1348,9 +1347,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     def _check_oob(self):
         """Checks if players are out of bounds and updates their states (and any flags in their possesion) accordingly."""
         for i, player in enumerate(self.players.values()): 
-            if not np.all(
-                (self.agent_radius[i] < player.pos) & (player.pos < (self.env_size - self.agent_radius[i]))
-            ):
+            if not np.all((0 < player.pos) & (player.pos < self.env_size)):
                 team_idx = int(player.team)
                 other_team_idx = int(not team_idx)
 
@@ -2290,6 +2287,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         Args:
             seed (optional): Starting seed.
+            return_info (boolean): whether or not to return the info dict for the episode (when calling reset and step)
             options (optional): Additonal options for resetting the environment:
                 -"normalize_obs": whether or not to normalize observations
                 -"normalize_state": whether or not to normalize the global state
@@ -2501,7 +2499,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             "agent_speed":               None, #to be set with init_dict and _generate_agent_starts()
             "agent_heading":             None, #to be set with init_dict and _generate_agent_starts()
             "prev_agent_action":         np.zeros((self.num_agents, 2)), #desired speed and relative heading for each agent
-            "agent_on_sides":            np.zeros(self.num_agents, dtype=bool),
+            "agent_on_sides":            None, #to be set with init_dict and _generate_agent_starts()
             "agent_oob":                 np.zeros(self.num_agents, dtype=bool), 
             "agent_has_flag":            np.zeros(self.num_agents, dtype=bool),
             "agent_is_tagged":           np.zeros(self.num_agents, dtype=bool),
@@ -2659,15 +2657,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             player.prev_pos = self.state["prev_agent_position"][i]
             player.speed = self.state["agent_speed"][i]
             player.heading = self.state["agent_heading"][i]
-            player.has_flag = self.state["agent_has_flag"][i]
             player.on_own_side = self.state["agent_on_sides"][i]
-            player.tagging_cooldown = self.state["agent_tagging_cooldown"][i]
-            player.is_tagged = self.state["agent_is_tagged"][i]
             player.oob = self.state["agent_oob"][i]
+            player.has_flag = self.state["agent_has_flag"][i]
+            player.is_tagged = self.state["agent_is_tagged"][i]
+            player.tagging_cooldown = self.state["agent_tagging_cooldown"][i]
 
     def _set_flag_attributes_from_state(self):
         for flag in self.flags:
-            team_idx = int(flag.team)
             flag.pos = self.state['flag_position'][int(flag.team)]
 
             #note: we do not set flag.home because this should already
@@ -2747,7 +2744,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         valid_pos = False
                         while not valid_pos:
                             pos = np.random.choice((-1,1), size=2) * np.random.rand(2) * (self.env_size/2 - self.agent_radius[i]) + self.env_size/2
-                            valid_pos = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)[0] and not self._check_on_side(pos, player.team)
+                            valid_pos = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)[0] and not self._check_on_sides(pos, player.team)
                     elif self.default_init:
                         flag_home = self.flags[int(player.team)].home
                         closest_scrim_line_point = closest_point_on_line(*self.scrimmage_coords, flag_home)
@@ -2769,10 +2766,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         pos[0] = max(2*self.agent_radius[i], min(self.env_size[0] - 2*self.agent_radius[i], pos[0])) #project out-of-bounds pos back into the environment (with buffer)
                         pos[1] = max(2*self.agent_radius[i], min(self.env_size[1] - 2*self.agent_radius[i], pos[1])) #project out-of-bounds pos back into the environment (with buffer)
 
-                        valid_pos = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)[0] and self._check_on_side(pos, player.team)
+                        valid_pos = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)[0] and self._check_on_sides(pos, player.team)
                         while not valid_pos:
                             pos = np.random.choice((-1,1), size=2) * np.random.rand(2) * (self.env_size/2 - self.agent_radius[i]) + self.env_size/2
-                            valid_pos = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)[0] and self._check_on_side(pos, player.team)
+                            valid_pos = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)[0] and self._check_on_sides(pos, player.team)
                     else:
                         valid_pos = False
                         while not valid_pos:
@@ -2790,7 +2787,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     )
 
                 # if applicable, check that agent with flag is not on-sides
-                if agent_has_flag[i] and self._check_on_side(agent_pos_dict[player.id], player.team):
+                if agent_has_flag[i] and self._check_on_sides(agent_pos_dict[player.id], player.team):
                     raise Exception(
                         f"Agent {player.id} was specified as having a flag, but its specified initial pos ({agent_pos_dict[player.id]}) is on-sides. This combination is not allowed."
                     )
@@ -2824,7 +2821,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 agent_hdg_dict[player.id] = heading
 
             ## on-sides ##
-            agent_on_sides.append(self._check_on_side(pos, player.team))
+            agent_on_sides.append(self._check_on_sides(pos, player.team))
 
         ### convert dicts to array in the order of self.agents (which matches self.players) ###
         agent_positions = []
@@ -3522,12 +3519,13 @@ when gps environment bounds are specified in meters"
         scrim2blue = self.flag_homes[Team.BLUE_TEAM] - scrimmage_coords[0]
         scrim2red = self.flag_homes[Team.RED_TEAM] - scrimmage_coords[0]
 
-        self.on_sides_sign = {}
-        self.on_sides_sign[Team.BLUE_TEAM] = np.sign(np.cross(self.scrimmage_vec, scrim2blue))
-        self.on_sides_sign[Team.RED_TEAM] = np.sign(np.cross(self.scrimmage_vec, scrim2red))
+        self._on_sides_sign = {
+            Team.BLUE_TEAM: np.sign(np.cross(self.scrimmage_vec, scrim2blue)),
+            Team.RED_TEAM: np.sign(np.cross(self.scrimmage_vec, scrim2red))
+        }
 
         # flag bisection check
-        if self.on_sides_sign[Team.BLUE_TEAM] == self.on_sides_sign[Team.RED_TEAM]:
+        if self._on_sides_sign[Team.BLUE_TEAM] == self._on_sides_sign[Team.RED_TEAM]:
             raise Exception(
                 "The specified flag locations and scrimmage line coordinates are not valid because the scrimmage line does not divide the flag locations"
             )
@@ -3961,7 +3959,7 @@ when gps environment bounds are specified in meters"
         for team in self.agents_of_team:
             self.valid_team_init_poses.append(
                 self.valid_init_poses[
-                    np.where(self._check_on_side(self.valid_init_poses, team))[0]
+                    np.where(self._check_on_sides(self.valid_init_poses, team))[0]
                 ]
             )
 

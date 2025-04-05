@@ -1,10 +1,11 @@
+import copy
 import itertools
 import numpy as np
 import pymoos
 import time
 
 from pyquaticus.envs.pyquaticus import PyQuaticusEnvBase
-from pyquaticus.moos_bridge.config import FieldReaderConfig, obs_config_std
+from pyquaticus.moos_bridge.config import FieldReaderConfig, pyquaticus_config_std
 from pyquaticus.structs import Player, Team, Flag
 from pyquaticus.config import ACTION_MAP
 from pyquaticus.utils.utils import get_afp, mag_bearing_to, rigid_transform
@@ -32,7 +33,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         opponent_names: list,
         all_agent_names: list,
         moos_config: FieldReaderConfig,
-        obs_config: dict = obs_config_std,
+        pyquaticus_config: dict = pyquaticus_config_std,
         action_space: str = "continuous",
         team = None,
         quiet = True,
@@ -47,13 +48,13 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             opponent_names: list of names of opponents
             all_agent_names: list of all agents names in the order they should be indexed (keep consistent across all instances of PyQuaticusMoosBridge)
             moos_config: one of the objects from pyquaticus.moos.config
-            obs_config: observation configuration dictionary (see pyquaticus/pyquaticus/moos_bridge/config.py for obs_config_std example)
+            pyquaticus_config: observation configuration dictionary (see pyquaticus/pyquaticus/moos_bridge/config.py for pyquaticus_config example)
             action_space: 'discrete', 'continuous', or 'afp' action space for this agent (see pyquaticus/pyquaticus/envs/pyquaticus.py for doc)
             quiet: tell the pymoos comms object to be quiet
             team: which team this agent is (will infer based on name if not passed)
             timewarp: specify the moos timewarp (IMPORTANT for messages to send correctly)
         """
-        # MOOS Parameters
+        # MOOS parameters
         self._server = server
         self._agent_name = agent_name
         self._agent_port = agent_port
@@ -62,9 +63,19 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self._quiet = quiet
         self.timewarp = timewarp
         self._moos_comm = None
+        self._action_count = 0
+
+        # Pyquaticus inits
+        self.reset_count = 0
+        self.current_time = 0
+        self.state = None
+        self.prev_state = None
+        self.dones = {}
+        self.return_info = False
+        self.active_collisions = [] #list that contains all new collisions between agents prevents counting a collision multiple times
 
         # Set variables from config
-        self.set_config(moos_config, obs_config)
+        self.set_config(moos_config, pyquaticus_config)
 
         # Team info
         if isinstance(team, str) and team.lower() in {"red", "blue"}:
@@ -108,7 +119,6 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         for team in Team:
             flag = Flag(team)
             flag.home = np.array(self.flag_homes[team])
-            flag.pos = np.array(self.flag_homes[team])
             self.flags.append(flag)
 
         # Team wall orientation
@@ -124,16 +134,88 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.agent_obs_normalizer, self.global_state_normalizer = self._register_state_elements(self.team_size, len(self.obstacles))
         self.observation_space = self.get_agent_observation_space()
 
-    def reset(self):
+    def reset(self, return_info=False, options: Optional[dict] = None):
         """
         Resets variables and (re)connects to MOOS node for the provided agent name.
-        """
+
+        Args:
+            seed (optional): Starting seed.
+            return_info (boolean): whether or not to return the info dict for the episode (when calling reset and step)
+            options (optional): Additonal options for resetting the environment:
+                -"normalize_obs": whether or not to normalize observations
+                -"normalize_state": whether or not to normalize the global state
+        """ 
         self._action_count = 0
+        self._auto_returning_flag = False #reset auto return status
         assert isinstance(self.timewarp, int)
         pymoos.set_moos_timewarp(self.timewarp)
 
-        # reset auto return status
-        self._auto_returning_flag = False
+        # Set options
+        if options is not None:
+            self.normalize_obs = options.get("normalize_obs", self.normalize_obs)
+            self.normalize_state = options.get("normalize_state", self.normalize_state)
+
+        # Get and set state information
+        for player in self.players.values():
+            #set values to None to for checking if connected with _wait_for_all_players
+            player.pos = [None, None]
+            player.speed = None
+            player.heading = None
+            player.has_flag = None
+            player.is_tagged = None
+            player.cantag_time = None
+
+        if self._moos_comm is not None:
+            self._moos_comm.close()
+
+        self._init_moos_comm()
+        self._wait_for_all_players()
+
+        flag_homes = list(self.flag_homes.values())
+        agent_positions = np.array([player.pos for player in self.player.values()])
+        agent_spd_hdg = np.array([[player.speed, player.heading] for player in self.player.values()])
+        agent_on_sides = np.array([self._check_on_sides(player.pos, player.team) for player in self.players.values()], dtype=bool)
+        agent_oob = np.any((self._standard_pos(agent_poses) <= 0) | (self.env_size <= self._standard_pos(agent_poses)), axis=-1)
+        agent_has_flag = np.array([player.has_flag for player in self.players.values()], dtype=bool)
+        agent_is_tagged = np.array([player.is_tagged for player in self.players.values()], dtype=bool)
+
+        self.state = {
+            "agent_position":            agent_positions,
+            "prev_agent_position":       copy.deepcopy(agent_positions),
+            "agent_speed":               agent_spd_hdg[:, 0],
+            "agent_heading":             agent_spd_hdg[:, 1],
+            "prev_agent_action":         np.zeros((self.num_agents, 2)), #desired speed and relative heading for each agent
+            "agent_on_sides":            agent_on_sides,
+            "agent_oob":                 agent_oob, #if this agent is out of bounds
+            "agent_has_flag":            agent_has_flag,
+            "agent_is_tagged":           agent_is_tagged, #if this agent is tagged
+            "agent_made_tag":            np.array([None] * self.num_agents), #whether this agent tagged something at the current timestep (will be index of tagged agent if so)
+            "agent_tagging_cooldown":    np.array([self.tagging_cooldown] * self.num_agents),
+            "dist_bearing_to_obstacles": {agent_id: np.zeros((len(self.obstacles), 2)) for agent_id in self.players},
+            "flag_home":                 np.array(flag_homes),
+            "flag_position":             np.array(flag_homes),
+            "flag_taken":                np.zeros(len(self.flags), dtype=bool),
+            "team_has_flag":             np.zeros(len(self.agents_of_team), dtype=bool), #whether a member of this team has a flag of the other team's
+            "captures":                  np.zeros(len(self.agents_of_team), dtype=int), #total number of flag captures made by this team
+            "tags":                      np.zeros(len(self.agents_of_team), dtype=int), #total number of tags made by this team
+            "grabs":                     np.zeros(len(self.agents_of_team), dtype=int), #total number of flag grabs made by this team
+            "agent_collisions":          np.zeros(len(self.players), dtype=int), #total number of collisions per agent
+        }
+
+        # set player and flag attributes
+        self._set_player_attributes_from_state()
+        self._set_flag_attributes_from_state()
+
+        # observation history
+        self.state["obs_hist_buffer"] = dict()
+        reset_obs = {agent_id: self.state_to_obs(agent_id, self.normalize_obs) for agent_id in self.players}
+        for agent_id in self.players:
+            self.state["obs_hist_buffer"][agent_id] = np.array(self.obs_hist_buffer_len * [reset_obs[agent_id]])
+
+        # global state history
+        reset_global_state = self.state_to_global_state(self.normalize_state)
+        self.state["global_state_hist_buffer"] = np.array(self.state_hist_buffer_len * [reset_global_state])
+        #####################################################################################################################
 
         # Set tagging cooldown
         for player in self.players.values():
@@ -155,18 +237,51 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
     def _wait_for_all_players(self):
         wait_time = 5
-        missing_agents = [p.id for p in filter(lambda p: None in p.pos, self.players.values())]
+        missing_agents = [
+            p.id
+            for p in self.players.values()
+            if None in p.pos
+            or p.speed is None
+            or p.heading is None
+            or p.has_flag is None
+            or p.is_tagged is None
+            or p.cantag_time is None
+        ]
         num_iters = 0
         while missing_agents:
             print("Waiting for other players to connect...")
             print(f"\tMissing Agents: {','.join(missing_agents)}")
             time.sleep(wait_time)
-            missing_agents = [p.id for p in filter(lambda p: None in p.pos, self.players.values())]
+            missing_agents = [
+                p.id
+                for p in self.players.values()
+                if None in p.pos
+                or p.speed is None
+                or p.heading is None
+                or p.has_flag is None
+                or p.is_tagged is None
+                or p.cantag_time is None
+            ]
             num_iters += 1
             if num_iters > 20:
                 raise RuntimeError(f"No other agents connected after {num_iters*wait_time} seconds. Failing and exiting.")
         print("All agents connected!")
         return
+
+    def _set_player_attributes_from_state(self):
+        for i, player in enumerate(self.players.values()):
+            player.prev_pos = self.state["prev_agent_position"][i]
+            player.on_own_side = self.state["agent_on_sides"][i]
+            player.oob = self.state["agent_oob"][i]
+            player.tagging_cooldown = self.state["agent_tagging_cooldown"][i]
+
+    def _set_flag_attributes_from_state(self):
+        for flag in self.flags:
+            flag.pos = self.state['flag_position'][int(flag.team)]
+
+            #note: we do not set flag.home because this should already
+            #be set and match what is in the state dictionary
+
 
     def render(self, mode="human"):
         """
@@ -253,7 +368,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         """
         # set on_own_side for each agent using _check_side(player)
         for agent in self.players.values():
-            agent.on_own_side = self._check_on_side(agent)
+            agent.on_own_side = self._check_on_sides(agent)
         # update tagging_cooldown value
         for agent in self.players.values():
             # should count up from 0.0 to tagging_cooldown (at which point it can tag again)
@@ -434,16 +549,16 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             print("SENDING A FLAG GRAB REQUEST!")
             self._moos_comm.notify('FLAG_GRAB_REQUEST', f'vname={self._agent_name}', -1)
 
-    def set_config(self, moos_config, obs_config):
+    def set_config(self, moos_config, pyquaticus_config):
         """
         Reads moos and observation configuration objects to set the field and other configuration variables
         """
         self._moos_config = moos_config
 
         ### Set Variables from Configurations ###
-        # Check for unrecognized variables in obs_config dictionary
-        for k in obs_config:
-            if k not in obs_config_std:
+        # Check for unrecognized variables in pyquaticus_config dictionary
+        for k in pyquaticus_config:
+            if k not in pyquaticus_config_std:
                 print(f"Warning! Config variable '{k}' not recognized (it will have no effect).")
                 print("Please consult /moos_bridge/config.py for variable names.")
                 print()
@@ -456,29 +571,29 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             )
 
         # Simulation parameters
-        self.dt = moos_config.dt # moostime (sec) between steps
+        self.dt = moos_config.dt #moostime (sec) between steps
 
         # Game parameters
-        self.max_score = moos_config.max_score #captures
-        self.max_time = moos_config.max_time # moostime (sec) before terminating episode
+        self.max_score = pyquaticus_config.get("max_score", pyquaticus_config_std["max_score"]) #captures
+        self.max_time = pyquaticus_config.get("max_time", pyquaticus_config_std["max_time"]) #moostime (sec) before terminating episode
         self.tagging_cooldown = moos_config.tagging_cooldown #seconds
 
         # Observation and state parameters
-        self.normalize_obs = obs_config.get("normalize_obs", obs_config_std["normalize_obs"])
-        self.short_obs_hist_length = obs_config.get("short_obs_hist_length", obs_config_std["short_obs_hist_length"])
-        self.short_obs_hist_interval = obs_config.get("short_obs_hist_interval", obs_config_std["short_obs_hist_interval"])
-        self.long_obs_hist_length = obs_config.get("long_obs_hist_length", obs_config_std["long_obs_hist_length"])
-        self.long_obs_hist_interval = obs_config.get("long_obs_hist_interval", obs_config_std["long_obs_hist_interval"])
+        self.normalize_obs = pyquaticus_config.get("normalize_obs", pyquaticus_config_std["normalize_obs"])
+        self.short_obs_hist_length = pyquaticus_config.get("short_obs_hist_length", pyquaticus_config_std["short_obs_hist_length"])
+        self.short_obs_hist_interval = pyquaticus_config.get("short_obs_hist_interval", pyquaticus_config_std["short_obs_hist_interval"])
+        self.long_obs_hist_length = pyquaticus_config.get("long_obs_hist_length", pyquaticus_config_std["long_obs_hist_length"])
+        self.long_obs_hist_interval = pyquaticus_config.get("long_obs_hist_interval", pyquaticus_config_std["long_obs_hist_interval"])
 
         # Lidar-specific observation parameters
         self.lidar_obs = False #not currently supported
 
         # Global state parameters
-        self.normalize_state = obs_config.get("normalize_state", obs_config_std["normalize_state"])
-        self.short_state_hist_length = obs_config.get("short_state_hist_length", obs_config_std["short_state_hist_length"])
-        self.short_state_hist_interval = obs_config.get("short_state_hist_interval", obs_config_std["short_state_hist_interval"])
-        self.long_state_hist_length = obs_config.get("long_state_hist_length", obs_config_std["long_state_hist_length"])
-        self.long_state_hist_interval = obs_config.get("long_state_hist_interval", obs_config_std["long_state_hist_interval"])
+        self.normalize_state = pyquaticus_config.get("normalize_state", pyquaticus_config_std["normalize_state"])
+        self.short_state_hist_length = pyquaticus_config.get("short_state_hist_length", pyquaticus_config_std["short_state_hist_length"])
+        self.short_state_hist_interval = pyquaticus_config.get("short_state_hist_interval", pyquaticus_config_std["short_state_hist_interval"])
+        self.long_state_hist_length = pyquaticus_config.get("long_state_hist_length", pyquaticus_config_std["long_state_hist_length"])
+        self.long_state_hist_interval = pyquaticus_config.get("long_state_hist_interval", pyquaticus_config_std["long_state_hist_interval"])
 
         ### Environment History ###
         # Observations
@@ -558,7 +673,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         scrim2blue = self.flag_homes[Team.BLUE_TEAM] - scrimmage_coords[0]
         scrim2red = self.flag_homes[Team.RED_TEAM] - scrimmage_coords[0]
 
-        self.on_sides_sign = {
+        self._on_sides_sign = {
             Team.BLUE_TEAM: np.sign(np.cross(self.scrimmage_vec, scrim2blue)),
             Team.RED_TEAM: np.sign(np.cross(self.scrimmage_vec, scrim2red))
         }

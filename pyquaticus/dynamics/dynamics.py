@@ -468,7 +468,7 @@ class Heron(BaseUSV):
     """
     Dynamics class for Clearpath Robotics Heron M300 USV
     
-    System Resources:
+    System References:
         (1) https://oceanai.mit.edu/autonomylab/pmwiki/pmwiki.php?n=Robot.Heron
     
     Parameters for dynamics and control are adapted from MOOS-IVP software/docs and missions:
@@ -531,7 +531,7 @@ class Surveyor(BaseUSV):
     """
     Dynamics class for SeaRobotics SR-Surveyor M1.8 USV
 
-    System Resources:
+    System References:
         (1) https://www.searobotics.com/products/autonomous-surface-vehicles/sr-surveyor-class
         (2) https://github.com/westpoint-robotics/mdo-hurt-s
     

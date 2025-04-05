@@ -9,7 +9,11 @@ from pathlib import Path
 from pyquaticus.config import config_dict_std
 
 
-obs_config_std = {
+pyquaticus_config_std = {
+    # Game Parameters
+    "max_score":           20,  # maximum score per episode (until a winner is declared)
+    "max_time":         600.0,  # maximum time (seconds) per episode
+
     # Observation parameters
     "normalize_obs":        True,  # flag for normalizing the observation space
     "short_obs_hist_length":   1,  # number of timesteps to include for the short-term observation history
@@ -329,11 +333,9 @@ class FieldReaderConfig:
         self.max_speeds = np.array(2 * [2.5])
 
         ####### Simulation Parameters #######
-        self.dt = 0.1 # moostime (sec) between steps
+        self.dt = 0.1 #moostime (sec) between steps
 
         ####### Game Parameters #######
-        self.max_score = 20 #captures
-        self.max_time = 600.0  # moostime (sec) before terminating episode
         self.tagging_cooldown = 60 #seconds
 
     def _set_boundary_and_scrimmage(self):
