@@ -73,6 +73,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.dones = {}
         self.return_info = False
         self.active_collisions = [] #list that contains all new collisions between agents prevents counting a collision multiple times
+        self.scores = {"blue_scores": 0, "red_scores": 0}  
 
         # Set variables from config
         self.set_config(moos_config, pyquaticus_config)
@@ -201,20 +202,40 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             "grabs":                     np.zeros(len(self.agents_of_team), dtype=int), #total number of flag grabs made by this team
             "agent_collisions":          np.zeros(len(self.players), dtype=int), #total number of collisions per agent
         }
+        for team, score in self.scores.items():
+            self.state["captures"][int(team)] = score
 
-        # set player and flag attributes
+        # Set player and flag attributes
         self._set_player_attributes_from_state()
         self._set_flag_attributes_from_state()
 
-        # observation history
-        self.state["obs_hist_buffer"] = dict()
-        reset_obs = {agent_id: self.state_to_obs(agent_id, self.normalize_obs) for agent_id in self.players}
-        for agent_id in self.players:
-            self.state["obs_hist_buffer"][agent_id] = np.array(self.obs_hist_buffer_len * [reset_obs[agent_id]])
+        # Observation history
+        reset_obs = self.state_to_obs(self._agent_name, self.normalize_obs)
+        self.state["obs_hist_buffer"] = np.array(self.obs_hist_buffer_len * [reset_obs])
 
-        # global state history
+        # Global state history
         reset_global_state = self.state_to_global_state(self.normalize_state)
         self.state["global_state_hist_buffer"] = np.array(self.state_hist_buffer_len * [reset_global_state])
+        
+        # General vars
+        self.message = ""
+        self.current_time = 0
+        self.reset_count += 1
+        self.dones = self._reset_dones()
+        self.team_flag_capture = [False for _ in Team] #this is False except at the timestep that the flag is captured
+
+        # Observations
+        obs = self.state["obs_hist_buffer"][self.obs_hist_buffer_inds].squeeze()
+
+        # Info
+        self.return_info = return_info
+
+        if self.return_info:
+            info = self.state["global_state_hist_buffer"][self.state_hist_buffer_inds].squeeze()
+        else:
+            info = {}
+
+        return obs, info
         #####################################################################################################################
 
         # Set tagging cooldown
@@ -531,9 +552,9 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         Handles messages about scores.
         """
         if msg.key() == "BLUE_SCORES":
-            self.game_score['blue_captures'] = msg.double()
+            self.scores['blue_scores'] = msg.double()
         elif msg.key() == "RED_SCORES":
-            self.game_score['red_captures'] = msg.double()
+            self.scores['red_scores'] = msg.double()
         else:
             raise ValueError(f"Unexpected message: {msg.key()}")
 

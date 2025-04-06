@@ -1089,18 +1089,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if self.message and self.render_mode:
             print(self.message)
 
-        # Rewards
-        rewards = {agent_id: self.compute_rewards(agent_id, player.team) for agent_id, player in self.players.items()}
-
         # Observations
         for agent_id in raw_action_dict:
             self.state["obs_hist_buffer"][agent_id][1:] = self.state["obs_hist_buffer"][agent_id][:-1]
             self.state["obs_hist_buffer"][agent_id][0] = self.state_to_obs(agent_id, self.normalize_obs)
 
-        if self.obs_hist_len > 1:
-            obs = {agent_id: self.state["obs_hist_buffer"][agent_id][self.obs_hist_buffer_inds] for agent_id in self.players}
-        else:
-            obs = {agent_id: self.state["obs_hist_buffer"][agent_id][0] for agent_id in self.players}
+        obs = {agent_id: self.state["obs_hist_buffer"][agent_id][self.obs_hist_buffer_inds].squeeze() for agent_id in self.players}
+
+        # Rewards
+        rewards = {agent_id: self.compute_rewards(agent_id, player.team) for agent_id, player in self.players.items()}
 
         # Dones
         terminated = False
@@ -1122,10 +1119,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.state["global_state_hist_buffer"][0] = self.state_to_global_state(self.normalize_state)
 
         if self.return_info:
-            if self.state_hist_len > 1:
-                info = {agent_id: self.state["global_state_hist_buffer"][self.state_hist_buffer_inds] for agent_id in self.players}
-            else:
-                info = {agent_id: self.state["global_state_hist_buffer"][0] for agent_id in self.players}
+            global_state = self.state["global_state_hist_buffer"][self.state_hist_buffer_inds].squeeze()
+            info = {agent_id: {"global_state" : global_state} for agent_id in self.players}
         else:
             info = {agent_id: {} for agent_id in self.players}
 
@@ -2445,19 +2440,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self._render()
 
         # Observations
-        if self.obs_hist_len > 1:
-            obs = {agent_id: self.state["obs_hist_buffer"][agent_id][self.obs_hist_buffer_inds] for agent_id in self.players}
-        else:
-            obs = {agent_id: self.state["obs_hist_buffer"][agent_id][0] for agent_id in self.players}
-        
+        obs = {agent_id: self.state["obs_hist_buffer"][agent_id][self.obs_hist_buffer_inds].squeeze() for agent_id in self.players}
+
         # Info
         self.return_info = return_info
 
         if self.return_info:
-            if self.state_hist_len > 1:
-                info = {agent_id: self.state["global_state_hist_buffer"][self.state_hist_buffer_inds] for agent_id in self.players}
-            else:
-                info = {agent_id: self.state["global_state_hist_buffer"][0] for agent_id in self.players}
+            global_state = self.state["global_state_hist_buffer"][self.state_hist_buffer_inds].squeeze()
+            info = {agent_id: {"global_state" : global_state} for agent_id in self.players}
         else:
             info = {agent_id: {} for agent_id in self.players}
 
