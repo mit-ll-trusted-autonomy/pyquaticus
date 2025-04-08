@@ -73,13 +73,7 @@ class BaseAttacker(BaseAgentPolicy):
             action: if continuous, a tuple containing desired speed and heading error.
             if discrete, an action index corresponding to ACTION_MAP in config.py
         """
-        self.update_state(obs, info)
-
-        global_state = info[self.id]
-
-        # Unnormalize state, if necessary
-        if not isinstance(global_state, dict):
-            global_state = self.state_normalizer.unnormalized(global_state)
+        self.update_state(obs, info)y
 
         if self.mode == "easy":
 

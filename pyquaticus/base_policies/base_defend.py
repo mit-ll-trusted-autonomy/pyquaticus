@@ -81,7 +81,7 @@ class BaseDefender(BaseAgentPolicy):
         """
         self.update_state(obs, info)
 
-        global_state = info[self.id]
+        global_state = info[self.id]["global_state"]
 
         # Unnormalize state, if necessary
         if not isinstance(global_state, dict):

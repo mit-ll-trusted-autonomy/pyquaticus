@@ -34,6 +34,7 @@ class Player:
     Attributes
     ----------
         id: The ID of the agent
+        idx: The index of the agent in self.agents
         team: The team of the agent (red or blue)
         pos: The position of the agent [x, y]
         speed: The speed of the agent (m / s)
@@ -48,6 +49,7 @@ class Player:
     """
 
     id: str
+    idx: int
     team: Team
     pos: list[float] = field(init=False, default_factory=list)
     speed: float = field(init=False, default_factory=float)
@@ -199,15 +201,18 @@ class Flag:
         team: The team the flag belongs to
         home: The flags original position at the start of the round/game
         pos: The flags current position
+        taken: whether or not the flag has been taken by opposing team
     """
 
     team: Team
-    home: list[float] = field(default_factory=list, init=False)
-    pos: list[float] = field(default_factory=list, init=False)
+    home: list[float] = field(init=False, default_factory=list)
+    pos: list[float] = field(init=False, default_factory=list)
+    taken: bool = field(init=False, default=False)
 
     def reset(self):
         """Resets the flags `pos` to be `home`."""
         self.pos = copy.deepcopy(self.home)
+        self.taken = False
 
 
 @dataclass

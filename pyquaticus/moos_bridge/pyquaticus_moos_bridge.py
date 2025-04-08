@@ -73,7 +73,15 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.dones = {}
         self.return_info = False
         self.active_collisions = [] #list that contains all new collisions between agents prevents counting a collision multiple times
-        self.scores = {"blue_scores": 0, "red_scores": 0}  
+        self.game_events = {
+            team: {
+                "scores": 0,
+                "grabs": 0,
+                "tags": 0,
+                "collisions": 0,
+            }
+            for team in Team
+        }
 
         # Set variables from config
         self.set_config(moos_config, pyquaticus_config)
@@ -115,12 +123,15 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         for player in self.players:
             self.agents_of_team[player.team].append(player)
 
-        # Create the list of flags that are indexed by self.flags[int(team)]
-        self.flags = []
+        # Create the list of flags that are indexed by self.flags[int(player.team)]
+        if len(self.flag_homes) != len(Team):
+            raise Exception(f"Length of self.flag_homes ({len(self.flag_homes)}) is not equal to that of {Team} struct ({len(Team)}).")
+
+        self.flags = [None for _ in range(len(self.flag_homes))]
         for team in Team:
             flag = Flag(team)
             flag.home = np.array(self.flag_homes[team])
-            self.flags.append(flag)
+            self.flags[int(team)] = flag
 
         # Team wall orientation
         self._determine_team_wall_orient()
@@ -135,7 +146,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.agent_obs_normalizer, self.global_state_normalizer = self._register_state_elements(self.team_size, len(self.obstacles))
         self.observation_space = self.get_agent_observation_space()
 
-    def reset(self, return_info=False, options: Optional[dict] = None):
+    def reset(self, return_info=True, options: Optional[dict] = None):
         """
         Resets variables and (re)connects to MOOS node for the provided agent name.
 
@@ -146,10 +157,17 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
                 -"normalize_obs": whether or not to normalize observations
                 -"normalize_state": whether or not to normalize the global state
         """ 
+        self.message = ""
+        self.current_time = 0
+        self.reset_count += 1
+        self.dones = self._reset_dones()
+
         self._action_count = 0
         self._auto_returning_flag = False #reset auto return status
         assert isinstance(self.timewarp, int)
         pymoos.set_moos_timewarp(self.timewarp)
+        
+        self.return_info = return_info
 
         # Set options
         if options is not None:
@@ -158,7 +176,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
         # Get and set state information
         for player in self.players.values():
-            #set values to None to for checking if connected with _wait_for_all_players
+            #set values to None before using _wait_for_all_players() to check if connected
             player.pos = [None, None]
             player.speed = None
             player.heading = None
@@ -172,66 +190,50 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self._init_moos_comm()
         self._wait_for_all_players()
 
-        flag_homes = list(self.flag_homes.values())
-        agent_positions = np.array([player.pos for player in self.player.values()])
-        agent_spd_hdg = np.array([[player.speed, player.heading] for player in self.player.values()])
-        agent_on_sides = np.array([self._check_on_sides(player.pos, player.team) for player in self.players.values()], dtype=bool)
-        agent_oob = np.any((self._standard_pos(agent_poses) <= 0) | (self.env_size <= self._standard_pos(agent_poses)), axis=-1)
-        agent_has_flag = np.array([player.has_flag for player in self.players.values()], dtype=bool)
-        agent_is_tagged = np.array([player.is_tagged for player in self.players.values()], dtype=bool)
+        flag_homes = [flag.home for flag in self.flags]
 
         self.state = {
-            "agent_position":            agent_positions,
-            "prev_agent_position":       copy.deepcopy(agent_positions),
-            "agent_speed":               agent_spd_hdg[:, 0],
-            "agent_heading":             agent_spd_hdg[:, 1],
-            "prev_agent_action":         np.zeros((self.num_agents, 2)), #desired speed and relative heading for each agent
-            "agent_on_sides":            agent_on_sides,
-            "agent_oob":                 agent_oob, #if this agent is out of bounds
-            "agent_has_flag":            agent_has_flag,
-            "agent_is_tagged":           agent_is_tagged, #if this agent is tagged
-            "agent_made_tag":            np.array([None] * self.num_agents), #whether this agent tagged something at the current timestep (will be index of tagged agent if so)
+            "agent_position":            None, #to be set with _update_state()
+            "prev_agent_position":       None, #to be set with _update_state()
+            "agent_speed":               None, #to be set with _update_state()
+            "agent_heading":             None, #to be set with _update_state()
+            "prev_agent_action":         np.zeros((self.num_agents, 2)),
+            "agent_on_sides":            None, #to be set with _update_state()
+            "agent_oob":                 None, #to be set with _update_state()
+            "agent_has_flag":            None, #to be set with _update_state()
+            "agent_is_tagged":           None, #to be set with _update_state()
+            "agent_made_tag":            [None] * self.num_agents,
             "agent_tagging_cooldown":    np.array([self.tagging_cooldown] * self.num_agents),
-            "dist_bearing_to_obstacles": {agent_id: np.zeros((len(self.obstacles), 2)) for agent_id in self.players},
+            "dist_bearing_to_obstacles": {agent_id: np.empty((len(self.obstacles), 2)) for agent_id in self.players},
             "flag_home":                 np.array(flag_homes),
-            "flag_position":             np.array(flag_homes),
-            "flag_taken":                np.zeros(len(self.flags), dtype=bool),
-            "team_has_flag":             np.zeros(len(self.agents_of_team), dtype=bool), #whether a member of this team has a flag of the other team's
-            "captures":                  np.zeros(len(self.agents_of_team), dtype=int), #total number of flag captures made by this team
-            "tags":                      np.zeros(len(self.agents_of_team), dtype=int), #total number of tags made by this team
-            "grabs":                     np.zeros(len(self.agents_of_team), dtype=int), #total number of flag grabs made by this team
-            "agent_collisions":          np.zeros(len(self.players), dtype=int), #total number of collisions per agent
-        }
-        for team, score in self.scores.items():
-            self.state["captures"][int(team)] = score
+            "flag_position":             None, #to be set with _update_state()
+            "flag_taken":                None, #to be set with _update_state()
+            "team_has_flag":             None, #to be set with _update_state()
+            "captures":                  None, #to be set with _update_state()
+            "tags":                      np.zeros(len(self.agents_of_team), dtype=int),
+            "grabs":                     np.zeros(len(self.agents_of_team), dtype=int),
+            "agent_collisions":          np.zeros(len(self.players), dtype=int)
+        } #note: see pyquaticus/pyquaticus/envs/pyquaticus.py reset method for documentation on self.state
 
         # Set player and flag attributes
-        self._set_player_attributes_from_state()
-        self._set_flag_attributes_from_state()
+        self._update_state()
 
         # Observation history
         reset_obs = self.state_to_obs(self._agent_name, self.normalize_obs)
         self.state["obs_hist_buffer"] = np.array(self.obs_hist_buffer_len * [reset_obs])
 
         # Global state history
-        reset_global_state = self.state_to_global_state(self.normalize_state)
-        self.state["global_state_hist_buffer"] = np.array(self.state_hist_buffer_len * [reset_global_state])
-        
-        # General vars
-        self.message = ""
-        self.current_time = 0
-        self.reset_count += 1
-        self.dones = self._reset_dones()
-        self.team_flag_capture = [False for _ in Team] #this is False except at the timestep that the flag is captured
+        if self.return_info:
+            reset_global_state = self.state_to_global_state(self.normalize_state)
+            self.state["global_state_hist_buffer"] = np.array(self.state_hist_buffer_len * [reset_global_state])
 
         # Observations
         obs = self.state["obs_hist_buffer"][self.obs_hist_buffer_inds].squeeze()
 
         # Info
-        self.return_info = return_info
-
         if self.return_info:
-            info = self.state["global_state_hist_buffer"][self.state_hist_buffer_inds].squeeze()
+            global_state = self.state["global_state_hist_buffer"][self.state_hist_buffer_inds].squeeze()
+            info = {"global_state": global_state}
         else:
             info = {}
 
@@ -288,6 +290,33 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
                 raise RuntimeError(f"No other agents connected after {num_iters*wait_time} seconds. Failing and exiting.")
         print("All agents connected!")
         return
+
+    def _update_state(self):
+        """
+        Updates the state dictionary (self.state) and some agent/flag attributes based on the latest messages from MOOS
+        """
+        self.state["agent_poses"]
+        agent_positions = np.array([player.pos for player in self.player.values()])
+        agent_spd_hdg = np.array([[player.speed, player.heading] for player in self.player.values()])
+        agent_has_flag = np.array([player.has_flag for player in self.players.values()], dtype=bool)
+        agent_is_tagged = np.array([player.is_tagged for player in self.players.values()], dtype=bool)
+        #TODO: score, cantag
+
+        ###########################################################################################################################################
+        agent_on_sides = np.array([self._check_on_sides(player.pos, player.team) for player in self.players.values()], dtype=bool)
+        agent_oob = np.any((self._standard_pos(agent_poses) <= 0) | (self.env_size <= self._standard_pos(agent_poses)), axis=-1)
+
+        # Set on_own_side for each agent using _check_on_sides()
+        for agent in self.players.values():
+            agent.on_own_side = self._check_on_sides(agent, agent.team)
+
+        # Update tagging_cooldown value
+        for agent in self.players.values():
+            # should count up from 0.0 to tagging_cooldown (at which point it can tag again)
+            agent.tagging_cooldown = self.tagging_cooldown - max(0.0, agent.cantag_time - time.time())
+            agent.tagging_cooldown = max(0, min(self.tagging_cooldown, agent.tagging_cooldown))
+        #############################################################################################################################################3
+
 
     def _set_player_attributes_from_state(self):
         for i, player in enumerate(self.players.values()):
@@ -378,7 +407,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         terminated, truncated = False, False
 
         # let the action occur
-        time.sleep(self.steptime / self.timewarp)
+        time.sleep(self.steptime)
 
         obs = self.state_to_obs(self._agent_name)
         return obs, reward, terminated, truncated, {}
@@ -387,14 +416,16 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         """
         Light wrapper around parent class state_to_obs function
         """
-        # set on_own_side for each agent using _check_side(player)
+        # Set on_own_side for each agent using _check_on_sides()
         for agent in self.players.values():
-            agent.on_own_side = self._check_on_sides(agent)
-        # update tagging_cooldown value
+            agent.on_own_side = self._check_on_sides(agent, agent.team)
+
+        # Update tagging_cooldown value
         for agent in self.players.values():
             # should count up from 0.0 to tagging_cooldown (at which point it can tag again)
             agent.tagging_cooldown = self.tagging_cooldown - max(0.0, agent.cantag_time - time.time())
             agent.tagging_cooldown = max(0, min(self.tagging_cooldown, agent.tagging_cooldown))
+
         return super().state_to_obs(agent_id, normalize)
 
     def _init_moos_comm(self):
@@ -552,9 +583,9 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         Handles messages about scores.
         """
         if msg.key() == "BLUE_SCORES":
-            self.scores['blue_scores'] = msg.double()
+            self.game_events[Team.BLUE_TEAM]['scores'] = msg.double()
         elif msg.key() == "RED_SCORES":
-            self.scores['red_scores'] = msg.double()
+            self.game_events[Team.RED_TEAM]['scores'] = msg.double()
         else:
             raise ValueError(f"Unexpected message: {msg.key()}")
 
