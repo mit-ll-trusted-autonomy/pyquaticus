@@ -70,6 +70,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         # Pyquaticus inits
         self.reset_count = 0
         self.current_time = 0
+        self.start_time = None
         self.state = None
         self.prev_state = None
         self.dones = {}
@@ -163,8 +164,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
                 -"normalize_obs": whether or not to normalize observations
                 -"normalize_state": whether or not to normalize the global state
         """ 
-        self.message = ""
         self.current_time = 0
+        self.start_time = time.time()
         self.reset_count += 1
         self.dones = self._reset_dones()
         self.active_collisions = np.zeros((len(all_agent_names), len(all_agent_names)), dtype=bool)
@@ -219,7 +220,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             "tags":                      np.zeros(len(self.agents_of_team), dtype=int),
             "grabs":                     np.zeros(len(self.agents_of_team), dtype=int),
             "agent_collisions":          np.zeros(len(self.players), dtype=int)
-        } #note: see pyquaticus/pyquaticus/envs/pyquaticus.py reset method for documentation on self.state
+        } #NOTE: see pyquaticus/pyquaticus/envs/pyquaticus.py reset method for documentation on self.state
 
         # Update state dictionary (self.state)
         self._update_state()
@@ -228,11 +229,11 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         # self._set_player_attributes_from_state() #TODO: uncomment when implemented
         # self._set_flag_attributes_from_state() #TODO: uncomment when implemented
         self._set_game_events_from_state()
-        #note: because the observation and global state are built from the state
+        #NOTE: because the observation and global state are built from the state
         #dictionary, it is not currently necessary to set the player and flag attributes
 
         # Observation history
-        reset_obs = super().state_to_obs(self._agent_name, self.normalize_obs)
+        reset_obs = self.state_to_obs(self._agent_name, self.normalize_obs)
         self.state["obs_hist_buffer"] = np.array(self.obs_hist_buffer_len * [reset_obs])
 
         # Global state history
@@ -365,7 +366,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         #TODO: pos, taken
         raise NotImplementedError
 
-        #note: we do not set flag.home because this should already
+        #NOTE: we do not set flag.home because this should already
         #be set in __init__() and match what is in the state dictionary
 
 
@@ -404,7 +405,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         """
         # Previous state
         # self.prev_state = copy.deepcopy(self.state) #TODO: uncomment if prev_state is needed 
-        #note: prev_state not currently tracked in PyQuaticusMoosBridge to optimize speed (avoid calling copy.deepcopy)
+        #NOTE: prev_state not currently tracked in PyQuaticusMoosBridge to optimize speed (avoid calling copy.deepcopy)
 
         agent = self.players[self._agent_name]
         moostime = pymoos.time()
@@ -427,13 +428,10 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             self._moos_comm.notify("RLA_SPEED", desired_spd, moostime)
             self._moos_comm.notify("RLA_HEADING", desired_hdg%360, moostime)
 
+        # Translate incoming actions and publish them
         else:
-            #translate actions and publish them
-            desired_spd, delta_hdg = self._to_speed_heading(agent, action)
-            desired_hdg = self._relheading_to_global_heading(
-                self.players[self._agent_name].heading,
-                delta_hdg
-            )
+            desired_spd, rel_hdg = self._to_speed_heading(agent, action)
+            desired_hdg = self._relheading_to_global_heading(agent.heading, rel_hdg)
 
             #notify the moos agent that we're controlling it directly
             #NOTE: the name of this variable depends on the mission files
@@ -447,12 +445,11 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             self._flag_grab_publisher()
             self._auto_returning_flag = False
 
-        reward = 0 #always returning zero reward for now (this is only for deploying policies, not traning)
-
-        terminated, truncated = False, False #just for evaluation, never need to reset (might be running real robots)
-
-        # let the action occur
+        # Let the action occur
         time.sleep(self.dt)
+
+        # Set the time
+        self.current_time += self.timewarp * self.dt
 
         # Update state
         self._update_state
@@ -460,14 +457,25 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         # self._set_player_attributes_from_state() #TODO: uncomment when implemented
         # self._set_flag_attributes_from_state() #TODO: uncomment when implemented
         self._set_game_events_from_state()
-        #note: because the observation and global state are built from the state
+        #NOTE: because the observation and global state are built from the state
         #dictionary, it is not currently necessary to set the player and flag attributes
 
         # Observations
+        self.state["obs_hist_buffer"][1:] = self.state["obs_hist_buffer"][:-1]
+        self.state["obs_hist_buffer"][0] = self.state_to_obs(self._agent_name, self.normalize_obs)
         obs = self.state["obs_hist_buffer"][self.obs_hist_buffer_inds].squeeze()
+
+        # Dones
+        terminated = np.any(self.state["captures"] >= self.max_score)
+        truncated = (self.current_time >= self.max_time) or ((time.time() - self.start_time) >= self.max_time)
+
+        # Reward
+        reward = 0 #always returning zero reward for now (this is only for deploying policies, not traning)
 
         # Info
         if self.return_info:
+            self.state["global_state_hist_buffer"][1:] = self.state["global_state_hist_buffer"][:-1]
+            self.state["global_state_hist_buffer"][0] = self.state_to_global_state(self.normalize_state)
             global_state = self.state["global_state_hist_buffer"][self.state_hist_buffer_inds].squeeze()
             info = {"global_state": global_state}
         else:
@@ -571,7 +579,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         """
         Handles messages about the flags.
         """
-        # Note: assuming the underlying MOOS logic only allows
+        # NOTE: assuming the underlying MOOS logic only allows
         #       agents to grab the opponent's flag, so not even
         #       checking for that
         flag_holders = set()
