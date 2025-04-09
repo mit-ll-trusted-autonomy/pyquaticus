@@ -71,6 +71,7 @@ class RenderingPlayer(Player):
     ----------
         #### inherited from Player
         id: The ID of the agent (also used as an index)
+        idx: The index of the agent in self.agents
         team: The team of the agent (red or blue)
         pos: The position of the agent [x, y]
         speed: The speed of the agent (m / s)
@@ -211,7 +212,7 @@ class Flag:
 
     def reset(self):
         """Resets the flags `pos` to be `home`."""
-        self.pos = copy.deepcopy(self.home)
+        self.pos = self.home.copy()
         self.taken = False
 
 
