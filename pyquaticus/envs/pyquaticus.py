@@ -186,63 +186,51 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         dones["__all__"] = False
         return dones
 
-    def _to_speed_heading(self, action_dict):
+    def _to_speed_heading(self, agent, raw_action):
         """
-        Processes the raw actions.
+        Processes the raw action for a player object (acge)
+
+        Args:
+            agent: Player object
+            raw_action: discrete (int), continuous (array), or afp (str) action
 
         Returns:
             dict from agent id -> (speed, relative heading)
             Note: we use relative heading here so that it can be used directly
                   as the heading error in the PID controller
         """
-        processed_action_dict = OrderedDict()
-        for i, player in enumerate(self.players.values()):
-            if player.id in action_dict:
-                # Continuous actions
-                if isinstance(action_dict[player.id], (list, tuple, np.ndarray)):
-                    speed = action_dict[player.id][0]
-                    rel_heading = action_dict[player.id][1]
+        # Continuous actions
+        if isinstance(raw_action, (list, tuple, np.ndarray)):
+            speed = raw_action[0]
+            rel_heading = raw_action[1]
 
-                # Aquaticus Point Field
-                elif isinstance(action_dict[player.id], str):
-                    #make aquaticus point field the same on both blue and red sides
-                    if player.team == Team.BLUE_TEAM:
-                        if "P" in action_dict[player.id]:
-                            action_dict[player.id] = "S" + action_dict[player.id][1:]
-                        elif "S" in action_dict[player.id]:
-                            action_dict[player.id] = "P" + action_dict[player.id][1:]
-                        if "X" not in action_dict[player.id] and action_dict[player.id] not in ["SC", "CC", "PC"]:
-                            action_dict[player.id] += "X"
-                        elif action_dict[player.id] not in ["SC", "CC", "PC"]:
-                            action_dict[player.id] = action_dict[player.id][:-1]
+        # Aquaticus point field
+        elif isinstance(raw_action, str):
+            #make aquaticus point field the same on both blue and red sides
+            if agent.team == Team.RED_TEAM:
+                if "P" in raw_action:
+                    raw_action = "S" + raw_action[1:]
+                elif "S" in raw_action:
+                    raw_action = "P" + raw_action[1:]
+                if "X" not in raw_action and raw_action not in ["SC", "CC", "PC"]:
+                    raw_action += "X"
+                elif raw_action not in ["SC", "CC", "PC"]:
+                    raw_action = raw_action[:-1]
 
-                    _, rel_heading = mag_bearing_to(
-                        player.pos,
-                        self.aquaticus_field_points[action_dict[player.id]],
-                        player.heading
-                    )
-                    if (-0.3 <= self.get_distance_between_2_points(
-                            player.pos,
-                            self.aquaticus_field_points[action_dict[player.id]],
-                        ) <= 0.3
-                    ):
-                        speed = 0.0
-                    else:
-                        speed = self.max_speeds[i]
-
-                # Discrete action space
-                else:
-                    speed, rel_heading = self._discrete_action_to_speed_relheading(
-                        action_dict[player.id]
-                    )
-                    speed = self.max_speeds[i] * speed #scale speed to agent's max speed
+            _, rel_heading = mag_bearing_to(
+                agent.pos, self.aquaticus_field_points[raw_action], agent.heading
+            )
+            if self.get_distance_between_2_points(agent.pos, self.aquaticus_field_points[raw_action]) <= self.agent_radius[agent.idx]:
+                speed = 0.0
             else:
-                # If no action provided, stop moving
-                speed, rel_heading = 0.0, 0.0
+                speed = self.max_speeds[agent.idx]
 
-            processed_action_dict[player.id] = np.array([speed, rel_heading], dtype=np.float32)
+        # Discrete action space
+        else:
+            speed, rel_heading = self._discrete_action_to_speed_relheading(raw_action)
+            speed = self.max_speeds[agent.idx] * speed #scale speed to agent's max speed
 
-        return processed_action_dict
+        return speed, rel_heading
 
     def _discrete_action_to_speed_relheading(self, action):
         return self.discrete_action_map[action]
@@ -1096,7 +1084,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.state["agent_tagging_cooldown"][i] = player.tagging_cooldown
         
         # Process incoming actions
-        action_dict = self._to_speed_heading(raw_action_dict)
+        action_dict = {}
+        for player in self.players.values():
+            if player.id in raw_action_dict:
+                speed, rel_heading = self._to_speed_heading(player, raw_action_dict[player.id])
+            else:
+                #if no action provided, no-op
+                speed, rel_heading = 0.0, 0.0
+
+            action_dict[player.id] = np.array([speed, rel_heading], dtype=np.float32)
 
         # Move agents and render
         if self.render_mode:
@@ -1878,7 +1874,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Scale the aquaticus point field by env size
         if not self.gps_env:
-            if not np.all(np.isclose(0.5*self.scrimmage_coords[:, 0], self.env_size[0])):
+            if not np.all(np.isclose(self.scrimmage_coords[:, 0], 0.5*self.env_size[0])):
                 print("Warning! Aquaticus field points are not side/team agnostic when environment is not symmetric.")
                 print(f"Environment dimensions: {self.env_size}")
                 print(f"Scrimmage line coordinates: {self.scrimmage_coords}")

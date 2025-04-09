@@ -410,20 +410,18 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         moostime = pymoos.time()
 
         # MOOS behavior mode ACTION (e.g. "ATTACK_E", "ATTACK_MED", "DEFEND_E", "DEFEND_MED")
-        if isinstance(action, str):
-            if action in self.aquaticus_field_points:
-                raise NotImplementedError #TODO
-            else:
-                self._moos_comm.notify("ACTION", action, moostime)
-                self._auto_returning_flag = False
-        
-        elif self._check_on_sides(agent.pos, agent.team) and agent.has_flag:
-            # Automatically return agent to home region
+        if isinstance(action, str) and not (action in self.aquaticus_field_points):
+            self._moos_comm.notify("ACTION", action, moostime)
+            self._auto_returning_flag = False
+
+        # Automatically return agent to home region
+        elif agent.has_flag and self._check_on_sides(agent.pos, agent.team):
             desired_spd = self.max_speeds[agent.idx]
-            player_flag_home = self.flags[int(self.team)].home
-            _, desired_hdg = mag_bearing_to(player.pos, player_flag_home)
+            _, desired_hdg = mag_bearing_to(agent.pos, self.flags[int(self.team)].home)
+
             if not self._auto_returning_flag:
                 print("Taking over control to return flag")
+
             self._auto_returning_flag = True
             self._moos_comm.notify("ACTION", "CONTROL", moostime)
             self._moos_comm.notify("RLA_SPEED", desired_spd, moostime)
@@ -431,19 +429,21 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
         else:
             #translate actions and publish them
-            desired_spd, delta_hdg = self._discrete_action_to_speed_relheading(action)
+            desired_spd, delta_hdg = self._to_speed_heading(agent, action)
             desired_hdg = self._relheading_to_global_heading(
                 self.players[self._agent_name].heading,
-                delta_hdg)
+                delta_hdg
+            )
 
-            # notify the moos agent that we're controlling it directly
-            # NOTE: the name of this variable depends on the mission files
+            #notify the moos agent that we're controlling it directly
+            #NOTE: the name of this variable depends on the mission files
             self._moos_comm.notify("ACTION", "CONTROL", moostime)
             self._moos_comm.notify("RLA_SPEED", desired_spd, moostime)
             self._moos_comm.notify("RLA_HEADING", desired_hdg%360, moostime)
             self._action_count += 1
             self._moos_comm.notify("RLA_ACTION_COUNT", self._action_count, moostime)
-            # if close enough to flag, will attempt to grab
+            
+            #if close enough to flag, will attempt to grab
             self._flag_grab_publisher()
             self._auto_returning_flag = False
 
