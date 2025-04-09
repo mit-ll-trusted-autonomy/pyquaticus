@@ -74,6 +74,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.prev_state = None
         self.dones = {}
         self.return_info = True
+        self.aquaticus_field_points = None
+        self.afp_sym = True
         self.active_collisions = None #see pyquaticus/pyquaticus/envs/pyquaticus.py for documentation
         self.game_events = {
             team: {
@@ -484,8 +486,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             "FLAG_SUMMARY",
             "TAGGED_VEHICLES",
             "CANTAG_SUMMARY",
-            "BLUE_SCORES",
-            "RED_SCORES"
+            "BLUE_SCORES", "RED_SCORES"
         ]
         self._moos_vars.extend([
             f"NODE_REPORT_{n.upper()}"
@@ -776,9 +777,24 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         }
 
         #scale and transform the aquaticus point field to match mission field
-        self.aquaticus_field_points = get_afp()
-        for k, v in self.aquaticus_field_points.items():
-            pt = self.env_rot_matrix @ np.asarray(v)
-            pt += self.env_ll
-            pt *= self.env_size
-            self.aquaticus_field_points[k] = pt
+        if not np.all(np.isclose(0.5*self.scrimmage_coords[:, 0], self.env_size[0])):
+            print("Warning! Aquaticus field points are not side/team agnostic when environment is not symmetric.")
+            print(f"Environment dimensions: {self.env_size}")
+            print(f"Scrimmage line coordinates: {self.scrimmage_coords}")
+
+            self.afp_sym = False
+            self.aquaticus_field_points = get_afp()
+            for k, v in self.aquaticus_field_points.items():
+                pt = self.env_rot_matrix @ np.asarray(v)
+                pt += self.env_ll
+                pt *= self.env_size
+                self.aquaticus_field_points[k] = pt
+
+        else:
+            self.afp_sym = True
+            self.aquaticus_field_points = get_afp()
+            for k, v in self.aquaticus_field_points.items():
+                pt = self.env_rot_matrix @ np.asarray(v)
+                pt += self.env_ll
+                pt *= self.env_size
+                self.aquaticus_field_points[k] = pt

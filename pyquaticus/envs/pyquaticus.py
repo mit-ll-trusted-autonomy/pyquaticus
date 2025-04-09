@@ -924,6 +924,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.prev_state = None
         self.dones = {}
         self.return_info = True
+        self.aquaticus_field_points = None
+        self.afp_sym = True
         self.active_collisions = None #current collisions between all agents
         self.game_events = {
             team: {
@@ -1876,10 +1878,27 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Scale the aquaticus point field by env size
         if not self.gps_env:
-            self.aquaticus_field_points = get_afp()
-            for k in self.aquaticus_field_points:
-                self.aquaticus_field_points[k][0] *= self.env_size[0]
-                self.aquaticus_field_points[k][1] *= self.env_size[1]
+            if not np.all(np.isclose(0.5*self.scrimmage_coords[:, 0], self.env_size[0])):
+                print("Warning! Aquaticus field points are not side/team agnostic when environment is not symmetric.")
+                print(f"Environment dimensions: {self.env_size}")
+                print(f"Scrimmage line coordinates: {self.scrimmage_coords}")
+
+                self.afp_sym = False
+                self.aquaticus_field_points = get_afp()
+                for k, v in self.aquaticus_field_points.items():
+                    pt = self.env_rot_matrix @ np.asarray(v)
+                    pt += self.env_ll
+                    pt *= self.env_size
+                    self.aquaticus_field_points[k] = pt
+
+            else:
+                self.afp_sym = True
+                self.aquaticus_field_points = get_afp()
+                for k, v in self.aquaticus_field_points.items():
+                    pt = self.env_rot_matrix @ np.asarray(v)
+                    pt += self.env_ll
+                    pt *= self.env_size
+                    self.aquaticus_field_points[k] = pt
 
         ### Environment Rendering ###
         if self.render_mode:
