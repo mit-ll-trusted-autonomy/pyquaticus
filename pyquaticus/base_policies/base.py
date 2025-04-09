@@ -84,16 +84,16 @@ class BaseAgentPolicy:
 
     def compute_action(self, obs, info) -> Any:
         """
-        Compute an action for the given position. This function uses observations
-        of both teams.
+        Compute an action from the given observation and global state.
 
         Args:
-            obs: observation from gym
-            info: info from gym
+            obs: observation from the gym
+            info: info from the gym
 
-        Returns:
-            action: The action index describing which speed/heading combo to use (assumes
-            discrete action values from `ctf-gym.envs.pyquaticus.ACTION_MAP`)
+        Returns
+        -------
+            action: if continuous, a tuple containing desired speed and heading error.
+            if discrete, an action index corresponding to ACTION_MAP in config.py
         """
         pass
 
