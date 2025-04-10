@@ -84,10 +84,14 @@ class BaseDefender(BaseAgentPolicy):
         global_state = info[self.id]["global_state"]
 
         # Unnormalize state, if necessary
-        if global_state.size != 1:
-            global_state = self.state_normalizer.unnormalized(global_state)
-        else:
-            global_state = global_state.item()
+        if not isinstance(global_state, dict):
+            if global_state.dtype == np.object_:
+                global_state = global_state[0]
+            else:
+                if len(global_state.shape) == 1:
+                    global_state = self.state_normalizer.unnormalized(global_state)
+                else:
+                    global_state = self.state_normalizer.unnormalized(global_state[0])
 
         if self.mode == "easy":
 

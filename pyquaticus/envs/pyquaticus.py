@@ -35,7 +35,6 @@ import random
 import subprocess
 
 from abc import ABC
-from collections import defaultdict, OrderedDict
 from contextily.tile import _sm2ll
 from datetime import datetime
 from geographiclib.geodesic import Geodesic
@@ -445,7 +444,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         Developer Note 2: check that variables used here are available to PyQuaticusMoosBridge in pyquaticus_moos_bridge.py
         Developer Note 3: assumes there are only 2 teams (blue and red) and one flag per team
         """
-        obs = OrderedDict()
+        obs = dict()
         agent = self.players[agent_id]
 
         own_team = agent.team
@@ -1146,7 +1145,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.state["obs_hist_buffer"][agent_id][1:] = self.state["obs_hist_buffer"][agent_id][:-1]
             self.state["obs_hist_buffer"][agent_id][0] = self.state_to_obs(agent_id, self.normalize_obs)
 
-        obs = {agent_id: self.state["obs_hist_buffer"][agent_id][self.obs_hist_buffer_inds].squeeze() for agent_id in self.players}
+        if self.obs_hist_len > 1:
+            obs = {agent_id: self.state["obs_hist_buffer"][agent_id][self.obs_hist_buffer_inds] for agent_id in self.players}
+        else:
+            obs = {agent_id: self.state["obs_hist_buffer"][agent_id][0] for agent_id in self.players}
 
         # Rewards
         rewards = {agent_id: self.compute_rewards(agent_id, player.team) for agent_id, player in self.players.items()}
@@ -1170,8 +1172,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if self.return_info:
             self.state["global_state_hist_buffer"][1:] = self.state["global_state_hist_buffer"][:-1]
             self.state["global_state_hist_buffer"][0] = self.state_to_global_state(self.normalize_state)
-            global_state = self.state["global_state_hist_buffer"][self.state_hist_buffer_inds].squeeze()
-            info = {agent_id: {"global_state": global_state} for agent_id in self.players}
+
+            global_state = self.state["global_state_hist_buffer"][self.state_hist_buffer_inds]
+            if self.state_hist_len > 1:
+                info = {agent_id: {"global_state": global_state} for agent_id in self.players}
+            else:
+                info = {agent_id: {"global_state": global_state[0]} for agent_id in self.players}
         else:
             info = {agent_id: {} for agent_id in self.players}
 
@@ -1230,22 +1236,26 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     else:
                         desired_speed, heading_error = policy.compute_action(player.pos, player.heading)
                         if player.oob:
-                            desired_speed = player.get_max_speed() * self.oob_speed_frac
-
-                #if agent is out of bounds, drive back in bounds at fraction of max speed
-                elif player.oob:
-                    heading_error = self._get_oob_recover_rel_heading(player.pos, player.heading)
-                    desired_speed = player.get_max_speed() * self.oob_speed_frac
+                            desired_speed = player.get_max_speed()
+                            # desired_speed = player.get_max_speed() * self.oob_speed_frac
+                            #TODO: optimize based on MOOS behvior
             
                 #else go directly to home
                 else:
                     _, heading_error = mag_bearing_to(player.pos, flag_home, player.heading)
-                    desired_speed = player.get_max_speed()
+                    if player.oob:
+                        desired_speed = player.get_max_speed()
+                        # desired_speed = player.get_max_speed() * self.oob_speed_frac
+                        #TODO: optimize based on MOOS behvior
+                    else:
+                        desired_speed = player.get_max_speed()
 
             # If agent is out of bounds, drive back in bounds at fraction of max speed
             elif player.oob:
                 heading_error = self._get_oob_recover_rel_heading(player.pos, player.heading)
-                desired_speed = player.get_max_speed() * self.oob_speed_frac
+                desired_speed = player.get_max_speed()
+                # desired_speed = player.get_max_speed() * self.oob_speed_frac
+                #TODO: optimize based on MOOS behvior
 
             # Else get desired speed and heading from action_dict
             else:
@@ -1813,7 +1823,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         short_obs_hist_oldest_timestep = self.short_obs_hist_length * self.short_obs_hist_interval - self.short_obs_hist_interval
         long_obs_hist_oldest_timestep = self.long_obs_hist_length * self.long_obs_hist_interval - self.long_obs_hist_interval
-        if short_obs_hist_oldest_timestep > long_obs_hist_oldest_timestep:
+        if (
+            short_obs_hist_oldest_timestep > long_obs_hist_oldest_timestep
+            and self.long_obs_hist_length != 1
+        ):
             print(f"Warning! The short term obs history contains older timestep (-{short_obs_hist_oldest_timestep}) than the long term obs history (-{long_obs_hist_oldest_timestep}).")
         
         # Global State
@@ -1828,7 +1841,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         short_state_hist_oldest_timestep = self.short_state_hist_length * self.short_state_hist_interval - self.short_state_hist_interval
         long_state_hist_oldest_timestep = self.long_state_hist_length * self.long_state_hist_interval - self.long_state_hist_interval
-        if short_state_hist_oldest_timestep > long_state_hist_oldest_timestep:
+        if (
+            short_state_hist_oldest_timestep > long_state_hist_oldest_timestep
+            and self.long_state_hist_length != 1
+
+        ):
             print(f"Warning! The short term state history contains older timestep (-{short_state_hist_oldest_timestep}) than the long term state history (-{long_state_hist_oldest_timestep}).")
 
         ### Environment Geometry Construction ###
@@ -2048,7 +2065,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             ray_int_label_names = ["nothing", "obstacle"]
             ray_int_label_names.extend([f"flag_{i}" for i, _ in enumerate(self.flags)])
             ray_int_label_names.extend([f"agent_{i}" for i, _ in enumerate(self.agents)])
-            self.ray_int_label_map = OrderedDict({label_name: i for i, label_name in enumerate(ray_int_label_names)})
+            self.ray_int_label_map = {label_name: i for i, label_name in enumerate(ray_int_label_names)}
 
             self.obj_ray_detection_states = {team: [] for team in self.agents_of_team}
             for team in self.agents_of_team:
@@ -2465,12 +2482,18 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self._render()
 
         # Observations
-        obs = {agent_id: self.state["obs_hist_buffer"][agent_id][self.obs_hist_buffer_inds].squeeze() for agent_id in self.players}
+        if self.obs_hist_len > 1:
+            obs = {agent_id: self.state["obs_hist_buffer"][agent_id][self.obs_hist_buffer_inds] for agent_id in self.players}
+        else:
+            obs = {agent_id: self.state["obs_hist_buffer"][agent_id][0] for agent_id in self.players}
 
         # Info
         if self.return_info:
-            global_state = self.state["global_state_hist_buffer"][self.state_hist_buffer_inds].squeeze()
-            info = {agent_id: {"global_state": global_state} for agent_id in self.players}
+            global_state = self.state["global_state_hist_buffer"][self.state_hist_buffer_inds]
+            if self.state_hist_len > 1:
+                info = {agent_id: {"global_state": global_state} for agent_id in self.players}
+            else:
+                info = {agent_id: {"global_state": global_state[0]} for agent_id in self.players}
         else:
             info = {agent_id: {} for agent_id in self.players}
 
