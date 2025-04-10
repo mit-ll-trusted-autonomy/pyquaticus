@@ -110,8 +110,10 @@ class BaseAgentPolicy:
         global_state = info[self.id]["global_state"]
 
         # Unnormalize state, if necessary
-        if not isinstance(global_state, dict):
+        if global_state.size != 1:
             global_state = self.state_normalizer.unnormalized(global_state)
+        else:
+            global_state = global_state.item()
 
         self.opp_team_pos = []
         self.opp_team_pos_dict = {}  # for labeling by agent_id
