@@ -25,4 +25,6 @@ done
 rm -rf  $VERBOSE   MOOSLog_*  LOG_*
 rm -f   $VERBOSE   *~  targ_* *.moos++
 rm -f   $VERBOSE   .LastOpenedMOOSLogDirectory
-rm -f   $VERBOSE   murmur/murmur.log
+rm -f   $VERBOSE   field.txt
+rm -f   $VERBOSE   flags.txt
+rm -f   $VERBOSE   region_info.txt

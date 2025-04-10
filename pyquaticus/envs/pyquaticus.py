@@ -70,6 +70,7 @@ from pyquaticus.utils.obs_utils import ObsNormalizer
 from pyquaticus.utils.pid import PID
 from pyquaticus.utils.utils import (
     angle180,
+    check_segment_intersections,
     clip,
     closest_line,
     closest_point_on_line,
@@ -88,7 +89,7 @@ from pyquaticus.utils.utils import (
     rot2d,
     vec_to_mag_heading,
     wrap_mercator_x,
-    wrap_mercator_x_dist,
+    wrap_mercator_x_dist
 )
 from pyquaticus.base_policies.env_waypoint_policy import EnvWaypointPolicy
 from scipy.ndimage import label
@@ -744,14 +745,15 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
         blue_wall_vec = blue_flag - team_flags_midpoint
         blue_wall_ray_end = team_flags_midpoint + self.env_diag * (blue_wall_vec / np.linalg.norm(blue_wall_vec))
-        blue_wall_ray = LineString((team_flags_midpoint, blue_wall_ray_end))
+        blue_wall_ray = np.asarray([team_flags_midpoint, blue_wall_ray_end])
 
         red_wall_vec = red_flag - team_flags_midpoint
         red_wall_ray_end = team_flags_midpoint + self.env_diag * (red_wall_vec / np.linalg.norm(red_wall_vec))
-        red_wall_ray = LineString((team_flags_midpoint, red_wall_ray_end))
+        red_wall_ray = np.asarray([team_flags_midpoint, red_wall_ray_end])
 
-        blue_borders = self._point_on_which_border(intersection(blue_wall_ray, Polygon(self.env_corners)).coords[1])
-        red_borders = self._point_on_which_border(intersection(red_wall_ray, Polygon(self.env_corners)).coords[1])
+        edges_reordered = np.roll(self.env_edges, 1, axis=0) #match _point_on_which_border() wall ordering
+        blue_borders = check_segment_intersections(edges_reordered, blue_wall_ray)
+        red_borders = check_segment_intersections(edges_reordered, red_wall_ray)
 
         if len(blue_borders) == len(red_borders) == 2:
             #blue wall
@@ -1362,8 +1364,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             (intersect_y >= np.minimum(y3, y4) - LINE_INTERSECT_TOL) & (intersect_y <= np.maximum(y3, y4) + LINE_INTERSECT_TOL) & \
             flag_int_seg_mask & self.agent_int_seg_mask
 
-        intersect_x = np.where(mask, intersect_x, -self.env_diag)  # a coordinate out of bounds and far away
-        intersect_y = np.where(mask, intersect_y, -self.env_diag)  # a coordinate out of bounds and far away
+        intersect_x = np.where(mask, intersect_x, -self.env_diag)  #a coordinate out of bounds and far away
+        intersect_y = np.where(mask, intersect_y, -self.env_diag)  #a coordinate out of bounds and far away
         intersections = np.stack((intersect_x.flatten(), intersect_y.flatten()), axis=-1).reshape(intersect_x.shape + (2,))
 
         # determine lidar ray readings
@@ -3519,7 +3521,8 @@ when gps environment bounds are specified in meters"
         self.scrimmage_vec = scrimmage_coords[1] - scrimmage_coords[0]
 
         # environment angle (rotation)
-        self.env_rot_angle = np.arctan2(self.env_lr[1], self.env_lr[0])
+        rot_vec = self.env_lr - self.env_ll
+        self.env_rot_angle = np.arctan2(rot_vec[1], rot_vec[0])
         s, c = np.sin(self.env_rot_angle), np.cos(self.env_rot_angle)
         self.env_rot_matrix = np.array([[c, -s], [s, c]])
 

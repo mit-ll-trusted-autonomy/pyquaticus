@@ -246,7 +246,7 @@ class FieldReaderConfig:
     This format started with the jervis-2023 mission and continued with the charles-2023
     mission, both included in moos-ivp-aquaticus
     '''
-    def __init__(self, mission_dir:str, script:str =f'{os.path.dirname(__file__)}/get_field.sh'):
+    def __init__(self, mission_dir:str, script:str=f'{os.path.dirname(__file__)}/get_field.sh'):
         ####### Geometry Parameters #######
         # field reader
         print(f"Using field script: {script}")
@@ -383,7 +383,7 @@ class JervisBayConfig(FieldReaderConfig):
 class MITConfig2025(FieldReaderConfig):
     def __init__(self):
         pyquaticus_root = Path(__file__).resolve().parents[2]
-        super(str(pyquaticus_root / "moos" / "missions" / "charles-2025"))
+        super().__init__(str(pyquaticus_root / "moos" / "missions" / "charles-2025"))
 
         ####### Geometry Parameters #######
         self.agent_radius = 6 * [2.0]

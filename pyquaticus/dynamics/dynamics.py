@@ -482,12 +482,12 @@ class Heron(BaseUSV):
 
         (2) https://oceanai.mit.edu/svn/moos-ivp-aquaticus-oai/trunk/missions/charles-2023/meta_vehicle.moos
                 -max_speed
-                    *pHelmIvP config speed domain
-                    *max_speed = max(thrust_map[1]) + 0.5 (buffer added for normlization)
+                    *max_speed = max(thrust_map[1])
+                    *pHelmIvP config speed domain (0.5 buffer added for normlization)
     """
     def __init__(
         self,
-        max_speed:float = 2.5,
+        max_speed:float = 2.0,
         thrust_map:np.ndarray = np.array(
             [[0, 40, 100],
              [0,  1,   2]]
@@ -553,12 +553,12 @@ class Surveyor(BaseUSV):
 
         (3) https://oceanai.mit.edu/svn/moos-ivp-aquaticus-oai/trunk/missions/wp_2024/surveyor/plug_pHelmIvP.moos
             -max_speed
-                *pHelmIvP config speed domain
-                *max_speed = max(thrust_map[1]) + 0.5 (buffer added for normlization) 
+                *max_speed = max(thrust_map[1])
+                *pHelmIvP config speed domain (0.5 buffer added for normlization)
     """
     def __init__(
         self,
-        max_speed:float = 3.5,
+        max_speed:float = 3.0,
         thrust_map:np.ndarray = np.array(
             [[-100, 0, 20,  40,  60,   70, 100],
              [-2.0, 0,  1, 1.5, 2.0, 2.25, 3.0]]

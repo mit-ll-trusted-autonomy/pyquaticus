@@ -514,3 +514,24 @@ def rigid_transform(pos, origin, rot_matrix):
     pos can be a single point or multiple points.
     """
     return (np.asarray(pos) - np.asarray(origin)) @ np.asarray(rot_matrix).T
+
+def check_segment_intersections(segments, query_segment):
+    p = segments[:, 0]           # (N, 2)
+    r = segments[:, 1] - p       # (N, 2)
+
+    q = query_segment[0]         # (2,)
+    s = query_segment[1] - q     # (2,)
+
+    r_cross_s = np.cross(r, s)   # (N,)
+    q_minus_p = q - p            # (N, 2)
+
+    t = np.cross(q_minus_p, s) / r_cross_s
+    u = np.cross(q_minus_p, r) / r_cross_s
+
+    # Exclude parallel segments (r_cross_s == 0)
+    valid = ~np.isclose(r_cross_s, 0)
+
+    # Only keep those where the intersection occurs within both segments
+    intersecting = valid & (t >= 0) & (t <= 1) & (u >= 0) & (u <= 1)
+
+    return np.where(intersecting)[0]

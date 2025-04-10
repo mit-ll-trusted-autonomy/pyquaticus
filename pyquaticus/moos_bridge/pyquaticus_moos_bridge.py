@@ -7,8 +7,9 @@ import time
 from pyquaticus.envs.pyquaticus import PyQuaticusEnvBase
 from pyquaticus.moos_bridge.config import FieldReaderConfig, pyquaticus_config_std
 from pyquaticus.structs import Player, Team, Flag
-from pyquaticus.config import ACTION_MAP
-from pyquaticus.utils.utils import get_afp, mag_bearing_to, rigid_transform
+from pyquaticus.config import ACTION_MAP, get_afp
+from pyquaticus.utils.utils import mag_bearing_to, rigid_transform
+from typing import Optional
 
 
 class PyQuaticusMoosBridge(PyQuaticusEnvBase):
@@ -61,6 +62,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self._agent_name = agent_name
         self._agent_port = agent_port
         self._team_names = team_names
+        self.agents = all_agent_names
         self._opponent_names = opponent_names
         self._quiet = quiet
         self.timewarp = timewarp
@@ -112,7 +114,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
         # Create players
         self.players = {}
-        for i, name in enumerate(all_agent_names):
+        for i, name in enumerate(self.agents):
             if (
                 name == self._agent_name or
                 name in self._team_names
@@ -121,14 +123,12 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             else:
                 self.players[name] = Player(name, i, self.opponent_team)
 
-        self.agents = all_agent_names
-
         # Agents (player objects) of each team
         self.agents_of_team = {t: [] for t in Team}
         self.agent_inds_of_team = {t: [] for t in Team}
-        for player in self.players:
-            self.agents_of_team[player.team].append(player)
-            self.agent_inds_of_team[player.team].append(player.idx)
+        for agent in self.players.values():
+            self.agents_of_team[agent.team].append(agent)
+            self.agent_inds_of_team[agent.team].append(agent.idx)
 
         # Create the list of flags that are indexed by self.flags[int(player.team)]
         if len(self.flag_homes) != len(Team):
@@ -168,7 +168,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.start_time = time.time()
         self.reset_count += 1
         self.dones = self._reset_dones()
-        self.active_collisions = np.zeros((len(all_agent_names), len(all_agent_names)), dtype=bool)
+        self.active_collisions = np.zeros((self.num_agents, self.num_agents), dtype=bool)
 
         self._action_count = 0
         self._auto_returning_flag = False #reset auto return status
@@ -189,8 +189,6 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             player.speed = None
             player.heading = None
             player.has_flag = None
-            player.is_tagged = None
-            player.cantag_time = None
 
         if self._moos_comm is not None:
             self._moos_comm.close()
@@ -208,7 +206,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             "agent_on_sides":            np.ones(self.num_agents, dtype=bool), #set with _update_state() to confirm
             "agent_oob":                 None, #to be set with _update_state()
             "agent_has_flag":            None, #to be set with _update_state()
-            "agent_is_tagged":           None, #to be set with _update_state()
+            "agent_is_tagged":           np.zeros(self.num_agents, dtype=bool),
             "agent_made_tag":            [None] * self.num_agents,
             "agent_tagging_cooldown":    np.array([self.tagging_cooldown] * self.num_agents),
             "dist_bearing_to_obstacles": {agent_id: np.empty((len(self.obstacles), 2)) for agent_id in self.players},
@@ -216,7 +214,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             "flag_position":             np.array(flag_homes),
             "flag_taken":                np.zeros(len(self.flags), dtype=bool), #set with _update_state() to confirm
             "team_has_flag":             None, #to be set with _update_state()
-            "captures":                  None, #to be set with _update_state()
+            "captures":                  np.zeros(len(self.agents_of_team), dtype=int), #set with _update_state() to confirm
             "tags":                      np.zeros(len(self.agents_of_team), dtype=int),
             "grabs":                     np.zeros(len(self.agents_of_team), dtype=int),
             "agent_collisions":          np.zeros(len(self.players), dtype=int)
@@ -262,8 +260,6 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             or p.speed is None
             or p.heading is None
             or p.has_flag is None
-            or p.is_tagged is None
-            or p.cantag_time is None
         ]
         num_iters = 0
         while missing_agents:
@@ -277,8 +273,6 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
                 or p.speed is None
                 or p.heading is None
                 or p.has_flag is None
-                or p.is_tagged is None
-                or p.cantag_time is None
             ]
             num_iters += 1
             if num_iters > 20:
@@ -295,13 +289,13 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.state["prev_agent_position"] = self.state["agent_position"]
 
         ### Save latest values of all moos vars so state is built with information from the same time ###
-        agent_poses = np.array([agent.pos for agent in self.player.values()])
-        agent_has_flag = np.array([agent.has_flag for agent in self.player.values()])
-        agent_is_tagged = np.array([agent.is_tagged for agent in self.player.values()])
-        agent_cantag_time = np.array([agent.cantag_time for agent in self.player.values()])
+        agent_poses = np.array([agent.pos for agent in self.players.values()])
+        agent_has_flag = np.array([agent.has_flag for agent in self.players.values()])
+        agent_is_tagged = np.array([agent.is_tagged for agent in self.players.values()])
+        agent_cantag_time = np.array([agent.cantag_time for agent in self.players.values()])
 
-        self.state["agent_speed"] = np.array([agent.speed for agent in self.player.values()])
-        self.state["agent_heading"] = np.array([agent.heading for agent in self.player.values()])
+        self.state["agent_speed"] = np.array([agent.speed for agent in self.players.values()])
+        self.state["agent_heading"] = np.array([agent.heading for agent in self.players.values()])
         for team in self.game_events:
             self.state["captures"][int(team)] = self.game_events[team]["scores"]
 
@@ -331,17 +325,17 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             axis=-1
         )
 
-        #tagging cooldown
-        self.state["agent_tagging_cooldown"] = np.maximum(
-            0.0,
-            np.minimum(
-                self.tagging_cooldown,
-                self.tagging_cooldown - np.maximum(0.0, agent_cantag_time - time.time())
-            )
-        )
-
         #tags, grabs, and collisions
-        self.current_time != 0:
+        if self.current_time != 0:
+            #tagging cooldown
+            self.state["agent_tagging_cooldown"] = np.maximum(
+                0.0,
+                np.minimum(
+                    self.tagging_cooldown,
+                    self.tagging_cooldown - np.maximum(0.0, agent_cantag_time - time.time())
+                )
+            )
+
             #TODO: update self.state["agent_made_tag"]
 
             #tags and grabs
@@ -351,12 +345,14 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
                 self.state["tags"][other_team_idx] += np.sum(agent_is_tagged[agent_inds] & ~self.state["agent_is_tagged"][agent_inds])
                 self.state["grabs"][team_idx] += np.any(agent_has_flag[agent_inds] & ~self.state["agent_has_flag"][agent_inds])
-            
-            self.state["agent_has_flag"] = agent_has_flag
+
             self.state["agent_is_tagged"] = agent_is_tagged
 
             #collisions
             self._check_agent_collisions()
+
+        #has flag
+        self.state["agent_has_flag"] = agent_has_flag #set last so grabs can be updated
 
     def _set_player_attributes_from_state(self):
         #TODO: prev_pos, on_own_side, tagging_cooldown, oob
@@ -671,7 +667,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
         # Dynamics Parameters
         self.max_speeds = np.asarray(moos_config.max_speeds)
-        if not (len(self.max_speeds) == len(self._agent_names)):
+        if len(self.max_speeds) != self.num_agents:
             raise Exception(
                 f"max_speeds list length must be equal to the number of agents."
             )
@@ -737,7 +733,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             )
 
         ### Environment Geometry Construction ###
-        #environment size, diagonal, and corners
+        #environment size, diagonal, corners, and edges
         self.env_ll = np.asarray(moos_config.env_ll) #origin
         self.env_lr = np.asarray(moos_config.env_lr)
         self.env_ur = np.asarray(moos_config.env_ur)
@@ -754,12 +750,19 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             self.env_ur,
             self.env_ul
         ])
+        self.env_edges = np.array([
+            [self.env_ll, self.env_lr],
+            [self.env_lr, self.env_ur],
+            [self.env_ur, self.env_ul],
+            [self.env_ul, self.env_ll]
+        ])
 
         self.scrimmage_coords = np.asarray(moos_config.scrimmage_coords)
-        self.scrimmage_vec = scrimmage_coords[1] - scrimmage_coords[0]
+        self.scrimmage_vec = self.scrimmage_coords[1] - self.scrimmage_coords[0]
 
         # environment angle (rotation)
-        self.env_rot_angle = np.arctan2(self.env_lr[1], self.env_lr[0]) #field angle
+        rot_vec = self.env_lr - self.env_ll
+        self.env_rot_angle = np.arctan2(rot_vec[1], rot_vec[0]) #field angle
         s, c = np.sin(self.env_rot_angle), np.cos(self.env_rot_angle)
         self.env_rot_matrix = np.array([[c, -s], [s, c]])
 
@@ -769,15 +772,15 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             Team.RED_TEAM: np.array(moos_config.red_flag) 
         }
         self.agent_radius = np.asarray(moos_config.agent_radius)
-        if not (len(self.agent_radius) == len(self._agent_names)):
+        if len(self.agent_radius) != self.num_agents:
             raise Exception(
                 f"agent_radius list length must be equal to the number of agents."
             )
         self.flag_grab_radius = moos_config.flag_grab_radius
 
         #on sides
-        scrim2blue = self.flag_homes[Team.BLUE_TEAM] - scrimmage_coords[0]
-        scrim2red = self.flag_homes[Team.RED_TEAM] - scrimmage_coords[0]
+        scrim2blue = self.flag_homes[Team.BLUE_TEAM] - self.scrimmage_coords[0]
+        scrim2red = self.flag_homes[Team.RED_TEAM] - self.scrimmage_coords[0]
 
         self._on_sides_sign = {
             Team.BLUE_TEAM: np.sign(np.cross(self.scrimmage_vec, scrim2blue)),
