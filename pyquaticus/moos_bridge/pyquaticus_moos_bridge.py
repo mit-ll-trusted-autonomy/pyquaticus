@@ -240,12 +240,17 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             self.state["global_state_hist_buffer"] = np.array(self.state_hist_buffer_len * [reset_global_state])
 
         # Observations
-        obs = self.state["obs_hist_buffer"][self.obs_hist_buffer_inds].squeeze()
+        if self.obs_hist_len > 1:
+            obs = self.state["obs_hist_buffer"][self.obs_hist_buffer_inds]
+        else:
+            obs = self.state["obs_hist_buffer"][0]
 
         # Info
         if self.return_info:
-            global_state = self.state["global_state_hist_buffer"][self.state_hist_buffer_inds].squeeze()
-            info = {"global_state": global_state}
+            if self.state_hist_len > 1:
+                info = {"global_state": self.state["global_state_hist_buffer"][self.state_hist_buffer_inds]}
+            else:
+                info = {"global_state": self.state["global_state_hist_buffer"][0]}
         else:
             info = {}
 
@@ -459,7 +464,11 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         # Observations
         self.state["obs_hist_buffer"][1:] = self.state["obs_hist_buffer"][:-1]
         self.state["obs_hist_buffer"][0] = self.state_to_obs(self._agent_name, self.normalize_obs)
-        obs = self.state["obs_hist_buffer"][self.obs_hist_buffer_inds].squeeze()
+        
+        if self.obs_hist_len > 1:
+            obs = self.state["obs_hist_buffer"][self.obs_hist_buffer_inds]
+        else:
+            obs = self.state["obs_hist_buffer"][0]
 
         # Dones
         terminated = np.any(self.state["captures"] >= self.max_score)
@@ -472,8 +481,11 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         if self.return_info:
             self.state["global_state_hist_buffer"][1:] = self.state["global_state_hist_buffer"][:-1]
             self.state["global_state_hist_buffer"][0] = self.state_to_global_state(self.normalize_state)
-            global_state = self.state["global_state_hist_buffer"][self.state_hist_buffer_inds].squeeze()
-            info = {"global_state": global_state}
+
+            if self.state_hist_len > 1:
+                info = {"global_state": self.state["global_state_hist_buffer"][self.state_hist_buffer_inds]}
+            else:
+                info = {"global_state": self.state["global_state_hist_buffer"][0]}
         else:
             info = {}
 

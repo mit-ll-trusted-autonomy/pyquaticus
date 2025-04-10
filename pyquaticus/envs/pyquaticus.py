@@ -1173,11 +1173,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.state["global_state_hist_buffer"][1:] = self.state["global_state_hist_buffer"][:-1]
             self.state["global_state_hist_buffer"][0] = self.state_to_global_state(self.normalize_state)
 
-            global_state = self.state["global_state_hist_buffer"][self.state_hist_buffer_inds]
             if self.state_hist_len > 1:
-                info = {agent_id: {"global_state": global_state} for agent_id in self.players}
+                info = {agent_id: {"global_state": self.state["global_state_hist_buffer"][self.state_hist_buffer_inds]} for agent_id in self.players}
             else:
-                info = {agent_id: {"global_state": global_state[0]} for agent_id in self.players}
+                info = {agent_id: {"global_state": self.state["global_state_hist_buffer"][0]} for agent_id in self.players}
         else:
             info = {agent_id: {} for agent_id in self.players}
 
@@ -2489,11 +2488,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Info
         if self.return_info:
-            global_state = self.state["global_state_hist_buffer"][self.state_hist_buffer_inds]
             if self.state_hist_len > 1:
-                info = {agent_id: {"global_state": global_state} for agent_id in self.players}
+                info = {agent_id: {"global_state": self.state["global_state_hist_buffer"][self.state_hist_buffer_inds]} for agent_id in self.players}
             else:
-                info = {agent_id: {"global_state": global_state[0]} for agent_id in self.players}
+                info = {agent_id: {"global_state": self.state["global_state_hist_buffer"][0]} for agent_id in self.players}
         else:
             info = {agent_id: {} for agent_id in self.players}
 
