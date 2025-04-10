@@ -655,8 +655,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             for i, obstacle in enumerate(
                 self.state["dist_bearing_to_obstacles"][agent_id]
             ):
-                global_state[(player_name, f"obstacle_{i}_distance")] = obstacle[0]
-                global_state[(player_name, f"obstacle_{i}_bearing")] = obstacle[1]
+                global_state[(agent_id, f"obstacle_{i}_distance")] = obstacle[0]
+                global_state[(agent_id, f"obstacle_{i}_bearing")] = obstacle[1]
 
         # flag and score info
         blue_team_idx = int(Team.BLUE_TEAM)
