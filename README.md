@@ -20,7 +20,8 @@ The default vehicle dynamics are based on the [MOOS-IvP](https://oceanai.mit.edu
 * Configurable reward function
 * Supports custom agent dynamics
 * Simulate real-world maritime scenarios of any aquatic region on earth with [OpenStreetMap](https://www.openstreetmap.org/)-based environments
-* Example integration with [RLLib](https://docs.ray.io/en/latest/rllib/index.html) for reinforcement learning  
+* Example integration with [RLLib](https://docs.ray.io/en/latest/rllib/index.html) for reinforcement learning
+* Easy deployment on MOOS-compatible robots  
 
 
 ## Installation
