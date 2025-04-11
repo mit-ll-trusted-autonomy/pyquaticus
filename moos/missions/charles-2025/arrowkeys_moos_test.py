@@ -23,6 +23,7 @@ import argparse
 import sys
 from pyquaticus.moos_bridge.config import MITConfig2025, pyquaticus_config_std
 from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
+from pyquaticus.moos_bridge.pyquaticus_moos_bridge_ext import PyQuaticusMoosBridgeFullObs
 
 def main():
     no_op = 16
@@ -37,7 +38,7 @@ def main():
         'a': left,
         'd': right
     }
-    env = PyQuaticusMoosBridge(
+    env = PyQuaticusMoosBridgeFullObs(
         server="localhost",
         agent_name="red_one",
         agent_port=9011,
@@ -64,7 +65,7 @@ def main():
                 listener.start()
 
                 while True:
-                    self.env.step(self.action)
+                    obs, reward, terminated, truncated, info = self.env.step(self.action)
 
             def on_press(self, key):
                 try:
@@ -79,7 +80,7 @@ def main():
     except KeyboardInterrupt:
         print("Stopped by user")
     finally:
-        print("running finally block")
+        print("Running finally block")
         env.close()
 
 if __name__ == "__main__":

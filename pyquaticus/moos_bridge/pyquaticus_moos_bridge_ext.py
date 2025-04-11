@@ -1,5 +1,8 @@
+import numpy as np
+
 from pyquaticus.moos_bridge.config import FieldReaderConfig, pyquaticus_config_std
 from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
+from typing import Optional
 
 
 class PyQuaticusMoosBridgeFullObs(PyQuaticusMoosBridge):
@@ -67,20 +70,92 @@ class PyQuaticusMoosBridgeFullObs(PyQuaticusMoosBridge):
         """
         agent_obs, agent_info = super().reset(return_info, options) #agent's observation and info
 
-        unnormalized_obs = OrderedDict((n, self.state_to_obs(n, False)) for n in self.players)
-        normalized_obs = OrderedDict()
-        for n, obs in unnormalized_obs.items():
-            normalized_obs[n] = self.agent_obs_normalizer.normalized(obs)
+        # Combine with other agents' obs
+        obs = {}
+        for agent_id in self.agents:
+            #observation history
+            if agent_id != self._agent_name:
+                reset_obs, reset_unnorm_obs = self.state_to_obs(agent_id, self.normalize_obs)
+                self.state["obs_hist_buffer"][agent_id] = np.array(self.obs_hist_buffer_len * [reset_obs])
 
-        return obs, info #normalized_obs, unnormalized_obs
+                if self.unnorm_obs_info:
+                    self.state["unnorm_obs_hist_buffer"][agent_id] = np.array(self.obs_hist_buffer_len * [reset_unnorm_obs])
+
+            #observations
+            if agent_id == self._agent_name:
+                obs[agent_id] = agent_obs
+            else:
+                if self.obs_hist_len > 1:
+                    obs[agent_id] = self.state["obs_hist_buffer"][agent_id][self.obs_hist_buffer_inds]
+                else:
+                    obs[agent_id] = self.state["obs_hist_buffer"][agent_id][0]
+
+        # Combine with other agents' info
+        info = {}
+        if self.return_info:
+            info["global_state"] = agent_info["global_state"]
+
+            if self.unnorm_obs_info:
+                if self.state_hist_len > 1:
+                    info["unnorm_obs"] = {
+                        agent_id: self.state["unnorm_obs_hist_buffer"][agent_id][self.obs_hist_buffer_inds]
+                        if agent_id != self._agent_name
+                        else agent_info["unnorm_obs"]
+                        for agent_id in self.agents
+                    }
+                else:
+                    info["unnorm_obs"] = {
+                        agent_id: self.state["unnorm_obs_hist_buffer"][agent_id][0]
+                        if agent_id != self._agent_name
+                        else agent_info["unnorm_obs"]
+                        for agent_id in self.agents
+                    }
+
+        return obs, info
 
     def step(self, action):
-        _, reward, terminated, truncated, info = super().step(action)
+        agent_obs, reward, terminated, truncated, agent_info = super().step(action)
 
-        unnormalized_obs = OrderedDict((n, self.state_to_obs(n, False)) for n in self.players)
-        normalized_obs = OrderedDict()
-        for n, obs in unnormalized_obs.items():
-            normalized_obs[n] = self.agent_obs_normalizer.normalized(obs)
+        # Observations
+        obs = {}
+        for agent_id in self.agents:
+            if agent_id != self._agent_name:
+                next_obs, next_unnorm_obs = self.state_to_obs(agent_id, self.normalize_obs)
 
-        info['unnormalized_obs'] = unnormalized_obs
-        return normalized_obs, reward, terminated, truncated, info
+                self.state["obs_hist_buffer"][agent_id][1:] = self.state["obs_hist_buffer"][agent_id][:-1]
+                self.state["obs_hist_buffer"][agent_id][0] = next_obs
+
+                if self.unnorm_obs_info:
+                    self.state["unnorm_obs_hist_buffer"][agent_id][1:] = self.state["unnorm_obs_hist_buffer"][agent_id][:-1]
+                    self.state["unnorm_obs_hist_buffer"][agent_id][0] = next_unnorm_obs
+
+            if agent_id == self._agent_name:
+                obs[agent_id] = agent_obs
+            else:
+                if self.obs_hist_len > 1:
+                    obs[agent_id] = self.state["obs_hist_buffer"][agent_id][self.obs_hist_buffer_inds]
+                else:
+                    obs[agent_id] = self.state["obs_hist_buffer"][agent_id][0]
+
+        # Info
+        info = {}
+        if self.return_info:
+            info["global_state"] = agent_info["global_state"]
+
+            if self.unnorm_obs_info:
+                if self.state_hist_len > 1:
+                    info["unnorm_obs"] = {
+                        agent_id: self.state["unnorm_obs_hist_buffer"][agent_id][self.obs_hist_buffer_inds]
+                        if agent_id != self._agent_name
+                        else agent_info["unnorm_obs"]
+                        for agent_id in self.agents
+                    }
+                else:
+                    info["unnorm_obs"] = {
+                        agent_id: self.state["unnorm_obs_hist_buffer"][agent_id][0]
+                        if agent_id != self._agent_name
+                        else agent_info["unnorm_obs"]
+                        for agent_id in self.agents
+                    }
+
+        return obs, reward, terminated, truncated, info
