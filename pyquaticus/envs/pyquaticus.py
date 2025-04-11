@@ -581,9 +581,9 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                     obs[(entry_name, "is_tagged")] = self.state["agent_is_tagged"][dif_agent.idx]
 
         if normalize:
-            return self.agent_obs_normalizer.normalized(obs)
+            return self.agent_obs_normalizer.normalized(obs), obs
         else:
-            return obs
+            return obs, None
     
     def state_to_global_state(self, normalize=True):
         """
@@ -1143,7 +1143,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # Observations
         for agent_id in raw_action_dict:
             self.state["obs_hist_buffer"][agent_id][1:] = self.state["obs_hist_buffer"][agent_id][:-1]
-            self.state["obs_hist_buffer"][agent_id][0] = self.state_to_obs(agent_id, self.normalize_obs)
+            self.state["obs_hist_buffer"][agent_id][0], _ = self.state_to_obs(agent_id, self.normalize_obs)
 
         if self.obs_hist_len > 1:
             obs = {agent_id: self.state["obs_hist_buffer"][agent_id][self.obs_hist_buffer_inds] for agent_id in self.players}
@@ -2311,8 +2311,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             seed (optional): Starting seed.
             return_info (boolean): whether or not to return the info dict for the episode (when calling reset and step)
             options (optional): Additonal options for resetting the environment:
-                -"normalize_obs": whether or not to normalize observations
-                -"normalize_state": whether or not to normalize the global state
+                -"normalize_obs": whether or not to normalize observations (sets self.normalize_obs)
+                -"normalize_state": whether or not to normalize the global state (sets self.normalize_state)
                 -"state_dict": self.state dictionary from a previous episode
 
                     note: state_dict should be produced by the same (or an equivalently configured) instance of
@@ -2461,10 +2461,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                                 self.obj_ray_detection_states[team][label_idx] = LIDAR_DETECTION_CLASS_MAP["opponent"]
 
             # observation history
-            self.state["obs_hist_buffer"] = dict()
-            reset_obs = {agent_id: self.state_to_obs(agent_id, self.normalize_obs) for agent_id in self.players}
-            for agent_id in self.players:
-                self.state["obs_hist_buffer"][agent_id] = np.array(self.obs_hist_buffer_len * [reset_obs[agent_id]])
+            self.state["obs_hist_buffer"] = {
+                agent_id: np.array(self.obs_hist_buffer_len * [self.state_to_obs(agent_id, self.normalize_obs)[0]])
+                for agent_id in self.players
+            }
 
             # global state history
             if self.return_info:
@@ -4348,22 +4348,22 @@ when gps environment bounds are specified in meters"
             agent_id: The agent who's observation is being generated
             normalize: Flag to normalize the values in the observation
         Returns
-            A dictionary containing the agents observation
+            The agent's observation
         """
-        orig_obs = super().state_to_obs(agent_id, normalize=False)
+        obs, _ = super().state_to_obs(agent_id, normalize=False)
 
         if not self.lidar_obs:
             # Obstacle Distance/Bearing
             for i, obstacle in enumerate(
                 self.state["dist_bearing_to_obstacles"][agent_id]
             ):
-                orig_obs[f"obstacle_{i}_distance"] = obstacle[0]
-                orig_obs[f"obstacle_{i}_bearing"] = obstacle[1]
+                obs[f"obstacle_{i}_distance"] = obstacle[0]
+                obs[f"obstacle_{i}_bearing"] = obstacle[1]
 
         if normalize:
-            orig_obs = self.agent_obs_normalizer.normalized(orig_obs)
-
-        return orig_obs
+            return self.agent_obs_normalizer.normalized(obs), obs
+        else:
+            return obs, None
 
     def multiagent_var(self, val, dtype, name:str):
         """

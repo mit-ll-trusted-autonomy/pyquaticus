@@ -15,14 +15,15 @@ pyquaticus_config_std = {
     "max_time":         600.0,  # maximum time (seconds) per episode
 
     # Observation parameters
-    "normalize_obs":        True,  # flag for normalizing the observation space
-    "short_obs_hist_length":   1,  # number of timesteps to include for the short-term observation history
-    "short_obs_hist_interval": 1,  # number of steps in between entries in the short-term observation history
-    "long_obs_hist_length":    1,  # number of timesteps to include for the long-term observation history
-    "long_obs_hist_interval":  4,  # number of steps in between entries in the long-term observation history
+    "normalize_obs":          True,  # flag for normalizing the observation space
+    "unnorm_obs_info":       False,  # whether or not to include unnormalized observations in the info dictionary
+    "short_obs_hist_length":     1,  # number of timesteps to include for the short-term observation history
+    "short_obs_hist_interval":   1,  # number of steps in between entries in the short-term observation history
+    "long_obs_hist_length":      1,  # number of timesteps to include for the long-term observation history
+    "long_obs_hist_interval":    4,  # number of steps in between entries in the long-term observation history
 
     # Global state parameters
-    "normalize_state":        True,  # flag for normalizing the global state
+    "normalize_state":       False,  # flag for normalizing the global state
     "short_state_hist_length":   1,  # number of timesteps to include for the short-term global state history
     "short_state_hist_interval": 1,  # number of steps in between entries in the short-term global state history
     "long_state_hist_length":    1,  # number of timesteps to include for the long-term global state history
@@ -389,4 +390,4 @@ class MITConfig2025(FieldReaderConfig):
         self.agent_radius = 6 * [2.0]
 
         ####### Dynamics Parameters #######
-        self.max_speeds = 6 * [2.5]
+        self.max_speeds = 6 * [2.0]

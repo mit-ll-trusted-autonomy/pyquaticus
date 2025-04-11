@@ -79,7 +79,7 @@ config_dict_std = {
     "num_lidar_rays":     50,  # number of rays for lidar
 
     # Global state parameters
-    "normalize_state":        True,  # flag for normalizing the global state
+    "normalize_state":       False,  # flag for normalizing the global state
     "short_state_hist_length":   1,  # number of timesteps to include for the short-term global state history
     "short_state_hist_interval": 1,  # number of steps in between entries in the short-term global state history
     "long_state_hist_length":    1,  # number of timesteps to include for the long-term global state history
