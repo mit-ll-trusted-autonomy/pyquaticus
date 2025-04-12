@@ -56,7 +56,7 @@ dependencies = [
 	"pygame==2.4.0",
 	"scipy==1.14.1",
 	"shapely==2.0.6",
-	"sympy==1.12",
+	"sympy==1.13.1",
 	"pymoos==2022.1; sys_platform == 'linux' or sys_platform == 'darwin'"
 ]
 
