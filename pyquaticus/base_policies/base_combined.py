@@ -26,7 +26,7 @@ import pyquaticus.base_policies.base_defend as defend_policy
 from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import config_dict_std, Team, PyQuaticusEnv
 
-modes = {"easy", "medium", "hard", "nothing"}
+MODES = {"easy", "medium", "hard", "nothing"}
 
 
 class Heuristic_CTF_Agent(BaseAgentPolicy):
@@ -43,12 +43,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
     ):
         super().__init__(agent_id, team, env)
 
-        if mode not in modes:
-            raise ValueError(f"mode {mode} not a valid mode out of {modes}")
-
-        if mode not in modes:
-            raise ValueError(f"Invalid mode {mode}, valid modes are {modes}")
-        self.mode = mode
+        self.set_mode(mode)
         self.defensiveness = defensiveness
         self.id = agent_id
         self.continuous = continuous
@@ -69,15 +64,10 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         )
         self.scrimmage = None
 
-    def set_mode(self, mode="easy"):
-        """
-        Determine which mode the agent is in:
-        'easy' = Easy Attacker
-        'medium' = Medium Attacker
-        'hard' = Hard Attacker.
-        """
-        if mode not in modes:
-            raise ValueError(f"Invalid mode {mode}")
+    def set_mode(self, mode: str):
+        """Sets difficulty mode."""
+        if mode not in MODES:
+            raise ValueError(f"mode {mode} not in set of valid modes: {MODES}")
         self.mode = mode
 
     def compute_action(self, obs, info):

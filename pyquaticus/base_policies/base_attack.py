@@ -25,7 +25,7 @@ from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import Team, PyQuaticusEnv
 from pyquaticus.utils.utils import mag_bearing_to
 
-modes = {"nothing", "easy", "medium", "hard", "competition_easy", "competition_medium"}
+MODES = {"nothing", "easy", "medium", "hard", "competition_easy", "competition_medium"}
 
 
 class BaseAttacker(BaseAgentPolicy):
@@ -41,9 +41,7 @@ class BaseAttacker(BaseAgentPolicy):
     ):
         super().__init__(agent_id, team, env)
 
-        if mode not in modes:
-            raise AttributeError(f"Invalid mode {mode}")
-        self.mode = mode
+        self.set_mode(mode)
 
         if team not in Team:
             raise AttributeError(f"Invalid team {team}")
@@ -56,8 +54,8 @@ class BaseAttacker(BaseAgentPolicy):
 
     def set_mode(self, mode: str):
         """Sets difficulty mode."""
-        if mode not in modes:
-            raise ValueError(f"Invalid mode {mode}")
+        if mode not in MODES:
+            raise ValueError(f"mode {mode} not in set of valid modes: {MODES}")
         self.mode = mode
 
     def compute_action(self, obs, info):

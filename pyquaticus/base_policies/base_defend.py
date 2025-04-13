@@ -27,7 +27,7 @@ from pyquaticus.utils.utils import mag_bearing_to
 
 from typing import Union
 
-modes = {"nothing", "easy", "medium", "hard", "competition_easy", "competition_medium"}
+MODES = {"nothing", "easy", "medium", "hard", "competition_easy", "competition_medium"}
 
 
 class BaseDefender(BaseAgentPolicy):
@@ -43,10 +43,7 @@ class BaseDefender(BaseAgentPolicy):
     ):
         super().__init__(agent_id, team, env)
 
-        if mode not in modes:
-            raise ValueError(f"mode {mode} not in set of valid modes {modes}")
-        self.mode = mode
-
+        self.set_mode(mode)
         self.continuous = continuous
         self.flag_keepout = env.flag_keepout_radius
         self.catch_radius = env.catch_radius
@@ -56,14 +53,9 @@ class BaseDefender(BaseAgentPolicy):
             self.aquaticus_field_points = env.aquaticus_field_points
 
     def set_mode(self, mode: str):
-        """
-        Determine which mode the agent is in:
-        'easy' = Easy Attacker
-        'medium' = Medium Attacker
-        'hard' = Hard Attacker.
-        """
-        if mode not in modes:
-            raise ValueError(f"mode {mode} not in set of valid modes {modes}")
+        """Sets difficulty mode."""
+        if mode not in MODES:
+            raise ValueError(f"mode {mode} not in set of valid modes: {MODES}")
         self.mode = mode
 
     def compute_action(self, obs, info):

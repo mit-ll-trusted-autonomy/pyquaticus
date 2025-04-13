@@ -1054,7 +1054,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         Steps the environment forward in time by self.dt seconds, applying actions.
 
         Args:
-            raw_action_dict: Actions IDs from discrete action space for agents to apply
+            raw_action_dict: Actions from discrete or continuous action space for agents to apply
 
         Returns
         -------
@@ -1062,9 +1062,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             Some reward
 
-            Indicator for whether or not the env is done/truncated
+            Indicators for whether or not the env is done/truncated
 
-            Additional info (not currently used)
+            Additional info:
+                -global state
+                -unnormalized observations
         """
         if self.state is None:
             raise Exception("Call reset before using step method.")
