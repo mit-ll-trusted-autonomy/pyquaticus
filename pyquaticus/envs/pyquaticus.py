@@ -180,14 +180,13 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
     """
     def _seed(self, seed=None):
         """
-        Overridden method from Gym inheritance to set seeds in the environment.
+        Handles numpy and python random seeding.
+
+        Adapted from Gymnasium 1.1.1:
+            https://github.com/Farama-Foundation/Gymnasium/blob/1c7c709f6bb3bfc4e8928dc40752780c3d89b965/gymnasium/core.py#L157
 
         Args:
-            seed (optional): Starting seed
-
-        Returns
-        -------
-            List of seeds used for the environment.
+            seed (optional): starting seed
         """
         if seed is not None:
             random.seed(seed)
@@ -920,8 +919,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         action_space: str | list[str] = "discrete",
         reward_config: dict = None,
         config_dict = config_dict_std,
-        render_mode: Optional[str] = None,
-        seed=None
+        render_mode: Optional[str] = None
     ):
         super().__init__()
         self.team_size = team_size
@@ -948,8 +946,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             }
             for team in Team
         }
-
-        self._seed(seed)
 
         # Set variables from config
         self.set_config_values(config_dict)

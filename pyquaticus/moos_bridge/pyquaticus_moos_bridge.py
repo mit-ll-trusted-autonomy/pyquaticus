@@ -38,8 +38,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         action_space: str = "continuous",
         team = None,
         quiet = True,
-        timewarp = 1,
-        seed=None
+        timewarp = 1
     ):
         """
         Args:
@@ -88,8 +87,6 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             }
             for team in Team
         }
-
-        self._seed(seed)
 
         # Set variables from config
         self.set_config(moos_config, pyquaticus_config)
