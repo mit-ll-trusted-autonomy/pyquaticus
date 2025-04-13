@@ -675,6 +675,22 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         else:
             return global_state
 
+    def _history_to_state(self):
+        if self.state_hist_len > 1:
+            global_state = self.state["global_state_hist_buffer"][self.state_hist_buffer_inds]
+        else:
+            global_state = self.state["global_state_hist_buffer"][0]
+
+        return global_state
+
+    def _history_to_obs(self, agent_id, buffer_key):
+        if self.obs_hist_len > 1:
+            agent_obs = self.state[buffer_key][agent_id][self.obs_hist_buffer_inds]
+        else:
+            agent_obs = self.state[buffer_key][agent_id][0]
+
+        return agent_obs
+
     def action_space(self, agent_id: str):
         return self.action_spaces[agent_id]
 
@@ -1140,15 +1156,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if self.message and self.render_mode:
             print(self.message)
 
-        # Observations
+        # Observation History
         for agent_id in raw_action_dict:
             self.state["obs_hist_buffer"][agent_id][1:] = self.state["obs_hist_buffer"][agent_id][:-1]
             self.state["obs_hist_buffer"][agent_id][0], _ = self.state_to_obs(agent_id, self.normalize_obs)
 
-        if self.obs_hist_len > 1:
-            obs = {agent_id: self.state["obs_hist_buffer"][agent_id][self.obs_hist_buffer_inds] for agent_id in self.players}
-        else:
-            obs = {agent_id: self.state["obs_hist_buffer"][agent_id][0] for agent_id in self.players}
+        # Current Observation
+        obs = {agent_id: self._history_to_obs(agent_id, "obs_hist_buffer") for agent_id in self.players}
 
         # Rewards
         rewards = {agent_id: self.compute_rewards(agent_id, player.team) for agent_id, player in self.players.items()}
@@ -1169,16 +1183,19 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         truncated["__all__"] = self.dones["__all__"]
 
         # Info
+        info = {agent_id: {} for agent_id in self.players}
         if self.return_info:
             self.state["global_state_hist_buffer"][1:] = self.state["global_state_hist_buffer"][:-1]
             self.state["global_state_hist_buffer"][0] = self.state_to_global_state(self.normalize_state)
+            global_state = self._history_to_state() #common to all agents
 
-            if self.state_hist_len > 1:
-                info = {agent_id: {"global_state": self.state["global_state_hist_buffer"][self.state_hist_buffer_inds]} for agent_id in self.players}
-            else:
-                info = {agent_id: {"global_state": self.state["global_state_hist_buffer"][0]} for agent_id in self.players}
-        else:
-            info = {agent_id: {} for agent_id in self.players}
+            for agent_id in self.agents:
+                #global state
+                info[agent_id]["global_state"] = global_state
+
+                #unnormalized obs
+                if self.unnorm_obs_info:
+                    info[agent_id]["unnorm_obs"] = self._history_to_obs(agent_id, "unnorm_obs_hist_buffer")
 
         return obs, rewards, terminated, truncated, info
 
@@ -1772,6 +1789,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Observation and state parameters
         self.normalize_obs = config_dict.get("normalize_obs", config_dict_std["normalize_obs"])
+        self.unnorm_obs_info = True
         self.short_obs_hist_length = config_dict.get("short_obs_hist_length", config_dict_std["short_obs_hist_length"])
         self.short_obs_hist_interval = config_dict.get("short_obs_hist_interval", config_dict_std["short_obs_hist_interval"])
         self.long_obs_hist_length = config_dict.get("long_obs_hist_length", config_dict_std["long_obs_hist_length"])
@@ -2313,6 +2331,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             options (optional): Additonal options for resetting the environment:
                 -"normalize_obs": whether or not to normalize observations (sets self.normalize_obs)
                 -"normalize_state": whether or not to normalize the global state (sets self.normalize_state)
+                -"unnorm_obs_info": whether or not to include unnormalized observations in the info dictionary
+                    *note: will be overwritten and set to False if self.normalize_obs is False
                 -"state_dict": self.state dictionary from a previous episode
 
                     note: state_dict should be produced by the same (or an equivalently configured) instance of
@@ -2354,6 +2374,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if options is not None:
             self.normalize_obs = options.get("normalize_obs", self.normalize_obs)
             self.normalize_state = options.get("normalize_state", self.normalize_state)
+            self.unnorm_obs_info = options.get("unnorm_obs_info", self.unnorm_obs_info)
+            if not self.normalize_obs and self.unnorm_obs_info:
+                print(f"Warning! Setting unnorm_obs_info to False because normalize_obs is False")
+                self.unnorm_obs_info = False #overwrite because unnormalized observations are already returned with obs
 
             state_dict = options.get("state_dict", None)
             init_dict = options.get("init_dict", None)
@@ -2363,8 +2387,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             state_dict = None
             init_dict = None
 
+        # Reset env from state_dict 
         if state_dict != None:
-            # reset env from state_dict
             if self.reset_count == 0:
                 raise Exception(
                     "Resetting from state_dict should only be done for an environment that has been previously reset."
@@ -2376,17 +2400,38 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             for i, player in enumerate(self.players.values()):
                 player.state = self.state['agent_dynamics'][i]
 
+            # global state
             if self.return_info:
                 if "global_state_hist_buffer" not in state_dict:
                     print(
                         "Warning! Global state buffer not provided in state_dict."
-                        "Building global state buffer with intial state padding."
+                        "Building buffer with intial state padding."
                         f"Global state buffer will not match the observation buffer until after {self.state_hist_buffer_len - 1} timesteps."
                     )
-                    self.state["global_state_hist_buffer"] = np.array(self.state_hist_buffer_len * [self.state_to_global_state(self.normalize_state)])
+                    self.state["global_state_hist_buffer"] = np.array(
+                        self.state_hist_buffer_len * [self.state_to_global_state(self.normalize_state)]
+                    )
             else:
                 if "global_state_hist_buffer" in state_dict:
                     del self.state["global_state_hist_buffer"]
+
+            # unnormalized obs
+            if self.unnorm_obs_info:
+                if "unnorm_obs_hist_buffer" not in state_dict:
+                    print(
+                        "Warning! Unnormalized observation buffer not provided in state_dict."
+                        "Building buffer with intial observation padding."
+                        f"Unnormalized observation buffer will not match the observation buffer until after {self.obs_hist_buffer_len - 1} timesteps."
+                    )
+                    self.state["unnorm_obs_hist_buffer"] = {
+                        agent_id: np.array(self.obs_hist_buffer_len * [self.state_to_obs(agent_id, False)[0]])
+                        for agent_id in self.players
+                    }
+            else:
+                if "unnorm_obs_hist_buffer" in state_dict:
+                   del self.state["unnorm_obs_hist_buffer"] 
+
+        # Reset env from init_dict or standard init
         else:
             if init_dict != None:
                 self._set_state_from_init_dict(init_dict)
@@ -2461,10 +2506,16 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                                 self.obj_ray_detection_states[team][label_idx] = LIDAR_DETECTION_CLASS_MAP["opponent"]
 
             # observation history
-            self.state["obs_hist_buffer"] = {
-                agent_id: np.array(self.obs_hist_buffer_len * [self.state_to_obs(agent_id, self.normalize_obs)[0]])
-                for agent_id in self.players
-            }
+            self.state["obs_hist_buffer"] = {agent_id: None for agent_id in self.agents}
+            if self.unnorm_obs_info:
+                self.state["unnorm_obs_hist_buffer"] = {agent_id: None for agent_id in self.agents}
+
+            for agent_id in self.agents:
+                reset_obs, reset_unnorm_obs = self.state_to_obs(agent_id, self.normalize_obs)
+                self.state["obs_hist_buffer"][agent_id] = np.array(self.obs_hist_buffer_len * [reset_obs])
+
+                if self.unnorm_obs_info:
+                    self.state["unnorm_obs_hist_buffer"][agent_id] = np.array(self.obs_hist_buffer_len * [reset_unnorm_obs])
 
             # global state history
             if self.return_info:
@@ -2480,20 +2531,21 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.render_ctr = 0
             self._render()
 
-        # Observations
-        if self.obs_hist_len > 1:
-            obs = {agent_id: self.state["obs_hist_buffer"][agent_id][self.obs_hist_buffer_inds] for agent_id in self.players}
-        else:
-            obs = {agent_id: self.state["obs_hist_buffer"][agent_id][0] for agent_id in self.players}
+        # Current Observation
+        obs = {agent_id: self._history_to_obs(agent_id, "obs_hist_buffer") for agent_id in self.players}
 
         # Info
+        info = {agent_id: {} for agent_id in self.players}
         if self.return_info:
-            if self.state_hist_len > 1:
-                info = {agent_id: {"global_state": self.state["global_state_hist_buffer"][self.state_hist_buffer_inds]} for agent_id in self.players}
-            else:
-                info = {agent_id: {"global_state": self.state["global_state_hist_buffer"][0]} for agent_id in self.players}
-        else:
-            info = {agent_id: {} for agent_id in self.players}
+            global_state = self._history_to_state() #common to all agents
+
+            for agent_id in self.agents:
+                #global state
+                info[agent_id]["global_state"] = global_state
+
+                #unnormalized obs
+                if self.unnorm_obs_info:
+                    info[agent_id]["unnorm_obs"] = self._history_to_obs(agent_id, "unnorm_obs_hist_buffer")
 
         return obs, info
 
