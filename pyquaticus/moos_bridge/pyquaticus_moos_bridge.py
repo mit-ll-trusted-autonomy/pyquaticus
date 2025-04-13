@@ -38,7 +38,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         action_space: str = "continuous",
         team = None,
         quiet = True,
-        timewarp = 1
+        timewarp = 1,
+        seed=None
     ):
         """
         Args:
@@ -75,7 +76,6 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.start_time = None
         self.state = None
         self.prev_state = None
-        self.return_info = True
         self.aquaticus_field_points = None
         self.afp_sym = True
         self.active_collisions = None #see pyquaticus/pyquaticus/envs/pyquaticus.py for documentation
@@ -88,6 +88,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             }
             for team in Team
         }
+
+        self._seed(seed)
 
         # Set variables from config
         self.set_config(moos_config, pyquaticus_config)
@@ -150,18 +152,20 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.agent_obs_normalizer, self.global_state_normalizer = self._register_state_elements(own_team_len, len(self.obstacles))
         self.observation_space = self.get_agent_observation_space()
 
-    def reset(self, return_info=True, options: Optional[dict] = None):
+    def reset(self, seed=None, options: Optional[dict] = None):
         """
         Resets variables and (re)connects to MOOS node for the provided agent name.
 
         Args:
-            return_info (boolean): whether or not to return the info dict for the episode (when calling reset and step)
+            seed (optional): Starting seed.
             options (optional): Additonal options for resetting the environment:
                 -"normalize_obs": whether or not to normalize observations (sets self.normalize_obs)
                 -"normalize_state": whether or not to normalize the global state (sets self.normalize_state)
                 -"unnorm_obs_info": whether or not to include unnormalized observations in the info dictionary
                     *note: will be overwritten and set to False if self.normalize_obs is False
         """
+        self._seed(seed=seed)
+
         self.current_time = 0
         self.start_time = time.time()
         self.reset_count += 1
@@ -171,8 +175,6 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self._auto_returning_flag = False #reset auto return status
         assert isinstance(self.timewarp, int)
         pymoos.set_moos_timewarp(self.timewarp)
-        
-        self.return_info = return_info
 
         # Set options
         if options is not None:
@@ -231,7 +233,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         #NOTE: because the observation and global state are built from the state
         #dictionary, it is not currently necessary to set the player and flag attributes
 
-        # Observation History
+        # Observations
         reset_obs, reset_unnorm_obs = self.state_to_obs(self._agent_name, self.normalize_obs)
 
         self.state["obs_hist_buffer"] = {agent_id: None for agent_id in self.agents}
@@ -241,22 +243,16 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             self.state["unnorm_obs_hist_buffer"] = {agent_id: None for agent_id in self.agents}
             self.state["unnorm_obs_hist_buffer"][self._agent_name] = np.array(self.obs_hist_buffer_len * [reset_unnorm_obs])
 
-        # Global State History
-        if self.return_info:
-            self.state["global_state_hist_buffer"] = np.array(self.state_hist_buffer_len * [self.state_to_global_state(self.normalize_state)])
-
-        # Current Observation
         obs = self._history_to_obs(self._agent_name, "obs_hist_buffer")
+
+        # Global State History
+        self.state["global_state_hist_buffer"] = np.array(self.state_hist_buffer_len * [self.state_to_global_state(self.normalize_state)])
 
         # Info
         info = {}
-        if self.return_info:
-            #global state
-            info["global_state"] = self._history_to_state()
-
-            #unnormalized obs
-            if self.unnorm_obs_info:
-                info["unnorm_obs"] = self._history_to_obs(self._agent_name, "unnorm_obs_hist_buffer")
+        info["global_state"] = self._history_to_state()
+        if self.unnorm_obs_info:
+            info["unnorm_obs"] = self._history_to_obs(self._agent_name, "unnorm_obs_hist_buffer")
 
         return obs, info
 
@@ -465,7 +461,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         #NOTE: because the observation and global state are built from the state
         #dictionary, it is not currently necessary to set the player and flag attributes
 
-        # Observation History
+        # Observations
         next_obs, next_unnorm_obs = self.state_to_obs(self._agent_name, self.normalize_obs)
 
         self.state["obs_hist_buffer"][self._agent_name][1:] = self.state["obs_hist_buffer"][self._agent_name][:-1]
@@ -475,8 +471,11 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             self.state["unnorm_obs_hist_buffer"][self._agent_name][1:] = self.state["unnorm_obs_hist_buffer"][self._agent_name][:-1]
             self.state["unnorm_obs_hist_buffer"][self._agent_name][0] = next_unnorm_obs
 
-        # Current Observation
         obs = self._history_to_obs(self._agent_name, "obs_hist_buffer")
+
+        # Global State History
+        self.state["global_state_hist_buffer"][1:] = self.state["global_state_hist_buffer"][:-1]
+        self.state["global_state_hist_buffer"][0] = self.state_to_global_state(self.normalize_state)
 
         # Dones
         terminated = np.any(self.state["captures"] >= self.max_score)
@@ -487,16 +486,9 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
         # Info
         info = {}
-        if self.return_info:
-            self.state["global_state_hist_buffer"][1:] = self.state["global_state_hist_buffer"][:-1]
-            self.state["global_state_hist_buffer"][0] = self.state_to_global_state(self.normalize_state)
-
-            #global state
-            info["global_state"] = self._history_to_state()
-
-            #unnormalized obs
-            if self.unnorm_obs_info:
-                info["unnorm_obs"] = self._history_to_obs(self._agent_name, "unnorm_obs_hist_buffer")
+        info["global_state"] = self._history_to_state()
+        if self.unnorm_obs_info:
+            info["unnorm_obs"] = self._history_to_obs(self._agent_name, "unnorm_obs_hist_buffer")
 
         return obs, reward, terminated, truncated, info
 
