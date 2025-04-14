@@ -104,7 +104,7 @@ config_dict_std = {
     #'history': history observations rendered
     #'traj_agent': combines 'traj' and 'agent'
     #'traj_history': combines 'traj' and 'history'
-    # note: render_traj_freq applies only to agent rendering (not trajectory lines)
+    # note: render_traj_freq applies only to agent rendering (not trajectory trails)
 
     # Miscellaneous parameters
     "suppress_numpy_warnings": True,  # option to stop numpy from printing warnings to the console

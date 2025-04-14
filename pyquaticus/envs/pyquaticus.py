@@ -1785,7 +1785,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Observation and state parameters
         self.normalize_obs = config_dict.get("normalize_obs", config_dict_std["normalize_obs"])
-        self.unnorm_obs_info = True
+        self.unnorm_obs_info = True #config_dict.get("unnorm_obs_info", config_dict_std["unnorm_obs_info"])
         self.short_obs_hist_length = config_dict.get("short_obs_hist_length", config_dict_std["short_obs_hist_length"])
         self.short_obs_hist_interval = config_dict.get("short_obs_hist_interval", config_dict_std["short_obs_hist_interval"])
         self.long_obs_hist_length = config_dict.get("long_obs_hist_length", config_dict_std["long_obs_hist_length"])
@@ -1817,6 +1817,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Agent spawn parameters
         self.default_init = config_dict.get("default_init", config_dict_std["default_init"])
+        self.on_sides_init = False #config_dict.get("on_sides_init", config_dict_std["on_sides_init"])
+
+        if self.gps_env and self.default_init:
+            print("Warning! Default initialization not supported in when self.gps_env is True.")
+            print("Set on_sides_init to True in config to have agents spawn on their side of the scrimmage line.")
 
         # Miscellaneous parameters
         if config_dict.get("suppress_numpy_warnings", config_dict_std["suppress_numpy_warnings"]):
@@ -2554,7 +2559,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 -'captures'***, 'tags'***, 'grabs'***, 'agent_collisions'***
 
                   *Note 1: These variables can either be specified as a dict with agent id's as keys, in which case it is not
-                           required to specify variable-specific information for each agent and _generate_agent_starts() will
+                           required to specify variable-specific information for all agents and _generate_agent_starts() will
                            be used to generate unspecified information, or as an array, which must be be of length self.num_agents
                            and the indices of the entries must match the indices of the corresponding agents' ids in self.agents
 
@@ -2817,14 +2822,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     while not valid_pos:
                         if agent_has_flag[i]:
                             pos = random.choice(self.valid_team_init_poses[other_team_idx])
-                        elif self.default_init:
-                            start_pos_idx = np.random.choice(valid_init_pos_inds[player.team])
-                            valid_init_pos_inds[player.team].remove(start_pos_idx)
-                            pos = self.valid_team_init_poses[team_idx][start_pos_idx]
                         else:
-                            start_pos_idx = np.random.choice(valid_init_pos_inds)
-                            valid_init_pos_inds.remove(start_pos_idx)
-                            pos = self.valid_init_poses[start_pos_idx]
+                            if self.on_sides_init:
+                                start_pos_idx = np.random.choice(valid_init_pos_inds[player.team])
+                                valid_init_pos_inds[player.team].remove(start_pos_idx)
+                                pos = self.valid_team_init_poses[team_idx][start_pos_idx]
+                            else:
+                                start_pos_idx = np.random.choice(valid_init_pos_inds)
+                                valid_init_pos_inds.remove(start_pos_idx)
+                                pos = self.valid_init_poses[start_pos_idx]
 
                         #check if valid pos
                         valid_pos, _ = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)
@@ -2860,10 +2866,16 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                             pos = np.random.choice((-1,1), size=2) * np.random.rand(2) * (self.env_size/2 - self.agent_radius[i]) + self.env_size/2
                             valid_pos = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)[0] and self._check_on_sides(pos, player.team)
                     else:
-                        valid_pos = False
-                        while not valid_pos:
-                            pos = np.random.choice((-1,1), size=2) * np.random.rand(2) * (self.env_size/2 - self.agent_radius[i]) + self.env_size/2
-                            valid_pos, _ = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)
+                        if self.on_sides_init:
+                            valid_pos = False
+                            while not valid_pos:
+                                pos = np.random.choice((-1,1), size=2) * np.random.rand(2) * (self.env_size/2 - self.agent_radius[i]) + self.env_size/2
+                                valid_pos = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)[0] and self._check_on_sides(pos, player.team)
+                        else:
+                            valid_pos = False
+                            while not valid_pos:
+                                pos = np.random.choice((-1,1), size=2) * np.random.rand(2) * (self.env_size/2 - self.agent_radius[i]) + self.env_size/2
+                                valid_pos, _ = self._check_valid_pos(pos, i, agent_positions, flag_homes_not_picked_up)
                 # save pos
                 agent_positions.append(pos)
                 agent_pos_dict[player.id] = pos
@@ -2940,18 +2952,20 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 return False, "agent"
 
         #flags
-        flag_distance = np.linalg.norm(flag_homes - new_pos, axis=-1)
-        if np.any(flag_distance <= self.flag_keepout_radius):
-            return False, "flag"
+        if flag_homes.shape[0] != 0:
+            flag_distance = np.linalg.norm(flag_homes - new_pos, axis=-1)
+            if np.any(flag_distance <= self.flag_keepout_radius):
+                return False, "flag"
 
         #obstacles
         ## TODO: add check to make sure agent isn't spawned inside an obstacle
         if detect_collision(new_pos, self.agent_radius[agent_idx], self.obstacle_geoms):
             return False, "obstacle"
 
-        #out-of-bounds
+        #boundary
+        #NOTE: different from out-of-bounds condition
         if not np.all((self.agent_radius[agent_idx] < new_pos) & (new_pos < (self.env_size - self.agent_radius[agent_idx]))):
-            return False, "oob"
+            return False, "boundary"
 
         return True, None
 
