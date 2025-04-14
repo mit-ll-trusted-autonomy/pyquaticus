@@ -2629,7 +2629,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     isinstance(init_dict[state_var], (list, tuple, np.ndarray)) and
                     len(init_dict[state_var]) != self.num_agents
                 ):
-                    raise Exception(f"{state_var} {str(type(state_var))[8:-2]} must be be of length self.num_agents with entries matching order of self.agents")
+                    raise Exception(f"{state_var} {str(type(init_dict[state_var]))[8:-2]} must be be of length self.num_agents with entries matching order of self.agents")
                 else:
                     for i, agent_id in enumerate(self.agents):
                         if isinstance(init_dict[state_var], (list, tuple, np.ndarray)):
