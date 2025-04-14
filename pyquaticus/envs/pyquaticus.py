@@ -2738,7 +2738,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     f"agent_collisions array must be be of length f{self.num_agents} with entries matching order of self.agents"
                 )
 
-
     def _set_player_attributes_from_state(self):
         for i, player in enumerate(self.players.values()):
             player.pos = self.state["agent_position"][i]
@@ -2884,21 +2883,21 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             # pos variable for picked up flag (if applicable), as well as heading and on-sides calculations
             pos = agent_pos_dict[player.id]
-            
+
             ## picked up flag (if any) ##
             if agent_has_flag[i]:
                 self.state['flag_position'][other_team_idx] = copy.deepcopy(pos)
-            
+
             ## speed ##
             if player.id not in agent_spd_dict:
                 if self.default_init:
                     speed = 0.0
                 else:
                     speed = self.max_speeds[i] * np.random.rand()
-                
+
                 # save speed
                 agent_spd_dict[player.id] = speed
-            
+
             ## heading ##
             if player.id not in agent_hdg_dict:
                 if self.default_init:
@@ -2906,7 +2905,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     _, heading = vec_to_mag_heading(closest_scrim_line_point - pos)
                 else:
                     heading = 360 * np.random.rand() - 180
-                
+
                 # save heading
                 agent_hdg_dict[player.id] = heading
 
