@@ -922,6 +922,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         render_mode: Optional[str] = None
     ):
         super().__init__()
+
         self.team_size = team_size
         self.num_blue = team_size
         self.num_red = team_size
