@@ -32,7 +32,13 @@ class BaseAgentPolicy:
     the observation space.
     """
 
-    def __init__(self, agent_id: int, team: Team, suppress_numpy_warnings=True):
+    def __init__(
+        self,
+        agent_id: int,
+        team: Team,
+        max_speed: float,
+        suppress_numpy_warnings=True
+    ):
         self.id = agent_id
         if isinstance(team, str):
             if team == 'red':
@@ -42,6 +48,8 @@ class BaseAgentPolicy:
             else:
                 raise ValueError(f"Got unknown team: {team}")
         self.team = team
+        self.max_speed = max_speed
+
         self.speed = 0.0
         self.has_flag = False
         self.on_sides = False

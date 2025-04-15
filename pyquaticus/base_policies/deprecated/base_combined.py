@@ -21,12 +21,12 @@
 
 import numpy as np
 
-import pyquaticus.base_policies.base_attack as attack_policy
-import pyquaticus.base_policies.base_defend as defend_policy
-from pyquaticus.base_policies.base import BaseAgentPolicy
-from pyquaticus.envs.pyquaticus import config_dict_std, Team
+import pyquaticus.base_policies.deprecated.base_attack as attack_policy
+import pyquaticus.base_policies.deprecated.base_defend as defend_policy
+from pyquaticus.base_policies.deprecated.base import BaseAgentPolicy
+from pyquaticus.envs.pyquaticus import config_dict_std, Team, ACTION_MAP
 
-modes = {"easy", "medium", "hard"}
+MODES = {"easy", "medium", "hard"}
 
 
 class Heuristic_CTF_Agent(BaseAgentPolicy):
@@ -36,30 +36,36 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         self,
         agent_id: int,
         team: Team,
+        max_speed: float,
+        continuous=True,
         mode="easy",
         flag_keepout=10.0,
         catch_radius=config_dict_std["catch_radius"],
         using_pyquaticus=True,
         defensiveness=20.0,
     ):
-        super().__init__(agent_id, team)
+        super().__init__(agent_id=agent_id, team=team, max_speed=max_speed)
 
-        if mode not in modes:
-            raise ValueError(f"mode {mode} not a valid mode out of {modes}")
+        self.continuous = continuous
+        self.set_mode(mode)
 
-        if mode not in modes:
-            raise ValueError(f"Invalid mode {mode}, valid modes are {modes}")
-        self.mode = mode
         self.flag_keepout = flag_keepout
         self.defensiveness = defensiveness
         self.using_pyquaticus = using_pyquaticus
         self.id = agent_id
         self.base_attacker = attack_policy.BaseAttacker(
-            self.id, team, mode=mode, using_pyquaticus=using_pyquaticus
+            self.id,
+            team,
+            max_speed=max_speed,
+            continuous=continuous,
+            mode=mode,
+            using_pyquaticus=using_pyquaticus
         )
         self.base_defender = defend_policy.BaseDefender(
             self.id,
             team,
+            max_speed=max_speed,
+            continuous=continuous,
             mode=mode,
             using_pyquaticus=using_pyquaticus,
             catch_radius=catch_radius,
@@ -83,15 +89,10 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         self.opp_team_density = None
         self.opp_team_has_flag = False
 
-    def set_mode(self, mode="easy"):
-        """
-        Determine which mode the agent is in:
-        'easy' = Easy Attacker
-        'medium' = Medium Attacker
-        'hard' = Hard Attacker.
-        """
-        if mode not in modes:
-            raise ValueError(f"Invalid mode {mode}")
+    def set_mode(self, mode: str):
+        """Sets difficulty mode."""
+        if mode not in MODES:
+            raise ValueError(f"mode {mode} not in set of valid modes: {MODES}")
         self.mode = mode
 
     def compute_action(self, obs):
@@ -146,6 +147,9 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
                     action = self.base_attacker.compute_action(obs)
                 else:
                     action = self.random_defense_action(self.opp_team_pos, my_obs)
+
+        if self.continuous and (action == 16):
+            return ACTION_MAP[-1]
 
         return action
 
@@ -221,10 +225,15 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
                 elif act_heading > 1:
                     act_index = 2
         except:
-            # print(f'Failed to convert vector to heading')
+            # If there is an error converting the vector to a heading, just go straight
+            act_heading = 0
             act_index = 4
 
-        return act_index
+        if self.continuous:
+            speed = self.max_speed * ACTION_MAP[act_index][0]
+            return [speed, act_heading]
+        else:
+            return act_index
 
     def get_team_density(self, friendly_positions, enemy_positions):
         """This function returns the center of mass and varience of all the agents in the team."""

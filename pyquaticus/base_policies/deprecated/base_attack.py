@@ -21,28 +21,29 @@
 
 import numpy as np
 
-from pyquaticus.base_policies.base import BaseAgentPolicy
-from pyquaticus.envs.pyquaticus import config_dict_std, Team
+from pyquaticus.base_policies.deprecated.base import BaseAgentPolicy
+from pyquaticus.envs.pyquaticus import config_dict_std, Team, ACTION_MAP
 
-modes = {"nothing", "easy", "medium", "hard", "competition_easy", "competition_medium"}
-"""
-Difficulty modes for the policy, each one has different behavior. 
-'easy' = Easy Attacker - Go straight to goal
-'medium' = Medium Attacker - Go to goal and avoid others
-'hard' = Hard Attacker - Not Implemented, but plan to goal smartly
-"""
+
+MODES = {"nothing", "easy", "medium", "hard", "competition_easy", "competition_medium"}
 
 
 class BaseAttacker(BaseAgentPolicy):
     """This is a Policy class that contains logic for capturing the flag."""
 
     def __init__(
-        self, agent_id: int, team=Team.RED_TEAM, mode="easy", using_pyquaticus=True
+        self,
+        agent_id: int,
+        team: Team,
+        max_speed: float,
+        continuous=True,
+        mode="easy",
+        using_pyquaticus=True
     ):
-        super().__init__(agent_id, team)
-        if mode not in modes:
-            raise AttributeError(f"Invalid mode {mode}")
-        self.mode = mode
+        super().__init__(agent_id=agent_id, team=team, max_speed=max_speed)
+
+        self.continuous = continuous
+        self.set_mode(mode)
 
         if team not in Team:
             raise AttributeError(f"Invalid team {team}")
@@ -53,8 +54,8 @@ class BaseAttacker(BaseAgentPolicy):
 
     def set_mode(self, mode: str):
         """Sets difficulty mode."""
-        if mode not in modes:
-            raise ValueError(f"Invalid mode {mode}")
+        if mode not in MODES:
+            raise ValueError(f"mode {mode} not in set of valid modes: {MODES}")
         self.mode = mode
 
     def compute_action(self, obs):
@@ -97,6 +98,7 @@ class BaseAttacker(BaseAgentPolicy):
                     act_index = 12
             except:
                 # If there is an error converting the vector to a heading, just go straight
+                act_heading = 0
                 act_index = 12
 
         elif self.mode=="nothing":
@@ -168,6 +170,8 @@ class BaseAttacker(BaseAgentPolicy):
                     # Should only happen if the act_heading is somehow NAN
                     act_index = 12
             except:
+                # If there is an error converting the vector to a heading, just go straight
+                act_heading = 0
                 act_index = 12
 
         elif self.mode == "competition_medium":
@@ -268,6 +272,8 @@ class BaseAttacker(BaseAgentPolicy):
                     # Should only happen if the act_heading is somehow NAN
                     act_index = 4
             except:
+                # If there is an error converting the vector to a heading, just go straight
+                act_heading = 0
                 act_index = 4
 
         elif self.mode == "hard":
@@ -369,6 +375,12 @@ class BaseAttacker(BaseAgentPolicy):
                     # Should only happen if the act_heading is somehow NAN
                     act_index = 4
             except:
+                # If there is an error converting the vector to a heading, just go straight
+                act_heading = 0
                 act_index = 4
 
-        return [2.0, act_heading]
+        if self.continuous:
+            speed = self.max_speed * ACTION_MAP[act_index][0]
+            return [speed, act_heading]
+        else:
+            return act_index

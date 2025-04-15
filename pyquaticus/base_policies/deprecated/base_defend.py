@@ -21,10 +21,10 @@
 
 import numpy as np
 
-from pyquaticus.base_policies.base import BaseAgentPolicy
-from pyquaticus.envs.pyquaticus import config_dict_std, Team
+from pyquaticus.base_policies.deprecated.base import BaseAgentPolicy
+from pyquaticus.envs.pyquaticus import config_dict_std, Team, ACTION_MAP
 
-modes = {"nothing", "easy", "medium", "hard", "competition_easy", "competition_medium"}
+MODES = {"nothing", "easy", "medium", "hard", "competition_easy", "competition_medium"}
 
 
 class BaseDefender(BaseAgentPolicy):
@@ -34,30 +34,29 @@ class BaseDefender(BaseAgentPolicy):
         self,
         agent_id: int,
         team: Team,
+        max_speed: float,
+        continuous=True,
         mode: str = "easy",
         flag_keepout=10.0,
         catch_radius=config_dict_std["catch_radius"],
         using_pyquaticus=True,
     ):
-        super().__init__(agent_id, team)
+        super().__init__(agent_id=agent_id, team=team, max_speed=max_speed)
 
-        if mode not in modes:
-            raise ValueError(f"mode {mode} not in set of valid modes {modes}")
-        self.mode = mode
+        self.continuous = continuous
+        self.set_mode(mode)
+
         self.flag_keepout = flag_keepout
         self.catch_radius = catch_radius
         self.using_pyquaticus = using_pyquaticus
         self.goal = 'PM'
+
     def set_mode(self, mode: str):
-        """
-        Determine which mode the agent is in:
-        'easy' = Easy Attacker
-        'medium' = Medium Attacker
-        'hard' = Hard Attacker.
-        """
-        if mode not in modes:
-            raise ValueError(f"mode {mode} not in set of valid modes {modes}")
+        """Sets difficulty mode."""
+        if mode not in MODES:
+            raise ValueError(f"mode {mode} not in set of valid modes: {MODES}")
         self.mode = mode
+
     def get_distance_between_2_points(self, start: np.array, end: np.array) -> float:
         """
         Convenience method for returning distance between two points.
@@ -177,6 +176,8 @@ class BaseDefender(BaseAgentPolicy):
                 elif act_heading > 1:
                     act_index = 2
             except:
+                # If there is an error converting the vector to a heading, just go straight
+                act_heading = 0
                 act_index = 4
         elif self.mode == "medium":
             my_flag_vec = self.bearing_to_vec(self.my_flag_bearing)
@@ -272,24 +273,21 @@ class BaseDefender(BaseAgentPolicy):
                 enemy_loc = self.rb_to_rect(self.opp_team_pos_dict[closest_enemy])
 
             if not self.opp_team_has_flag:
-                defend_pt = self.closest_point_on_line(
-                    self.my_flag_loc, enemy_loc, [0, 0]
-                )
-                defend_pt_flag_dist = self.get_distance_between_2_points(
-                    defend_pt, self.my_flag_loc
-                )
-                unit_def_flag = self.unit_vect_between_points(
-                    defend_pt, self.my_flag_loc
-                )
-                enemy_dist_2_flag = self.get_distance_between_2_points(
-                    enemy_loc, self.my_flag_loc
-                )
+                # defend_pt = self.closest_point_on_line(
+                #     self.my_flag_loc, enemy_loc, [0, 0]
+                # )
+                enemy_dist_2_flag = self.get_distance_between_2_points(self.my_flag_loc, enemy_loc)
+                unit_flag_enemy = self.unit_vect_between_points(self.my_flag_loc, enemy_loc)
+                defend_pt = self.my_flag_loc + (enemy_dist_2_flag/2) * unit_flag_enemy
+
+                dist_defend_pt_flag = self.get_distance_between_2_points(defend_pt, self.my_flag_loc)
+                unit_flag_def = self.unit_vect_between_points(self.my_flag_loc, defend_pt)
 
                 if enemy_dist_2_flag > defense_perim or my_obs[(closest_enemy, "is_tagged")]:
-                    if defend_pt_flag_dist > defense_perim or my_obs[(closest_enemy, "is_tagged")]:
+                    if dist_defend_pt_flag > defense_perim or my_obs[(closest_enemy, "is_tagged")]:
                         guide_pt = [
-                            self.my_flag_loc[0] + (unit_def_flag[0] * defense_perim),
-                            self.my_flag_loc[1] + (unit_def_flag[1] * defense_perim),
+                            self.my_flag_loc[0] + (unit_flag_def[0] * defense_perim),
+                            self.my_flag_loc[1] + (unit_flag_def[1] * defense_perim),
                         ]
                     else:
                         guide_pt = defend_pt
@@ -315,6 +313,12 @@ class BaseDefender(BaseAgentPolicy):
                 elif act_heading > 1:
                     act_index = 2
             except:
+                # If there is an error converting the vector to a heading, just go straight
+                act_heading = 0
                 act_index = 4
 
-        return [2.0, act_heading]
+        if self.continuous:
+            speed = self.max_speed * ACTION_MAP[act_index][0]
+            return [speed, act_heading]
+        else:
+            return act_index
