@@ -73,20 +73,9 @@ class BaseDefender(BaseAgentPolicy):
         """
         self.update_state(obs, info)
 
-        # global_state = info[self.id]["global_state"]
-
-        # # Unnormalize state, if necessary
-        # if not isinstance(global_state, dict):
-        #     if global_state.dtype == np.object_:
-        #         global_state = global_state[0]
-        #     else:
-        #         if len(global_state.shape) == 1:
-        #             global_state = self.state_normalizer.unnormalized(global_state)
-        #         else:
-        #             global_state = self.state_normalizer.unnormalized(global_state[0])
-        my_obs = info[self.id]["unnorm_obs"]
-        if my_obs is None:
-            my_obs = obs[self.id]
+        unnorm_obs = info[self.id]["unnorm_obs"]
+        if unnorm_obs is None:
+            unnorm_obs = obs[self.id]
 
         if self.mode == "easy":
 
@@ -176,38 +165,6 @@ class BaseDefender(BaseAgentPolicy):
                 else:
                     self.goal = "SM"
 
-            # if self.continuous:
-
-            #     # Make point system the same on both blue and red side
-            #     if self.team == Team.BLUE_TEAM:
-            #         if "P" in self.goal:
-            #             self.goal = "S" + self.goal[1:]
-            #         elif "S" in self.goal:
-            #             self.goal = "P" + self.goal[1:]
-            #         if "X" not in self.goal and self.goal not in ["SC", "CC", "PC"]:
-            #             self.goal += "X"
-            #         elif self.goal not in ["SC", "CC", "PC"]:
-            #             self.goal = self.goal[:-1]
-
-            #     _, heading = mag_bearing_to(
-            #         self.pos,
-            #         self.aquaticus_field_points[self.goal],
-            #         self.heading,
-            #     )
-            #     if (
-            #         self.get_distance_between_2_points(
-            #             self.pos,
-            #             self.aquaticus_field_points[self.goal],
-            #         )
-            #         <= 0.3
-            #     ):
-            #         speed = 0.0
-            #     else:
-            #         speed = self.max_speed
-
-            #     return speed, heading
-            # else:
-            #     return self.goal
             return self.goal
 
         elif self.mode == "competition_medium":
@@ -224,8 +181,8 @@ class BaseDefender(BaseAgentPolicy):
                 enemy_dis_dict[enem] = pos[0]
                 if (
                     pos[0] < min_enemy_distance
-                    and not my_obs[(enem, "is_tagged")]
-                    and my_obs[(enem, "on_side")] == 0
+                    and not unnorm_obs[(enem, "is_tagged")]
+                    and unnorm_obs[(enem, "on_side")] == 0
                 ):
                     min_enemy_distance = pos[0]
                     closest_enemy = enem
@@ -259,45 +216,8 @@ class BaseDefender(BaseAgentPolicy):
                     )
                     <= 2.5
                 ):
-                    # if self.continuous:
-                    #     return (0, 0)
-                    # else:
-                    #     return -1
                     return -1
                 else:
-                    # if self.continuous:
-                    #     goal = "CH"
-                    #     # Make point system the same on both blue and red side
-                    #     if self.team == Team.BLUE_TEAM:
-                    #         if "P" in goal:
-                    #             goal = "S" + goal[1:]
-                    #         elif "S" in goal:
-                    #             goal = "P" + goal[1:]
-                    #         if "X" not in goal and goal not in ["SC", "CC", "PC"]:
-                    #             goal += "X"
-                    #         elif self.goal not in ["SC", "CC", "PC"]:
-                    #             goal = goal[:-1]
-
-                    #     _, heading = mag_bearing_to(
-                    #         self.pos,
-                    #         self.aquaticus_field_points[goal],
-                    #         self.heading,
-                    #     )
-                    #     if (
-                    #         -0.3
-                    #         <= self.get_distance_between_2_points(
-                    #             self.pos,
-                    #             self.aquaticus_field_points[goal],
-                    #         )
-                    #         <= 0.3
-                    #     ):
-                    #         speed = 0.0
-                    #     else:
-                    #         speed = self.max_speed
-
-                    #     return speed, heading
-                    # else:
-                    #     return "CH"
                     return "CH"
 
             # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
@@ -431,7 +351,7 @@ class BaseDefender(BaseAgentPolicy):
             enemy_loc = np.asarray((0, 0))
             for enem, pos in self.opp_team_pos_dict.items():
                 enemy_dis_dict[enem] = pos[0]
-                if pos[0] < min_enemy_distance and not my_obs[(enem, "is_tagged")]:
+                if pos[0] < min_enemy_distance and not unnorm_obs[(enem, "is_tagged")]:
                     min_enemy_distance = pos[0]
                     closest_enemy = enem
                     enemy_loc = self.rb_to_rect(pos)
@@ -459,11 +379,11 @@ class BaseDefender(BaseAgentPolicy):
 
                 if (
                     enemy_dist_2_flag > defense_perim
-                    or my_obs[(closest_enemy, "is_tagged")]
+                    or unnorm_obs[(closest_enemy, "is_tagged")]
                 ):
                     if (
                         defend_pt_flag_dist > defense_perim
-                        or my_obs[(closest_enemy, "is_tagged")]
+                        or unnorm_obs[(closest_enemy, "is_tagged")]
                     ):
                         guide_pt = [
                             self.my_flag_loc[0] + (unit_def_flag[0] * defense_perim),

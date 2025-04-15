@@ -73,9 +73,9 @@ class BaseAttacker(BaseAgentPolicy):
         """
         self.update_state(obs, info)
 
-        my_obs = info[self.id]["unnorm_obs"]
-        if my_obs is None:
-            my_obs = obs[self.id]
+        unnorm_obs = info[self.id]["unnorm_obs"]
+        if unnorm_obs is None:
+            unnorm_obs = obs[self.id]
 
         if self.mode == "easy":
 
@@ -83,7 +83,7 @@ class BaseAttacker(BaseAgentPolicy):
 
             # If I or someone on my team has the flag, go back home
             if self.has_flag or self.my_team_has_flag:
-                goal_vect = self.bearing_to_vec(my_obs["own_home_bearing"])
+                goal_vect = self.bearing_to_vec(unnorm_obs["own_home_bearing"])
 
             # Otherwise go get the opponents flag
             else:
@@ -138,7 +138,6 @@ class BaseAttacker(BaseAgentPolicy):
                         self.wall_distances[2],
                     ]
                 )
-            print(f"\nnew_pos: {estimated_position}")
             value = self.goal
 
             if self.team == Team.BLUE_TEAM:
@@ -152,9 +151,6 @@ class BaseAttacker(BaseAgentPolicy):
                     value = value[:-1]
             if self.is_tagged:
                 self.goal = "SC"
-            print(value)
-            print(self.aquaticus_field_points[value])
-            print(f"dist: {self.get_distance_between_2_points(estimated_position, self.aquaticus_field_points[value])}")
             if (
                 -2.5
                 <= self.get_distance_between_2_points(
@@ -162,7 +158,6 @@ class BaseAttacker(BaseAgentPolicy):
                 )
                 <= 2.5
             ):
-                print("new a")
                 if self.goal == "SC":
                     self.goal = "CFX"
                 elif self.goal == "CFX":
@@ -179,41 +174,8 @@ class BaseAttacker(BaseAgentPolicy):
                 )
                 <= 6
             ):
-                print("new b")
+
                 self.goal = "SC"
-
-            # if self.continuous:
-
-            #     # Make point system the same on both blue and red side
-            #     if self.team == Team.BLUE_TEAM:
-            #         if "P" in self.goal:
-            #             self.goal = "S" + self.goal[1:]
-            #         elif "S" in self.goal:
-            #             self.goal = "P" + self.goal[1:]
-            #         if "X" not in self.goal and self.goal not in ["SC", "CC", "PC"]:
-            #             self.goal += "X"
-            #         elif self.goal not in ["SC", "CC", "PC"]:
-            #             self.goal = self.goal[:-1]
-
-            #     _, heading = mag_bearing_to(
-            #         self.pos,
-            #         self.aquaticus_field_points[self.goal],
-            #         self.heading,
-            #     )
-            #     if (
-            #         self.get_distance_between_2_points(
-            #             self.pos,
-            #             self.aquaticus_field_points[self.goal],
-            #         )
-            #         <= 0.3
-            #     ):
-            #         speed = 0.0
-            #     else:
-            #         speed = self.max_speed
-
-            #     return speed, heading
-            # else:
-            #     return self.goal
             return self.goal
 
         elif self.mode == "medium":
@@ -225,7 +187,7 @@ class BaseAttacker(BaseAgentPolicy):
 
                 # Weighted to follow goal more than avoiding others
                 goal_vect = np.multiply(
-                    2.00, self.bearing_to_vec(my_obs["own_home_bearing"])
+                    2.00, self.bearing_to_vec(unnorm_obs["own_home_bearing"])
                 )
                 avoid_vect = self.get_avoid_vect(self.opp_team_pos)
                 my_action = goal_vect + avoid_vect
@@ -337,7 +299,7 @@ class BaseAttacker(BaseAgentPolicy):
             # If I have the flag, go back to my side
             if self.has_flag:
                 goal_vect = np.multiply(
-                    1.25, self.bearing_to_vec(my_obs["own_home_bearing"])
+                    1.25, self.bearing_to_vec(unnorm_obs["own_home_bearing"])
                 )
                 avoid_vect = self.get_avoid_vect(
                     self.opp_team_pos, avoid_threshold=avoid_thresh
@@ -478,7 +440,7 @@ class BaseAttacker(BaseAgentPolicy):
             # If I or someone on my team has the flag, go back to my side
             if self.has_flag or self.my_team_has_flag:
                 goal_vect = np.multiply(
-                    1.25, self.bearing_to_vec(my_obs["own_home_bearing"])
+                    1.25, self.bearing_to_vec(unnorm_obs["own_home_bearing"])
                 )
                 avoid_vect = self.get_avoid_vect(
                     self.opp_team_pos, avoid_threshold=avoid_thresh
