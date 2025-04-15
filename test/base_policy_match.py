@@ -8,6 +8,9 @@ from pyquaticus.base_policies.deprecated.base_defend import (
     BaseDefender as OldBaseDefender,
 )
 from pyquaticus.base_policies.base_combined import Heuristic_CTF_Agent
+from pyquaticus.base_policies.deprecated.base_combined import (
+    Heuristic_CTF_Agent as OldHeuristicAgent,
+)
 from pyquaticus.envs.pyquaticus import Team
 from pyquaticus.base_policies.key_agent import KeyAgent
 import numpy as np
@@ -55,7 +58,17 @@ r_two = BaseDefender(
     "agent_3", Team.RED_TEAM, env, mode="competition_easy", continuous=True
 )
 
-b_one = BaseDefender("agent_0", Team.BLUE_TEAM, env, mode="nothing")
+b_one_old = OldHeuristicAgent(
+    "agent_0",
+    Team.BLUE_TEAM,
+    3,
+    aquaticus_field_points=env.aquaticus_field_points,
+    mode="hard",
+    continuous=True,
+)
+b_one = Heuristic_CTF_Agent(
+    "agent_0", Team.BLUE_TEAM, env, mode="hard", continuous=True
+)
 b_two = KeyAgent()
 step = 0
 while True:
@@ -88,6 +101,18 @@ while True:
         raise Exception("Defend policies don't match")
 
     zero = b_one.compute_action(obs, info)
+    zero_old = b_one_old.compute_action(obs)
+    if isinstance(zero, str) or isinstance(zero_old, str):
+        if zero != zero_old:
+            print("---")
+            print(zero)
+            print(zero_old)
+            raise Exception("Heuristic policies don't match")
+    elif not np.all(np.isclose(np.array(zero), np.array(zero_old))):
+        print("---")
+        print(f"{zero}")
+        print(f"{zero_old}")
+        raise Exception("Heuristic policies don't match")
     one = b_two.compute_action(obs, info)
 
     obs, reward, term, trunc, info = env.step(
