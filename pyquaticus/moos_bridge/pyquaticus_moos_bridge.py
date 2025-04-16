@@ -277,8 +277,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
                 # or p.has_flag is None
             ]
             num_iters += 1
-            if num_iters > 1000:
-                raise RuntimeError(f"No other agents connected after {num_iters*wait_time} seconds. Failing and exiting.")
+            # if num_iters > 1000:
+            #     raise RuntimeError(f"No other agents connected after {num_iters*wait_time} seconds. Failing and exiting.")
 
         print("All agents connected!")
 
