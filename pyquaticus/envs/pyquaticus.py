@@ -276,7 +276,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             agent_obs_normalizer.register("ray_labels", max_lidar_label, min_lidar_label)
         else:
             max_bearing = [180]
-            max_dist = [self.env_diag]
+            max_dist = [self.env_diag + 10]
             min_dist = [0.0]
             max_bool, min_bool = [1.0], [0.0]
             max_speed, min_speed = [max(self.max_speeds)], [0.0]
@@ -295,7 +295,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             agent_obs_normalizer.register("wall_3_bearing", max_bearing)
             agent_obs_normalizer.register("wall_3_distance", max_dist, min_dist)
             agent_obs_normalizer.register("scrimmage_line_bearing", max_bearing)
-            agent_obs_normalizer.register("scrimmage_line_distance", max_dist, min_dist)
+            agent_obs_normalizer.register("scrimmage_line_distance", [80.0], min_dist)
             agent_obs_normalizer.register("speed", max_speed, min_speed)
             agent_obs_normalizer.register("has_flag", max_bool, min_bool)
             agent_obs_normalizer.register("on_side", max_bool, min_bool)
