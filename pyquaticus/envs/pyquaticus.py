@@ -1032,10 +1032,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.create_background_image()  # create background pygame surface (for faster rendering)
 
         # RRT policies for driving back home
+        self.rrt_policies = []
         if len(self.obstacles) > 0:
             from pyquaticus.base_policies.env_waypoint_policy import EnvWaypointPolicy
-
-            self.rrt_policies = []
             for i in range(self.num_agents):
                 self.rrt_policies.append(
                     EnvWaypointPolicy(
@@ -1230,8 +1229,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.state['agent_dynamics'][i] = player.state
                 continue
 
-            if len(self.rrt_policies[i].wps) > 0 and not player.is_tagged:
-                self.rrt_policies[i].wps = []
+            if len(self.obstacles) > 0:
+                if len(self.rrt_policies[i].wps) > 0 and not player.is_tagged:
+                    self.rrt_policies[i].wps = []
 
             # If agent is tagged, drive at max speed towards home
             if player.is_tagged:
