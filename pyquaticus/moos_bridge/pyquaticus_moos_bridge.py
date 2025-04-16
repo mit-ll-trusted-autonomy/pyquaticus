@@ -186,9 +186,9 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         for player in self.players.values():
             #set values to None before using _wait_for_all_players() to check if connected
             player.pos = [None, None]
-            player.speed = None
-            player.heading = None
-            player.has_flag = None
+            # player.speed = None
+            # player.heading = None
+            # player.has_flag = None
 
         if self._moos_comm is not None:
             self._moos_comm.close()
@@ -259,9 +259,9 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             p.id
             for p in self.players.values()
             if None in p.pos
-            or p.speed is None
-            or p.heading is None
-            or p.has_flag is None
+            # or p.speed is None
+            # or p.heading is None
+            # or p.has_flag is None
         ]
         num_iters = 0
         while missing_agents:
@@ -272,9 +272,9 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
                 p.id
                 for p in self.players.values()
                 if None in p.pos
-                or p.speed is None
-                or p.heading is None
-                or p.has_flag is None
+                # or p.speed is None
+                # or p.heading is None
+                # or p.has_flag is None
             ]
             num_iters += 1
             if num_iters > 20:
