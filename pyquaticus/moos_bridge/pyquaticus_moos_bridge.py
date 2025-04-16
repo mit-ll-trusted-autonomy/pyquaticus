@@ -450,7 +450,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.current_time += self.timewarp * self.dt
 
         # Update state
-        self._update_state
+        self._update_state()
         # Set the player and flag attributes that are not connected to MOOS vars, and self.game_events
         # self._set_player_attributes_from_state() #TODO: uncomment when implemented
         # self._set_flag_attributes_from_state() #TODO: uncomment when implemented

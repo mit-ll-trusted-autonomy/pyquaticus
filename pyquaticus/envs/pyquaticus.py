@@ -20,12 +20,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import colorsys
-import contextily as cx
 import copy
 import cv2
 import itertools
 import math
-import mercantile as mt
 import numpy as np
 import os
 import pathlib
@@ -35,9 +33,7 @@ import random
 import subprocess
 
 from abc import ABC
-from contextily.tile import _sm2ll
 from datetime import datetime
-from geographiclib.geodesic import Geodesic
 from gymnasium.spaces import Box, Discrete
 from gymnasium.utils import seeding
 from math import ceil, floor
@@ -90,10 +86,9 @@ from pyquaticus.utils.utils import (
     wrap_mercator_x,
     wrap_mercator_x_dist
 )
-from pyquaticus.base_policies.env_waypoint_policy import EnvWaypointPolicy
 from scipy.ndimage import label
 from shapely import intersection, LineString, Point, Polygon
-from typing import Optional
+from typing import Optional, Union
 
 
 class PyQuaticusEnvBase(ParallelEnv, ABC):
@@ -916,7 +911,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     def __init__(
         self,
         team_size: int = 1,
-        action_space: str | list[str] = "discrete",
+        action_space: Union[str, list[str]] = "discrete",
         reward_config: dict = None,
         config_dict = config_dict_std,
         render_mode: Optional[str] = None
@@ -1037,18 +1032,21 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.create_background_image()  # create background pygame surface (for faster rendering)
 
         # RRT policies for driving back home
-        self.rrt_policies = []
-        for i in range(self.num_agents):
-            self.rrt_policies.append(
-                EnvWaypointPolicy(
-                    self.obstacles,
-                    self.env_size,
-                    self.max_speeds[i],
-                    capture_radius=0.45 * self.catch_radius,
-                    slip_radius=self.slip_radius[i],
-                    avoid_radius=2 * self.agent_radius[i]
+        if len(self.obstacles) > 0:
+            from pyquaticus.base_policies.env_waypoint_policy import EnvWaypointPolicy
+
+            self.rrt_policies = []
+            for i in range(self.num_agents):
+                self.rrt_policies.append(
+                    EnvWaypointPolicy(
+                        self.obstacles,
+                        self.env_size,
+                        self.max_speeds[i],
+                        capture_radius=0.45 * self.catch_radius,
+                        slip_radius=self.slip_radius[i],
+                        avoid_radius=2 * self.agent_radius[i]
+                    )
                 )
-            )
 
     def step(self, raw_action_dict):
         """
@@ -2766,7 +2764,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
     def _generate_agent_starts(
         self,
-        flag_homes_not_picked_up: list | np.ndarray,
+        flag_homes_not_picked_up: Union[list, np.ndarray],
         agent_pos_dict: Optional[dict] = None,
         agent_spd_dict: Optional[dict] = None,
         agent_hdg_dict: Optional[dict] = None,
@@ -3008,6 +3006,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             )
 
         if self.gps_env:
+            import contextily as cx
+            import mercantile as mt
+            from contextily.tile import _sm2ll
+            from geographiclib.geodesic import Geodesic
+
             ### environment bounds ###
             if self._is_auto_string(env_bounds):
                 flag_home_blue = np.asarray(flag_homes[Team.BLUE_TEAM])
