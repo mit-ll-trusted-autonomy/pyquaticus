@@ -20,12 +20,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import colorsys
-import contextily as cx
 import copy
 import cv2
 import itertools
 import math
-import mercantile as mt
 import numpy as np
 import os
 import pathlib
@@ -35,9 +33,7 @@ import random
 import subprocess
 
 from abc import ABC
-from contextily.tile import _sm2ll
 from datetime import datetime
-from geographiclib.geodesic import Geodesic
 from gymnasium.spaces import Box, Discrete
 from gymnasium.utils import seeding
 from math import ceil, floor
@@ -90,10 +86,9 @@ from pyquaticus.utils.utils import (
     wrap_mercator_x,
     wrap_mercator_x_dist
 )
-from pyquaticus.base_policies.env_waypoint_policy import EnvWaypointPolicy
 from scipy.ndimage import label
 from shapely import intersection, LineString, Point, Polygon
-from typing import Optional
+from typing import Optional, Union
 
 
 class PyQuaticusEnvBase(ParallelEnv, ABC):
@@ -281,7 +276,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             agent_obs_normalizer.register("ray_labels", max_lidar_label, min_lidar_label)
         else:
             max_bearing = [180]
-            max_dist = [self.env_diag]
+            max_dist = [self.env_diag + 10]
             min_dist = [0.0]
             max_bool, min_bool = [1.0], [0.0]
             max_speed, min_speed = [max(self.max_speeds)], [0.0]
@@ -300,7 +295,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             agent_obs_normalizer.register("wall_3_bearing", max_bearing)
             agent_obs_normalizer.register("wall_3_distance", max_dist, min_dist)
             agent_obs_normalizer.register("scrimmage_line_bearing", max_bearing)
-            agent_obs_normalizer.register("scrimmage_line_distance", max_dist, min_dist)
+            agent_obs_normalizer.register("scrimmage_line_distance", [80.0], min_dist)
             agent_obs_normalizer.register("speed", max_speed, min_speed)
             agent_obs_normalizer.register("has_flag", max_bool, min_bool)
             agent_obs_normalizer.register("on_side", max_bool, min_bool)
@@ -848,7 +843,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         """
         Converts heading into env reference frame based on the boundary.
         """
-        return heading - self.env_rot_angle
+        return angle180(heading + self.env_rot_angle) #nautical headings are cw (not ccw)
 
     def _check_on_sides(self, pos, team):
         """pos can be a single point or multiple points"""
@@ -916,7 +911,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     def __init__(
         self,
         team_size: int = 1,
-        action_space: str | list[str] = "discrete",
+        action_space: Union[str, list[str]] = "discrete",
         reward_config: dict = None,
         config_dict = config_dict_std,
         render_mode: Optional[str] = None
@@ -1038,17 +1033,19 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # RRT policies for driving back home
         self.rrt_policies = []
-        for i in range(self.num_agents):
-            self.rrt_policies.append(
-                EnvWaypointPolicy(
-                    self.obstacles,
-                    self.env_size,
-                    self.max_speeds[i],
-                    capture_radius=0.45 * self.catch_radius,
-                    slip_radius=self.slip_radius[i],
-                    avoid_radius=2 * self.agent_radius[i]
+        if len(self.obstacles) > 0:
+            from pyquaticus.base_policies.env_waypoint_policy import EnvWaypointPolicy
+            for i in range(self.num_agents):
+                self.rrt_policies.append(
+                    EnvWaypointPolicy(
+                        self.obstacles,
+                        self.env_size,
+                        self.max_speeds[i],
+                        capture_radius=0.45 * self.catch_radius,
+                        slip_radius=self.slip_radius[i],
+                        avoid_radius=2 * self.agent_radius[i]
+                    )
                 )
-            )
 
     def step(self, raw_action_dict):
         """
@@ -1232,8 +1229,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.state['agent_dynamics'][i] = player.state
                 continue
 
-            if len(self.rrt_policies[i].wps) > 0 and not player.is_tagged:
-                self.rrt_policies[i].wps = []
+            if len(self.obstacles) > 0:
+                if len(self.rrt_policies[i].wps) > 0 and not player.is_tagged:
+                    self.rrt_policies[i].wps = []
 
             # If agent is tagged, drive at max speed towards home
             if player.is_tagged:
@@ -2766,7 +2764,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
     def _generate_agent_starts(
         self,
-        flag_homes_not_picked_up: list | np.ndarray,
+        flag_homes_not_picked_up: Union[list, np.ndarray],
         agent_pos_dict: Optional[dict] = None,
         agent_spd_dict: Optional[dict] = None,
         agent_hdg_dict: Optional[dict] = None,
@@ -3008,6 +3006,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             )
 
         if self.gps_env:
+            import contextily as cx
+            import mercantile as mt
+            from contextily.tile import _sm2ll
+            from geographiclib.geodesic import Geodesic
+
             ### environment bounds ###
             if self._is_auto_string(env_bounds):
                 flag_home_blue = np.asarray(flag_homes[Team.BLUE_TEAM])

@@ -81,14 +81,14 @@ fi
 #-----------------------------------------------
 # Part 3: Set the Vehicle random positions
 #-----------------------------------------------
-# POS=(`pickpos --amt=3 --polygon=$RED_ZONE --hdg=$CCT,0 --format=terse` )
-# ABE_POS=${POS[0]}
-# BEN_POS=${POS[1]}
-# CAL_POS=${POS[2]}
-# POS=(`pickpos --amt=3 --polygon=$BLUE_ZONE --hdg=$CCT,0 --format=terse`)
-# DEB_POS=${POS[0]}
-# EVE_POS=${POS[1]}
-# FIN_POS=${POS[2]}
+POS=(`pickpos --amt=3 --polygon=$RED_ZONE --hdg=$CCT,0 --format=terse` )
+ABE_POS=${POS[0]}
+BEN_POS=${POS[1]}
+CAL_POS=${POS[2]}
+POS=(`pickpos --amt=3 --polygon=$BLUE_ZONE --hdg=$CCT,0 --format=terse`)
+DEB_POS=${POS[0]}
+EVE_POS=${POS[1]}
+FIN_POS=${POS[2]}
 
 #---------------------------------------------------------------
 #  Part 4: If verbose, show vars and confirm before launching
@@ -118,22 +118,22 @@ fi
 #-------------------------------------------------------
 #  Part 5: Launching vehicles
 #-------------------------------------------------------
-# VARGS=" $VERBOSE $JUST_MAKE $TIME_WARP $LOGDIR $FLD_ANG $RLA --sim --auto  --shore=localhost --ip=localhost"
-# BVARGS="$VARGS $BENTRY"
-# RVARGS="$VARGS $RENTRY"
+VARGS=" $VERBOSE $JUST_MAKE $TIME_WARP $LOGDIR $FLD_ANG $RLA --sim --auto  --shore=localhost --ip=localhost"
+BVARGS="$VARGS $BENTRY"
+RVARGS="$VARGS $RENTRY"
 
-# echo "Launching Abe Red-One"
-# ./launch_vehicle.sh -va -r1 $RVARGS --start=$ABE_POS --role=CONTROL
-# echo "Launching Ben Red-Two"
-# ./launch_vehicle.sh -vb -r2 $RVARGS --start=$BEN_POS --role=CONTROL
-# echo "Launching Cal Red-Three"
-# ./launch_vehicle.sh -vc -r3 $RVARGS --start=$CAL_POS --role=CONTROL
-# echo "Launching Deb Blue-One"
-# ./launch_vehicle.sh -vd -b1 $BVARGS --start=$DEB_POS --role=CONTROL
-# echo "Launching Eve Blue-Two"
-# ./launch_vehicle.sh -ve -b2 $BVARGS --start=$EVE_POS --role=CONTROL
-# echo "Launching Fin Blue-Three"
-# ./launch_vehicle.sh -vf -b3 $BVARGS --start=$FIN_POS --role=CONTROL
+echo "Launching Abe Red-One"
+./launch_vehicle.sh -va -r1 $RVARGS --start=$ABE_POS --role=CONTROL
+echo "Launching Ben Red-Two"
+./launch_vehicle.sh -vb -r2 $RVARGS --start=$BEN_POS --role=CONTROL
+echo "Launching Cal Red-Three"
+./launch_vehicle.sh -vc -r3 $RVARGS --start=$CAL_POS --role=CONTROL
+echo "Launching Deb Blue-One"
+./launch_vehicle.sh -vd -b1 $BVARGS --start=$DEB_POS --role=CONTROL
+echo "Launching Eve Blue-Two"
+./launch_vehicle.sh -ve -b2 $BVARGS --start=$EVE_POS --role=CONTROL
+echo "Launching Fin Blue-Three"
+./launch_vehicle.sh -vf -b3 $BVARGS --start=$FIN_POS --role=CONTROL
 
 
 

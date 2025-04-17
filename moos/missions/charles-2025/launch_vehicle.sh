@@ -105,7 +105,7 @@ for ARGI; do
     elif [ $ARGI = "-vf" -o $ARGI = "-v6" -o $ARGI = "--fin" ]; then
         FSEAT_IP=192.168.19.1;   VNAME="fin";  IP_ADDR=192.168.19.100
     elif [ $ARGI = "-vm" -o $ARGI = "-v7" -o $ARGI = "--max" ]; then
-        FSEAT_IP=192.168.20.7;   VNAME="max";  IP_ADDR=192.168.20.100
+        FSEAT_IP=192.168.20.1;   VNAME="max";  IP_ADDR=192.168.20.100
     elif [ $ARGI = "-vn" -o $ARGI = "-v8" -o $ARGI = "--ned" ]; then
         FSEAT_IP=192.168.21.1;   VNAME="ned";  IP_ADDR=192.168.21.100
     elif [ $ARGI = "-vo" -o $ARGI = "-v9" -o $ARGI = "--oak" ]; then
