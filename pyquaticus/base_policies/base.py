@@ -19,14 +19,12 @@
 
 # SPDX-License-Identifier: BSD-3-Clause
 
+from typing import Any, Union
+
 import numpy as np
 
-from pyquaticus.envs.pyquaticus import Team, PyQuaticusEnv
-
-# from pyquaticus.moos.pyquaticus_moos_bridge import PyQuaticusMoosBridge
-from pyquaticus.utils.utils import closest_point_on_line, mag_bearing_to
-
-from typing import Any, Union
+from pyquaticus.envs.pyquaticus import PyQuaticusEnv, Team
+from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
 
 
 class BaseAgentPolicy:
@@ -39,7 +37,7 @@ class BaseAgentPolicy:
         self,
         agent_id: str,
         team: Team,
-        env: PyQuaticusEnv,  # Union[PyQuaticusEnv, PyQuaticusMoosBridge],
+        env: Union[PyQuaticusEnv, PyQuaticusMoosBridge],
         suppress_numpy_warnings=True,
     ):
         self.id = agent_id
@@ -124,7 +122,6 @@ class BaseAgentPolicy:
         my_team_ids = set()
 
         # Copy this agents state from the observation
-        # my_obs = obs[self.id]
         self.speed = unnorm_obs["speed"]
         self.on_sides = unnorm_obs["on_side"]
         self.has_flag = unnorm_obs["has_flag"]

@@ -37,25 +37,25 @@ r_one_old = OldBaseAttacker(
     "agent_2",
     Team.RED_TEAM,
     3,
-    mode="competition_medium",
+    mode="hard",
     continuous=True,
     aquaticus_field_points=env.aquaticus_field_points,
 )
 r_one_new = BaseAttacker(
-    "agent_2", Team.RED_TEAM, env, mode="competition_medium", continuous=True
+    "agent_2", Team.RED_TEAM, env, mode="hard", continuous=True
 )
 
 r_two_old = OldBaseDefender(
     "agent_3",
     Team.RED_TEAM,
     3,
-    mode="competition_easy",
+    mode="hard",
     continuous=True,
     flag_keepout=env.flag_keepout_radius,
     aquaticus_field_points=env.aquaticus_field_points,
 )
 r_two = BaseDefender(
-    "agent_3", Team.RED_TEAM, env, mode="competition_easy", continuous=True
+    "agent_3", Team.RED_TEAM, env, mode="hard", continuous=True
 )
 
 b_one_old = OldHeuristicAgent(

@@ -19,13 +19,13 @@
 
 # SPDX-License-Identifier: BSD-3-Clause
 
+from typing import Union
+
 import numpy as np
 
 from pyquaticus.base_policies.base import BaseAgentPolicy
-from pyquaticus.envs.pyquaticus import config_dict_std, Team, PyQuaticusEnv
-from pyquaticus.utils.utils import mag_bearing_to
-
-from typing import Union
+from pyquaticus.envs.pyquaticus import PyQuaticusEnv, Team
+from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
 
 MODES = {"nothing", "easy", "medium", "hard", "competition_easy", "competition_medium"}
 
@@ -37,7 +37,7 @@ class BaseDefender(BaseAgentPolicy):
         self,
         agent_id: str,
         team: Team,
-        env: PyQuaticusEnv,
+        env: Union[PyQuaticusEnv, PyQuaticusMoosBridge],
         continuous: bool = False,
         mode: str = "easy",
     ):
@@ -49,7 +49,7 @@ class BaseDefender(BaseAgentPolicy):
         self.catch_radius = env.catch_radius
         self.goal = "PM"
 
-        if not env.gps_env:
+        if isinstance(env, PyQuaticusMoosBridge) or not env.gps_env:
             self.aquaticus_field_points = env.aquaticus_field_points
 
     def set_mode(self, mode: str):
@@ -94,7 +94,7 @@ class BaseDefender(BaseAgentPolicy):
 
                 # Convert the vector to a heading, and then pick the best discrete action to perform
             try:
-                heading_error = self.angle180(self.vec_to_heading(ag_vect))
+                heading_error = self.vec_to_heading(ag_vect)
 
                 if self.continuous:
                     if np.isnan(heading_error):
@@ -126,7 +126,7 @@ class BaseDefender(BaseAgentPolicy):
                 return -1
 
         elif self.mode == "competition_easy":
-
+            assert self.aquaticus_field_points is not None
             if self.team == Team.RED_TEAM:
                 estimated_position = np.asarray(
                     [
@@ -168,6 +168,7 @@ class BaseDefender(BaseAgentPolicy):
             return self.goal
 
         elif self.mode == "competition_medium":
+            assert self.aquaticus_field_points is not None
 
             desired_speed = self.max_speed
 
@@ -223,7 +224,7 @@ class BaseDefender(BaseAgentPolicy):
             # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
             # Convert the vector to a heading, and then pick the best discrete action to perform
             try:
-                heading_error = self.angle180(self.vec_to_heading(ag_vect))
+                heading_error = self.vec_to_heading(ag_vect)
 
                 if self.continuous:
                     if np.isnan(heading_error):
@@ -270,7 +271,7 @@ class BaseDefender(BaseAgentPolicy):
 
                     # Convert the vector to a heading, and then pick the best discrete action to perform
             try:
-                heading_error = self.angle180(self.vec_to_heading(ag_vect))
+                heading_error = self.vec_to_heading(ag_vect)
 
                 if self.continuous:
                     if np.isnan(heading_error):
@@ -363,18 +364,18 @@ class BaseDefender(BaseAgentPolicy):
 
             if not self.opp_team_has_flag:
                 enemy_dist_2_flag = self.get_distance_between_2_points(
-                    self.my_flag_loc, enemy_loc
+                    np.array(self.my_flag_loc), enemy_loc
                 )
                 unit_flag_enemy = self.unit_vect_between_points(
-                    self.my_flag_loc, enemy_loc
+                    np.array(self.my_flag_loc), enemy_loc
                 )
                 defend_pt = self.my_flag_loc + (enemy_dist_2_flag / 2) * unit_flag_enemy
 
                 defend_pt_flag_dist = self.get_distance_between_2_points(
-                    defend_pt, self.my_flag_loc
+                    defend_pt, np.array(self.my_flag_loc)
                 )
                 unit_def_flag = self.unit_vect_between_points(
-                    self.my_flag_loc, defend_pt
+                    np.array(self.my_flag_loc), defend_pt
                 )
 
                 if (
@@ -405,7 +406,7 @@ class BaseDefender(BaseAgentPolicy):
             # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
             # Convert the vector to a heading, and then pick the best discrete action to perform
             try:
-                heading_error = self.angle180(self.vec_to_heading(ag_vect))
+                heading_error = self.vec_to_heading(ag_vect)
 
                 if self.continuous:
                     if np.isnan(heading_error):

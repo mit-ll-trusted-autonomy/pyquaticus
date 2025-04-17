@@ -19,11 +19,13 @@
 
 # SPDX-License-Identifier: BSD-3-Clause
 
+from typing import Union
+
 import numpy as np
 
 from pyquaticus.base_policies.base import BaseAgentPolicy
-from pyquaticus.envs.pyquaticus import Team, PyQuaticusEnv
-from pyquaticus.utils.utils import mag_bearing_to
+from pyquaticus.envs.pyquaticus import PyQuaticusEnv, Team
+from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
 
 MODES = {"nothing", "easy", "medium", "hard", "competition_easy", "competition_medium"}
 
@@ -35,7 +37,7 @@ class BaseAttacker(BaseAgentPolicy):
         self,
         agent_id: str,
         team: Team,
-        env: PyQuaticusEnv,
+        env: Union[PyQuaticusEnv, PyQuaticusMoosBridge],
         continuous: bool = False,
         mode: str = "easy",
     ):
@@ -49,7 +51,7 @@ class BaseAttacker(BaseAgentPolicy):
         self.continuous = continuous
         self.goal = "SC"
 
-        if not env.gps_env:
+        if isinstance(env, PyQuaticusMoosBridge) or not env.gps_env:
             self.aquaticus_field_points = env.aquaticus_field_points
 
     def set_mode(self, mode: str):
@@ -91,7 +93,7 @@ class BaseAttacker(BaseAgentPolicy):
 
             # Convert the vector to a heading, and then pick the best discrete action to perform
             try:
-                heading_error = self.angle180(self.vec_to_heading(goal_vect))
+                heading_error = self.vec_to_heading(goal_vect)
 
                 if self.continuous:
                     if np.isnan(heading_error):
@@ -123,6 +125,7 @@ class BaseAttacker(BaseAgentPolicy):
                 return -1
 
         elif self.mode == "competition_easy":
+            assert self.aquaticus_field_points is not None
 
             if self.team == Team.RED_TEAM:
                 estimated_position = np.asarray(
@@ -202,7 +205,7 @@ class BaseAttacker(BaseAgentPolicy):
 
             # Convert the heading to a discrete action to follow
             try:
-                heading_error = self.angle180(self.vec_to_heading(my_action))
+                heading_error = self.vec_to_heading(my_action)
 
                 if self.continuous:
                     if np.isnan(heading_error):
@@ -344,7 +347,7 @@ class BaseAttacker(BaseAgentPolicy):
 
             # Try to convert the heading to a discrete action
             try:
-                heading_error = self.angle180(self.vec_to_heading(my_action))
+                heading_error = self.vec_to_heading(my_action)
                 # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
                 if self.continuous:
                     if np.isnan(heading_error):
@@ -485,7 +488,7 @@ class BaseAttacker(BaseAgentPolicy):
 
             # Try to convert the heading to a discrete action
             try:
-                heading_error = self.angle180(self.vec_to_heading(my_action))
+                heading_error = self.vec_to_heading(my_action)
                 # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
                 if self.continuous:
                     if np.isnan(heading_error):
