@@ -98,7 +98,7 @@ class BaseAgentPolicy:
         """
         pass
 
-    def update_state(self, obs, info) -> None:
+    def update_state(self, obs, info: dict[str, dict]) -> None:
         """
         Method to convert the gym obs and info into data more relative to the
         agent.
@@ -107,7 +107,7 @@ class BaseAgentPolicy:
             obs: observation from gym
             info: info from gym
         """
-        unnorm_obs = info[self.id]["unnorm_obs"]
+        unnorm_obs = info[self.id].get("unnorm_obs", None)
         if unnorm_obs is None:
             unnorm_obs = obs[self.id]
 

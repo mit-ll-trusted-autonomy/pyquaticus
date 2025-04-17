@@ -60,7 +60,7 @@ class BaseAttacker(BaseAgentPolicy):
             raise ValueError(f"mode {mode} not in set of valid modes: {MODES}")
         self.mode = mode
 
-    def compute_action(self, obs, info):
+    def compute_action(self, obs, info: dict[str, dict]):
         """
         Compute an action from the given observation and global state.
 
@@ -75,7 +75,7 @@ class BaseAttacker(BaseAgentPolicy):
         """
         self.update_state(obs, info)
 
-        unnorm_obs = info[self.id]["unnorm_obs"]
+        unnorm_obs = info[self.id].get("unnorm_obs", None)
         if unnorm_obs is None:
             unnorm_obs = obs[self.id]
 
