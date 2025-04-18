@@ -1,170 +1,170 @@
-#!/bin/bash -e
-#---------------------------------------------------------------
+#!/bin/bash
+#------------------------------------------------------
 #   Script: launch.sh
 #  Mission: jervis-2023
 #   Author: Mike Benjamin
 #   LastEd: Oct 2023
-#-------------------------------------------------------
+#------------------------------------------------------
 #  Part 1: Set global var defaults
-#-------------------------------------------------------
+#------------------------------------------------------
 ME=`basename "$0"`
 TIME_WARP=1
-JUST_MAKE="no"
+JUST_MAKE=""
 VERBOSE=""
-AUTO_LAUNCHED="no"
+
 CMD_ARGS=""
-
-IP_ADDR="localhost"
-MOOS_PORT="9000"
-PSHARE_PORT="9300"
-
-VTEAM1="red"
-VTEAM2="blue"
-
-CID=000 # Competiton id
-LOGPATH=./
+NO_SHORESIDE=""
+LOGPATH=""
+RLA=""
+BENTRY=""
+RENTRY=""
 FLD_ANG=""
-VNAMES="red_one:red_two:blue_one:blue_two"
+VNAMES="red_one:red_two:red_three:blue_one:blue_two:blue_three"
 
 #-------------------------------------------------------
 #  Part 2: Check for and handle command-line arguments
 #-------------------------------------------------------
 for ARGI; do
     CMD_ARGS+="${ARGI} "
-    if [ "${ARGI}" = "--help" -o "${ARGI}" = "-h" ] ; then
+    if [ "${ARGI}" = "--help" -o "${ARGI}" = "-h" ]; then
 	echo "$ME [OPTIONS] [time_warp]                     "
-        echo "  --help, -h                                  "
-        echo "  --shore-port=<PORT>  Shore pShare port      "
-	echo "                       Default $SHORE_LISTEN  "
-        echo "  --ip=<localhost>     Shore IP address       "
-        echo "  --mport=<9000>       Shoreside MOOS port    "
-        echo "  --pshare=<9300>      The pShare Listen port "
 	echo "                                              "
-        echo "  --cid=<ID>           Competition id (for log file)"
-        echo "  --logpath=<PATH>     Log path              "
+	echo "Options:                                      "
+	echo "  --help, -h                                  "
+	echo "    Show this help message                    "
+	echo "  --just_make, -j                             "
+	echo "    Just make targ files, no launch           "
+	echo "  --verbose, -v                               "
+	echo "    Increase verbosity, confirm before launch "
+	echo "  --no_shoreside, -ns                         "
+	echo "  --logpath=<path>                            "
 	echo "  --ang=<field_angle>                         "
-        echo "  --just_make, -j      Just make targ files   "
-        echo "  --verbose, -v        Verbose Launch         "
-        echo "  --auto, -a                                  "
-        echo "     Auto-launched by a script.               "
-        echo "     Will not launch uMAC as the final step.  "
-	echo "  --vnames=<vname:vname:vname>                " 
-	echo "    List of anticipated vehicle names         "
-        exit 0
+	echo "  --no_rla                                    "
+	echo "    Do not use RLAgent behavior               "
+	echo "                                              "
+	echo "  --bentry=<entry>                            "
+	echo "    Example: --bentry=mitx                    "
+	echo "  --rentry=<entry>                            "
+	echo "    Example: --rentry=team                    "
+	exit 0
     elif [ "${ARGI//[^0-9]/}" = "$ARGI" -a "$TIME_WARP" = 1 ]; then
         TIME_WARP=$ARGI
     elif [ "${ARGI}" = "--just_make" -o "${ARGI}" = "-j" ]; then
-        JUST_MAKE="yes"
-    elif [ $ARGI = "--verbose" -o $ARGI = "-V" -o $ARGI = "-v" ]; then
-	VERBOSE="yes"
-    elif [ "${ARGI}" = "--auto" -o "${ARGI}" = "-a" ]; then
-        AUTO_LAUNCHED="yes"
-
-    elif [ "${ARGI:0:5}" = "--ip=" ]; then
-        IP_ADDR="${ARGI#--ip=*}"
-        FORCE_IP="yes"
-    elif [ "${ARGI}" = "-sip" -o "${ARGI}" = "--sip" ]; then
-	IP_ADDR="192.168.1.37"
-        FORCE_IP="yes"
-
-    elif [ "${ARGI:0:11}" = "--shore-ip=" ]; then
-        SHORE_IP="${ARGI#--shore-ip=*}"
-    elif [ "${ARGI:0:13}" = "--shore-port=" ]; then
-        PSHARE_PORT=${ARGI#--shore-port=*}
-    elif [ "${ARGI:0:9}" = "--pshare=" ]; then
-        PSHARE_PORT=${ARGI#--pshare=*}
-    elif [ "${ARGI:0:6}" = "--cid=" ]; then
-        CID="${ARGI#--cid=*}"
-        CID=$(printf "%03d" $CID)
+        JUST_MAKE="-j"
+    elif [ $ARGI = "--verbose" -o $ARGI = "-V"  -o $ARGI = "-v" ]; then
+	VERBOSE="-V"
+    elif [ "${ARGI}" = "--no_shoreside" -o "${ARGI}" = "-ns" ]; then
+        NO_SHORESIDE="true"
+    elif [ "${ARGI}" = "--no_rla" ]; then
+        RLA=$ARGI
     elif [ "${ARGI:0:10}" = "--logpath=" ]; then
         LOGPATH="${ARGI#--logpath=*}"
     elif [ "${ARGI:0:6}" = "--ang=" ]; then
         FLD_ANG="${ARGI}"
-    elif [ "${ARGI:0:9}" = "--vnames=" ]; then
-        VNAMES="${ARGI#--vnames=*}"
+    elif [ "${ARGI:0:9}" = "--bentry=" ]; then
+        BENTRY="--entry=${ARGI#--bentry=*}"
+    elif [ "${ARGI:0:9}" = "--rentry=" ]; then
+        RENTRY="--entry=${ARGI#--rentry=*}"
     else
-        echo "$ME: Bad Arg: [$ARGI] Exit code 1."
-        exit 1
+        echo "$ME Bad Arg: [$ARGI]. Exit Code 1"
+	exit 1
     fi
 done
 
-if [ "${AUTO_LAUNCHED}" != "yes" ]; then
-    ./genop.sh $FLD_ANG > targ_region.txt
-fi
+./genop.sh $FLD_ANG > targ_region.txt
 source targ_region.txt
 
+if [ -n "${LOGPATH}" ]; then
+  LOGDIR=--logpath=${LOGPATH}
+fi
+
+#-----------------------------------------------
+# Part 3: Set the Vehicle random positions
+#-----------------------------------------------
+# POS=(`pickpos --amt=3 --polygon=$RED_ZONE --hdg=$CCT,0 --format=terse` )
+# ABE_POS=${POS[0]}
+# BEN_POS=${POS[1]}
+# CAL_POS=${POS[2]}
+# POS=(`pickpos --amt=3 --polygon=$BLUE_ZONE --hdg=$CCT,0 --format=terse`)
+# DEB_POS=${POS[0]}
+# EVE_POS=${POS[1]}
+# FIN_POS=${POS[2]}
+
 #---------------------------------------------------------------
-#  Part 3: If verbose, show vars and confirm before launching
+#  Part 4: If verbose, show vars and confirm before launching
 #---------------------------------------------------------------
 if [ "${VERBOSE}" != "" ]; then 
-    echo "======================================================"
-    echo "        launch_shoreside.sh SUMMARY                   "
-    echo "======================================================"
-    echo "$ME"
-    echo "CMD_ARGS =      [${CMD_ARGS}]      "
-    echo "TIME_WARP =     [${TIME_WARP}]     "
-    echo "AUTO_LAUNCHED = [${AUTO_LAUNCHED}] "
-    echo "JUST_MAKE =     [${JUST_MAKE}]     "
-    echo "FLD_ANG =       [${FLD_ANG}]       "
-    echo "---------------------------------- "
-    echo "IP_ADDR =       [${IP_ADDR}]       "
-    echo "MOOS_PORT =     [${MOOS_PORT}]     "
-    echo "PSHARE_PORT =   [${PSHARE_PORT}]   "
-    echo "---------------------------------- "
-    echo "XMODE =         [${XMODE}]         "
-    echo "REGION =        [${REGION}]        "
-    echo "VNAMES =        [${VNAMES}]        "
-    echo "VTEAM1 =        [${VTEAM1}]        "
-    echo "VTEAM2 =        [${VTEAM2}]        "
-    echo "---------------------------------- "
-    echo "BLUE_ZONE =     [${BLUE_ZONE}]     "
-    echo "RED_ZONE =      [${RED_ZONE}]      "
-    echo "BLUE_FLAG =     [${BLUE_FLAG}]     "
-    echo "RED_FLAG =      [${RED_FLAG}]      "
-    echo -n "Hit any key to continue with launching SHORESIDE"
+    echo "======================================="
+    echo "  launch.sh SUMMARY                    "
+    echo "======================================="
+    echo "CMD_ARGS =  [${CMD_ARGS}]              "
+    echo "TIME_WARP = [${TIME_WARP}]             "
+    echo "JUST_MAKE = [${JUST_MAKE}]             "
+    echo "---------------------------------------"
+    echo "WANG =      [${WANG}]                  "
+    echo "DANG =      [${DANG}]                  "
+    echo "FLD_ANG =   [${FLD_ANG}]               "
+    echo "---------------------------------------"
+    echo "BENTRY =    [${BENTRY}]                "
+    echo "RENTRY =    [${RENTRY}]                "
+    echo "LOGDIR =    [${LOGDIR}]                "
+    echo "RLA =       [${RLA}]                   "
+    echo "---------------------------------------"
+    echo "VNAMES = [${VNAMES}]                   "
+    echo -n "Hit the RETURN key to continue with launching"
     read ANSWER
 fi
 
 #-------------------------------------------------------
-#  Part 4: Create the Shoreside MOOS file
+#  Part 5: Launching vehicles
 #-------------------------------------------------------
-nsplug meta_shoreside.moos targ_shoreside.moos -f WARP=$TIME_WARP  \
-       IP_ADDR=$IP_ADDR     PSHARE_PORT=$PSHARE_PORT  \
-       MOOS_PORT="9000"     VNAMES=$VNAMES            \
-       LOGPATH=$LOGPATH     CID=$CID                  \
-       VTEAM1=$VTEAM1       VTEAM2=$VTEAM2            \
-       DANGX=$DANGX         $FLDS
-       
-if [ ! -e targ_shoreside.moos ]; then
-    echo "no targ_shoreside.moos";
-    exit 1;
+# VARGS=" $VERBOSE $JUST_MAKE $TIME_WARP $LOGDIR $FLD_ANG $RLA --sim --auto  --shore=localhost --ip=localhost"
+# BVARGS="$VARGS $BENTRY"
+# RVARGS="$VARGS $RENTRY"
+
+# echo "Launching Abe Red-One"
+# ./launch_vehicle.sh -va -r1 $RVARGS --start=$ABE_POS --role=CONTROL
+# echo "Launching Ben Red-Two"
+# ./launch_vehicle.sh -vb -r2 $RVARGS --start=$BEN_POS --role=CONTROL
+# echo "Launching Cal Red-Three"
+# ./launch_vehicle.sh -vc -r3 $RVARGS --start=$CAL_POS --role=CONTROL
+# echo "Launching Deb Blue-One"
+# ./launch_vehicle.sh -vd -b1 $BVARGS --start=$DEB_POS --role=CONTROL
+# echo "Launching Eve Blue-Two"
+# ./launch_vehicle.sh -ve -b2 $BVARGS --start=$EVE_POS --role=CONTROL
+# echo "Launching Fin Blue-Three"
+# ./launch_vehicle.sh -vf -b3 $BVARGS --start=$FIN_POS --role=CONTROL
+
+
+
+#-------------------------------------------------------
+#  Part 6: Launching shoreside
+#-------------------------------------------------------
+SARGS=" $VERBOSE $JUST_MAKE $TIME_WARP $LOGDIR $FLD_ANG --auto"
+SARGS+=" --vnames=$VNAMES"
+
+if [[ -z $NO_SHORESIDE ]]; then
+  ./launch_shoreside.sh $SARGS
 fi
 
 #-------------------------------------------------------
-#  Part 5: Possibly exit now if we're just building targ files
+#  Part 7: Possibly exit now if we're just building targ files
 #-------------------------------------------------------
-if [ ${JUST_MAKE} = "yes" ]; then
-    echo "Shoreside targ files made. Nothing launched per request."
+if [[ ${JUST_MAKE} != "" ]]; then
     exit 0
 fi
 
 #-------------------------------------------------------
-#  Part 6: Launch the Shoreside
+#  Part 8: Launching uMAC
 #-------------------------------------------------------
-echo "Launching shoreside MOOS Community (WARP=$TIME_WARP)"
-pAntler targ_shoreside.moos >& /dev/null &
-echo "Done Launching Shoreside "
-
-#---------------------------------------------------------------
-#  Part 7: If launched from script, we're done, exit now
-#---------------------------------------------------------------
-if [ "${AUTO_LAUNCHED}" = "yes" ]; then
-    exit 0
-fi
-
 uMAC targ_shoreside.moos
 
-sleep 2 # Give them a chance to exit with grace
-echo "Killing all processes ... "
+#-------------------------------------------------------
+#  Part 9: Killing all processes launched from script
+#-------------------------------------------------------
+echo "Killing Simulation..."
+
 kill -- -$$
-echo "Done killing processes.   "
+# sleep is to give enough time to all processes to die
+sleep 3
+echo "All processes killed"
