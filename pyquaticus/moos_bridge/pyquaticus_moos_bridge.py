@@ -16,14 +16,14 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
     """
     This class is used to control an agent in MOOS Aquaticus.
     It does *not* start anything on the MOOS side. Instead, you start everything you want
-    and then run this and pass actions (for example from a policy learned in Pyquaticus)
+    and then run this and pass actions (from a policy learned in Pyquaticus for example)
     once you're ready to run the agent.
 
-    Important differences from pyquaticus_team_env_bridge:
+    Important differences from PyQuaticusEnv and the deprecated pyquaticus_team_env_bridge:
     * This class only connects to a single MOOS node, not all of them
         -- this choice makes it much more efficient
     * This class only controls a single agent
-        -- run multiple instances (e.g., one per docker) to run multiple agents
+        -- run multiple instances (e.g., one per docker / shell session / terminal window) to run multiple agents
     """
     def __init__(
         self,
@@ -158,7 +158,6 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             options (optional): Additonal options for resetting the environment:
                 -"normalize_obs": whether or not to normalize observations (sets self.normalize_obs)
                 -"normalize_state": whether or not to normalize the global state (sets self.normalize_state)
-                -"unnorm_obs_info": whether or not to include unnormalized observations in the info dictionary
                     *note: will be overwritten and set to False if self.normalize_obs is False
         """
         self._seed(seed=seed)
@@ -177,10 +176,6 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         if options is not None:
             self.normalize_obs = options.get("normalize_obs", self.normalize_obs)
             self.normalize_state = options.get("normalize_state", self.normalize_state)
-            self.unnorm_obs_info = options.get("unnorm_obs_info", self.unnorm_obs_info)
-            if not self.normalize_obs and self.unnorm_obs_info:
-                print(f"Warning! Setting unnorm_obs_info to False because normalize_obs is False")
-                self.unnorm_obs_info = False #overwrite because unnormalized observations are already returned with obs
 
         # Get and set state information
         for player in self.players.values():
@@ -236,7 +231,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.state["obs_hist_buffer"] = {agent_id: None for agent_id in self.agents}
         self.state["obs_hist_buffer"][self._agent_name] = np.array(self.obs_hist_buffer_len * [reset_obs])
 
-        if self.unnorm_obs_info:
+        if self.normalize_obs:
             self.state["unnorm_obs_hist_buffer"] = {agent_id: None for agent_id in self.agents}
             self.state["unnorm_obs_hist_buffer"][self._agent_name] = np.array(self.obs_hist_buffer_len * [reset_unnorm_obs])
 
@@ -248,7 +243,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         # Info
         info = {}
         info["global_state"] = self._history_to_state()
-        if self.unnorm_obs_info:
+        if self.normalize_obs:
             info["unnorm_obs"] = self._history_to_obs(self._agent_name, "unnorm_obs_hist_buffer")
 
         return obs, info
@@ -277,7 +272,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
                 # or p.has_flag is None
             ]
             num_iters += 1
-            # if num_iters > 1000:
+            # if num_iters > 20:
             #     raise RuntimeError(f"No other agents connected after {num_iters*wait_time} seconds. Failing and exiting.")
 
         print("All agents connected!")
@@ -464,7 +459,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.state["obs_hist_buffer"][self._agent_name][1:] = self.state["obs_hist_buffer"][self._agent_name][:-1]
         self.state["obs_hist_buffer"][self._agent_name][0] = next_obs
 
-        if self.unnorm_obs_info:
+        if self.normalize_obs:
             self.state["unnorm_obs_hist_buffer"][self._agent_name][1:] = self.state["unnorm_obs_hist_buffer"][self._agent_name][:-1]
             self.state["unnorm_obs_hist_buffer"][self._agent_name][0] = next_unnorm_obs
 
@@ -484,7 +479,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         # Info
         info = {}
         info["global_state"] = self._history_to_state()
-        if self.unnorm_obs_info:
+        if self.normalize_obs:
             info["unnorm_obs"] = self._history_to_obs(self._agent_name, "unnorm_obs_hist_buffer")
 
         return obs, reward, terminated, truncated, info
@@ -692,11 +687,6 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
         # Observation and state parameters
         self.normalize_obs = pyquaticus_config.get("normalize_obs", pyquaticus_config_std["normalize_obs"])
-        self.unnorm_obs_info = pyquaticus_config.get("unnorm_obs_info", pyquaticus_config_std["unnorm_obs_info"])
-        if not self.normalize_obs and self.unnorm_obs_info:
-            print(f"Warning! Setting unnorm_obs_info to False because normalize_obs is False")
-            self.unnorm_obs_info = False #overwrite because unnormalized observations are already returned with obs
-
         self.short_obs_hist_length = pyquaticus_config.get("short_obs_hist_length", pyquaticus_config_std["short_obs_hist_length"])
         self.short_obs_hist_interval = pyquaticus_config.get("short_obs_hist_interval", pyquaticus_config_std["short_obs_hist_interval"])
         self.long_obs_hist_length = pyquaticus_config.get("long_obs_hist_length", pyquaticus_config_std["long_obs_hist_length"])

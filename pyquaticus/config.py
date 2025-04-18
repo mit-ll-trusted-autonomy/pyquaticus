@@ -60,6 +60,7 @@ config_dict_std = {
 
     # Game parameters
     "default_init":      True,  # Spawn agents programmatically, rather than randomly
+    # "on_sides_init":     True,  # Spawn agents on their own side of the field / scrimmage line #TODO: uncomment after 2025 AAMAS competition
     "max_score":           20,  # maximum score per episode (until a winner is declared)
     "max_time":         600.0,  # maximum time (seconds) per episode
     "tagging_cooldown":  60.0,  # cooldown on an agent (seconds) after they tag another agent, to prevent consecutive tags
