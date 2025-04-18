@@ -89,7 +89,7 @@ ProcessConfig = iM300
 	
 	max_rudder  = 50
 	max_thrust  = 100
-	drive_mode  = aggro
+	drive_mode  = normal
 	ignore_msg  = $GPGLL, $GPGSV, $GPVTG, $GPZDA, $CPALT, $CPIMU, $GPGST, $GNGLL, $GNGSV, $GNVTG, $GNZDA, $GLGSV, $GNGSA, $GNTXT
 	ignore_checksum_errors = true
 
