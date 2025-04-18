@@ -105,6 +105,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
         own_team_len = len(self._team_names) + 1
         opp_team_len = len(self._opponent_names)
+        self.team_size = own_team_len
         if own_team_len != opp_team_len:
             raise ValueError(f"Expecting equal team sizes but got: {own_team_len} and {opp_team_len}")
 
@@ -146,7 +147,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.discrete_action_map = [[spd, hdg] for (spd, hdg) in ACTION_MAP]
         self.action_space = self.get_agent_action_space(action_space, self.players[self._agent_name].idx)
 
-        self.agent_obs_normalizer, self.global_state_normalizer = self._register_state_elements(own_team_len, len(self.obstacles))
+        self.agent_obs_normalizer, self.global_state_normalizer = self._register_state_elements(self.team_size, len(self.obstacles))
         self.observation_space = self.get_agent_observation_space()
 
     def reset(self, seed=None, options: Optional[dict] = None):
