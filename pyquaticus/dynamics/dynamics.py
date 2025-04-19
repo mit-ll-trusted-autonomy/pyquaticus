@@ -286,8 +286,8 @@ class BaseUSV(Dynamics):
 
         # PID 
         self._pid_controllers = {
-            "speed": PID(dt=kwargs["dt"], kp=0.8, ki=0.11, kd=0.1, integral_limit=0.07, output_limit=max_thrust),
-            "heading": PID(dt=kwargs["dt"], kp=0.5, ki=0.012, kd=0.1, integral_limit=0.2, output_limit=max_rudder)
+            "speed": PID(dt=kwargs["dt"], kp=0.8, kd=0.1, ki=0.11, integral_limit=0.07, output_limit=max_thrust),
+            "heading": PID(dt=kwargs["dt"], kp=0.5, kd=0.1, ki=0.012, integral_limit=0.2, output_limit=max_rudder)
         }
 
     def reset(self):
@@ -466,17 +466,24 @@ class BaseUSV(Dynamics):
 
 class Heron(BaseUSV):
     """
-    Dynamics class for Clearpath Robotics Heron M300 USV (https://oceanai.mit.edu/autonomylab/pmwiki/pmwiki.php?n=Robot.Heron).
+    Dynamics class for Clearpath Robotics Heron M300 USV
     
-    Parameters for dynamics and control were provided by the MIT Marine Autonomy Lab (https://oceanai.mit.edu/pavlab/pmwiki/pmwiki.php):
-        -max_speed
-            *max(thrust_map[1])
-        -thrust_map
-        -max_thrust
-        -max_rudder
-        -turn_rate
-        -speed PID gains
-        -heading (yaw) PID gains 
+    System References:
+        (1) https://oceanai.mit.edu/autonomylab/pmwiki/pmwiki.php?n=Robot.Heron
+    
+    Parameters for dynamics and control are adapted from MOOS-IVP software/docs and missions:
+        (1) The following parameters were provided by the MIT Marine Autonomy Lab (https://oceanai.mit.edu/pavlab/pmwiki/pmwiki.php):
+            -thrust_map
+            -max_thrust
+            -max_rudder
+            -turn_rate
+            -speed PID gains
+            -heading (yaw) PID gains
+
+        (2) https://oceanai.mit.edu/svn/moos-ivp-aquaticus-oai/trunk/missions/charles-2023/meta_vehicle.moos
+                -max_speed
+                    *max_speed = max(thrust_map[1])
+                    *pHelmIvP config speed domain (0.5 buffer added for normlization)
     """
     def __init__(
         self,
@@ -504,16 +511,16 @@ class Heron(BaseUSV):
             "speed": PID(
                 dt=kwargs["dt"],
                 kp=1.0,
-                ki=0.0,
                 kd=0.0,
+                ki=0.0,
                 integral_limit=0.07,
                 output_limit=max_thrust
             ),
             "heading": PID(
                 dt=kwargs["dt"],
                 kp=0.9,
-                ki=0.3,
                 kd=0.6,
+                ki=0.3,
                 integral_limit=0.3,
                 output_limit=max_rudder
             )
@@ -522,7 +529,11 @@ class Heron(BaseUSV):
 
 class Surveyor(BaseUSV):
     """
-    Dynamics class for SeaRobotics SR-Surveyor M1.8 USV (https://www.searobotics.com/products/autonomous-surface-vehicles/sr-surveyor-class).
+    Dynamics class for SeaRobotics SR-Surveyor M1.8 USV
+
+    System References:
+        (1) https://www.searobotics.com/products/autonomous-surface-vehicles/sr-surveyor-class
+        (2) https://github.com/westpoint-robotics/mdo-hurt-s
     
     Parameters for dynamics and control are adapted from MOOS-IVP software/docs and missions:
         (1) https://oceanai.mit.edu/svn/moos-ivp-aquaticus-oai/trunk/missions/wp_2024/surveyor/meta_surveyor.moos
@@ -532,15 +543,18 @@ class Surveyor(BaseUSV):
             -heading (yaw) PID gains
 
         (2) https://oceanai.mit.edu/svn/moos-ivp-aquaticus-oai/trunk/missions/wp_2024/surveyor/plug_uSimMarine.moos
-            -max_speed
-                *max(thrust_map[1])
             -thrust_map
                 *top speed changed from 2.75 to 3.0 based on wp_2024 experimental data
             -turn_rate
             -max_acc
             -max_dec
             -rotate_speed
-                *changed from 1.0 to 0.0 to assume equal thruster capabilites in simulation   
+                *changed from 1.0 to 0.0 to assume equal thruster capabilites in simulation
+
+        (3) https://oceanai.mit.edu/svn/moos-ivp-aquaticus-oai/trunk/missions/wp_2024/surveyor/plug_pHelmIvP.moos
+            -max_speed
+                *max_speed = max(thrust_map[1])
+                *pHelmIvP config speed domain (0.5 buffer added for normlization)
     """
     def __init__(
         self,
@@ -574,16 +588,16 @@ class Surveyor(BaseUSV):
             "speed": PID(
                 dt=kwargs["dt"],
                 kp=0.5,
-                ki=0.0,
                 kd=0.0,
+                ki=0.0,
                 integral_limit=0.00,
                 output_limit=max_thrust
             ),
             "heading": PID(
                 dt=kwargs["dt"],
                 kp=1.2,
-                ki=0.0,
                 kd=3.0,
+                ki=0.0,
                 integral_limit=0.00,
                 output_limit=max_rudder
             )
@@ -622,8 +636,8 @@ class LargeUSV(BaseUSV):
 
         # PID
         self._pid_controllers = {
-            "speed": PID(dt=kwargs["dt"], kp=1.0, ki=0.0, kd=0.0, integral_limit=0.07),
-            "heading": PID(dt=kwargs["dt"], kp=0.35, ki=0.0, kd=0.07, integral_limit=0.07)
+            "speed": PID(dt=kwargs["dt"], kp=1.0, kd=0.0, ki=0.0, integral_limit=0.07, output_limit=max_thrust),
+            "heading": PID(dt=kwargs["dt"], kp=0.35, kd=0.07, ki=0.0, integral_limit=0.07, output_limit=max_rudder)
         }
 
 

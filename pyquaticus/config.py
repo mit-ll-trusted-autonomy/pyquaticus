@@ -26,16 +26,16 @@ config_dict_std = {
     "topo_contour_eps":    0.001,  # tolerance for error between approximate and true contours dividing water and land
     "agent_radius":          2.0,  # meters
 
-    # note: if different radii are desired for different agents, provide a list like:
+    # note: if different radii are desired for different agents, provide a list / tuple / array like:
     # [2.0, 4.0, 2.5, 3.5]
 
-    "flag_radius":           2.0,  # meters
+    "flag_radius":           1.5,  # meters
     "flag_keepout":          3.0,  # minimum distance (meters) between agent and flag centers
     "catch_radius":         10.0,  # distance (meters) for tagging and flag pickup
     "slip_radius":          10.0,  # meters (tolerance for reaching RRT* waypoint for auto-driving home on tag)
 
     # note 1: slip radius has no affect on any BasePolicies providing actions externally.
-    # note 2: if different radii are desired for different agents, provide a list like:
+    # note 2: if different radii are desired for different agents, provide a list / tuple / array like:
     # [40.0, 40.0, 10.0, 10.0]
 
     "n_circle_segments":       8,  # default is to approximate circles as an octagon
@@ -48,10 +48,10 @@ config_dict_std = {
     # note 4: for polygons, there is an implied edge between (xn, yn) and (x1, y1), to complete the polygon.
 
     # Dynamics parameters
-    "oob_speed_frac":     0.5,  # proportion
+    "oob_speed_frac":        0.5,  # proportion
     "dynamics":       "surveyor",  # dynamics to use for agents (from dynamics_registry.py)
 
-    # note: if different dynamics are desired for different agents, provide a list / tuple / numpy.ndarray like
+    # note: if different dynamics are desired for different agents, provide a list / tuple / array like:
     # ["heron", "large_usv", "heron", "drone", "fixed_wing", "fixed_wing"]
 
     # Simulation parameters
@@ -60,11 +60,12 @@ config_dict_std = {
 
     # Game parameters
     "default_init":      True,  # Spawn agents programmatically, rather than randomly
-    "max_score":            20,  # maximum score per episode (until a winner is declared)
+    # "on_sides_init":     True,  # Spawn agents on their own side of the field / scrimmage line #TODO: uncomment after 2025 AAMAS competition
+    "max_score":           20,  # maximum score per episode (until a winner is declared)
     "max_time":         600.0,  # maximum time (seconds) per episode
     "tagging_cooldown":  60.0,  # cooldown on an agent (seconds) after they tag another agent, to prevent consecutive tags
     "tag_on_collision": False,  # option for setting the agent to a tagged state upon collsion with an obstacle
-    "tag_on_oob":       True,  # option for setting the agent to a tagged state upon driving out-of-bounds
+    "tag_on_oob":        True,  # option for setting the agent to a tagged state upon driving out-of-bounds
 
     # Observation parameters
     "normalize_obs":        True,  # flag for normalizing the observation space
@@ -79,7 +80,7 @@ config_dict_std = {
     "num_lidar_rays":     50,  # number of rays for lidar
 
     # Global state parameters
-    "normalize_state":        True,  # flag for normalizing the global state
+    "normalize_state":       False,  # flag for normalizing the global state
     "short_state_hist_length":   1,  # number of timesteps to include for the short-term global state history
     "short_state_hist_interval": 1,  # number of steps in between entries in the short-term global state history
     "long_state_hist_length":    1,  # number of timesteps to include for the long-term global state history
@@ -104,7 +105,7 @@ config_dict_std = {
     #'history': history observations rendered
     #'traj_agent': combines 'traj' and 'agent'
     #'traj_history': combines 'traj' and 'history'
-    # note: render_traj_freq applies only to agent rendering (not trajectory lines)
+    # note: render_traj_freq applies only to agent rendering (not trajectory trails)
 
     # Miscellaneous parameters
     "suppress_numpy_warnings": True,  # option to stop numpy from printing warnings to the console

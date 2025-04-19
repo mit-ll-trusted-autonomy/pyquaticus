@@ -38,7 +38,7 @@ runtime = 120 # seconds
 def run_one_episode(env, quittable=True, render=RENDER_MODE):
     env.reset()
     full_action = {agent_id:env.action_space(agent_id).sample() for agent_id in  env.players}
-    for i in range(int(runtime/env.tau)):
+    for i in range(int(runtime/env.dt)):
         if quittable and render:
             for event in pygame.event.get():
                 if event.type == QUIT or (

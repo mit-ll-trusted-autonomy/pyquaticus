@@ -335,9 +335,9 @@ def wrap_mercator_x(wm, x_only:bool = False) -> np.ndarray:
     (will not exceed a difference in longitude of 180 degrees).
     """
     if x_only:
-        wm = np.asarray(wm).reshape(-1, 1)
+        wm = np.array(wm).reshape(-1, 1)
     else:
-        wm = np.asarray(wm).reshape(-1, 2)
+        wm = np.array(wm).reshape(-1, 2)
 
     over = wm[:, 0] > EPSG_3857_EXT_X
     while np.any(over):
@@ -363,9 +363,9 @@ def wrap_mercator_x_dist(wm, x_only:bool = False) -> np.ndarray:
     therefore will be normalized to [0, 2*EPSG_3857_EXT_X].
     """
     if x_only:
-        wm = np.asarray(wm, dtype=float).reshape(-1, 1)
+        wm = np.array(wm, dtype=float).reshape(-1, 1)
     else:
-        wm = np.asarray(wm, dtype=float).reshape(-1, 2)
+        wm = np.array(wm, dtype=float).reshape(-1, 2)
 
     under = np.where(wm[:, 0] < 0)[0]
     wm[under, 0] += 2*EPSG_3857_EXT_X
@@ -507,3 +507,31 @@ def closest_line(
         closest_line = closest_line.item()
 
     return closest_line
+
+def rigid_transform(pos, origin, rot_matrix):
+    """
+    Translate and rotate position vector(s) based on origin and rotation matrix.
+    pos can be a single point or multiple points.
+    """
+    return (np.asarray(pos) - np.asarray(origin)) @ np.asarray(rot_matrix).T
+
+def check_segment_intersections(segments, query_segment):
+    p = segments[:, 0]           # (N, 2)
+    r = segments[:, 1] - p       # (N, 2)
+
+    q = query_segment[0]         # (2,)
+    s = query_segment[1] - q     # (2,)
+
+    r_cross_s = np.cross(r, s)   # (N,)
+    q_minus_p = q - p            # (N, 2)
+
+    t = np.cross(q_minus_p, s) / r_cross_s
+    u = np.cross(q_minus_p, r) / r_cross_s
+
+    # Exclude parallel segments (r_cross_s == 0)
+    valid = ~np.isclose(r_cross_s, 0)
+
+    # Only keep those where the intersection occurs within both segments
+    intersecting = valid & (t >= 0) & (t <= 1) & (u >= 0) & (u <= 1)
+
+    return np.where(intersecting)[0]

@@ -1,0 +1,113 @@
+<tag><origin_warp>
+MOOSTimeWarp = $(WARP)
+
+// MIT Sailing Pavilion (PavLab)
+LatOrigin = 42.358436
+LongOrigin = -71.087448
+
+<tag><pHostInfo>
+//--------------------------------------------------
+// pHostInfo Config Block
+	
+ProcessConfig = pHostInfo
+{
+  AppTick     = 1
+  CommsTick   = 1
+
+  default_hostip_force = $(IP_ADDR)
+}
+
+<tag><pShare>
+//-------------------------------------------------
+// pShare Config Block 
+
+ProcessConfig = pShare
+{
+  AppTick    = 2
+  CommsTick  = 2
+
+	input = route =  $(IP_ADDR):$(PSHARE_PORT)
+}
+
+<tag><uLoadWatch>
+//-------------------------------------------------
+// uLoadWatch Config Block 
+
+ProcessConfig = uLoadWatch 
+{
+  AppTick = 4
+  CommsTick = 4
+
+  thresh = app=any,      gapthresh=1.5
+  thresh = app=iSay,     gapthresh=40.0 
+  // iSay is blocking when it plays audio, ignore unless it gets too out of hand
+}
+
+<tag><uSimMarine>
+//------------------------------------------------------
+// uSimMarine Config Block 
+
+ProcessConfig = uSimMarine
+{
+  AppTick   = 10
+  CommsTick = 10
+
+  start_pos = $(START_POS)
+  prefix    = NAV
+
+  turn_rate = 60
+  //rotate_speed = 0.012
+  //drift_x      = 0.0045
+
+  thrust_map = 0:0, 40:1, 100:2
+
+  deprecated_ok = true
+}
+
+<tag><iM300>
+//--------------------------------------------------------
+// iM300 Config Block
+	
+ProcessConfig = iM300
+{
+  AppTick    = 6
+  CommsTick  = 6
+
+	// iM300 needs to know the IP address of the M300 front seat
+	// computer, from the perspective of the PABLO. This is different
+	// than the IP of the front seat computer for users logging in from
+	// outside the vehicle.
+
+	comms_type = client
+  	port       = 29500
+	ip_addr    = $(FSEAT_IP)
+
+  warn_bad_nmea_len  = false   
+  warn_bad_nmea_form = false   
+	
+	stale_thresh = 15
+	
+	max_rudder  = 50
+	max_thrust  = 100
+	drive_mode  = normal
+	ignore_msg  = $GPGLL, $GPGSV, $GPVTG, $GPZDA, $CPALT, $CPIMU, $GPGST, $GNGLL, $GNGSV, $GNVTG, $GNZDA, $GLGSV, $GNGSA, $GNTXT
+	ignore_checksum_errors = true
+
+	max_appcast_events       = 8
+  	// max_appcast_run_warnings = 10
+
+	// heading_source options are gps, imu, or auto where auto uses imu
+	// when available and not timed out as defined in the
+	// stale_nave_msg_thresh parameter
+ 	heading_source = auto    
+
+	// threshold in seconds, default is 1.5
+	stale_gps_msg_thresh = 3
+	
+	nav_prefix 	= NAV
+	gps_prefix	= GPS
+	compass_prefix	= COMPASS
+
+	// Publish the body-relative velocities for adaptive controller
+	publish_body_vel = false				      
+}
