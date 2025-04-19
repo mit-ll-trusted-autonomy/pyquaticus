@@ -37,6 +37,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         agent_id: int,
         team: Team,
         max_speed: float,
+        aquaticus_field_points,
         continuous=True,
         mode="easy",
         flag_keepout=10.0,
@@ -57,6 +58,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             self.id,
             team,
             max_speed=max_speed,
+            aquaticus_field_points=aquaticus_field_points,
             continuous=continuous,
             mode=mode,
             using_pyquaticus=using_pyquaticus
@@ -65,6 +67,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             self.id,
             team,
             max_speed=max_speed,
+            aquaticus_field_points=aquaticus_field_points,
             continuous=continuous,
             mode=mode,
             using_pyquaticus=using_pyquaticus,

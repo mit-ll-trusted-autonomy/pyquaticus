@@ -19,12 +19,15 @@
 
 # SPDX-License-Identifier: BSD-3-Clause
 
+from typing import Union
+
 import numpy as np
 
 import pyquaticus.base_policies.base_attack as attack_policy
 import pyquaticus.base_policies.base_defend as defend_policy
 from pyquaticus.base_policies.base import BaseAgentPolicy
-from pyquaticus.envs.pyquaticus import config_dict_std, Team, PyQuaticusEnv
+from pyquaticus.envs.pyquaticus import PyQuaticusEnv, Team
+from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
 
 MODES = {"easy", "medium", "hard", "nothing"}
 
@@ -36,7 +39,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         self,
         agent_id: str,
         team: Team,
-        env: PyQuaticusEnv,
+        env: Union[PyQuaticusEnv, PyQuaticusMoosBridge],
         continuous: bool = False,
         mode="easy",
         defensiveness=20.0,
@@ -182,7 +185,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         desired_speed = self.max_speed
 
         try:
-            heading_error = self.angle180(self.vec_to_heading(direction))
+            heading_error = self.vec_to_heading(direction)
 
             if self.continuous:
                 if np.isnan(heading_error):
@@ -262,7 +265,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             )
 
         dist_to_flag = self.get_distance_between_2_points(
-            self.opp_team_density[0], self.my_flag_loc
+            self.opp_team_density[0], np.array(self.my_flag_loc)
         )
         return dist_to_flag < threshold
 
@@ -285,6 +288,6 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             )
 
         dist_to_flag = self.get_distance_between_2_points(
-            self.opp_team_density[0], self.my_flag_loc
+            self.opp_team_density[0], np.array(self.my_flag_loc)
         )
         return dist_to_flag > threshold

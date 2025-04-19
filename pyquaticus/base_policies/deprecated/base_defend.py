@@ -35,6 +35,7 @@ class BaseDefender(BaseAgentPolicy):
         agent_id: int,
         team: Team,
         max_speed: float,
+        aquaticus_field_points,
         continuous=True,
         mode: str = "easy",
         flag_keepout=10.0,
@@ -50,6 +51,7 @@ class BaseDefender(BaseAgentPolicy):
         self.catch_radius = catch_radius
         self.using_pyquaticus = using_pyquaticus
         self.goal = 'PM'
+        self.aquaticus_field_points = aquaticus_field_points
 
     def set_mode(self, mode: str):
         """Sets difficulty mode."""
@@ -133,7 +135,7 @@ class BaseDefender(BaseAgentPolicy):
                     value = value[:-1]
             if my_obs["is_tagged"]:
                 self.goal = 'SC'
-            if -2.5 <= self.get_distance_between_2_points(estimated_position, config_dict_std["aquaticus_field_points"][value]) <= 2.5:
+            if -2.5 <= self.get_distance_between_2_points(estimated_position, self.aquaticus_field_points[value]) <= 2.5:
                 if self.goal == 'SM':
                     self.goal = 'PM'
                 else:
@@ -163,7 +165,7 @@ class BaseDefender(BaseAgentPolicy):
                 else:
                     estimated_position = [my_obs["wall_3_distance"], my_obs["wall_2_distance"]]
                 point = 'CH' if self.team == Team.RED_TEAM else  'CHX'
-                if -2.5 <= self.get_distance_between_2_points(estimated_position, config_dict_std["aquaticus_field_points"][point]) <= 2.5:
+                if -2.5 <= self.get_distance_between_2_points(estimated_position, self.aquaticus_field_points[point]) <= 2.5:
                     return -1
                 else:
                     return 'CH' 

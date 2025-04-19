@@ -36,6 +36,7 @@ class BaseAttacker(BaseAgentPolicy):
         agent_id: int,
         team: Team,
         max_speed: float,
+        aquaticus_field_points,
         continuous=True,
         mode="easy",
         using_pyquaticus=True
@@ -51,6 +52,7 @@ class BaseAttacker(BaseAgentPolicy):
         self.using_pyquaticus = using_pyquaticus
         self.competition_easy = [15, 6, 50, 35]
         self.goal = 'SC'
+        self.aquaticus_field_points = aquaticus_field_points
 
     def set_mode(self, mode: str):
         """Sets difficulty mode."""
@@ -123,7 +125,7 @@ class BaseAttacker(BaseAgentPolicy):
             if my_obs["is_tagged"]:
                 self.goal = 'SC'
 
-            if -2.5 <= self.get_distance_between_2_points(estimated_position, config_dict_std["aquaticus_field_points"][value]) <= 2.5:
+            if -2.5 <= self.get_distance_between_2_points(estimated_position, self.aquaticus_field_points[value]) <= 2.5:
                 
                 if self.goal == 'SC':
                     self.goal = 'CFX'
@@ -133,7 +135,7 @@ class BaseAttacker(BaseAgentPolicy):
                     self.goal = 'CF'
                 elif self.goal == 'CF':
                     self.goal = 'SC'
-            if self.goal == 'CF' and -6 <= self.get_distance_between_2_points(estimated_position, config_dict_std["aquaticus_field_points"][value]) <= 6:
+            if self.goal == 'CF' and -6 <= self.get_distance_between_2_points(estimated_position, self.aquaticus_field_points[value]) <= 6:
                 self.goal = 'SC'
             return self.goal
         elif self.mode == "medium":
