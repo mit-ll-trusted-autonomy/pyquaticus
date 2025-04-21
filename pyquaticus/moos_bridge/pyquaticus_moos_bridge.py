@@ -428,11 +428,13 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         # Translate incoming actions and publish them
         else:
             if not self.act_space_checked:
-                self.act_space_match = self.action_space.contains(action)
+                self.act_space_match = self.action_space.contains(
+                    np.asarray(action, dtype=self.action_space.dtype)
+                )
                 self.act_space_checked = True
 
                 if not self.act_space_match:
-                    print(f"Warning! Action passed in for {self._agent_name} is not contained in agent's action space ({self.action_space}).")
+                    print(f"Warning! Action passed in for {self._agent_name} ({action}) is not contained in agent's action space ({self.action_space}).")
                     print(f"Auto-detecting action space for {self._agent_name}")
 
             desired_spd, rel_hdg = self._to_speed_heading(

@@ -206,8 +206,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                 speed = raw_action[0]
                 rel_heading = raw_action[1]
             # Discrete action space
-            if act_space_str == "discrete":    
-                speed, rel_heading = self._discrete_action_to_speed_relheading(raw_action, player)
+            elif act_space_str == "discrete":    
+                speed, rel_heading = self._discrete_action_to_speed_relheading(raw_action)
                 speed = self.max_speeds[player.idx] * speed #scale speed to agent's max speed
             # Aquaticus point field
             else:
@@ -1111,18 +1111,20 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         for player in self.players.values():
             if player.id in raw_action_dict:
                 if not self.act_space_checked[player.id]:
-                    self.act_space_match[player.id] = self.action_spaces[player.id].contains(raw_action)
+                    self.act_space_match[player.id] = self.action_spaces[player.id].contains(
+                        np.asarray(raw_action_dict[player.id], dtype=self.action_spaces[player.id].dtype)
+                    )
                     self.act_space_checked[player.id] = True
 
                     if not self.act_space_match[player.id]:
-                        print(f"Warning! Action passed in for {player.id} is not contained in agent's action space ({self.action_spaces[player.id]}).")
+                        print(f"Warning! Action passed in for {player.id} ({raw_action_dict[player.id]}) is not contained in agent's action space ({self.action_spaces[player.id]}).")
                         print(f"Auto-detecting action space for {player.id}")
 
                 speed, rel_heading = self._to_speed_heading(
                     raw_action=raw_action_dict[player.id],
                     player=player,
                     act_space_match=self.act_space_match[player.id],
-                    act_space_str=self.self.act_space_str[player.id]
+                    act_space_str=self.act_space_str[player.id]
                 )
             else:
                 #if no action provided, no-op
@@ -4449,7 +4451,7 @@ when gps environment bounds are specified in meters"
         if isinstance(val, (list, tuple, np.ndarray)):
             if len(val) != 2*self.team_size:
                 raise Exception(f"{name} list incorrect length")
-        elif isinstace(val, dict):
+        elif isinstance(val, dict):
             if dtype is dict:
                 for agent_id in self.players:
                     if agent_id not in val:
@@ -4464,6 +4466,10 @@ when gps environment bounds are specified in meters"
                         raise Exception(f"No value for {agent_id} in {name} {str(type(val))[8:-2]}")
                 val = temp_val
         else:
-            val = [val for _ in range(2*self.team_size)]
+            if dtype is dict:
+                val = {agent_id: val for agent_id in self.players}
+                return val
+            else:
+                val = [val for _ in range(2*self.team_size)]
 
         return np.array(val, dtype=dtype)
