@@ -145,7 +145,10 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
         # Setup action and observation spaces
         self.discrete_action_map = [[spd, hdg] for (spd, hdg) in ACTION_MAP]
-        self.action_space = self.get_agent_action_space(action_space, self.players[self._agent_name].idx)
+        self.act_space_str = action_space
+        self.action_space = self.get_agent_action_space(self.act_space_str, self.players[self._agent_name].idx)
+        self.act_space_checked = False
+        self.act_space_match = True
 
         self.agent_obs_normalizer, self.global_state_normalizer = self._register_state_elements(self.team_size, len(self.obstacles))
         self.observation_space = self.get_agent_observation_space()
@@ -424,7 +427,20 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
         # Translate incoming actions and publish them
         else:
-            desired_spd, rel_hdg = self._to_speed_heading(agent, action)
+            if not self.act_space_checked:
+                self.act_space_match = self.action_space.contains(action)
+                self.act_space_checked = True
+
+                if not self.act_space_match:
+                    print(f"Warning! Action passed in for {self._agent_name} is not contained in agent's action space ({self.action_space}).")
+                    print(f"Auto-detecting action space for {self._agent_name}")
+
+            desired_spd, rel_hdg = self._to_speed_heading(
+                raw_action=action,
+                player=agent,
+                act_space_match=self.act_space_match,
+                act_space_str=self.self.act_space_str
+            )
             desired_hdg = self._relheading_to_global_heading(agent.heading, rel_hdg)
 
             #notify the moos agent that we're controlling it directly

@@ -187,12 +187,12 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             random.seed(seed)
             self._np_random, self._np_random_seed = seeding.np_random(seed)
 
-    def _to_speed_heading(self, agent, raw_action):
+    def _to_speed_heading(self, raw_action, player, act_space_match, act_space_str):
         """
         Processes the raw action for a player object (acge)
 
         Args:
-            agent: Player object
+            player: Player object
             raw_action: discrete (int), continuous (array), or afp (str) action
 
         Returns:
@@ -200,41 +200,57 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             Note: we use relative heading here so that it can be used directly
                   as the heading error in the PID controller
         """
-        # Continuous actions
-        if isinstance(raw_action, (list, tuple, np.ndarray)):
-            speed = raw_action[0]
-            rel_heading = raw_action[1]
-
-        # Aquaticus point field
-        elif isinstance(raw_action, str):
-            #make aquaticus point field the same on both blue and red sides
-            if agent.team == Team.RED_TEAM:
-                if "P" in raw_action:
-                    raw_action = "S" + raw_action[1:]
-                elif "S" in raw_action:
-                    raw_action = "P" + raw_action[1:]
-                if "X" not in raw_action and raw_action not in ["SC", "CC", "PC"]:
-                    raw_action += "X"
-                elif raw_action not in ["SC", "CC", "PC"]:
-                    raw_action = raw_action[:-1]
-
-            _, rel_heading = mag_bearing_to(
-                agent.pos, self.aquaticus_field_points[raw_action], agent.heading
-            )
-            if self.get_distance_between_2_points(agent.pos, self.aquaticus_field_points[raw_action]) <= self.agent_radius[agent.idx]:
-                speed = 0.0
+        if act_space_match:
+            # Continuous actions
+            if act_space_str == "continuous":
+                speed = raw_action[0]
+                rel_heading = raw_action[1]
+            # Discrete action space
+            if act_space_str == "discrete":    
+                speed, rel_heading = self._discrete_action_to_speed_relheading(raw_action, player)
+                speed = self.max_speeds[player.idx] * speed #scale speed to agent's max speed
+            # Aquaticus point field
             else:
-                speed = self.max_speeds[agent.idx]
-
-        # Discrete action space
+                speed, rel_heading = self._afp_to_speed_relheading(raw_action, player)
         else:
-            speed, rel_heading = self._discrete_action_to_speed_relheading(raw_action)
-            speed = self.max_speeds[agent.idx] * speed #scale speed to agent's max speed
+            # Continuous actions
+            if isinstance(raw_action, (list, tuple, np.ndarray)):
+                speed = raw_action[0]
+                rel_heading = raw_action[1]
+            # Aquaticus point field
+            elif isinstance(raw_action, str):
+                speed, rel_heading = self._afp_to_speed_relheading(raw_action, player)
+            # Discrete action space
+            else:
+                speed, rel_heading = self._discrete_action_to_speed_relheading(raw_action)
+                speed = self.max_speeds[player.idx] * speed #scale speed to agent's max speed
 
         return speed, rel_heading
 
     def _discrete_action_to_speed_relheading(self, action):
         return self.discrete_action_map[action]
+
+    def _afp_to_speed_relheading(self, raw_action, agent):
+        #make aquaticus point field the same on both blue and red sides
+        if agent.team == Team.RED_TEAM:
+            if "P" in raw_action:
+                raw_action = "S" + raw_action[1:]
+            elif "S" in raw_action:
+                raw_action = "P" + raw_action[1:]
+            if "X" not in raw_action and raw_action not in ["SC", "CC", "PC"]:
+                raw_action += "X"
+            elif raw_action not in ["SC", "CC", "PC"]:
+                raw_action = raw_action[:-1]
+
+        _, rel_heading = mag_bearing_to(
+            agent.pos, self.aquaticus_field_points[raw_action], agent.heading
+        )
+        if self.get_distance_between_2_points(agent.pos, self.aquaticus_field_points[raw_action]) <= self.agent_radius[agent.idx]:
+            speed = 0.0
+        else:
+            speed = self.max_speeds[agent.idx]
+
+        return speed, rel_heading
 
     def _relheading_to_global_heading(self, player_heading, relheading):
         return angle180((player_heading + relheading) % 360)
@@ -911,7 +927,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     def __init__(
         self,
         team_size: int = 1,
-        action_space: Union[str, list[str]] = "discrete",
+        action_space: Union[str, list[str], dict[str, str]] = "discrete",
         reward_config: dict = None,
         config_dict = config_dict_std,
         render_mode: Optional[str] = None
@@ -1008,9 +1024,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.set_geom_config(config_dict)
 
         # Setup action and observation spaces
-        action_space = self.multiagent_var(action_space, str, "action_space")
         self.discrete_action_map = [[spd, hdg] for (spd, hdg) in ACTION_MAP]
-        self.action_spaces = {agent_id: self.get_agent_action_space(action_space[i], i) for i, agent_id in enumerate(self.players)}
+        self.act_space_str = self.multiagent_var(action_space, dict, "action_space")
+        self.action_spaces = {agent_id: self.get_agent_action_space(self.act_space_str[agent_id], i) for i, agent_id in enumerate(self.players)}
+        self.act_space_checked = {agent_id: False for agent_id in self.players}
+        self.act_space_match = {agent_id: True for agent_id in self.players}
 
         self.agent_obs_normalizer, self.global_state_normalizer = self._register_state_elements(team_size, len(self.obstacles))
         self.observation_spaces = {agent_id: self.get_agent_observation_space() for agent_id in self.players}
@@ -1092,7 +1110,20 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         action_dict = {}
         for player in self.players.values():
             if player.id in raw_action_dict:
-                speed, rel_heading = self._to_speed_heading(player, raw_action_dict[player.id])
+                if not self.act_space_checked[player.id]:
+                    self.act_space_match[player.id] = self.action_spaces[player.id].contains(raw_action)
+                    self.act_space_checked[player.id] = True
+
+                    if not self.act_space_match[player.id]:
+                        print(f"Warning! Action passed in for {player.id} is not contained in agent's action space ({self.action_spaces[player.id]}).")
+                        print(f"Auto-detecting action space for {player.id}")
+
+                speed, rel_heading = self._to_speed_heading(
+                    raw_action=raw_action_dict[player.id],
+                    player=player,
+                    act_space_match=self.act_space_match[player.id],
+                    act_space_str=self.self.act_space_str[player.id]
+                )
             else:
                 #if no action provided, no-op
                 speed, rel_heading = 0.0, 0.0
@@ -4412,12 +4443,26 @@ when gps environment bounds are specified in meters"
     def multiagent_var(self, val, dtype, name:str):
         """
         val: variable value
-        dtype: built-in data type to create array with
+        dtype: built-in data type to create multiagent variable with
         name: variable name
         """
         if isinstance(val, (list, tuple, np.ndarray)):
             if len(val) != 2*self.team_size:
                 raise Exception(f"{name} list incorrect length")
+        elif isinstace(val, dict):
+            if dtype is dict:
+                for agent_id in self.players:
+                    if agent_id not in val:
+                        raise Exception(f"No value for {agent_id} in {name} {str(type(val))[8:-2]}")
+                return val
+            else:
+                temp_val = [None for _ in self.agents]
+                for agent_id, player in self.players.items():
+                    if agent_id in val:
+                        temp_val[player.idx] = val[agent_id]
+                    else:
+                        raise Exception(f"No value for {agent_id} in {name} {str(type(val))[8:-2]}")
+                val = temp_val
         else:
             val = [val for _ in range(2*self.team_size)]
 
