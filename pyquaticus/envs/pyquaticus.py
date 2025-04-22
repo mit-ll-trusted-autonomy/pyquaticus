@@ -2313,25 +2313,29 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         """Check all of the end game conditions."""
         blue_scores = self.game_events[Team.BLUE_TEAM]['scores']
         red_scores = self.game_events[Team.RED_TEAM]['scores']
-        
+        final_score_msg = f"Final score: {blue_scores}\u2013{red_scores} (Blue\u2013Red). "
+
         if (blue_scores == self.max_score) and (red_scores != self.max_score):
             self.dones["blue"] = True
             self.dones["__all__"] = True
-            self.message = "Blue Wins! Red Loses"
+            self.message = "Blue Wins!"
 
         elif red_scores == self.max_score:
             self.dones["red"] = True
             self.dones["__all__"] = True
-            self.message = "Red Wins! Blue Loses"
+            self.message = "Red Wins!"
 
         elif self.current_time > self.max_time or np.isclose(self.current_time, self.max_time):
             self.dones["__all__"] = True
             if blue_scores > red_scores:
-                self.message = "Blue Wins! Red Loses"
+                self.message = "Blue Wins!"
             elif blue_scores < red_scores:
-                self.message = "Red Wins! Blue Loses"
+                self.message = "Red Wins!"
             else:
-                self.message = "Game Over. No Winner"
+                self.message = "No Winner"
+
+        if self.dones["__all__"]:
+            self.message = final_score_msg + self.message
 
     def compute_rewards(self, agent_id, team):
         if self.reward_config[agent_id] is None:
@@ -2607,9 +2611,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             "flag_home":                 np.array(flag_homes),
             "flag_position":             np.array(flag_homes),
             "flag_taken":                np.zeros(len(self.flags), dtype=bool),
-            "captures":                  np.zeros(len(self.agents_of_team)),
-            "tags":                      np.zeros(len(self.agents_of_team)),
-            "grabs":                     np.zeros(len(self.agents_of_team)),
+            "captures":                  np.zeros(len(self.agents_of_team), dtype=int),
+            "tags":                      np.zeros(len(self.agents_of_team), dtype=int),
+            "grabs":                     np.zeros(len(self.agents_of_team), dtype=int),
             "agent_collisions":          np.zeros(len(self.players), dtype=int), #total number of collisions per agent
         }
 
