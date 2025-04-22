@@ -1119,6 +1119,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     if not self.act_space_match[player.id]:
                         print(f"Warning! Action passed in for {player.id} ({raw_action_dict[player.id]}) is not contained in agent's action space ({self.action_spaces[player.id]}).")
                         print(f"Auto-detecting action space for {player.id}")
+                        print()
 
                 speed, rel_heading = self._to_speed_heading(
                     raw_action=raw_action_dict[player.id],
@@ -2479,7 +2480,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self._set_game_events_from_state()
             for player in self.players.values():
                 player.reset() #reset agent-specific dynamics
-            
+
             self.state['agent_dynamics'] = np.array([player.state for player in self.players.values()])
 
             # run event checks

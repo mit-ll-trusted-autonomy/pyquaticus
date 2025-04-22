@@ -436,6 +436,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
                 if not self.act_space_match:
                     print(f"Warning! Action passed in for {self._agent_name} ({action}) is not contained in agent's action space ({self.action_space}).")
                     print(f"Auto-detecting action space for {self._agent_name}")
+                    print()
 
             desired_spd, rel_hdg = self._to_speed_heading(
                 raw_action=action,
