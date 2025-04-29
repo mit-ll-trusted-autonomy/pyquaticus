@@ -20,6 +20,8 @@ config_dict["max_time"] = 600.0
 config_dict["max_score"] = 100
 config_dict["sim_speedup_factor"] = 16
 config_dict["normalize_obs"] = False
+config_dict["normalize_state"] = True
+config_dict["render_agent_ids"] = True
 
 env = pyquaticus_v0.PyQuaticusEnv(
     team_size=2, config_dict=config_dict, render_mode="human"
@@ -37,37 +39,48 @@ r_one_old = OldBaseAttacker(
     "agent_2",
     Team.RED_TEAM,
     3,
-    mode="hard",
+    mode="nothing",
     continuous=True,
     aquaticus_field_points=env.aquaticus_field_points,
 )
 r_one_new = BaseAttacker(
-    "agent_2", Team.RED_TEAM, env, mode="hard", continuous=True
+    "agent_2", Team.RED_TEAM, env, mode="nothing", continuous=True
 )
 
 r_two_old = OldBaseDefender(
     "agent_3",
     Team.RED_TEAM,
     3,
-    mode="hard",
+    mode="nothing",
     continuous=True,
     flag_keepout=env.flag_keepout_radius,
     aquaticus_field_points=env.aquaticus_field_points,
 )
 r_two = BaseDefender(
-    "agent_3", Team.RED_TEAM, env, mode="hard", continuous=True
+    "agent_3", Team.RED_TEAM, env, mode="nothing", continuous=True
 )
 
-b_one_old = OldHeuristicAgent(
+# b_one_old = OldHeuristicAgent(
+#     "agent_0",
+#     Team.BLUE_TEAM,
+#     3,
+#     aquaticus_field_points=env.aquaticus_field_points,
+#     mode="nothing",
+#     continuous=True,
+# )
+# b_one = Heuristic_CTF_Agent(
+#     "agent_0", Team.BLUE_TEAM, env, mode="nothing", continuous=True
+# )
+b_one_old = OldBaseDefender(
     "agent_0",
     Team.BLUE_TEAM,
     3,
     aquaticus_field_points=env.aquaticus_field_points,
-    mode="hard",
+    mode="nothing",
     continuous=True,
 )
-b_one = Heuristic_CTF_Agent(
-    "agent_0", Team.BLUE_TEAM, env, mode="hard", continuous=True
+b_one = BaseDefender(
+    "agent_0", Team.BLUE_TEAM, env, mode="nothing", continuous=True
 )
 b_two = KeyAgent()
 step = 0

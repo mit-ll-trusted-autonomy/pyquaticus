@@ -26,6 +26,7 @@ import numpy as np
 from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import PyQuaticusEnv, Team
 from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
+from pyquaticus.utils.utils import dist
 
 MODES = {"nothing", "easy", "medium", "hard", "competition_easy", "competition_medium"}
 
@@ -155,7 +156,7 @@ class BaseDefender(BaseAgentPolicy):
             if self.is_tagged:
                 self.goal = "SC"
             if (
-                self.get_distance_between_2_points(
+                dist(
                     estimated_position, self.aquaticus_field_points[value]
                 )
                 <= 2.5
@@ -211,7 +212,7 @@ class BaseDefender(BaseAgentPolicy):
                     )
                 point = "CH" if self.team == Team.RED_TEAM else "CHX"
                 if (
-                    self.get_distance_between_2_points(
+                    dist(
                         estimated_position,
                         self.aquaticus_field_points[point],
                     )
@@ -363,7 +364,7 @@ class BaseDefender(BaseAgentPolicy):
                 enemy_loc = self.rb_to_rect(self.opp_team_pos_dict[closest_enemy])
 
             if not self.opp_team_has_flag:
-                enemy_dist_2_flag = self.get_distance_between_2_points(
+                enemy_dist_2_flag = dist(
                     np.array(self.my_flag_loc), enemy_loc
                 )
                 unit_flag_enemy = self.unit_vect_between_points(
@@ -371,7 +372,7 @@ class BaseDefender(BaseAgentPolicy):
                 )
                 defend_pt = self.my_flag_loc + (enemy_dist_2_flag / 2) * unit_flag_enemy
 
-                defend_pt_flag_dist = self.get_distance_between_2_points(
+                defend_pt_flag_dist = dist(
                     defend_pt, np.array(self.my_flag_loc)
                 )
                 unit_def_flag = self.unit_vect_between_points(

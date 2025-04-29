@@ -320,6 +320,8 @@ class BaseDefender(BaseAgentPolicy):
                 act_index = 4
 
         if self.continuous:
+            if self.mode == "nothing":
+                return [0, 0]
             speed = self.max_speed * ACTION_MAP[act_index][0]
             return [speed, act_heading]
         else:

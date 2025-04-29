@@ -26,6 +26,8 @@ import numpy as np
 from pyquaticus.envs.pyquaticus import PyQuaticusEnv, Team
 from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
 
+from pyquaticus.utils.utils import angle180, dist
+
 
 class BaseAgentPolicy:
     """
@@ -59,18 +61,18 @@ class BaseAgentPolicy:
         # Make sure own id is not in teammate_ids
         agents_per_team = env.team_size
         if team == Team.BLUE_TEAM:
-            self.teammate_idxs = [i for i in range(agents_per_team) if i != self.idx]
+            # self.teammate_idxs = [i for i in range(agents_per_team) if i != self.idx]
             self.teammate_ids = env.agent_ids_of_team[Team.BLUE_TEAM]
-            self.opponent_idxs = [
-                i for i in range(agents_per_team, 2 * agents_per_team)
-            ]
+            # self.opponent_idxs = [
+            #     i for i in range(agents_per_team, 2 * agents_per_team)
+            # ]
             self.opponent_ids = env.agent_ids_of_team[Team.RED_TEAM]
         else:
-            self.teammate_idxs = [
-                i for i in range(agents_per_team, 2 * agents_per_team) if i != self.idx
-            ]
+            # self.teammate_idxs = [
+            #     i for i in range(agents_per_team, 2 * agents_per_team) if i != self.idx
+            # ]
             self.teammate_ids = env.agent_ids_of_team[Team.RED_TEAM]
-            self.opponent_idxs = [i for i in range(agents_per_team)]
+            # self.opponent_idxs = [i for i in range(agents_per_team)]
             self.opponent_ids = env.agent_ids_of_team[Team.BLUE_TEAM]
 
         self.max_speed = env.players[self.id].get_max_speed()
@@ -103,6 +105,9 @@ class BaseAgentPolicy:
         Method to convert the gym obs and info into data more relative to the
         agent.
 
+        Note: all rectangular positions are in the ego agent's local coordinate frame.
+        Note: all bearings are relative, measured in degrees clockwise from the ego agent's heading.
+
         Args:
             obs: observation from gym
             info: info from gym
@@ -110,6 +115,11 @@ class BaseAgentPolicy:
         unnorm_obs = info[self.id].get("unnorm_obs", None)
         if unnorm_obs is None:
             unnorm_obs = obs[self.id]
+
+        global_state = info[self.id]["global_state"]
+        if not isinstance(global_state, dict):
+            global_state = self.state_normalizer.unnormalized(global_state)
+        print(global_state)
 
         self.opp_team_pos = []
         self.opp_team_pos_dict = {}  # for labeling by agent_id
@@ -121,14 +131,15 @@ class BaseAgentPolicy:
         opp_team_ids = set()
         my_team_ids = set()
 
-        # Copy this agents state from the observation
-        self.speed = unnorm_obs["speed"]
-        self.on_sides = unnorm_obs["on_side"]
-        self.has_flag = unnorm_obs["has_flag"]
-        self.tagging_cooldown = unnorm_obs["tagging_cooldown"]
-        self.is_tagged = unnorm_obs["is_tagged"]
+        # Copy this agents state from the global state
+        self.speed = global_state[(self.id, "speed")]
+        self.on_sides = global_state[(self.id, "on_side")]
+        self.has_flag = global_state[(self.id, "has_flag")]
+        self.tagging_cooldown = global_state[(self.id, "tagging_cooldown")]
+        self.is_tagged = global_state[(self.id, "is_tagged")]
 
         # Calculate the rectangular coordinates for the flags location relative to the agent.
+        team_str = self.team.name.lower().split("_")[0]
         self.my_flag_distance = unnorm_obs["own_home_distance"]
         self.my_flag_bearing = unnorm_obs["own_home_bearing"]
         self.my_flag_loc = (
@@ -137,7 +148,18 @@ class BaseAgentPolicy:
             unnorm_obs["own_home_distance"]
             * np.sin(np.deg2rad(unnorm_obs["own_home_bearing"])),
         )
+        self.new_my_flag_distance = dist(
+            global_state[(self.id, "pos")], global_state[team_str + "_flag_pos"]
+        )
+        self.new_my_flag_bearing = angle180(
+            self.global_rect_to_abs_bearing(
+                global_state[team_str + "_flag_pos"] - global_state[(self.id, "pos")]
+            )
+            - global_state[(self.id, "heading")]
+        )
+        self.new_my_flag_loc = self.dist_rel_bearing_to_local_rect(self.new_my_flag_distance, self.new_my_flag_bearing)
 
+        opp_str = "red" if team_str == "blue" else "blue"
         self.opp_flag_distance = unnorm_obs["opponent_home_distance"]
         self.opp_flag_bearing = unnorm_obs["opponent_home_bearing"]
         self.opp_flag_loc = (
@@ -146,6 +168,16 @@ class BaseAgentPolicy:
             unnorm_obs["opponent_home_distance"]
             * np.sin(np.deg2rad(unnorm_obs["opponent_home_bearing"])),
         )
+        self.new_opp_flag_distance = dist(
+            global_state[(self.id, "pos")], global_state[opp_str + "_flag_pos"]
+        )
+        self.new_opp_flag_bearing = angle180(
+            self.global_rect_to_abs_bearing(
+                global_state[opp_str + "_flag_pos"] - global_state[(self.id, "pos")]
+            )
+            - global_state[(self.id, "heading")]
+        )
+        self.new_opp_flag_loc = self.dist_rel_bearing_to_local_rect(self.new_opp_flag_distance, self.new_opp_flag_bearing)
 
         self.home = (
             unnorm_obs["own_home_distance"]
@@ -153,6 +185,16 @@ class BaseAgentPolicy:
             unnorm_obs["own_home_distance"]
             * np.sin(np.deg2rad(unnorm_obs["own_home_bearing"])),
         )
+        self.new_home_distance = dist(
+            global_state[(self.id, "pos")], global_state[team_str + "_flag_home"]
+        )
+        self.new_home_bearing = angle180(
+            self.global_rect_to_abs_bearing(
+                global_state[team_str + "_flag_home"] - global_state[(self.id, "pos")]
+            )
+            - global_state[(self.id, "heading")]
+        )
+        self.new_home_loc = self.dist_rel_bearing_to_local_rect(self.new_home_distance, self.new_home_bearing)
 
         # Copy the polar positions of each agent, separated by team and get their tag status
         # Update flag positions if picked up
@@ -200,32 +242,26 @@ class BaseAgentPolicy:
                             * np.sin(np.deg2rad(unnorm_obs[(k[0], "bearing")])),
                         )
                     self.my_team_tag.append(unnorm_obs[(k[0], "is_tagged")])
+        if self.id == "agent_0":
+            print(self.my_team_pos)
 
-            # update opponent flag position if flag has been picked up by agent
-            if self.has_flag:
-                self.opp_flag_distance = 0.0
-                self.opp_flag_bearing = 0.0
-                self.opp_flag_loc = (0.0, 0.0)
+        # update opponent flag position if flag has been picked up by agent
+        if self.has_flag:
+            self.opp_flag_distance = 0.0
+            self.opp_flag_bearing = 0.0
+            self.opp_flag_loc = (0.0, 0.0)
 
-            # Get wall distances and bearings
-            self.wall_distances = []
-            self.wall_bearings = []
-            for i in range(4):
-                self.wall_distances.append(unnorm_obs[f"wall_{i}_distance"])
-                self.wall_bearings.append(unnorm_obs[f"wall_{i}_bearing"])
-
-    def angle180(self, deg):
-        """Rotates an angle to be between -180 and +180 degrees."""
-        while deg > 180:
-            deg -= 360
-        while deg < -180:
-            deg += 360
-        return deg
+        # Get wall distances and bearings
+        self.wall_distances = []
+        self.wall_bearings = []
+        for i in range(4):
+            self.wall_distances.append(unnorm_obs[f"wall_{i}_distance"])
+            self.wall_bearings.append(unnorm_obs[f"wall_{i}_bearing"])
 
     def vec_to_heading(self, vec):
         """Converts a vector to a magnitude and heading (deg)."""
         angle = np.degrees(np.arctan2(vec[1], vec[0]))
-        return self.angle180(angle)
+        return angle180(angle)
 
     def bearing_to_vec(self, heading):
         return [np.cos(np.deg2rad(heading)), np.sin(np.deg2rad(heading))]
@@ -274,69 +310,27 @@ class BaseAgentPolicy:
 
         return final_avoid_unit_vect
 
-    def unit_vect_between_points(self, start: np.ndarray, end: np.ndarray):
+    @staticmethod
+    def unit_vect_between_points(start: np.ndarray, end: np.ndarray):
         """Calculates the unit vector between two rectangular points."""
-        norm = self.get_distance_between_2_points(start, end)
-        vect = np.asarray((end[0] - start[0], end[1] - start[1]))
+        norm = np.linalg.norm(start - end)
+        vect = end - start
         unit_vect = np.divide(vect, norm)
-        return unit_vect
+        return (end - start) / np.linalg.norm(end - start)
 
-    def gaussian_unit_vect_between_points(self, start: np.ndarray, end: np.ndarray):
-        """Calculates the gaussian unit vector between points."""
-        noisy_end_x = np.random.normal(end[0], 5)
-        noisy_end_y = np.random.normal(end[1], 5)
-        new_end = np.array([noisy_end_x, noisy_end_y])
-        norm = self.get_distance_between_2_points(start, new_end)
-        vect = np.asarray((new_end[0] - start[0], new_end[1] - start[1]))
-        unit_vect = np.divide(vect, norm)
-        return unit_vect
-
-    def action_from_vector(self, vector):
+    def action_from_vector(self, vector, desired_speed):
         """Returns the action from a vector."""
         return vector
 
-    def distance_between(self, a: tuple[float, float], b: tuple[float, float]):
-        """Calculate the distance between two polar coordinates."""
-        ra = a[0]
-        rb = b[0]
-        ta = a[1]
-        tb = b[1]
-        r_ab_sq = (ra * ra) + (rb * rb)
-        dist_sq = r_ab_sq - 2 * ra * rb * np.cos(np.deg2rad(tb - ta))
-        return np.sqrt(dist_sq)
+    @staticmethod
+    def global_rect_to_abs_bearing(vec):
+        return 90 - np.degrees(np.arctan2(vec[1], vec[0]))
+    
+    @staticmethod
+    def dist_rel_bearing_to_local_rect(dist, rel_bearing):
+        return dist * BaseAgentPolicy.rel_bearing_to_local_unit_rect(rel_bearing)
 
-    def get_distance_between_2_points(self, start: np.ndarray, end: np.ndarray):
-        """Calculates the distance between two rectagular points."""
-        return np.linalg.norm(start - end)
-
-    def closest_point_on_line(self, A, B, P):
-        """
-        Calculates the closest point to point `P` on a line between `A` and `B`.
-
-        Args:
-            A: One point on the line (x, y)
-            B: Other point on the line (x, y)
-            P: The goal point, the point that we want to find the closest point
-                on the line of AB
-        Returns:
-            The point (x, y) on the line AB closest to point P
-        """
-        A = np.array(A)
-        B = np.array(B)
-        P = np.array(P)
-
-        v_AB = B - A
-        v_AP = P - A
-        len_AB = np.linalg.norm(v_AB)
-        unit_AB = v_AB / len_AB
-        v_AB_AP = np.dot(v_AP, v_AB)
-        proj_dist = np.divide(v_AB_AP, len_AB)
-
-        if proj_dist <= 0.0:
-            return A
-        elif proj_dist >= len_AB:
-            return B
-        else:
-            return np.asarray(
-                [A[0] + (unit_AB[0] * proj_dist), A[1] + (unit_AB[1] * proj_dist)]
-            )
+    @staticmethod
+    def rel_bearing_to_local_unit_rect(rel_bearing):
+        rad = np.deg2rad(rel_bearing)
+        return np.array((np.sin(rad), np.cos(rad)))

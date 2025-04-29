@@ -27,6 +27,8 @@ from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import PyQuaticusEnv, Team
 from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
 
+from pyquaticus.utils.utils import dist
+
 MODES = {"nothing", "easy", "medium", "hard", "competition_easy", "competition_medium"}
 
 
@@ -156,7 +158,7 @@ class BaseAttacker(BaseAgentPolicy):
                 self.goal = "SC"
             if (
                 -2.5
-                <= self.get_distance_between_2_points(
+                <= dist(
                     estimated_position, self.aquaticus_field_points[value]
                 )
                 <= 2.5
@@ -172,7 +174,7 @@ class BaseAttacker(BaseAgentPolicy):
             if (
                 self.goal == "CF"
                 and -6
-                <= self.get_distance_between_2_points(
+                <= dist(
                     estimated_position, self.aquaticus_field_points[value]
                 )
                 <= 6

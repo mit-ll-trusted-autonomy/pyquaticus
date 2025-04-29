@@ -28,6 +28,7 @@ import pyquaticus.base_policies.base_defend as defend_policy
 from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import PyQuaticusEnv, Team
 from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
+from pyquaticus.utils.utils import dist
 
 MODES = {"easy", "medium", "hard", "nothing"}
 
@@ -264,7 +265,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
                 "Must call update_state() before trying to get an action."
             )
 
-        dist_to_flag = self.get_distance_between_2_points(
+        dist_to_flag = dist(
             self.opp_team_density[0], np.array(self.my_flag_loc)
         )
         return dist_to_flag < threshold
@@ -287,7 +288,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
                 "Must call update_state() before trying to get an action."
             )
 
-        dist_to_flag = self.get_distance_between_2_points(
+        dist_to_flag = dist(
             self.opp_team_density[0], np.array(self.my_flag_loc)
         )
         return dist_to_flag > threshold
