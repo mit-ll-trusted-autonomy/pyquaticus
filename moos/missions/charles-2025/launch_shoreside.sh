@@ -24,7 +24,7 @@ VTEAM2="blue"
 CID=000 # Competiton id
 LOGPATH=./
 FLD_ANG=""
-VNAMES="red_one:red_two:blue_one:blue_two"
+VNAMES="red_one:red_two:red_three:blue_one:blue_two:blue_three"
 
 #-------------------------------------------------------
 #  Part 2: Check for and handle command-line arguments

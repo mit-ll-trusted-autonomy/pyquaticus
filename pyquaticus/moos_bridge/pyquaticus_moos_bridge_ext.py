@@ -76,7 +76,7 @@ class PyQuaticusMoosBridgeFullObs(PyQuaticusMoosBridge):
                 reset_obs, reset_unnorm_obs = self.state_to_obs(agent_id, self.normalize_obs)
                 self.state["obs_hist_buffer"][agent_id] = np.array(self.obs_hist_buffer_len * [reset_obs])
 
-                if self.unnorm_obs_info:
+                if self.normalize_obs:
                     self.state["unnorm_obs_hist_buffer"][agent_id] = np.array(self.obs_hist_buffer_len * [reset_unnorm_obs])
 
         obs = {
@@ -89,7 +89,7 @@ class PyQuaticusMoosBridgeFullObs(PyQuaticusMoosBridge):
         # Info
         info = {}
         info["global_state"] = agent_info["global_state"]
-        if self.unnorm_obs_info:
+        if self.normalize_obs:
             info["unnorm_obs"] = {
                 agent_id: self._history_to_obs(agent_id, "unnorm_obs_hist_buffer")
                 if agent_id != self._agent_name
@@ -110,7 +110,7 @@ class PyQuaticusMoosBridgeFullObs(PyQuaticusMoosBridge):
                 self.state["obs_hist_buffer"][agent_id][1:] = self.state["obs_hist_buffer"][agent_id][:-1]
                 self.state["obs_hist_buffer"][agent_id][0] = next_obs
 
-                if self.unnorm_obs_info:
+                if self.normalize_obs:
                     self.state["unnorm_obs_hist_buffer"][agent_id][1:] = self.state["unnorm_obs_hist_buffer"][agent_id][:-1]
                     self.state["unnorm_obs_hist_buffer"][agent_id][0] = next_unnorm_obs
 
@@ -124,7 +124,7 @@ class PyQuaticusMoosBridgeFullObs(PyQuaticusMoosBridge):
         # Info
         info = {}
         info["global_state"] = agent_info["global_state"]
-        if self.unnorm_obs_info:
+        if self.normalize_obs:
             info["unnorm_obs"] = {
                 agent_id: self._history_to_obs(agent_id, "unnorm_obs_hist_buffer")
                 if agent_id != self._agent_name
