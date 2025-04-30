@@ -24,9 +24,19 @@ from typing import Union
 import numpy as np
 
 from pyquaticus.base_policies.base import BaseAgentPolicy
+from pyquaticus.base_policies.utils import (
+    bearing_to_vec,
+    dist_rel_bearing_to_local_rect,
+    get_avoid_vect,
+    global_rect_to_abs_bearing,
+    local_rect_to_rel_bearing,
+    rb_to_rect,
+    unit_vect_between_points,
+    vec_to_heading,
+)
 from pyquaticus.envs.pyquaticus import PyQuaticusEnv, Team
 from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
-from pyquaticus.utils.utils import dist
+from pyquaticus.utils.utils import angle180, closest_point_on_line, dist
 
 MODES = {"nothing", "easy", "medium", "hard", "competition_easy", "competition_medium"}
 
@@ -49,6 +59,9 @@ class BaseDefender(BaseAgentPolicy):
         self.flag_keepout = env.flag_keepout_radius
         self.catch_radius = env.catch_radius
         self.goal = "PM"
+        self.state_normalizer = env.global_state_normalizer
+        self.walls = env._walls[team.value]
+        self.max_speed = env.players[self.id].get_max_speed()
 
         if isinstance(env, PyQuaticusMoosBridge) or not env.gps_env:
             self.aquaticus_field_points = env.aquaticus_field_points
@@ -80,51 +93,16 @@ class BaseDefender(BaseAgentPolicy):
 
         if self.mode == "easy":
 
-            desired_speed = self.max_speed / 2
-
-            ag_vect = [0, 0]
-            my_flag_vec = self.bearing_to_vec(self.my_flag_bearing)
-
             # If far away from the flag, move towards it
             if self.my_flag_distance > (self.flag_keepout + self.catch_radius + 1.0):
-                ag_vect = my_flag_vec
+                return self.action_from_vector(self.my_flag_loc, 0.5)
 
             # If too close to the flag, move away
             else:
-                ag_vect = np.multiply(-1.0, my_flag_vec)
-
-                # Convert the vector to a heading, and then pick the best discrete action to perform
-            try:
-                heading_error = self.vec_to_heading(ag_vect)
-
-                if self.continuous:
-                    if np.isnan(heading_error):
-                        heading_error = 0
-
-                    return (desired_speed, heading_error)
-
-                else:
-                    if 1 >= heading_error >= -1:
-                        return 12
-                    elif heading_error < -1:
-                        return 14
-                    elif heading_error > 1:
-                        return 10
-                    else:
-                        # Should only happen if the act_heading is somehow NAN
-                        return 12
-            except Exception:
-                # If there is an error converting the vector to a heading, just go straight
-                if self.continuous:
-                    return (desired_speed, 0)
-                else:
-                    return 12
+                return self.action_from_vector(-1 * self.my_flag_loc, 0.5)
 
         elif self.mode == "nothing":
-            if self.continuous:
-                return (0, 0)
-            else:
-                return -1
+            return self.action_from_vector(None, 0)
 
         elif self.mode == "competition_easy":
             assert self.aquaticus_field_points is not None
@@ -155,12 +133,7 @@ class BaseDefender(BaseAgentPolicy):
                     value = value[:-1]
             if self.is_tagged:
                 self.goal = "SC"
-            if (
-                dist(
-                    estimated_position, self.aquaticus_field_points[value]
-                )
-                <= 2.5
-            ):
+            if dist(estimated_position, self.aquaticus_field_points[value]) <= 2.5:
                 if self.goal == "SM":
                     self.goal = "PM"
                 else:
@@ -173,7 +146,7 @@ class BaseDefender(BaseAgentPolicy):
 
             desired_speed = self.max_speed
 
-            my_flag_vec = self.bearing_to_vec(self.my_flag_bearing)
+            my_flag_vec = bearing_to_vec(self.my_flag_bearing)
             # Check if opponents are on teams side
             min_enemy_distance = 1000.00
             enemy_dis_dict = {}
@@ -188,7 +161,7 @@ class BaseDefender(BaseAgentPolicy):
                 ):
                     min_enemy_distance = pos[0]
                     closest_enemy = enem
-                    enemy_loc = self.rb_to_rect(pos)
+                    enemy_loc = rb_to_rect(pos)
             # If the blue team doesn't have the flag, guard it
             if self.opp_team_has_flag:
                 # If the blue team has the flag, chase them
@@ -225,7 +198,7 @@ class BaseDefender(BaseAgentPolicy):
             # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
             # Convert the vector to a heading, and then pick the best discrete action to perform
             try:
-                heading_error = self.vec_to_heading(ag_vect)
+                heading_error = vec_to_heading(ag_vect)
 
                 if self.continuous:
                     if np.isnan(heading_error):
@@ -252,50 +225,19 @@ class BaseDefender(BaseAgentPolicy):
 
         elif self.mode == "medium":
 
-            desired_speed = self.max_speed / 2
-
-            my_flag_vec = self.bearing_to_vec(self.my_flag_bearing)
-
-            # If the blue team doesn't have the flag, guard it
+            # If opposing team has the flag, chase them
             if self.opp_team_has_flag:
-                # If the blue team has the flag, chase them
-                ag_vect = my_flag_vec
-
+                return self.action_from_vector(self.my_flag_loc, 0.5)
             else:
-                flag_dist = self.my_flag_distance
+                # If far away from the flag, move towards it
+                if self.my_flag_distance > (
+                    self.flag_keepout + self.catch_radius + 1.0
+                ):
+                    return self.action_from_vector(self.my_flag_loc, 0.5)
 
-                if flag_dist > (self.flag_keepout + self.catch_radius + 1.0):
-                    ag_vect = my_flag_vec
-
+                # If too close to the flag, move away
                 else:
-                    ag_vect = np.multiply(-1.0, my_flag_vec)
-
-                    # Convert the vector to a heading, and then pick the best discrete action to perform
-            try:
-                heading_error = self.vec_to_heading(ag_vect)
-
-                if self.continuous:
-                    if np.isnan(heading_error):
-                        heading_error = 0
-
-                    return (desired_speed, heading_error)
-
-                else:
-                    if 1 >= heading_error >= -1:
-                        return 12
-                    elif heading_error < -1:
-                        return 14
-                    elif heading_error > 1:
-                        return 10
-                    else:
-                        # Should only happen if the act_heading is somehow NAN
-                        return 12
-            except Exception:
-                # If there is an error converting the vector to a heading, just go straight
-                if self.continuous:
-                    return (desired_speed, 0)
-                else:
-                    return 12
+                    return self.action_from_vector(-1 * self.my_flag_loc, 0.5)
 
         elif self.mode == "hard":
 
@@ -304,7 +246,7 @@ class BaseDefender(BaseAgentPolicy):
             # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid
             wall_pos = []
             if self.wall_distances[0] < 7 and (-90 < self.wall_bearings[0] < 90):
-                wall_0_unit_vec = self.rb_to_rect(
+                wall_0_unit_vec = rb_to_rect(
                     np.array((self.wall_distances[0], self.wall_bearings[0]))
                 )
                 wall_pos.append(
@@ -314,7 +256,7 @@ class BaseDefender(BaseAgentPolicy):
                     )
                 )
             elif self.wall_distances[2] < 7 and (-90 < self.wall_bearings[2] < 90):
-                wall_2_unit_vec = self.rb_to_rect(
+                wall_2_unit_vec = rb_to_rect(
                     np.array((self.wall_distances[2], self.wall_bearings[2]))
                 )
                 wall_pos.append(
@@ -324,7 +266,7 @@ class BaseDefender(BaseAgentPolicy):
                     )
                 )
             if self.wall_distances[1] < 7 and (-90 < self.wall_bearings[1] < 90):
-                wall_1_unit_vec = self.rb_to_rect(
+                wall_1_unit_vec = rb_to_rect(
                     np.array((self.wall_distances[1], self.wall_bearings[1]))
                 )
                 wall_pos.append(
@@ -334,7 +276,7 @@ class BaseDefender(BaseAgentPolicy):
                     )
                 )
             elif self.wall_distances[3] < 7 and (-90 < self.wall_bearings[3] < 90):
-                wall_3_unit_vec = self.rb_to_rect(
+                wall_3_unit_vec = rb_to_rect(
                     np.array((self.wall_distances[3], self.wall_bearings[3]))
                 )
                 wall_pos.append(
@@ -356,26 +298,22 @@ class BaseDefender(BaseAgentPolicy):
                 if pos[0] < min_enemy_distance and not unnorm_obs[(enem, "is_tagged")]:
                     min_enemy_distance = pos[0]
                     closest_enemy = enem
-                    enemy_loc = self.rb_to_rect(pos)
+                    enemy_loc = rb_to_rect(pos)
 
             if closest_enemy is None:
                 min_enemy_distance = min(enemy_dis_dict.values())
                 closest_enemy = min(enemy_dis_dict, key=enemy_dis_dict.__getitem__)
-                enemy_loc = self.rb_to_rect(self.opp_team_pos_dict[closest_enemy])
+                enemy_loc = rb_to_rect(self.opp_team_pos_dict[closest_enemy])
 
             if not self.opp_team_has_flag:
-                enemy_dist_2_flag = dist(
-                    np.array(self.my_flag_loc), enemy_loc
-                )
-                unit_flag_enemy = self.unit_vect_between_points(
+                enemy_dist_2_flag = dist(np.array(self.my_flag_loc), enemy_loc)
+                unit_flag_enemy = unit_vect_between_points(
                     np.array(self.my_flag_loc), enemy_loc
                 )
                 defend_pt = self.my_flag_loc + (enemy_dist_2_flag / 2) * unit_flag_enemy
 
-                defend_pt_flag_dist = dist(
-                    defend_pt, np.array(self.my_flag_loc)
-                )
-                unit_def_flag = self.unit_vect_between_points(
+                defend_pt_flag_dist = dist(defend_pt, np.array(self.my_flag_loc))
+                unit_def_flag = unit_vect_between_points(
                     np.array(self.my_flag_loc), defend_pt
                 )
 
@@ -399,15 +337,15 @@ class BaseDefender(BaseAgentPolicy):
                 ag_vect = guide_pt
 
             else:
-                ag_vect = self.bearing_to_vec(self.my_flag_bearing)
+                ag_vect = bearing_to_vec(self.my_flag_bearing)
 
             if len(wall_pos) > 0:
-                ag_vect = ag_vect + self.get_avoid_vect(wall_pos)
+                ag_vect = ag_vect + get_avoid_vect(wall_pos)
 
             # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
             # Convert the vector to a heading, and then pick the best discrete action to perform
             try:
-                heading_error = self.vec_to_heading(ag_vect)
+                heading_error = vec_to_heading(ag_vect)
 
                 if self.continuous:
                     if np.isnan(heading_error):
@@ -431,3 +369,146 @@ class BaseDefender(BaseAgentPolicy):
                     return (desired_speed, 0)
                 else:
                     return 4
+
+    def action_from_vector(self, vector, desired_speed_normalized):
+        if desired_speed_normalized == 0:
+            if self.continuous:
+                return (0, 0)
+            else:
+                return -1
+        rel_bearing = local_rect_to_rel_bearing(vector)
+        if self.continuous:
+            return (desired_speed_normalized * self.max_speed, rel_bearing)
+        elif desired_speed_normalized == 0.5:
+            if 1 >= rel_bearing >= -1:
+                return 12
+            elif rel_bearing < -1:
+                return 14
+            elif rel_bearing > 1:
+                return 10
+        elif desired_speed_normalized == 1:
+            if 1 >= rel_bearing >= -1:
+                return 4
+            elif rel_bearing < -1:
+                return 6
+            elif rel_bearing > 1:
+                return 2
+
+    def update_state(self, obs, info: dict[str, dict]) -> None:
+        """
+        Method to convert the gym obs and info into data more relative to the
+        agent.
+
+        Note: all rectangular positions are in the ego agent's local coordinate frame.
+        Note: all bearings are relative, measured in degrees clockwise from the ego agent's heading.
+
+        Args:
+            obs: observation from gym
+            info: info from gym
+        """
+
+        global_state = info[self.id]["global_state"]
+        if not isinstance(global_state, dict):
+            global_state = self.state_normalizer.unnormalized(global_state)
+        # print(global_state)
+
+        # Copy this agents state from the global state
+        self.speed = global_state[(self.id, "speed")]
+        self.on_sides = global_state[(self.id, "on_side")]
+        self.has_flag = global_state[(self.id, "has_flag")]
+        self.tagging_cooldown = global_state[(self.id, "tagging_cooldown")]
+        self.is_tagged = global_state[(self.id, "is_tagged")]
+
+        # Calculate the rectangular coordinates for the flags location relative to the agent.
+        team_str = self.team.name.lower().split("_")[0]
+        opp_str = "red" if team_str == "blue" else "blue"
+
+        self.my_flag_distance = dist(
+            global_state[(self.id, "pos")], global_state[team_str + "_flag_pos"]
+        )
+        self.my_flag_bearing = angle180(
+            global_rect_to_abs_bearing(
+                global_state[team_str + "_flag_pos"] - global_state[(self.id, "pos")]
+            )
+            - global_state[(self.id, "heading")]
+        )
+        self.my_flag_loc = dist_rel_bearing_to_local_rect(
+            self.my_flag_distance, self.my_flag_bearing
+        )
+        self.opp_flag_distance = dist(
+            global_state[(self.id, "pos")], global_state[opp_str + "_flag_pos"]
+        )
+        self.opp_flag_bearing = angle180(
+            global_rect_to_abs_bearing(
+                global_state[opp_str + "_flag_pos"] - global_state[(self.id, "pos")]
+            )
+            - global_state[(self.id, "heading")]
+        )
+        self.opp_flag_loc = dist_rel_bearing_to_local_rect(
+            self.opp_flag_distance, self.opp_flag_bearing
+        )
+
+        self.home_distance = dist(
+            global_state[(self.id, "pos")], global_state[team_str + "_flag_home"]
+        )
+        self.home_bearing = angle180(
+            global_rect_to_abs_bearing(
+                global_state[team_str + "_flag_home"] - global_state[(self.id, "pos")]
+            )
+            - global_state[(self.id, "heading")]
+        )
+        self.home_loc = dist_rel_bearing_to_local_rect(
+            self.home_distance, self.home_bearing
+        )
+
+        # Copy the polar positions of each agent, separated by team and get their tag status
+        self.opp_team_pos = []
+        self.opp_team_pos_dict = {}  # for labeling by agent_id
+        self.my_team_pos = []
+        self.opp_team_tag = []
+        self.my_team_tag = []
+        self.opp_team_has_flag = False
+        self.my_team_has_flag = False
+        for id in self.teammate_ids:
+            if id != self.id:
+                distance = dist(
+                    global_state[(self.id, "pos")], global_state[(id, "pos")]
+                )
+                bearing = angle180(
+                    global_rect_to_abs_bearing(
+                        global_state[(id, "pos")] - global_state[(self.id, "pos")]
+                    )
+                    - global_state[(self.id, "heading")]
+                )
+                self.my_team_pos.append(np.array((distance, bearing)))
+                self.my_team_has_flag = (
+                    self.my_team_has_flag or global_state[(id, "has_flag")]
+                )
+                self.my_team_tag.append(global_state[(id, "is_tagged")])
+        for id in self.opponent_ids:
+            distance = dist(global_state[(self.id, "pos")], global_state[(id, "pos")])
+            bearing = angle180(
+                global_rect_to_abs_bearing(
+                    global_state[(id, "pos")] - global_state[(self.id, "pos")]
+                )
+                - global_state[(self.id, "heading")]
+            )
+            self.opp_team_pos.append(np.array((distance, bearing)))
+            self.opp_team_has_flag = (
+                self.opp_team_has_flag or global_state[(id, "has_flag")]
+            )
+            self.opp_team_tag.append(global_state[(id, "is_tagged")])
+            self.opp_team_pos_dict[id] = np.array((distance, bearing))
+
+        self.wall_distances = []
+        self.wall_bearings = []
+        for wall in self.walls:
+            closest = closest_point_on_line(
+                wall[0], wall[1], global_state[(self.id, "pos")]
+            )
+            self.wall_distances.append(dist(closest, global_state[(self.id, "pos")]))
+            bearing = angle180(
+                global_rect_to_abs_bearing(closest - global_state[(self.id, "pos")])
+                - global_state[(self.id, "heading")]
+            )
+            self.wall_bearings.append(bearing)
