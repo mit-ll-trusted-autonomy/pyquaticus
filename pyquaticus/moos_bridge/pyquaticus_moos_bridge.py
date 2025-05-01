@@ -122,10 +122,15 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
         # Agents (player objects) of each team
         self.agents_of_team = {t: [] for t in Team}
+        self.agent_ids_of_team = {t: [] for t in Team}
         self.agent_inds_of_team = {t: [] for t in Team}
         for agent in self.players.values():
             self.agents_of_team[agent.team].append(agent)
-            self.agent_inds_of_team[agent.team].append(agent.idx)
+            agent_ids_of_team[agent.team].append(agent.id)
+            agent_inds_of_team[agent.team].append(agent.idx)
+
+        self.agent_ids_of_team = {t: np.array(v) for t, v in self.agent_ids_of_team.items()}
+        self.agent_inds_of_team = {t: np.array(v) for t, v in self.agent_inds_of_team.items()}
 
         # Create the list of flags that are indexed by self.flags[int(player.team)]
         if len(self.flag_homes) != len(Team):
@@ -672,7 +677,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         goal_flag = self.flags[not int(self.team)]
         flag_dist = np.hypot(goal_flag.home[0]-player.pos[0],
                              goal_flag.home[1]-player.pos[1])
-        if (flag_dist < self.flag_grab_radius):
+        if (flag_dist < self.catch_radius):
             print("SENDING A FLAG GRAB REQUEST!")
             self._moos_comm.notify('FLAG_GRAB_REQUEST', f'vname={self._agent_name}', -1)
 
@@ -801,7 +806,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             raise Exception(
                 f"agent_radius list length must be equal to the number of agents."
             )
-        self.flag_grab_radius = moos_config.flag_grab_radius
+        self.catch_radius = moos_config.flag_grab_radius
 
         #on sides
         scrim2blue = self.flag_homes[Team.BLUE_TEAM] - self.scrimmage_coords[0]
