@@ -25,14 +25,11 @@ import numpy as np
 
 from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.base_policies.utils import (
-    bearing_to_vec,
     dist_rel_bearing_to_local_rect,
     get_avoid_vect,
     global_rect_to_abs_bearing,
     local_rect_to_rel_bearing,
-    rb_to_rect,
     rel_bearing_to_local_unit_rect,
-    vec_to_heading,
 )
 from pyquaticus.envs.pyquaticus import PyQuaticusEnv, Team
 from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
@@ -88,11 +85,8 @@ class BaseAttacker(BaseAgentPolicy):
             action: if continuous, a tuple containing desired speed and heading error.
             if discrete, an action index corresponding to ACTION_MAP in config.py
         """
+        
         self.update_state(obs, info)
-
-        unnorm_obs = info[self.id].get("unnorm_obs", None)
-        if unnorm_obs is None:
-            unnorm_obs = obs[self.id]
 
         if self.mode == "easy":
 
@@ -185,65 +179,33 @@ class BaseAttacker(BaseAgentPolicy):
 
         elif self.mode == "competition_medium":
 
-            # If I'm close to a wall and driving towards it, add the closest point to the wall as an obstacle to avoid
+            # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid
             if self.wall_distances[0] < 10 and (-90 < self.wall_bearings[0] < 90):
-                wall_0_unit_vec = rb_to_rect(
-                    np.array(
-                        (
-                            self.wall_distances[0],
-                            self.wall_bearings[0],
-                        )
-                    )
-                )
                 self.opp_team_pos.append(
                     (
-                        self.wall_distances[0] * wall_0_unit_vec[0],
-                        self.wall_distances[0] * wall_0_unit_vec[1],
+                        self.wall_distances[0],
+                        self.wall_bearings[0],
                     )
                 )
             elif self.wall_distances[2] < 10 and (-90 < self.wall_bearings[2] < 90):
-                wall_2_unit_vec = rb_to_rect(
-                    np.array(
-                        (
-                            self.wall_distances[2],
-                            self.wall_bearings[2],
-                        )
-                    )
-                )
                 self.opp_team_pos.append(
                     (
-                        self.wall_distances[2] * wall_2_unit_vec[0],
-                        self.wall_distances[2] * wall_2_unit_vec[1],
+                        self.wall_distances[2],
+                        self.wall_bearings[2],
                     )
                 )
             if self.wall_distances[1] < 10 and (-90 < self.wall_bearings[1] < 90):
-                wall_1_unit_vec = rb_to_rect(
-                    np.array(
-                        (
-                            self.wall_distances[1],
-                            self.wall_bearings[1],
-                        )
-                    )
-                )
                 self.opp_team_pos.append(
                     (
-                        self.wall_distances[1] * wall_1_unit_vec[0],
-                        self.wall_distances[1] * wall_1_unit_vec[1],
+                        self.wall_distances[1],
+                        self.wall_bearings[1],
                     )
                 )
             elif self.wall_distances[3] < 10 and (-90 < self.wall_bearings[3] < 90):
-                wall_3_unit_vec = rb_to_rect(
-                    np.array(
-                        (
-                            self.wall_distances[3],
-                            self.wall_bearings[3],
-                        )
-                    )
-                )
                 self.opp_team_pos.append(
                     (
-                        self.wall_distances[3] * wall_3_unit_vec[0],
-                        self.wall_distances[3] * wall_3_unit_vec[1],
+                        self.wall_distances[3],
+                        self.wall_bearings[3],
                     )
                 )
 
@@ -252,17 +214,15 @@ class BaseAttacker(BaseAgentPolicy):
 
             # If I have the flag, go back to my side
             if self.has_flag:
-                goal_vect = np.multiply(
-                    1.25, bearing_to_vec(unnorm_obs["own_home_bearing"])
-                )
+                goal_vect = 1.25 * rel_bearing_to_local_unit_rect(self.home_bearing)
                 avoid_vect = get_avoid_vect(
                     self.opp_team_pos, avoid_threshold=avoid_thresh
                 )
-                my_action = goal_vect + (avoid_vect)
+                my_action = goal_vect + avoid_vect
 
             # Otherwise go get the flag
             else:
-                goal_vect = bearing_to_vec(self.opp_flag_bearing)
+                goal_vect = rel_bearing_to_local_unit_rect(self.opp_flag_bearing)
                 avoid_vect = get_avoid_vect(
                     self.opp_team_pos, avoid_threshold=avoid_thresh
                 )
@@ -286,15 +246,15 @@ class BaseAttacker(BaseAgentPolicy):
                     # Some bias towards the bottom boundary to force it to stick with a
                     # direction.
                     if top_dist > 1.25 * bottom_dist:
-                        my_action = rb_to_rect(
-                            np.array((top_dist, self.wall_bearings[0]))
+                        my_action = dist_rel_bearing_to_local_rect(
+                            top_dist, self.wall_bearings[0]
                         )
                     else:
-                        my_action = rb_to_rect(
-                            np.array((bottom_dist, self.wall_bearings[2]))
+                        my_action = dist_rel_bearing_to_local_rect(
+                            bottom_dist, self.wall_bearings[2]
                         )
                 else:
-                    my_action = np.multiply(1.25, goal_vect) + avoid_vect
+                    my_action = 1.25 * goal_vect + avoid_vect
 
             return self.action_from_vector(my_action, 1)
 

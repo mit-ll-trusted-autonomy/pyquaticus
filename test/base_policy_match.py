@@ -24,7 +24,7 @@ config_dict["normalize_state"] = True
 config_dict["render_agent_ids"] = True
 
 env = pyquaticus_v0.PyQuaticusEnv(
-    team_size=2, config_dict=config_dict, render_mode="human"
+    team_size=2, config_dict=config_dict, render_mode="human", action_space="continuous"
 )
 
 
@@ -65,12 +65,12 @@ b_one_old = OldHeuristicAgent(
     Team.BLUE_TEAM,
     2,
     aquaticus_field_points=env.aquaticus_field_points,
-    mode="medium",
+    mode="hard",
     continuous=True,
     flag_keepout=env.flag_keepout_radius,
 )
 b_one = Heuristic_CTF_Agent(
-    "agent_0", Team.BLUE_TEAM, env, mode="medium", continuous=True
+    "agent_0", Team.BLUE_TEAM, env, mode="hard", continuous=True
 )
 
 b_two = KeyAgent()

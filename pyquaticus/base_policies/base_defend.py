@@ -25,14 +25,12 @@ import numpy as np
 
 from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.base_policies.utils import (
-    bearing_to_vec,
     dist_rel_bearing_to_local_rect,
     get_avoid_vect,
     global_rect_to_abs_bearing,
     local_rect_to_rel_bearing,
-    rb_to_rect,
+    rel_bearing_to_local_unit_rect,
     unit_vect_between_points,
-    vec_to_heading,
 )
 from pyquaticus.envs.pyquaticus import PyQuaticusEnv, Team
 from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
@@ -56,8 +54,8 @@ class BaseDefender(BaseAgentPolicy):
 
         self.set_mode(mode)
         self.continuous = continuous
-        self.flag_keepout = env.flag_keepout_radius
-        self.catch_radius = env.catch_radius
+        self.flag_keepout = getattr(env, "flag_keepout_radius", 3)
+        self.catch_radius = getattr(env, "catch_radius", 10)
         self.goal = "PM"
         self.state_normalizer = env.global_state_normalizer
         self.walls = env._walls[team.value]
@@ -87,9 +85,9 @@ class BaseDefender(BaseAgentPolicy):
         """
         self.update_state(obs, info)
 
-        unnorm_obs = info[self.id].get("unnorm_obs", None)
-        if unnorm_obs is None:
-            unnorm_obs = obs[self.id]
+        global_state = info[self.id]["global_state"]
+        if not isinstance(global_state, dict):
+            global_state = self.state_normalizer.unnormalized(global_state)
 
         if self.mode == "easy":
 
@@ -105,7 +103,9 @@ class BaseDefender(BaseAgentPolicy):
             return self.action_from_vector(None, 0)
 
         elif self.mode == "competition_easy":
+
             assert self.aquaticus_field_points is not None
+
             if self.team == Team.RED_TEAM:
                 estimated_position = np.asarray(
                     [
@@ -120,6 +120,7 @@ class BaseDefender(BaseAgentPolicy):
                         self.wall_distances[2],
                     ]
                 )
+
             value = self.goal
 
             if self.team == Team.BLUE_TEAM:
@@ -142,11 +143,11 @@ class BaseDefender(BaseAgentPolicy):
             return self.goal
 
         elif self.mode == "competition_medium":
+
             assert self.aquaticus_field_points is not None
 
-            desired_speed = self.max_speed
+            my_flag_vec = rel_bearing_to_local_unit_rect(self.my_flag_bearing)
 
-            my_flag_vec = bearing_to_vec(self.my_flag_bearing)
             # Check if opponents are on teams side
             min_enemy_distance = 1000.00
             enemy_dis_dict = {}
@@ -156,15 +157,16 @@ class BaseDefender(BaseAgentPolicy):
                 enemy_dis_dict[enem] = pos[0]
                 if (
                     pos[0] < min_enemy_distance
-                    and not unnorm_obs[(enem, "is_tagged")]
-                    and unnorm_obs[(enem, "on_side")] == 0
+                    and not global_state[(enem, "is_tagged")]
+                    and global_state[(enem, "on_side")] == 0
                 ):
                     min_enemy_distance = pos[0]
                     closest_enemy = enem
-                    enemy_loc = rb_to_rect(pos)
-            # If the blue team doesn't have the flag, guard it
+                    enemy_loc = dist_rel_bearing_to_local_rect(pos[0], pos[1])
+
+            # If the opposing team doesn't have the flag, guard it
             if self.opp_team_has_flag:
-                # If the blue team has the flag, chase them
+                # If the opposing team has the flag, chase them
                 ag_vect = my_flag_vec
             elif closest_enemy is not None:
                 ag_vect = enemy_loc
@@ -195,33 +197,7 @@ class BaseDefender(BaseAgentPolicy):
                 else:
                     return "CH"
 
-            # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
-            # Convert the vector to a heading, and then pick the best discrete action to perform
-            try:
-                heading_error = vec_to_heading(ag_vect)
-
-                if self.continuous:
-                    if np.isnan(heading_error):
-                        heading_error = 0
-
-                    return (desired_speed, heading_error)
-
-                else:
-                    if 1 >= heading_error >= -1:
-                        return 4
-                    elif heading_error < -1:
-                        return 6
-                    elif heading_error > 1:
-                        return 2
-                    else:
-                        # Should only happen if the act_heading is somehow NAN
-                        return 4
-            except Exception:
-                # If there is an error converting the vector to a heading, just go straight
-                if self.continuous:
-                    return (desired_speed, 0)
-                else:
-                    return 4
+            return self.action_from_vector(ag_vect, 1)
 
         elif self.mode == "medium":
 
@@ -241,52 +217,37 @@ class BaseDefender(BaseAgentPolicy):
 
         elif self.mode == "hard":
 
-            desired_speed = self.max_speed
-
             # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid
             wall_pos = []
             if self.wall_distances[0] < 7 and (-90 < self.wall_bearings[0] < 90):
-                wall_0_unit_vec = rb_to_rect(
-                    np.array((self.wall_distances[0], self.wall_bearings[0]))
-                )
                 wall_pos.append(
                     (
-                        self.wall_distances[0] * wall_0_unit_vec[0],
-                        self.wall_distances[0] * wall_0_unit_vec[1],
+                        self.wall_distances[0],
+                        self.wall_bearings[0],
                     )
                 )
             elif self.wall_distances[2] < 7 and (-90 < self.wall_bearings[2] < 90):
-                wall_2_unit_vec = rb_to_rect(
-                    np.array((self.wall_distances[2], self.wall_bearings[2]))
-                )
                 wall_pos.append(
                     (
-                        self.wall_distances[2] * wall_2_unit_vec[0],
-                        self.wall_distances[2] * wall_2_unit_vec[1],
+                        self.wall_distances[2],
+                        self.wall_bearings[2],
                     )
                 )
             if self.wall_distances[1] < 7 and (-90 < self.wall_bearings[1] < 90):
-                wall_1_unit_vec = rb_to_rect(
-                    np.array((self.wall_distances[1], self.wall_bearings[1]))
-                )
                 wall_pos.append(
                     (
-                        self.wall_distances[1] * wall_1_unit_vec[0],
-                        self.wall_distances[1] * wall_1_unit_vec[1],
+                        self.wall_distances[1],
+                        self.wall_bearings[1],
                     )
                 )
             elif self.wall_distances[3] < 7 and (-90 < self.wall_bearings[3] < 90):
-                wall_3_unit_vec = rb_to_rect(
-                    np.array((self.wall_distances[3], self.wall_bearings[3]))
-                )
                 wall_pos.append(
                     (
-                        self.wall_distances[3] * wall_3_unit_vec[0],
-                        self.wall_distances[3] * wall_3_unit_vec[1],
+                        self.wall_distances[3],
+                        self.wall_bearings[3],
                     )
                 )
 
-            ag_vect = [0, 0]
             defense_perim = 5 * self.flag_keepout
             # Get nearest untagged enemy:
             min_enemy_distance = 1000.00
@@ -295,15 +256,20 @@ class BaseDefender(BaseAgentPolicy):
             enemy_loc = np.asarray((0, 0))
             for enem, pos in self.opp_team_pos_dict.items():
                 enemy_dis_dict[enem] = pos[0]
-                if pos[0] < min_enemy_distance and not unnorm_obs[(enem, "is_tagged")]:
+                if (
+                    pos[0] < min_enemy_distance
+                    and not global_state[(enem, "is_tagged")]
+                ):
                     min_enemy_distance = pos[0]
                     closest_enemy = enem
-                    enemy_loc = rb_to_rect(pos)
+                    enemy_loc = dist_rel_bearing_to_local_rect(pos[0], pos[1])
 
             if closest_enemy is None:
-                min_enemy_distance = min(enemy_dis_dict.values())
                 closest_enemy = min(enemy_dis_dict, key=enemy_dis_dict.__getitem__)
-                enemy_loc = rb_to_rect(self.opp_team_pos_dict[closest_enemy])
+                enemy_loc = dist_rel_bearing_to_local_rect(
+                    self.opp_team_pos_dict[closest_enemy][0],
+                    self.opp_team_pos_dict[closest_enemy][1],
+                )
 
             if not self.opp_team_has_flag:
                 enemy_dist_2_flag = dist(np.array(self.my_flag_loc), enemy_loc)
@@ -319,11 +285,11 @@ class BaseDefender(BaseAgentPolicy):
 
                 if (
                     enemy_dist_2_flag > defense_perim
-                    or unnorm_obs[(closest_enemy, "is_tagged")]
+                    or global_state[(closest_enemy, "is_tagged")]
                 ):
                     if (
                         defend_pt_flag_dist > defense_perim
-                        or unnorm_obs[(closest_enemy, "is_tagged")]
+                        or global_state[(closest_enemy, "is_tagged")]
                     ):
                         guide_pt = [
                             self.my_flag_loc[0] + (unit_def_flag[0] * defense_perim),
@@ -337,38 +303,12 @@ class BaseDefender(BaseAgentPolicy):
                 ag_vect = guide_pt
 
             else:
-                ag_vect = bearing_to_vec(self.my_flag_bearing)
+                ag_vect = rel_bearing_to_local_unit_rect(self.my_flag_bearing)
 
             if len(wall_pos) > 0:
                 ag_vect = ag_vect + get_avoid_vect(wall_pos)
 
-            # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
-            # Convert the vector to a heading, and then pick the best discrete action to perform
-            try:
-                heading_error = vec_to_heading(ag_vect)
-
-                if self.continuous:
-                    if np.isnan(heading_error):
-                        heading_error = 0
-
-                    return (desired_speed, heading_error)
-
-                else:
-                    if 1 >= heading_error >= -1:
-                        return 4
-                    elif heading_error < -1:
-                        return 6
-                    elif heading_error > 1:
-                        return 2
-                    else:
-                        # Should only happen if the act_heading is somehow NAN
-                        return 4
-            except Exception:
-                # If there is an error converting the vector to a heading, just go straight
-                if self.continuous:
-                    return (desired_speed, 0)
-                else:
-                    return 4
+            return self.action_from_vector(ag_vect, 1)
 
     def action_from_vector(self, vector, desired_speed_normalized):
         if desired_speed_normalized == 0:

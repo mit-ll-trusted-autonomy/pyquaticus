@@ -3,24 +3,6 @@ import numpy as np
 from pyquaticus.utils.utils import angle180
 
 
-def vec_to_heading(vec):
-    """Converts a vector to a magnitude and heading (deg)."""
-    angle = np.degrees(np.arctan2(vec[1], vec[0]))
-    return angle180(angle)
-
-
-def bearing_to_vec(heading):
-    return [np.cos(np.deg2rad(heading)), np.sin(np.deg2rad(heading))]
-
-
-def rb_to_rect(point: np.ndarray) -> np.ndarray:
-    """Returns the rectangular coordinates of polar point `point`."""
-    dist = point[0]
-    bearing = point[1]
-    unit_vec = bearing_to_vec(bearing)
-    return np.array([dist * unit_vec[0], dist * unit_vec[1]], dtype=np.float64)
-
-
 def get_avoid_vect(avoid_pos, avoid_threshold=10.0):
     """
     This function finds the vector most pointing away to all enemy agents.
