@@ -122,15 +122,15 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
         # Agents (player objects) of each team
         self.agents_of_team = {t: [] for t in Team}
-        self.agent_ids_of_team = {t: [] for t in Team}
-        self.agent_inds_of_team = {t: [] for t in Team}
+        agent_ids_of_team = {t: [] for t in Team}
+        agent_inds_of_team = {t: [] for t in Team}
         for agent in self.players.values():
             self.agents_of_team[agent.team].append(agent)
             agent_ids_of_team[agent.team].append(agent.id)
             agent_inds_of_team[agent.team].append(agent.idx)
 
-        self.agent_ids_of_team = {t: np.array(v) for t, v in self.agent_ids_of_team.items()}
-        self.agent_inds_of_team = {t: np.array(v) for t, v in self.agent_inds_of_team.items()}
+        self.agent_ids_of_team = {t: np.array(v) for t, v in agent_ids_of_team.items()}
+        self.agent_inds_of_team = {t: np.array(v) for t, v in agent_inds_of_team.items()}
 
         # Create the list of flags that are indexed by self.flags[int(player.team)]
         if len(self.flag_homes) != len(Team):
