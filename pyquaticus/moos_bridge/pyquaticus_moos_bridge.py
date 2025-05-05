@@ -447,7 +447,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
                 raw_action=action,
                 player=agent,
                 act_space_match=self.act_space_match,
-                act_space_str=self.self.act_space_str
+                act_space_str=self.act_space_str
             )
             desired_hdg = self._relheading_to_global_heading(agent.heading, rel_hdg)
 
