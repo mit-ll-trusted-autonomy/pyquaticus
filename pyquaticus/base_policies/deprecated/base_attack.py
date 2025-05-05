@@ -179,47 +179,35 @@ class BaseAttacker(BaseAgentPolicy):
         elif self.mode == "competition_medium":
             # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid
             if my_obs["wall_0_distance"] < 10 and (-90 < my_obs["wall_0_bearing"] < 90):
-                wall_0_unit_vec = self.rb_to_rect(
-                    (my_obs["wall_0_distance"], my_obs["wall_0_bearing"])
-                )
                 self.opp_team_pos.append(
                     (
-                        my_obs["wall_0_distance"] * wall_0_unit_vec[0],
-                        my_obs["wall_0_distance"] * wall_0_unit_vec[1],
+                        my_obs["wall_0_distance"],
+                        my_obs["wall_0_bearing"],
                     )
                 )
             elif my_obs["wall_2_distance"] < 10 and (
                 -90 < my_obs["wall_2_bearing"] < 90
             ):
-                wall_2_unit_vec = self.rb_to_rect(
-                    (my_obs["wall_2_distance"], my_obs["wall_2_bearing"])
-                )
                 self.opp_team_pos.append(
                     (
-                        my_obs["wall_2_distance"] * wall_2_unit_vec[0],
-                        my_obs["wall_2_distance"] * wall_2_unit_vec[1],
+                        my_obs["wall_2_distance"],
+                        my_obs["wall_2_bearing"],
                     )
                 )
             if my_obs["wall_1_distance"] < 10 and (-90 < my_obs["wall_1_bearing"] < 90):
-                wall_1_unit_vec = self.rb_to_rect(
-                    (my_obs["wall_1_distance"], my_obs["wall_1_bearing"])
-                )
                 self.opp_team_pos.append(
                     (
-                        my_obs["wall_1_distance"] * wall_1_unit_vec[0],
-                        my_obs["wall_1_distance"] * wall_1_unit_vec[1],
+                        my_obs["wall_1_distance"],
+                        my_obs["wall_1_bearing"],
                     )
                 )
             elif my_obs["wall_3_distance"] < 10 and (
                 -90 < my_obs["wall_3_bearing"] < 90
             ):
-                wall_3_unit_vec = self.rb_to_rect(
-                    (my_obs["wall_3_distance"], my_obs["wall_3_bearing"])
-                )
                 self.opp_team_pos.append(
                     (
-                        my_obs["wall_3_distance"] * wall_3_unit_vec[0],
-                        my_obs["wall_3_distance"] * wall_3_unit_vec[1],
+                        my_obs["wall_3_distance"],
+                        my_obs["wall_3_bearing"],
                     )
                 )
 
@@ -281,47 +269,35 @@ class BaseAttacker(BaseAgentPolicy):
         elif self.mode == "hard":
             # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid
             if my_obs["wall_0_distance"] < 10 and (-90 < my_obs["wall_0_bearing"] < 90):
-                wall_0_unit_vec = self.rb_to_rect(
-                    (my_obs["wall_0_distance"], my_obs["wall_0_bearing"])
-                )
                 self.opp_team_pos.append(
                     (
-                        my_obs["wall_0_distance"] * wall_0_unit_vec[0],
-                        my_obs["wall_0_distance"] * wall_0_unit_vec[1],
+                        my_obs["wall_0_distance"],
+                        my_obs["wall_0_bearing"],
                     )
                 )
             elif my_obs["wall_2_distance"] < 10 and (
                 -90 < my_obs["wall_2_bearing"] < 90
             ):
-                wall_2_unit_vec = self.rb_to_rect(
-                    (my_obs["wall_2_distance"], my_obs["wall_2_bearing"])
-                )
                 self.opp_team_pos.append(
                     (
-                        my_obs["wall_2_distance"] * wall_2_unit_vec[0],
-                        my_obs["wall_2_distance"] * wall_2_unit_vec[1],
+                        my_obs["wall_2_distance"],
+                        my_obs["wall_2_bearing"],
                     )
                 )
             if my_obs["wall_1_distance"] < 10 and (-90 < my_obs["wall_1_bearing"] < 90):
-                wall_1_unit_vec = self.rb_to_rect(
-                    (my_obs["wall_1_distance"], my_obs["wall_1_bearing"])
-                )
                 self.opp_team_pos.append(
                     (
-                        my_obs["wall_1_distance"] * wall_1_unit_vec[0],
-                        my_obs["wall_1_distance"] * wall_1_unit_vec[1],
+                        my_obs["wall_1_distance"],
+                        my_obs["wall_1_bearing"],
                     )
                 )
             elif my_obs["wall_3_distance"] < 10 and (
                 -90 < my_obs["wall_3_bearing"] < 90
             ):
-                wall_3_unit_vec = self.rb_to_rect(
-                    (my_obs["wall_3_distance"], my_obs["wall_3_bearing"])
-                )
                 self.opp_team_pos.append(
                     (
-                        my_obs["wall_3_distance"] * wall_3_unit_vec[0],
-                        my_obs["wall_3_distance"] * wall_3_unit_vec[1],
+                        my_obs["wall_3_distance"],
+                        my_obs["wall_3_bearing"],
                     )
                 )
 

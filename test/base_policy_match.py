@@ -88,7 +88,7 @@ while True:
         print("---")
         print(f"{two}")
         print(f"{two_old}")
-        # raise Exception("Attack policies don't match")
+        raise Exception("Attack policies don't match")
 
     three = r_two.compute_action(obs, info)
     three_old = r_two_old.compute_action(obs)
