@@ -178,3 +178,13 @@ class MITConfig2025(FieldReaderConfig):
 
         ####### Dynamics Parameters #######
         self.max_speeds = 6 * [2.0]
+
+class WestPoint2025(FieldReaderConfig):
+    def __init__(self):
+        super().__init__(str(Path.home() / "moos-ivp-aquaticus" / "missions" / "wp_2024"))
+
+        ####### Geometry Parameters #######
+        self.agent_radius = 6 * [2.0]
+
+        ####### Dynamics Parameters #######
+        self.max_speeds = 6 * [3.0]
