@@ -47,6 +47,8 @@ class BaseDefender(BaseAgentPolicy):
         agent_id: str,
         team: Team,
         env: Union[PyQuaticusEnv, PyQuaticusMoosBridge],
+        flag_keepout: float = 3,
+        catch_radius: float = 10,
         continuous: bool = False,
         mode: str = "easy",
     ):
@@ -54,8 +56,8 @@ class BaseDefender(BaseAgentPolicy):
 
         self.set_mode(mode)
         self.continuous = continuous
-        self.flag_keepout = getattr(env, "flag_keepout_radius", 3)
-        self.catch_radius = getattr(env, "catch_radius", 10)
+        self.flag_keepout = flag_keepout
+        self.catch_radius = catch_radius
         self.goal = "PM"
         self.state_normalizer = env.global_state_normalizer
         self.walls = env._walls[team.value]
