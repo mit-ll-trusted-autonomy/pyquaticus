@@ -352,18 +352,11 @@ class BaseDefender(BaseAgentPolicy):
         global_state = info[self.id]["global_state"]
         if not isinstance(global_state, dict):
             global_state = self.state_normalizer.unnormalized(global_state)
-        # print(global_state)
 
-        # Copy this agents state from the global state
-        self.speed = global_state[(self.id, "speed")]
-        self.on_sides = global_state[(self.id, "on_side")]
-        self.has_flag = global_state[(self.id, "has_flag")]
-        self.tagging_cooldown = global_state[(self.id, "tagging_cooldown")]
         self.is_tagged = global_state[(self.id, "is_tagged")]
 
         # Calculate the rectangular coordinates for the flags location relative to the agent.
         team_str = self.team.name.lower().split("_")[0]
-        opp_str = "red" if team_str == "blue" else "blue"
 
         self.my_flag_distance = dist(
             global_state[(self.id, "pos")], global_state[team_str + "_flag_pos"]
@@ -377,40 +370,12 @@ class BaseDefender(BaseAgentPolicy):
         self.my_flag_loc = dist_rel_bearing_to_local_rect(
             self.my_flag_distance, self.my_flag_bearing
         )
-        self.opp_flag_distance = dist(
-            global_state[(self.id, "pos")], global_state[opp_str + "_flag_pos"]
-        )
-        self.opp_flag_bearing = angle180(
-            global_rect_to_abs_bearing(
-                global_state[opp_str + "_flag_pos"] - global_state[(self.id, "pos")]
-            )
-            - global_state[(self.id, "heading")]
-        )
-        self.opp_flag_loc = dist_rel_bearing_to_local_rect(
-            self.opp_flag_distance, self.opp_flag_bearing
-        )
-
-        self.home_distance = dist(
-            global_state[(self.id, "pos")], global_state[team_str + "_flag_home"]
-        )
-        self.home_bearing = angle180(
-            global_rect_to_abs_bearing(
-                global_state[team_str + "_flag_home"] - global_state[(self.id, "pos")]
-            )
-            - global_state[(self.id, "heading")]
-        )
-        self.home_loc = dist_rel_bearing_to_local_rect(
-            self.home_distance, self.home_bearing
-        )
 
         # Copy the polar positions of each agent, separated by team and get their tag status
         self.opp_team_pos = []
         self.opp_team_pos_dict = {}  # for labeling by agent_id
-        self.my_team_pos = []
         self.opp_team_tag = []
-        self.my_team_tag = []
         self.opp_team_has_flag = False
-        self.my_team_has_flag = False
         for id in self.teammate_ids:
             if id != self.id:
                 distance = dist(
@@ -422,11 +387,6 @@ class BaseDefender(BaseAgentPolicy):
                     )
                     - global_state[(self.id, "heading")]
                 )
-                self.my_team_pos.append(np.array((distance, bearing)))
-                self.my_team_has_flag = (
-                    self.my_team_has_flag or global_state[(id, "has_flag")]
-                )
-                self.my_team_tag.append(global_state[(id, "is_tagged")])
         for id in self.opponent_ids:
             distance = dist(global_state[(self.id, "pos")], global_state[(id, "pos")])
             bearing = angle180(
