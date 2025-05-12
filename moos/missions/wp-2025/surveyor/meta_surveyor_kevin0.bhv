@@ -1,0 +1,338 @@
+initialize DEPLOY    = false
+initialize RETURN    = false
+initialize ACTION    = defend
+initialize TAGGED    = false
+initialize HAS_FLAG  = false
+initialize GO_GRAB   = false
+initialize RECOVER   = false
+
+#ifdef RNAME red_one
+	initialize ACTION=defend
+#elseifdef RNAME red_two
+	initialize ACTION=attack
+#elseifdef RNAME blue_one
+	initialize ACTION=defend
+#elseifdef RNAME blue_two
+	initialize ACTION=attack
+#endif
+	
+
+	
+	
+	// ACTION = {attack, defend}
+	//
+	//  ROOT
+	//	   - INACTIVE
+	//	   - ACTIVE
+	//	      - STATION-KEEPING
+	//	      - RETURN-PAVLAB
+  //
+	//	      - ATTACKING
+	//	        - TAGGED
+	//          - GO-GRAB
+	//          - GRAB-RETURN
+	//        - DEFENDING
+	//          - LOITERING
+	//          - INTERCEPTING
+	
+
+set MODE = ACTIVE {
+  DEPLOY = true
+} INACTIVE
+
+set MODE = RECOVERING {
+	MODE = ACTIVE
+  RECOVER = true
+}
+	
+set MODE = STATION-KEEPING {
+  MODE = ACTIVE
+  STATION_KEEP = true
+}
+
+
+set MODE = RETURN-PAVLAB {
+  MODE = ACTIVE
+  RETURN = true
+} 
+
+// ATTACKING MODES
+set MODE = ATTACKING {
+  MODE = ACTIVE
+  ACTION = attack
+}
+
+set MODE = TAGGED {
+  MODE = ACTIVE:ATTACKING
+  TAGGED = true
+} 
+
+set MODE = GO-GRAB {
+  MODE = ACTIVE:ATTACKING
+	HAS_FLAG = false
+	GO_GRAB  = true
+} GRAB-RETURN
+
+// DEFENDING MODES
+set MODE = DEFENDING {
+    MODE = ACTIVE
+	ACTION = defend
+}
+
+set MODE = LOITERING {
+    MODE = ACTIVE:DEFENDING
+}
+
+
+//----------------------------------------------
+Behavior = BHV_OpRegionRecover
+{
+  name         = recover
+  pwt          = 300
+  updates      = RECOVER_UPDATES
+  activeflag   = RECOVER = true
+  inactiveflag = RECOVER = false
+
+  polygon = $(REGION)
+
+	//dynamic_region_var = RESCUE_REGION
+	
+	buffer_dist = 3
+	
+	trigger_entry_time = 1
+  trigger_exit_time  = 1
+
+	visual_hints = edge_size = 2
+	visual_hints = edge_color = gray70
+
+  //name         = recover
+  //pwt          = 300
+  //updates      = RECOVER_UPDATES
+  //activeflag   = RECOVER = true
+  //inactiveflag = RECOVER = false
+
+//             polygon = pts={-85,-48 : 59.37,20.97 : 93.86,-51.22 : -50.51, -120.19}
+	///rigger_entry_time = 1
+	//trigger_exit_time  = 1
+}
+
+//----------------------------------------------
+Behavior = BHV_AvdColregsV22
+{
+  name       = colavd_one_
+  pwt        = 300
+  updates    = CONTACT_INFO_ONE
+  condition  = MODE == ACTIVE
+  condition  = MODE != ACTIVE:RECOVERING
+  templating = spawn
+  endflag    = CONTACT_RESOLVED = $[CONTACT]
+
+               contact = name_provided_upon_spawn
+                 decay = 15,30
+      on_no_contact_ok = true
+           extrapolate = true
+//  ignore_contact_group = $(VTEAM)
+	
+     completed_dist = 25
+
+	headon_only = true
+	
+  max_util_cpa_dist = 6
+  min_util_cpa_dist = 2
+     pwt_inner_dist = 8
+     pwt_outer_dist = 15
+
+//  max_util_cpa_dist = 85
+//  min_util_cpa_dist = 55
+//     pwt_inner_dist = 10
+//     pwt_outer_dist = 200
+
+}
+
+//----------------------------------------------
+Behavior = BHV_StationKeep
+{
+  name      = station_keep
+  pwt       = 100
+  condition = MODE==STATION-KEEPING // example
+
+     center_activate = true
+  hibernation_radius = 5
+        inner_radius = 4
+        outer_radius = 15
+         outer_speed = 5
+       transit_speed = 5
+		      swing_time = 4
+	
+        visual_hints = vertex_size = 1     // default
+        visual_hints = edge_color = light_blue // default
+        visual_hints = edge_size = 1       // default
+        visual_hints = label_color = white // default
+        visual_hints = vertex_color = red  // default
+}
+
+//----------------------------------------------
+Behavior = BHV_Waypoint
+{
+  name      = waypt_return_base
+  pwt       = 100
+  condition = MODE == RETURN-PAVLAB
+  endflag   = STATION_KEEP = true
+
+	crs_spd_zaic_ratio = 20
+               speed = 2
+              radius = 3.0
+         slip_radius = 15.0
+               point = 55,50
+              repeat = 10
+                lead = 8
+}
+
+//----------------------------------------------
+Behavior = BHV_Waypoint
+{
+  name      = waypt_return_grab
+  pwt       = 100
+  condition = MODE == GRAB-RETURN
+  endflag   = GO_GRAB = true
+
+        speed = 2
+       radius = 3.0
+  slip_radius = 15.0
+       points = $(CFT)
+       repeat = 10
+         lead = 8
+}
+
+//----------------------------------------------
+Behavior = BHV_Waypoint
+{
+  name      = waypt_grab
+  pwt       = 50
+  perpetual = true
+  condition = MODE == GO-GRAB
+  endflag   = FLAG_GRAB_REQUEST=vname=$(RNAME)
+	endflag   = GO_GRAB = false
+
+	
+	
+           speed = 2 // meters per second
+    capture_line = false
+  capture_radius = 5.0
+     slip_radius = 10.0
+          points = $(CFXT)
+//          points = 0,20
+}
+
+//----------------------------------------------
+Behavior = BHV_Waypoint
+{
+  name      = waypt_untag
+  pwt       = 50
+  perpetual = true
+  condition = MODE == TAGGED
+
+           speed = 2 // meters per second
+    capture_line = false
+  capture_radius = 5.0
+     slip_radius = 5.0
+          points = $(CFT)
+}
+
+//----------------------------------------------
+Behavior = BHV_Loiter
+{
+  name      = loiter_defend
+  pwt       = 100
+  condition = MODE==LOITERING
+  updates   = LOITER_UPDATES
+
+          speed = 1.4
+        polygon = format=ellipse, x=0, y=0, degs=$(DANGX), major=50, minor=15, pts=16
+  center_assign = $(CH)
+      clockwise = true
+	acquire_dist = 5
+     patience = 80
+	
+   visual_hints = edge_color=gray50, vertex_size=0
+   visual_hints = nextpt_size=1
+}
+
+//----------------------------------------------
+Behavior = BHV_Loiter
+{
+  name      = port_loiter_defend
+  pwt       = 100
+  condition = MODE==LOITERING_PORT
+  updates   = LOITER_UPDATES
+
+          speed = 1.4
+        polygon = format=ellipse, $(PH), degs=$(DANGX), major=24, minor=10, pts=16
+  center_assign = $(PH)
+      clockwise = true
+	acquire_dist = 5
+     patience = 80
+	
+   visual_hints = edge_color=gray50, vertex_size=0
+   visual_hints = nextpt_size=1
+	}
+
+//----------------------------------------------
+Behavior = BHV_Loiter
+{
+  name      = star_loiter_defend
+  pwt       = 100
+  condition = MODE==LOITERING_STAR
+  updates   = LOITER_UPDATES
+
+          speed = 1.4
+        polygon = format=ellipse, $(SH), degs=$(DANGX), major=24, minor=10, pts=16
+  center_assign = $(SH)
+      clockwise = true
+	acquire_dist = 5
+     patience = 80
+	
+   visual_hints = edge_color=gray50, vertex_size=0
+   visual_hints = nextpt_size=1
+}
+
+
+//----------------------------------------------
+Behavior = BHV_AvdColregsV22
+{
+  name       = avd_defender_
+  pwt        = 300
+  updates    = CONTACT_INFO_ONE
+  condition  = MODE == ACTIVE
+  condition  = MODE != ACTIVE:RECOVERING
+  condition  = ACTION = attack
+  templating = spawn
+  endflag    = CONTACT_RESOLVED = $[CONTACT]
+
+               contact = name_provided_upon_spawn
+                 decay = 15,30
+      on_no_contact_ok = true
+           extrapolate = true
+
+#ifdef VTEAM red
+	ignore_name = RED_ONE
+	ignore_name = RED_TWO
+#elseifdef VTEAM blue
+	ignore_name = BLUE_ONE
+	ignore_name = BLUE_TWO
+#endif	
+     completed_dist = 25
+
+	headon_only = true
+	
+  max_util_cpa_dist = 14
+  min_util_cpa_dist = 10
+     pwt_inner_dist = 8
+     pwt_outer_dist = 20
+
+//  max_util_cpa_dist = 85
+//  min_util_cpa_dist = 55
+//     pwt_inner_dist = 10
+//     pwt_outer_dist = 200
+
+}

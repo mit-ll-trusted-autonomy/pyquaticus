@@ -1,0 +1,104 @@
+#include common.bhv <inits>
+initialize ACTION    = defend
+initialize HAS_FLAG  = false
+
+#ifdef RNAME red_one
+	initialize ACTION=defend
+#elseifdef RNAME red_two
+	initialize ACTION=attack
+#elseifdef RNAME blue_one
+	initialize ACTION=defend
+#elseifdef RNAME blue_two
+	initialize ACTION=attack
+#endif
+
+#include common.bhv <modes>
+	
+set MODE = TAGGED {
+    MODE = ACTIVE
+		TAGGED = true
+} 
+
+set MODE = ATTACKING {
+    MODE = ACTIVE
+		ACTION = attack
+}
+
+set MODE = GRABBING {
+    MODE = ACTIVE:ATTACKING
+		HAS_FLAG = false
+} GRAB_RETURNING
+
+set MODE = DEFENDING {
+    MODE = ACTIVE
+		ACTION = defend
+}
+
+
+#include common.bhv <bhvs>
+//----------------------------------------------
+Behavior = BHV_Waypoint
+{
+  name      = waypt_score
+  pwt       = 100
+  condition = MODE == GRAB_RETURNING
+  endflag   = HAS_FLAG=false
+
+        speed = 2
+       radius = 3.0
+  slip_radius = 15.0
+       points = $(CFT)
+       repeat = 10
+         lead = 8
+}
+
+//----------------------------------------------
+Behavior = BHV_Waypoint
+{
+  name      = waypt_grab
+  pwt       = 50
+  perpetual = true
+  condition = MODE == GRABBING
+  endflag   = FLAG_GRAB_REQUEST=vname=$(RNAME)
+	endflag   = GRABBING = false
+
+	         speed = 2 // meters per second
+    capture_line = false
+  capture_radius = 5.0
+     slip_radius = 10.0
+          points = $(CFXT)  // Format x,y
+}
+
+//----------------------------------------------
+Behavior = BHV_Waypoint
+{
+  name      = waypt_untag
+  pwt       = 50
+  perpetual = true
+  condition = MODE == TAGGED
+
+           speed = 2 // meters per second
+    capture_line = false
+  capture_radius = 5.0
+     slip_radius = 5.0
+          points = $(CFT)
+}
+
+//----------------------------------------------
+Behavior = BHV_Loiter
+{
+  name      = loiter_defend
+  pwt       = 100
+  condition = MODE==DEFENDING
+  updates   = LOITER_UPDATES
+
+          speed = 1.4
+        polygon = format=ellipse, x=0, y=0, degs=$(DANGX), major=50, minor=15, pts=16
+  center_assign = $(CH)
+      clockwise = true
+	acquire_dist = 5
+     patience = 80
+	
+   visual_hints = edge_color=gray50, vertex_size=0
+   visual_hints = nextpt_size=1
+}
