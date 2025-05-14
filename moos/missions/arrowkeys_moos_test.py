@@ -67,7 +67,6 @@ def main():
 
                 while True:
                     moostime = pymoos.time()
-                    self.env._moos_comm.notify("TAG_REQUEST", "red_one", "test=1000")
                     obs, reward, terminated, truncated, info = self.env.step(self.action)
                     # print(info["global_state"][("blue_one", "pos")])
                     # print(info["global_state"][("blue_two", "pos")])
@@ -77,16 +76,25 @@ def main():
                     # print(info["global_state"][("red_three", "pos")])
 
             def on_press(self, key):
-                if key.char in keys_to_action:
-                    self.action = keys_to_action[key.char]
-                    if key.char not in self.pressed_keys:
-                        self.pressed_keys.append(key.char)
-                else:
-                    self.check_if_idle()
+                try:
+                    if key.char in keys_to_action:
+                        self.action = keys_to_action[key.char]
+                        if key.char not in self.pressed_keys:
+                            self.pressed_keys.append(key.char)
+                    else:
+                        if key.char == 'b':
+                            self.env._moos_comm.notify("TAG_REQUEST", "vname=red_one, bridge_tag=true")
+                        else:
+                            self.check_if_idle()
+                except:
+                    pass
 
             def on_release(self, key):
-                self.pressed_keys.remove(key.char)
-                self.check_if_idle()
+                try:
+                    self.pressed_keys.remove(key.char)
+                    self.check_if_idle()
+                except:
+                    pass
 
             def check_if_idle(self):
                 if len(self.pressed_keys) > 0:

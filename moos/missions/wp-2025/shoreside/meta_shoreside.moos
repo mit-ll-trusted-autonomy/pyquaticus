@@ -98,7 +98,7 @@ ProcessConfig = uFldTagManager
   AppTick   = 4
   CommsTick = 4
 
-  tag_range = 10     // default (meters)
+  tag_range = 1000     // default (meters)
 
   post_color = white  // default
 
@@ -345,6 +345,8 @@ ProcessConfig = pMarineViewer
   button_5 = UNTAG_REQUEST=vname=red_two
   button_5 = UNTAG_REQUEST=vname=blue_one
   button_5 = UNTAG_REQUEST=vname=blue_two
+  button_5 = UNTAG_REQUEST=vname=blue_three
+  button_5 = UNTAG_REQUEST=vname=red_three
   button_5 = FLAG_RESET=all
 
   button_6 = PAUSE # DEPLOY_ALL=false
