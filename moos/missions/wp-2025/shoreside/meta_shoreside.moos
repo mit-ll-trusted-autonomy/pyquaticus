@@ -105,7 +105,7 @@ ProcessConfig = uFldTagManager
   tag_circle = true
   tag_circle_range = 5
   tag_circle_color = "green"
-  tag_min_interval = 10
+  tag_min_interval = 0
 
   tag_duration = 10000
 

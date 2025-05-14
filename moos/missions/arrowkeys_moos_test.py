@@ -24,6 +24,7 @@ import sys
 from pyquaticus.moos_bridge.config import MITConfig2025, WestPoint2025, pyquaticus_config_std
 from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
 from pyquaticus.moos_bridge.pyquaticus_moos_bridge_ext import PyQuaticusMoosBridgeFullObs
+import pymoos
 
 def main():
     no_op = 16
@@ -46,7 +47,7 @@ def main():
         all_agent_names=["blue_one", "blue_two", "blue_three", "red_one", "red_two", "red_three"],
         moos_config=WestPoint2025(),
         pyquaticus_config=pyquaticus_config_std,
-        timewarp=3,
+        timewarp=6,
         quiet=False
     )
     env.reset()
@@ -65,6 +66,8 @@ def main():
                 listener.start()
 
                 while True:
+                    moostime = pymoos.time()
+                    self.env._moos_comm.notify("TAG_REQUEST", "red_one", "test=1000")
                     obs, reward, terminated, truncated, info = self.env.step(self.action)
                     # print(info["global_state"][("blue_one", "pos")])
                     # print(info["global_state"][("blue_two", "pos")])
