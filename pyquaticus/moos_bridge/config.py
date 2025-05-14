@@ -88,13 +88,18 @@ class FieldReaderConfig:
         self.red_zone_lr = red_zone[2]
         self.red_zone_ll = red_zone[3]
 
-        num_rotations = 0
-        while not self._set_boundary_and_scrimmage():
-            # keep rotating until the scrimmage points make sense
-            self._rotate_zone_points()
-            num_rotations += 1
-            if num_rotations > 3:
-                raise RuntimeError("Cannot figure out boundary and scrimmage lines based on zone points given (likely an orientation issue).")
+        self.env_ul = self.blue_zone_ul
+        self.env_ur = self.red_zone_ur
+        self.env_ll = self.blue_zone_ll
+        self.env_lr = self.red_zone_lr
+
+        # num_rotations = 0
+        # while not self._set_boundary_and_scrimmage():
+        #     # keep rotating until the scrimmage points make sense
+        #     self._rotate_zone_points()
+        #     num_rotations += 1
+        #     if num_rotations > 3:
+        #         raise RuntimeError("Cannot figure out boundary and scrimmage lines based on zone points given (likely an orientation issue).")
 
         print("############### Inferred Region Configuration ##################")
         print("Blue Zone:")

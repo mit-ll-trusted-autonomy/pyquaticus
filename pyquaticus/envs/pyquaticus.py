@@ -310,11 +310,11 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             agent_obs_normalizer.register("wall_2_distance", max_dist, min_dist)
             agent_obs_normalizer.register("wall_3_bearing", max_bearing)
             agent_obs_normalizer.register("wall_3_distance", max_dist, min_dist)
-            agent_obs_normalizer.register("scrimmage_line_bearing", max_bearing)
-            agent_obs_normalizer.register("scrimmage_line_distance", max_dist, min_dist)
+            # agent_obs_normalizer.register("scrimmage_line_bearing", max_bearing)
+            # agent_obs_normalizer.register("scrimmage_line_distance", max_dist, min_dist)
             agent_obs_normalizer.register("speed", max_speed, min_speed)
             agent_obs_normalizer.register("has_flag", max_bool, min_bool)
-            agent_obs_normalizer.register("on_side", max_bool, min_bool)
+            # agent_obs_normalizer.register("on_side", max_bool, min_bool)
             agent_obs_normalizer.register("tagging_cooldown", [self.tagging_cooldown], [0.0])
             agent_obs_normalizer.register("is_tagged", max_bool, min_bool)
             agent_obs_normalizer.register("team_score", max_score, min_score)
@@ -327,7 +327,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                 agent_obs_normalizer.register((teammate_name, "relative_heading"), max_bearing)
                 agent_obs_normalizer.register((teammate_name, "speed"), max_speed, min_speed)
                 agent_obs_normalizer.register((teammate_name, "has_flag"), max_bool, min_bool)
-                agent_obs_normalizer.register((teammate_name, "on_side"), max_bool, min_bool)
+                # agent_obs_normalizer.register((teammate_name, "on_side"), max_bool, min_bool)
                 agent_obs_normalizer.register((teammate_name, "tagging_cooldown"), [self.tagging_cooldown], [0.0])
                 agent_obs_normalizer.register((teammate_name, "is_tagged"), max_bool, min_bool)
 
@@ -338,7 +338,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                 agent_obs_normalizer.register((opponent_name, "relative_heading"), max_bearing)
                 agent_obs_normalizer.register((opponent_name, "speed"), max_speed, min_speed)
                 agent_obs_normalizer.register((opponent_name, "has_flag"), max_bool, min_bool)
-                agent_obs_normalizer.register((opponent_name, "on_side"), max_bool, min_bool)
+                # agent_obs_normalizer.register((opponent_name, "on_side"), max_bool, min_bool)
                 agent_obs_normalizer.register((opponent_name, "tagging_cooldown"), [self.tagging_cooldown], [0.0])
                 agent_obs_normalizer.register((opponent_name, "is_tagged"), max_bool, min_bool)
 
@@ -362,11 +362,11 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
             global_state_normalizer.register((player_name, "pos"), pos_max, pos_min)
             global_state_normalizer.register((player_name, "heading"), max_heading)
-            global_state_normalizer.register((player_name, "scrimmage_line_bearing"), max_bearing)
-            global_state_normalizer.register((player_name, "scrimmage_line_distance"), max_dist, min_dist)
+            # global_state_normalizer.register((player_name, "scrimmage_line_bearing"), max_bearing)
+            # global_state_normalizer.register((player_name, "scrimmage_line_distance"), max_dist, min_dist)
             global_state_normalizer.register((player_name, "speed"), max_speed, min_speed)
             global_state_normalizer.register((player_name, "has_flag"), max_bool, min_bool)
-            global_state_normalizer.register((player_name, "on_side"), max_bool, min_bool)
+            # global_state_normalizer.register((player_name, "on_side"), max_bool, min_bool)
             global_state_normalizer.register((player_name, "oob"), max_bool, min_bool)
             global_state_normalizer.register((player_name, "tagging_cooldown"), [self.tagging_cooldown], [0.0])
             global_state_normalizer.register((player_name, "is_tagged"), max_bool, min_bool)
@@ -557,15 +557,15 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             scrimmage_line_dist, scrimmage_line_bearing = mag_bearing_to(
                 pos, scrimmage_line_closest_point, heading
             )
-            obs["scrimmage_line_bearing"] = scrimmage_line_bearing
-            obs["scrimmage_line_distance"] = scrimmage_line_dist
+            # obs["scrimmage_line_bearing"] = scrimmage_line_bearing
+            # obs["scrimmage_line_distance"] = scrimmage_line_dist
 
             # Own speed
             obs["speed"] = self.state["agent_speed"][agent.idx]
             # Own flag status
             obs["has_flag"] = self.state["agent_has_flag"][agent.idx]
             # On side
-            obs["on_side"] = self.state["agent_on_sides"][agent.idx]
+            # obs["on_side"] = self.state["agent_on_sides"][agent.idx]
             # Tagging cooldown
             obs["tagging_cooldown"] = self.state["agent_tagging_cooldown"][agent.idx]
             # Is tagged
@@ -593,7 +593,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                     obs[(entry_name, "relative_heading")] = angle180((dif_heading - hdg_to_agent) % 360)
                     obs[(entry_name, "speed")] = self.state["agent_speed"][dif_agent.idx]
                     obs[(entry_name, "has_flag")] = self.state["agent_has_flag"][dif_agent.idx]
-                    obs[(entry_name, "on_side")] = self.state["agent_on_sides"][dif_agent.idx]
+                    # obs[(entry_name, "on_side")] = self.state["agent_on_sides"][dif_agent.idx]
                     obs[(entry_name, "tagging_cooldown")] = self.state["agent_tagging_cooldown"][dif_agent.idx]
                     obs[(entry_name, "is_tagged")] = self.state["agent_is_tagged"][dif_agent.idx]
 
@@ -658,11 +658,11 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
             global_state[(agent_id, "pos")] = self._standard_pos(pos)
             global_state[(agent_id, "heading")] = self._standard_heading(heading)
-            global_state[(agent_id, "scrimmage_line_bearing")] = scrimmage_line_bearing
-            global_state[(agent_id, "scrimmage_line_distance")] = scrimmage_line_dist
+            # global_state[(agent_id, "scrimmage_line_bearing")] = scrimmage_line_bearing
+            # global_state[(agent_id, "scrimmage_line_distance")] = scrimmage_line_dist
             global_state[(agent_id, "speed")] = self.state["agent_speed"][agent.idx]
             global_state[(agent_id, "has_flag")] = self.state["agent_has_flag"][agent.idx]
-            global_state[(agent_id, "on_side")] = self.state["agent_on_sides"][agent.idx]
+            # global_state[(agent_id, "on_side")] = self.state["agent_on_sides"][agent.idx]
             global_state[(agent_id, "oob")] = self.state["agent_oob"][agent.idx]
             global_state[(agent_id, "tagging_cooldown")] = self.state["agent_tagging_cooldown"][agent.idx]
             global_state[(agent_id, "is_tagged")] = self.state["agent_is_tagged"][agent.idx]
