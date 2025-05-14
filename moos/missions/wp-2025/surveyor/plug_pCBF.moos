@@ -1,0 +1,21 @@
+//------------------------------------------------
+// pCBFCore config block
+ProcessConfig = pCBF
+{
+   AppTick   = 4
+   CommsTick = 4
+
+   self_name = $(RNAME)
+   safety_radius = 3.0
+   delta = 20.0
+	   
+   debug_verbose = false
+
+   preCBF_varname_postfix = _PRECBF
+
+   stale_thresh = 1
+   
+   control_constraints = DESIRED_RUDDER=-INF:INF,DESIRED_THRUST=0.0:100.0
+
+   agents_to_avoid = $(AGENTS_TO_AVOID)
+}

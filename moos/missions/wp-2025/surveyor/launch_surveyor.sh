@@ -95,6 +95,8 @@ for ARGI; do
 	echo "  --just_make, -j   Just make targ files.        "
 	echo "  --help, -H,-h     Display this message.        "
 	echo "  --verbose,-V,-v   Verbose launch.              "
+    echo "  --agents_to_avoid=<comma,separated,agent,names>"
+    echo "   ex. red_two,red_three,blue_one,blue_two,blue_three"
 	exit 0
     elif [ $ARGI = "-vs" -o $ARGI = "-v1" -o $ARGI = "--scott" ]; then
         FSEAT_IP=192.168.1.11;   VNAME="SCOTT";  IP_ADDR=192.168.1.12
@@ -174,6 +176,9 @@ for ARGI; do
         FLD_ANG="${ARGI}"
     elif [ "${ARGI:0:8}" = "--entry=" ]; then
         ENTRY="_${ARGI#--entry=*}"
+    elif [ "${ARGI:0:18}" = "--agents_to_avoid=" ]; then
+        AGENTS_TO_AVOID="${ARGI#--agents_to_avoid=*}"
+        echo "agents to avoid $AGENTS_TO_AVOID"
     elif [ $ARGI = "--no_rla" ]; then
         RLA_ENABLED="no"
     elif [ $ARGI = "--multi" ]; then
@@ -279,7 +284,8 @@ nsplug meta_surveyor.moos targ_${RNAME}.moos $NSFLAGS WARP=$TIME_WARP  \
        CID=$CID                    LOGPATH=$LOGPATH     \
        OPFOR_ZONE=$OPFOR_ZONE      OPFOR=$OPFOR         \
        $SIM $HFLD $FLDS            FSEAT_IP=$FSEAT_IP   \
-       MULTI_ENABLE=$MULTI_ENABLE  FLD_ANG=$FLD_ANG
+       MULTI_ENABLE=$MULTI_ENABLE  FLD_ANG=$FLD_ANG \
+       AGENTS_TO_AVOID=$AGENTS_TO_AVOID
 
 echo "Assembling BHV file targ_${RNAME}.bhv"
 nsplug "meta_surveyor${ENTRY}.bhv" targ_${RNAME}.bhv $NSFLAGS \

@@ -131,19 +131,21 @@ VARGS=" $VERBOSE $JUST_MAKE $TIME_WARP $LOGDIR $FLD_ANG $RLA $MULTI --sim --auto
 BVARGS="$VARGS $BENTRY"
 RVARGS="$VARGS $RENTRY"
 
+AGENTS_TO_AVOID="red_one,red_two,red_three,blue_one,blue_two,blue_three"
+
 cd ./surveyor
 echo "Launching Scott Red-One"
-./launch_surveyor.sh -vs -r1 $RVARGS --start=$SCO_POS --role=CONTROL
+./launch_surveyor.sh -vs -r1 $RVARGS --start=$SCO_POS --role=CONTROL --agents_to_avoid="${AGENTS_TO_AVOID/"red_one,"/}"
 echo "Launching Thomas Red-Two"
-./launch_surveyor.sh -vt -r2 $RVARGS --start=$THO_POS --role=CONTROL
+./launch_surveyor.sh -vt -r2 $RVARGS --start=$THO_POS --role=CONTROL --agents_to_avoid="${AGENTS_TO_AVOID/"red_two,"/}"
 echo "Launching Walter Red-Three"
-./launch_surveyor.sh -vw -r3 $RVARGS --start=$WAL_POS --role=CONTROL
+./launch_surveyor.sh -vw -r3 $RVARGS --start=$WAL_POS --role=CONTROL --agents_to_avoid="${AGENTS_TO_AVOID/"red_three,"/}"
 echo "Launching Ursula Blue-One"
-./launch_surveyor.sh -vu -b1 $BVARGS --start=$URS_POS --role=CONTROL
+./launch_surveyor.sh -vu -b1 $BVARGS --start=$URS_POS --role=CONTROL --agents_to_avoid="${AGENTS_TO_AVOID/"blue_one,"/}"
 echo "Launching Valhall Blue-Two"
-./launch_surveyor.sh -vv -b2 $BVARGS --start=$VAL_POS --role=CONTROL
+./launch_surveyor.sh -vv -b2 $BVARGS --start=$VAL_POS --role=CONTROL --agents_to_avoid="${AGENTS_TO_AVOID/"blue_two,"/}"
 echo "Launching Xavier Blue-Three"
-./launch_surveyor.sh -vx -b3 $BVARGS --start=$XAV_POS --role=CONTROL 
+./launch_surveyor.sh -vx -b3 $BVARGS --start=$XAV_POS --role=CONTROL --agents_to_avoid="${AGENTS_TO_AVOID/"blue_three"/}"
 cd ..
 
 

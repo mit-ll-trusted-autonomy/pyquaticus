@@ -14,13 +14,15 @@ ProcessConfig = ANTLER
   Run = pShare             @ NewConsole = false
   Run = pLogger            @ NewConsole = false
   Run = pNodeReporter      @ NewConsole = false
-  Run = pMarinePID         @ NewConsole = false
+  // Run = pMarinePID         @ NewConsole = false
+  Run = pMarinePIDV22_CBF  @ NewConsole = false
   Run = pHelmIvP           @ NewConsole = false
   Run = pHostInfo          @ NewConsole = false
   Run = pContactMgrV20     @ NewConsole = false
   Run = uFldNodeBroker     @ NewConsole = false
   Run = pDeadManPost       @ NewConsole = false
 	Run = pRealm             @ NewConsole = false
+  Run = pCBF               @ NewConsole = false
 #ifdef SIM
   Run = uSimMarine         @ NewConsole = false
 #else
@@ -59,6 +61,8 @@ ProcessConfig = ANTLER
 #include plug_pAquaticusStateMgr.moos
 #include ../plug_pRoleChooser.moos
 #include plug_pHelmIvP.moos
+#include plug_pCBF.moos
+#include plug_pMarinePIDV22_CBF.moos
 
 
 //----------------------------------------------- 

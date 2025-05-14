@@ -1,0 +1,37 @@
+//--------------------------------------------------
+// pMarinePIDV22_CBF Config Block
+
+ProcessConfig = pMarinePIDV22_CBF
+{
+  AppTick    = 10
+  CommsTick  = 10
+
+  VERBOSE       = true
+  DEPTH_CONTROL = false
+  ACTIVE_START  = true
+
+  // Yaw PID controller (Set for M8_1)
+  YAW_PID_KP             = 1.2
+  YAW_PID_KD             = 3.0 
+  YAW_PID_KI             = 0.0  
+  YAW_PID_INTEGRAL_LIMIT = 0.00 
+	
+  // Speed PID controller
+  SPEED_PID_KP           = 0.5
+  SPEED_PID_KD           = 0.0
+  SPEED_PID_KI           = 0.0
+  SPEED_PID_INTEGRAL_LIMIT = 0.00
+
+  // Maximums
+  MAXRUDDER  = 100 // 100
+  MAXTHRUST  = 100
+
+  // A non-zero SPEED_FACTOR overrides use of SPEED_PID
+  // Will set DESIRED_THRUST = DESIRED_SPEED * SPEED_FACTOR
+  //SPEED_FACTOR = 20
+  deprecated_ok = true
+
+  // Output name remapping for CBF purposes
+  DESIRED_THRUST_OUTPUTNAME = DESIRED_THRUST_PRECBF
+  DESIRED_RUDDER_OUTPUTNAME = DESIRED_RUDDER_PRECBF
+}
