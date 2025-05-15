@@ -88,10 +88,10 @@ class FieldReaderConfig:
         self.red_zone_lr = red_zone[2]
         self.red_zone_ll = red_zone[3]
 
-        self.env_ul = self.blue_zone_ul
-        self.env_ur = self.red_zone_ur
-        self.env_ll = self.blue_zone_ll
-        self.env_lr = self.red_zone_lr
+        self.env_ur = (205.0, 220.0)
+        self.env_lr = (280.18, 192.64)
+        self.env_ll = (225.46, 42.29)
+        self.env_ul = (150.28, 69.65)
 
         # num_rotations = 0
         # while not self._set_boundary_and_scrimmage():
