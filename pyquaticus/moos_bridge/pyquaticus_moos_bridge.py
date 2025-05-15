@@ -207,7 +207,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             "prev_agent_position":       None, #to be set with _update_state()
             "agent_speed":               None, #to be set with _update_state()
             "agent_heading":             None, #to be set with _update_state()
-            "agent_on_sides":            np.ones(self.num_agents, dtype=bool), #set with _update_state() to confirm
+            # "agent_on_sides":            np.ones(self.num_agents, dtype=bool), #set with _update_state() to confirm
             "agent_oob":                 None, #to be set with _update_state()
             "agent_has_flag":            None, #to be set with _update_state()
             "agent_is_tagged":           np.zeros(self.num_agents, dtype=bool),
@@ -312,7 +312,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         #on sides, flag taken, and flag position
         for team, agent_inds in self.agent_inds_of_team.items():
             #on sides
-            self.state["agent_on_sides"][agent_inds] = self._check_on_sides(self.state["agent_position"][agent_inds], team)
+            # self.state["agent_on_sides"][agent_inds] = self._check_on_sides(self.state["agent_position"][agent_inds], team)
 
             #flag taken
             team_idx = int(team)
@@ -413,55 +413,55 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         moostime = pymoos.time()
 
         # MOOS behavior mode ACTION (e.g. "ATTACK_E", "ATTACK_MED", "DEFEND_E", "DEFEND_MED")
-        if isinstance(action, str) and not (action in self.aquaticus_field_points):
-            self._moos_comm.notify("ACTION", action, moostime)
-            self._auto_returning_flag = False
+        # if isinstance(action, str) and not (action in self.aquaticus_field_points):
+        #     self._moos_comm.notify("ACTION", action, moostime)
+        #     self._auto_returning_flag = False
 
         # Automatically return agent to home region
-        elif agent.has_flag and self._check_on_sides(agent.pos, agent.team):
-            desired_spd = self.max_speeds[agent.idx]
-            _, desired_hdg = mag_bearing_to(agent.pos, self.flags[int(self.team)].home)
+        # elif agent.has_flag and self._check_on_sides(agent.pos, agent.team):
+        #     desired_spd = self.max_speeds[agent.idx]
+        #     _, desired_hdg = mag_bearing_to(agent.pos, self.flags[int(self.team)].home)
 
-            if not self._auto_returning_flag:
-                print("Taking over control to return flag")
+        #     if not self._auto_returning_flag:
+        #         print("Taking over control to return flag")
 
-            self._auto_returning_flag = True
-            self._moos_comm.notify("ACTION", "CONTROL", moostime)
-            self._moos_comm.notify("RLA_SPEED", desired_spd, moostime)
-            self._moos_comm.notify("RLA_HEADING", desired_hdg%360, moostime)
+        #     self._auto_returning_flag = True
+        #     self._moos_comm.notify("ACTION", "CONTROL", moostime)
+        #     self._moos_comm.notify("RLA_SPEED", desired_spd, moostime)
+        #     self._moos_comm.notify("RLA_HEADING", desired_hdg%360, moostime)
 
         # Translate incoming actions and publish them
-        else:
-            if not self.act_space_checked:
-                self.act_space_match = self.action_space.contains(
-                    np.asarray(action, dtype=self.action_space.dtype)
-                )
-                self.act_space_checked = True
-
-                if not self.act_space_match:
-                    print(f"Warning! Action passed in for {self._agent_name} ({action}) is not contained in agent's action space ({self.action_space}).")
-                    print(f"Auto-detecting action space for {self._agent_name}")
-                    print()
-
-            desired_spd, rel_hdg = self._to_speed_heading(
-                raw_action=action,
-                player=agent,
-                act_space_match=self.act_space_match,
-                act_space_str=self.act_space_str
+        # else:
+        if not self.act_space_checked:
+            self.act_space_match = self.action_space.contains(
+                np.asarray(action, dtype=self.action_space.dtype)
             )
-            desired_hdg = self._relheading_to_global_heading(agent.heading, rel_hdg)
+            self.act_space_checked = True
 
-            #notify the moos agent that we're controlling it directly
-            #NOTE: the name of this variable depends on the mission files
-            self._moos_comm.notify("ACTION", "CONTROL", moostime)
-            self._moos_comm.notify("RLA_SPEED", desired_spd, moostime)
-            self._moos_comm.notify("RLA_HEADING", desired_hdg%360, moostime)
-            self._action_count += 1
-            self._moos_comm.notify("RLA_ACTION_COUNT", self._action_count, moostime)
-            
-            #if close enough to flag, will attempt to grab
-            self._flag_grab_publisher()
-            self._auto_returning_flag = False
+            if not self.act_space_match:
+                print(f"Warning! Action passed in for {self._agent_name} ({action}) is not contained in agent's action space ({self.action_space}).")
+                print(f"Auto-detecting action space for {self._agent_name}")
+                print()
+
+        desired_spd, rel_hdg = self._to_speed_heading(
+            raw_action=action,
+            player=agent,
+            act_space_match=self.act_space_match,
+            act_space_str=self.act_space_str
+        )
+        desired_hdg = self._relheading_to_global_heading(agent.heading, rel_hdg)
+
+        #notify the moos agent that we're controlling it directly
+        #NOTE: the name of this variable depends on the mission files
+        self._moos_comm.notify("ACTION", "CONTROL", moostime)
+        self._moos_comm.notify("RLA_SPEED", desired_spd, moostime)
+        self._moos_comm.notify("RLA_HEADING", desired_hdg%360, moostime)
+        self._action_count += 1
+        self._moos_comm.notify("RLA_ACTION_COUNT", self._action_count, moostime)
+        
+        #if close enough to flag, will attempt to grab
+        self._flag_grab_publisher()
+        self._auto_returning_flag = False
 
         # Let the action occur
         time.sleep(self.dt)
@@ -787,8 +787,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             [self.env_ul, self.env_ll]
         ])
 
-        self.scrimmage_coords = np.asarray(moos_config.scrimmage_coords)
-        self.scrimmage_vec = self.scrimmage_coords[1] - self.scrimmage_coords[0]
+        # self.scrimmage_coords = np.asarray(moos_config.scrimmage_coords)
+        # self.scrimmage_vec = self.scrimmage_coords[1] - self.scrimmage_coords[0]
 
         # environment angle (rotation)
         rot_vec = self.env_lr - self.env_ll
@@ -809,33 +809,39 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.catch_radius = moos_config.flag_grab_radius
 
         #on sides
-        scrim2blue = self.flag_homes[Team.BLUE_TEAM] - self.scrimmage_coords[0]
-        scrim2red = self.flag_homes[Team.RED_TEAM] - self.scrimmage_coords[0]
+        # scrim2blue = self.flag_homes[Team.BLUE_TEAM] - self.scrimmage_coords[0]
+        # scrim2red = self.flag_homes[Team.RED_TEAM] - self.scrimmage_coords[0]
 
-        self._on_sides_sign = {
-            Team.BLUE_TEAM: np.sign(np.cross(self.scrimmage_vec, scrim2blue)),
-            Team.RED_TEAM: np.sign(np.cross(self.scrimmage_vec, scrim2red))
-        }
+        # self._on_sides_sign = {
+        #     Team.BLUE_TEAM: np.sign(np.cross(self.scrimmage_vec, scrim2blue)),
+        #     Team.RED_TEAM: np.sign(np.cross(self.scrimmage_vec, scrim2red))
+        # }
 
         #scale and transform the aquaticus point field to match mission field
-        if not np.all(np.isclose(0.5*self.scrimmage_coords[:, 0], self.env_size[0])):
-            print("Warning! Aquaticus field points are not side/team agnostic when environment is not symmetric.")
-            print(f"Environment dimensions: {self.env_size}")
-            print(f"Scrimmage line coordinates: {self.scrimmage_coords}")
+        self.aquaticus_field_points = get_afp()
+        for k, v in self.aquaticus_field_points.items():
+            pt = self.env_rot_matrix @ np.asarray(v)
+            pt += self.env_ll
+            pt *= self.env_size
+            self.aquaticus_field_points[k] = pt
+        # if not np.all(np.isclose(0.5*self.scrimmage_coords[:, 0], self.env_size[0])):
+        #     print("Warning! Aquaticus field points are not side/team agnostic when environment is not symmetric.")
+        #     print(f"Environment dimensions: {self.env_size}")
+        #     print(f"Scrimmage line coordinates: {self.scrimmage_coords}")
 
-            self.afp_sym = False
-            self.aquaticus_field_points = get_afp()
-            for k, v in self.aquaticus_field_points.items():
-                pt = self.env_rot_matrix @ np.asarray(v)
-                pt += self.env_ll
-                pt *= self.env_size
-                self.aquaticus_field_points[k] = pt
+        #     self.afp_sym = False
+        #     self.aquaticus_field_points = get_afp()
+        #     for k, v in self.aquaticus_field_points.items():
+        #         pt = self.env_rot_matrix @ np.asarray(v)
+        #         pt += self.env_ll
+        #         pt *= self.env_size
+        #         self.aquaticus_field_points[k] = pt
 
-        else:
-            self.afp_sym = True
-            self.aquaticus_field_points = get_afp()
-            for k, v in self.aquaticus_field_points.items():
-                pt = self.env_rot_matrix @ np.asarray(v)
-                pt += self.env_ll
-                pt *= self.env_size
-                self.aquaticus_field_points[k] = pt
+        # else:
+        #     self.afp_sym = True
+        #     self.aquaticus_field_points = get_afp()
+        #     for k, v in self.aquaticus_field_points.items():
+        #         pt = self.env_rot_matrix @ np.asarray(v)
+        #         pt += self.env_ll
+        #         pt *= self.env_size
+        #         self.aquaticus_field_points[k] = pt

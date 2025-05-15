@@ -551,12 +551,12 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                 obs[f"wall_{i}_distance"] = wall_dist
 
             # Scrimmage line
-            scrimmage_line_closest_point = closest_point_on_line(
-                self.scrimmage_coords[0], self.scrimmage_coords[1], pos
-            )
-            scrimmage_line_dist, scrimmage_line_bearing = mag_bearing_to(
-                pos, scrimmage_line_closest_point, heading
-            )
+            # scrimmage_line_closest_point = closest_point_on_line(
+            #     self.scrimmage_coords[0], self.scrimmage_coords[1], pos
+            # )
+            # scrimmage_line_dist, scrimmage_line_bearing = mag_bearing_to(
+            #     pos, scrimmage_line_closest_point, heading
+            # )
             # obs["scrimmage_line_bearing"] = scrimmage_line_bearing
             # obs["scrimmage_line_distance"] = scrimmage_line_dist
 
@@ -649,12 +649,12 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             pos = self.state["agent_position"][agent.idx]
             heading = self.state["agent_heading"][agent.idx]
 
-            scrimmage_line_closest_point = closest_point_on_line(
-                self.scrimmage_coords[0], self.scrimmage_coords[1], pos
-            )
-            scrimmage_line_dist, scrimmage_line_bearing = mag_bearing_to(
-                pos, scrimmage_line_closest_point, heading
-            )
+            # scrimmage_line_closest_point = closest_point_on_line(
+            #     self.scrimmage_coords[0], self.scrimmage_coords[1], pos
+            # )
+            # scrimmage_line_dist, scrimmage_line_bearing = mag_bearing_to(
+            #     pos, scrimmage_line_closest_point, heading
+            # )
 
             global_state[(agent_id, "pos")] = self._standard_pos(pos)
             global_state[(agent_id, "heading")] = self._standard_heading(heading)
