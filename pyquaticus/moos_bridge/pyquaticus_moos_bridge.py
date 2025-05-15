@@ -391,7 +391,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
         self._moos_comm.close(nice=False)
 
-    def step(self, action):
+    def step(self, action, tag=False):
         """
         Take a single action and sleep until it has taken effect.
 
@@ -453,6 +453,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
         #notify the moos agent that we're controlling it directly
         #NOTE: the name of this variable depends on the mission files
+        if tag:
+            self._moos_comm.notify("TAG_REQUEST", f"vname={self._agent_name}, bridge_tag=true")
         self._moos_comm.notify("ACTION", "CONTROL", moostime)
         self._moos_comm.notify("RLA_SPEED", desired_spd, moostime)
         self._moos_comm.notify("RLA_HEADING", desired_hdg%360, moostime)

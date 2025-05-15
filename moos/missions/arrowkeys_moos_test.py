@@ -59,6 +59,7 @@ def main():
             def __init__(self, env):
                 self.env = env
                 self.action = no_op
+                self.tag = False
 
                 # Collect events until released
                 self.pressed_keys = []
@@ -67,7 +68,7 @@ def main():
 
                 while True:
                     moostime = pymoos.time()
-                    obs, reward, terminated, truncated, info = self.env.step(self.action)
+                    obs, reward, terminated, truncated, info = self.env.step(self.action, self.tag)
                     # print(info["global_state"][("blue_one", "pos")])
                     # print(info["global_state"][("blue_two", "pos")])
                     # print(info["global_state"][("blue_three", "pos")])
@@ -83,7 +84,9 @@ def main():
                             self.pressed_keys.append(key.char)
                     else:
                         if key.char == 'b':
-                            self.env._moos_comm.notify("TAG_REQUEST", "vname=red_one, bridge_tag=true")
+                            self.tag = True
+                            if key.char not in self.pressed_keys:
+                                self.pressed_keys.append(key.char)
                         else:
                             self.check_if_idle()
                 except:
@@ -97,6 +100,7 @@ def main():
                     pass
 
             def check_if_idle(self):
+                self.tag = False
                 if len(self.pressed_keys) > 0:
                     self.action = keys_to_action[self.pressed_keys[-1]]
                 else:
