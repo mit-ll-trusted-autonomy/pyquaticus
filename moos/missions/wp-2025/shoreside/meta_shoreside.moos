@@ -98,7 +98,7 @@ ProcessConfig = uFldTagManager
   AppTick   = 4
   CommsTick = 4
 
-  tag_range = 1000     // default (meters)
+  tag_range = 15     // default (meters)
 
   post_color = white  // default
 

@@ -684,8 +684,8 @@ echo "XXST=\"$XXST\""
 # Part 6: Calculate the coords of region & two zones
 #-----------------------------------------------------
 echo "# ------- ZONES -------"
-ZONE1="pts={$NWT:$NET:$ECT:$WCT}"
-ZONE2="pts={$WCT:$ECT:$SET:$SWT}"
+ZONE1="pts={$NWT:$NET:$SET:$SWT}"
+ZONE2="pts={$NWT:$NET:$SET:$SWT}"
 
 echo "REGION=\"pts={$NWT:$NET:$SET:$SWT}\""
 echo "ZONE1=\"$ZONE1\""

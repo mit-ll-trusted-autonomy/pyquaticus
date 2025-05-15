@@ -142,11 +142,11 @@ Behavior = BHV_Waypoint
   endflag		= UPDATE_WPT=currix=100
   endflag		= UPDATE_WPT=currix=0
 
-           speed = 3.5 // meters per second  
+           speed = 0. // meters per second  
     capture_line = false
   capture_radius = 10.0
      slip_radius = 10.0
-          points = $(CFT)
+          points = 222,48
 }
 
 //----------------------------------------------
