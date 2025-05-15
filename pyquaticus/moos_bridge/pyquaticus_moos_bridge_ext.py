@@ -99,7 +99,7 @@ class PyQuaticusMoosBridgeFullObs(PyQuaticusMoosBridge):
 
         return obs, info
 
-    def step(self, action, tag):
+    def step(self, action, tag=False):
         agent_obs, reward, terminated, truncated, agent_info = super().step(action, tag) #agent's observation and info
 
         # Observations
