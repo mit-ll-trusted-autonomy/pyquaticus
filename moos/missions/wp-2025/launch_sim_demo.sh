@@ -92,8 +92,8 @@ THO_POS=265,166,225 #${POS[1]}
 WAL_POS=261,155,225 #${POS[2]}
 POS=(`pickpos --amt=3 --polygon=$BLUE_ZONE --hdg=$CCT,0 --format=terse`)
 URS_POS=162,77,0 #${POS[0]}
-VAL_POS=174,74,0 #${POS[1]}
-XAV_POS=189,70,0 #${POS[2]}
+VAL_POS=188,111,0 #${POS[1]}
+XAV_POS=218,98,0 #${POS[2]}
 
 #---------------------------------------------------------------
 #  Part 4: If verbose, show vars and confirm before launching
