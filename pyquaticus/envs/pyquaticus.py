@@ -859,7 +859,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         """
         Converts heading into env reference frame based on the boundary.
         """
-        return angle180(heading + self.env_rot_angle) #nautical headings are cw (not ccw)
+        return angle180(heading + np.rad2deg(self.env_rot_angle)) #nautical headings are cw (not ccw)
 
     def _check_on_sides(self, pos, team):
         """pos can be a single point or multiple points"""

@@ -82,30 +82,30 @@ Behavior = BHV_OpRegionRecover
 }
 
 //----------------------------------------------
-Behavior = BHV_AvdColregsV22
-{
-  name       = colavd_one_
-  pwt        = 300
-  updates    = CONTACT_INFO
-  condition  = MODE == ACTIVE
-
-  templating = spawn
-  endflag    = CONTACT_RESOLVED = $[CONTACT]
-
-           contact = name_provided_upon_spawn
-             decay = 15,30
-	on_no_contact_ok = true
-	    use_refinery = true
-       extrapolate = true
-//  ignore_contact_group = $(VTEAM)
-	
-     completed_dist = 18
-//        headon_only = true
-  max_util_cpa_dist = 6
-  min_util_cpa_dist = 3
-     pwt_inner_dist = 9
-     pwt_outer_dist = 15
-}
+//Behavior = BHV_AvdColregsV22
+//{
+//  name       = colavd_one_
+//  pwt        = 300
+//  updates    = CONTACT_INFO
+//  condition  = MODE == ACTIVE
+//
+//  templating = spawn
+//  endflag    = CONTACT_RESOLVED = $[CONTACT]
+//
+//           contact = name_provided_upon_spawn
+//             decay = 15,30
+//	on_no_contact_ok = true
+//	    use_refinery = true
+//       extrapolate = true
+////  ignore_contact_group = $(VTEAM)
+//	
+//     completed_dist = 18
+////        headon_only = true
+//  max_util_cpa_dist = 6
+//  min_util_cpa_dist = 3
+//     pwt_inner_dist = 9
+//     pwt_outer_dist = 15
+//}
 
 
 //----------------------------------------------

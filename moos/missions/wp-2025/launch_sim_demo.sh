@@ -87,9 +87,9 @@ fi
 # Part 3: Set the Vehicle random positions
 #-----------------------------------------------
 POS=(`pickpos --amt=3 --polygon=$RED_ZONE --hdg=$CCT,0 --format=terse` )
-SCO_POS=267,174,0 #${POS[0]}
-THO_POS=265,166,0 #${POS[1]}
-WAL_POS=261,155,0 #${POS[2]}
+SCO_POS=267,174,225 #${POS[0]}
+THO_POS=265,166,225 #${POS[1]}
+WAL_POS=261,155,225 #${POS[2]}
 POS=(`pickpos --amt=3 --polygon=$BLUE_ZONE --hdg=$CCT,0 --format=terse`)
 URS_POS=162,77,0 #${POS[0]}
 VAL_POS=174,74,0 #${POS[1]}

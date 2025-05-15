@@ -126,32 +126,43 @@ class Defender:
                 defender_id_closest_to_opp_closest_to_targ = valid_defender_ids[np.argmin(defender_dists_to_opp_closest_to_targ)]
 
                 if defender_id_closest_to_opp_closest_to_targ == self.agent_id:
-                    goal_dist, goal_bearing = mag_bearing_to(pos, opp_poses[opp_idx_closest_to_targ], relative_hdg=heading)
-                    tag = (goal_dist <= self.tag_radius) and (protect_dist > self.tag_radius)
+                    if len(valid_defender_ids) > 1: 
+                        goal_dist, goal_bearing = mag_bearing_to(pos, opp_poses[opp_idx_closest_to_targ], relative_hdg=heading)
+                        tag = (goal_dist <= self.tag_radius) and (protect_dist > self.tag_radius)
+                    else:
+                        opp_poses = np.array([opp_pos for i, opp_pos in enumerate(opp_poses)])
+                        goal_pos = np.mean(0.5*protect_pos + 0.5*opp_poses, axis=0)
+                        goal_dist, goal_bearing = mag_bearing_to(pos, goal_pos, relative_hdg=heading)
+
+                        opp_dists = np.linalg.norm(pos - opp_poses, axis=-1)
+                        tag = np.all(opp_dists <= self.tag_radius) and (protect_dist > self.tag_radius)
                 else:
                     #go to midpoint between target and other agents
                     other_opp_poses = np.array([opp_pos for i, opp_pos in enumerate(opp_poses) if i != opp_idx_closest_to_targ])
                     if len(other_opp_poses) > 0:
                         if len(other_opp_poses) > 1:
-                            goal_pos = np.mean(0.25*protect_pos + 0.75*other_opp_poses, axis=0)
-                            _, goal_bearing = mag_bearing_to(pos, goal_pos, relative_hdg=heading)
+                            goal_pos = np.mean(0.5*protect_pos + 0.5*other_opp_poses, axis=0)
+                            goal_dist, goal_bearing = mag_bearing_to(pos, goal_pos, relative_hdg=heading)
 
                             other_opp_dists = np.linalg.norm(pos - other_opp_poses, axis=-1)
                             tag = np.all(other_opp_dists <= self.tag_radius) and (protect_dist > self.tag_radius)
                         else:
-                            goal_pos = 0.25*protect_pos + 0.75*other_opp_poses[0]
-                            _, goal_bearing = mag_bearing_to(pos, goal_pos, relative_hdg=heading)
+                            goal_pos = 0.5*protect_pos + 0.5*other_opp_poses[0]
+                            goal_dist, goal_bearing = mag_bearing_to(pos, goal_pos, relative_hdg=heading)
 
                             opp_dist = np.linalg.norm(pos - other_opp_poses[0])
                             tag = (opp_dist <= self.tag_radius) and (protect_dist > self.tag_radius)
                     else:
-                        goal_pos = 0.25*protect_pos + 0.75*opp_poses[opp_idx_closest_to_targ]
-                        _, goal_bearing = mag_bearing_to(pos, goal_pos, relative_hdg=heading)
+                        goal_pos = 0.5*protect_pos + 0.5*opp_poses[opp_idx_closest_to_targ]
+                        goal_dist, goal_bearing = mag_bearing_to(pos, goal_pos, relative_hdg=heading)
 
                         opp_dist = np.linalg.norm(pos - opp_poses[opp_idx_closest_to_targ])
                         tag = (opp_dist <= self.tag_radius) and (protect_dist > self.tag_radius)
 
-                return [self.max_speed, goal_bearing], tag
+                if goal_dist <= self.tag_radius:
+                    return [0., goal_bearing], tag
+                else:
+                    return [self.max_speed, goal_bearing], tag
             else:
                 return [0., 0.], False
         else:
@@ -222,7 +233,7 @@ if __name__ == "__main__":
 
     ### load policy ###############################################################
     if agent_name == "blue_one":
-        policy = A("agent_0", 1.5)
+        policy = A("agent_0", 1.0)
     elif agent_name.startswith("blue"):
         policy = Defender(
             agent_id=f"agent_{int(args.agent[-1]) - 1}",
