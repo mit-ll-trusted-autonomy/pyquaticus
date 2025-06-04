@@ -24,7 +24,12 @@ import numpy as np
 from pyquaticus.base_policies.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import Team
 from pyquaticus.envs.pyquaticus import PyQuaticusEnv
-from pyquaticus.base_policies.rrt.utils import Point
+from pyquaticus.base_policies.rrt.utils import (
+    Point,
+    intersect,
+    intersect_circles,
+    get_ungrouped_seglist,
+)
 from pyquaticus.base_policies.rrt.rrt_star import rrt_star
 from pyquaticus.structs import PolygonObstacle, CircleObstacle
 
@@ -33,7 +38,7 @@ from typing import Optional
 
 from multiprocessing.dummy import Pool
 from multiprocessing.pool import ThreadPool
-from multiprocessing import TimeoutError
+from functools import partial
 
 
 class WaypointPolicy(BaseAgentPolicy):
@@ -94,6 +99,14 @@ class WaypointPolicy(BaseAgentPolicy):
 
         self.poly_obstacles = poly_obstacles
         self.circle_obstacles = circle_obstacles
+        if self.circle_obstacles is not None:
+            self.circles_for_intersect = np.array(circle_obstacles)
+        else:
+            self.circles_for_intersect = None
+        if poly_obstacles is not None:
+            self.ungrouped_seglist = get_ungrouped_seglist(poly_obstacles)
+        else:
+            self.ungrouped_seglist = None
 
     def compute_action(self, obs, info):
         """
@@ -158,9 +171,37 @@ class WaypointPolicy(BaseAgentPolicy):
         if len(self.wps) == 0:
             return
 
+        # Check if any future waypoints have an obstacle-free path
+        # If so, skip directly to the closest one to the goal
+        wps = np.array(self.wps).reshape((-1, 1, 2))
+        pos_array = np.repeat(pos.reshape((-1, 2)), len(self.wps), 0).reshape(-1, 1, 2)
+        segs = np.concatenate((pos_array, wps), axis=1)
+        clear = np.logical_not(
+            intersect(segs, self.ungrouped_seglist, radius=self.avoid_radius)
+        )
+        clear = np.logical_and(
+            clear,
+            np.logical_not(
+                intersect_circles(
+                    segs, self.circles_for_intersect, agent_radius=self.avoid_radius
+                )
+            ),
+        )
+        try:
+            last_free_wp_index = len(list(clear)) - 1 - list(clear)[::-1].index(True)
+        except ValueError:
+            # No points are obstacle-free, even the current waypoint
+            # TODO: Continue to current waypoint? Replan?
+            pass
+        else:
+            if last_free_wp_index > 0:
+                self.wps = self.wps[last_free_wp_index:]
+                self.cur_dist = None
+                return
+
         new_dist = np.linalg.norm(self.wps[0] - pos)
 
-        if new_dist <= self.capture_radius:
+        if (new_dist <= self.capture_radius) and clear[0]:
             self.wps.pop(0)
             self.cur_dist = None
 
@@ -169,6 +210,7 @@ class WaypointPolicy(BaseAgentPolicy):
             and (self.cur_dist is not None)
             and (new_dist > self.cur_dist)
             and (new_dist <= self.slip_radius)
+            and clear[0]
         ):
             self.wps.pop(0)
             self.cur_dist = None
@@ -222,15 +264,9 @@ class WaypointPolicy(BaseAgentPolicy):
 
         assert isinstance(self.plan_process, ThreadPool)
 
-        try:
-            tree = self.plan_process.apply_async(rrt_star, kwds=kwargs).get(
-                timeout=timeout
-            )
-
-            self.get_path(tree, wp)
-
-        except TimeoutError:
-            print("Planning timed out.")
+        self.plan_process.apply_async(
+            rrt_star, kwds=kwargs, callback=partial(self.get_path, wp=wp)
+        )
 
     def get_path(self, tree: list[Point], wp: np.ndarray):
         """
