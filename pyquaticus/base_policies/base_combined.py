@@ -19,14 +19,17 @@
 
 # SPDX-License-Identifier: BSD-3-Clause
 
+from typing import Union
+
 import numpy as np
 
 import pyquaticus.base_policies.base_attack as attack_policy
 import pyquaticus.base_policies.base_defend as defend_policy
 from pyquaticus.base_policies.base import BaseAgentPolicy
-from pyquaticus.envs.pyquaticus import config_dict_std, Team, PyQuaticusEnv
+from pyquaticus.envs.pyquaticus import PyQuaticusEnv, Team
+from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
 
-modes = {"easy", "medium", "hard", "nothing"}
+MODES = {"easy", "medium", "hard", "nothing"}
 
 
 class Heuristic_CTF_Agent(BaseAgentPolicy):
@@ -36,19 +39,14 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         self,
         agent_id: str,
         team: Team,
-        env: PyQuaticusEnv,
+        env: Union[PyQuaticusEnv, PyQuaticusMoosBridge],
         continuous: bool = False,
         mode="easy",
         defensiveness=20.0,
     ):
         super().__init__(agent_id, team, env)
 
-        if mode not in modes:
-            raise ValueError(f"mode {mode} not a valid mode out of {modes}")
-
-        if mode not in modes:
-            raise ValueError(f"Invalid mode {mode}, valid modes are {modes}")
-        self.mode = mode
+        self.set_mode(mode)
         self.defensiveness = defensiveness
         self.id = agent_id
         self.continuous = continuous
@@ -69,15 +67,10 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         )
         self.scrimmage = None
 
-    def set_mode(self, mode="easy"):
-        """
-        Determine which mode the agent is in:
-        'easy' = Easy Attacker
-        'medium' = Medium Attacker
-        'hard' = Hard Attacker.
-        """
-        if mode not in modes:
-            raise ValueError(f"Invalid mode {mode}")
+    def set_mode(self, mode: str):
+        """Sets difficulty mode."""
+        if mode not in MODES:
+            raise ValueError(f"mode {mode} not in set of valid modes: {MODES}")
         self.mode = mode
 
     def compute_action(self, obs, info):
@@ -192,7 +185,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         desired_speed = self.max_speed
 
         try:
-            heading_error = self.angle180(self.vec_to_heading(direction))
+            heading_error = self.vec_to_heading(direction)
 
             if self.continuous:
                 if np.isnan(heading_error):
@@ -272,7 +265,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             )
 
         dist_to_flag = self.get_distance_between_2_points(
-            self.opp_team_density[0], self.my_flag_loc
+            self.opp_team_density[0], np.array(self.my_flag_loc)
         )
         return dist_to_flag < threshold
 
@@ -295,6 +288,6 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             )
 
         dist_to_flag = self.get_distance_between_2_points(
-            self.opp_team_density[0], self.my_flag_loc
+            self.opp_team_density[0], np.array(self.my_flag_loc)
         )
         return dist_to_flag > threshold

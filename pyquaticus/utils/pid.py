@@ -19,27 +19,49 @@
 
 # SPDX-License-Identifier: BSD-3-Clause
 
-class PID:
-    """Simple class for scalar PID control."""
+import numpy as np
+from collections import deque
 
-    def __init__(self, dt, kp, ki, kd, integral_max=float("inf")):
+
+class PID:
+    """
+    Simple class for scalar PID control.
+    
+    Adapted from MOOS-IvP ScalarPID and PIDEngine:
+        (1) https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/lib_marine_pid/ScalarPID.cpp
+            -deriv_history_size (m_nHistorySize) default changed from 10 to 1 (moving average for smoothing not necessary in sim)
+
+        (2) https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/lib_marine_pid/PIDEngine.cpp
+    """
+    def __init__(self, dt, kp, kd, ki, deriv_history_size=1, integral_limit=float("inf"), output_limit=float("inf")):
         self._dt = dt
         self._kp = kp
-        self._ki = ki
         self._kd = kd
-        self._integral_max = integral_max
+        self._ki = ki
 
-        self._prev_error = 0.0
+        self._deriv_history = deque(maxlen=deriv_history_size)
+        self._integral_limit = integral_limit
+        self._output_limit = output_limit
+
+        self._prev_error = None
         self._integral = 0.0
 
     def __call__(self, error):
-        self._integral = min(self._integral + error * self._dt, self._integral_max)
-        deriv = (error - self._prev_error) / self._dt
+        #Calculate the derivative term
+        if self._prev_error is not None:
+            self._deriv_history.append((error - self._prev_error) / self._dt)
+            deriv = np.mean(self._deriv_history)
+        else:
+            deriv = 0
 
+        #Calculate the integral term
+        self._integral += self._ki * error * self._dt
+        self._integral = np.clip(self._integral, -self._integral_limit, self._integral_limit) #prevent integral wind up
+        
+        #Calculate PID output
+        pid_out = (self._kp * error) + (self._kd * deriv) + self._integral #note Ki is already in self._integral
+        pid_out = np.clip(pid_out, -self._output_limit, self._output_limit) #prevent saturation
+        
         self._prev_error = error
 
-        p = self._kp * error
-        i = self._ki * self._integral
-        d = self._kd * deriv
-
-        return p + i + d
+        return pid_out

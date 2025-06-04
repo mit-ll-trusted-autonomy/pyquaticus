@@ -6,7 +6,7 @@ This PettingZoo is a _lightweight_ environment for developing algorithms to play
 
 The primary motivation is to enable quick iteration of algorithm development or training loops for Reinforcement Learning (RL). The implementation is pure-Python and supports faster-than-real-time execution and can easily be parallelized on a cluster. This is critical for scaling up learning-based techniques before transitioning to higher-fidelity simulation and/or USV hardware.
 
-The vehicle dynamics are based on the [MOOS-IvP](https://oceanai.mit.edu/moos-ivp/pmwiki/pmwiki.php?n=Main.HomePage) `uSimMarine` dynamics [here](https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarine). MOOS-IvP stands for Mission Oriented Operating Suite with Interval Programming. The IvP addition to the core MOOS software package is developed and maintained by the Laboratory for Autonomous Marine Sensing Systems at MIT. MOOS-IvP is a popular choice for maritime autonomy filling a similar role to the Robot Operating System (ROS) used in other robotics fields.
+The default vehicle dynamics are based on the [MOOS-IvP](https://oceanai.mit.edu/moos-ivp/pmwiki/pmwiki.php?n=Main.HomePage) `uSimMarine` dynamics [here](https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarine). MOOS-IvP stands for Mission Oriented Operating Suite with Interval Programming. The IvP addition to the core MOOS software package is developed and maintained by the Laboratory for Autonomous Marine Sensing Systems at MIT. MOOS-IvP is a popular choice for maritime autonomy filling a similar role to the Robot Operating System (ROS) used in other robotics fields.
 
 ## Key Capabilities
 * Supports standard PettingZoo interface for multi-agent RL
@@ -15,18 +15,43 @@ The vehicle dynamics are based on the [MOOS-IvP](https://oceanai.mit.edu/moos-iv
 * Implementation of MOOS-IvP vehicle dynamics such that algorithms and learning policies can easily be ported to MOOS-IvP and deployed on hardware
 * Baseline policies to train against
 * Parameterized number of agents
+* Configurable observation space
 * Decentralized and agent-relative observation space
 * Configurable reward function
+* Supports custom agent dynamics
+* Simulate real-world maritime scenarios of any aquatic region on earth with [OpenStreetMap](https://www.openstreetmap.org/)-based environments
+* Example integration with [RLLib](https://docs.ray.io/en/latest/rllib/index.html) for reinforcement learning
+* Easy deployment on MOOS-compatible robots  
+
 
 ## Installation
+### Conda
 It is highly recommended to use a `conda` environment. Assuming you have [Anaconda](https://www.anaconda.com/) or [Miniconda](https://docs.conda.io/en/latest/miniconda.html) installed, run the following from the top-level of this repository:
 
 ```
-# create a small virtualenv -- just enough to run the PettingZoo environment
+# create a small virtual environment -- just enough to run the PettingZoo environment
 ./setup-conda-env.sh light
 ```
 
-You can then activate the environment with: `conda activate pyquaticus-lightenv`
+```
+# or create the full virtual environment -- with RLLib and PyTorch
+./setup-conda-env.sh full
+```
+
+You can then activate the environment with: `conda activate env-light/` or `conda activate env-full/`
+### Venv
+Create a virtual environment with Python 3.10
+
+Source the environment
+
+In the pyquaticus root directory, run either
+```
+pip install -e .
+```
+or
+```
+pip install -e .[torch,ray]
+```
 
 ## Basic Tests
 
@@ -41,7 +66,8 @@ You can then activate the environment with: `conda activate pyquaticus-lightenv`
 * **Flag keepout zone:** circle (team's color) drawn around flag
 * **Flag pickup zone:** black circle drawn around flag
 * **Tagging cooldown**: receding black circle around agent
-* **Drive-to-home**: green halo around agent (occurs if tagged or boundary collision)
+* **Out-of-bounds**: yellow halo around agent (occurs if out-of-bounds)
+* **Drive-to-home**: green halo around agent (occurs if tagged)
 * **Lines between agents:**
   * Drawn between agents of opposite teams
   * **Green**: within `2*catch_radius`
@@ -50,38 +76,11 @@ You can then activate the environment with: `conda activate pyquaticus-lightenv`
 
 ## Configurable Reward
 
-`Pyquaticus` comes with a simple sparse reward, but it can be extended with different reward structures. See [rewards.py](https://github.com/mit-ll-trusted-autonomy/pyquaticus/blob/main/pyquaticus/utils/rewards.py) for more information. Here is an example of insantiating the environment with sparse rewards for all agents in a 2v2 environment:
+Pyquaticus comes with a simple sparse reward, but it can be extended with different reward structures. See [rewards.py](https://github.com/mit-ll-trusted-autonomy/pyquaticus/blob/main/pyquaticus/utils/rewards.py) for more information.
 
-```
-from pyquaticus import pyquaticus_v0
-import pyquaticus.utils.rewards as reward
+## Docker
 
-env = pyquaticus_v0.PyQuaticusEnv(render_mode="human", team_size=2, {i: reward.sparse for i in range(4)})
-```
-
-Note: agent ids are ordered with all the blue agents followed by all the red agents.
-
-## Docker 
-
-The docker directory contains the files for the bridge over to the MOOS environment. If you just want to run your agents in MOOS, you do not need to build the docker. Install gym-aquaticus with `pip install -e /gym-aquaticus ` and then run the pyquaticus_bridge_test.py or pyquaticus_bridge_single_sim.py. 
-
-The docker is necessary for running the agents on the boats, however. Here are the commands
-
-```
-# build the docker
-cd docker
-sudo docker build -t pyquaticus:test .
-```
-
-```
-# runs the docker and mounts a volume to the logs directory on the host computer
-sudo docker run -it -v ~/pyquaticus/docker/logs:/home/moos/logs --net host --entrypoint /bin/bash pyquaticus:test
-```
-
-## Competition Instructions
-Submitted agents will be evaluated based on three metrics easy, medium, and a hidden metric for 2500 steps. The easy metric consists of the competition_easy attacker and defender base policies. The medium evaluates your submited agents agaisnt the hard attacker and defender base policies. Last metric used to evaluate your submitted agents won't be shared, you will recieve a score for this metric. The scores recieved repersent the total number of flag captures your team of agents was able to achieve in the 2500 game steps.
-
-An example submission zip folder can be found in rl_test, submissions should be a zip file only containing the learned policy network and the filled in solution.py (the file name and class name must remain solution.py).
+Out-of-date, do not use. Coming soon!
 
 ## Distribution and Disclaimer Statements
 

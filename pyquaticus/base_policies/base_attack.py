@@ -19,13 +19,15 @@
 
 # SPDX-License-Identifier: BSD-3-Clause
 
+from typing import Union
+
 import numpy as np
 
 from pyquaticus.base_policies.base import BaseAgentPolicy
-from pyquaticus.envs.pyquaticus import Team, PyQuaticusEnv
-from pyquaticus.utils.utils import mag_bearing_to
+from pyquaticus.envs.pyquaticus import PyQuaticusEnv, Team
+from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
 
-modes = {"nothing", "easy", "medium", "hard", "competition_easy", "competition_medium"}
+MODES = {"nothing", "easy", "medium", "hard", "competition_easy", "competition_medium"}
 
 
 class BaseAttacker(BaseAgentPolicy):
@@ -35,15 +37,13 @@ class BaseAttacker(BaseAgentPolicy):
         self,
         agent_id: str,
         team: Team,
-        env: PyQuaticusEnv,
+        env: Union[PyQuaticusEnv, PyQuaticusMoosBridge],
         continuous: bool = False,
         mode: str = "easy",
     ):
         super().__init__(agent_id, team, env)
 
-        if mode not in modes:
-            raise AttributeError(f"Invalid mode {mode}")
-        self.mode = mode
+        self.set_mode(mode)
 
         if team not in Team:
             raise AttributeError(f"Invalid team {team}")
@@ -51,15 +51,16 @@ class BaseAttacker(BaseAgentPolicy):
         self.continuous = continuous
         self.goal = "SC"
 
-        self.aquaticus_field_points = env.config_dict["aquaticus_field_points"]
+        if isinstance(env, PyQuaticusMoosBridge) or not env.gps_env:
+            self.aquaticus_field_points = env.aquaticus_field_points
 
     def set_mode(self, mode: str):
         """Sets difficulty mode."""
-        if mode not in modes:
-            raise ValueError(f"Invalid mode {mode}")
+        if mode not in MODES:
+            raise ValueError(f"mode {mode} not in set of valid modes: {MODES}")
         self.mode = mode
 
-    def compute_action(self, obs, info):
+    def compute_action(self, obs, info: dict[str, dict]):
         """
         Compute an action from the given observation and global state.
 
@@ -74,11 +75,9 @@ class BaseAttacker(BaseAgentPolicy):
         """
         self.update_state(obs, info)
 
-        global_state = info[self.id]
-
-        # Unnormalize state, if necessary
-        if not isinstance(global_state, dict):
-            global_state = self.state_normalizer.unnormalized(global_state)
+        unnorm_obs = info[self.id].get("unnorm_obs", None)
+        if unnorm_obs is None:
+            unnorm_obs = obs[self.id]
 
         if self.mode == "easy":
 
@@ -86,7 +85,7 @@ class BaseAttacker(BaseAgentPolicy):
 
             # If I or someone on my team has the flag, go back home
             if self.has_flag or self.my_team_has_flag:
-                goal_vect = self.bearing_to_vec(self.own_home_bearing)
+                goal_vect = self.bearing_to_vec(unnorm_obs["own_home_bearing"])
 
             # Otherwise go get the opponents flag
             else:
@@ -94,13 +93,10 @@ class BaseAttacker(BaseAgentPolicy):
 
             # Convert the vector to a heading, and then pick the best discrete action to perform
             try:
-                heading_error = self.angle180(self.vec_to_heading(goal_vect) - self.heading)
+                heading_error = self.vec_to_heading(goal_vect)
 
                 if self.continuous:
                     if np.isnan(heading_error):
-                        heading_error = 0
-
-                    if np.abs(heading_error) < 5:
                         heading_error = 0
 
                     return (desired_speed, heading_error)
@@ -129,6 +125,7 @@ class BaseAttacker(BaseAgentPolicy):
                 return -1
 
         elif self.mode == "competition_easy":
+            assert self.aquaticus_field_points is not None
 
             if self.team == Team.RED_TEAM:
                 estimated_position = np.asarray(
@@ -157,7 +154,6 @@ class BaseAttacker(BaseAgentPolicy):
                     value = value[:-1]
             if self.is_tagged:
                 self.goal = "SC"
-
             if (
                 -2.5
                 <= self.get_distance_between_2_points(
@@ -165,7 +161,6 @@ class BaseAttacker(BaseAgentPolicy):
                 )
                 <= 2.5
             ):
-
                 if self.goal == "SC":
                     self.goal = "CFX"
                 elif self.goal == "CFX":
@@ -182,40 +177,9 @@ class BaseAttacker(BaseAgentPolicy):
                 )
                 <= 6
             ):
+
                 self.goal = "SC"
-
-            if self.continuous:
-
-                # Make point system the same on both blue and red side
-                if self.team == Team.BLUE_TEAM:
-                    if "P" in self.goal:
-                        self.goal = "S" + self.goal[1:]
-                    elif "S" in self.goal:
-                        self.goal = "P" + self.goal[1:]
-                    if "X" not in self.goal and self.goal not in ["SC", "CC", "PC"]:
-                        self.goal += "X"
-                    elif self.goal not in ["SC", "CC", "PC"]:
-                        self.goal = self.goal[:-1]
-
-                _, heading = mag_bearing_to(
-                    self.pos,
-                    self.aquaticus_field_points[self.goal],
-                    self.heading,
-                )
-                if (
-                    self.get_distance_between_2_points(
-                        self.pos,
-                        self.aquaticus_field_points[self.goal],
-                    )
-                    <= 0.3
-                ):
-                    speed = 0.0
-                else:
-                    speed = self.max_speed
-
-                return speed, heading
-            else:
-                return self.goal
+            return self.goal
 
         elif self.mode == "medium":
 
@@ -226,7 +190,7 @@ class BaseAttacker(BaseAgentPolicy):
 
                 # Weighted to follow goal more than avoiding others
                 goal_vect = np.multiply(
-                    2.00, self.bearing_to_vec(self.own_home_bearing)
+                    2.00, self.bearing_to_vec(unnorm_obs["own_home_bearing"])
                 )
                 avoid_vect = self.get_avoid_vect(self.opp_team_pos)
                 my_action = goal_vect + avoid_vect
@@ -241,13 +205,10 @@ class BaseAttacker(BaseAgentPolicy):
 
             # Convert the heading to a discrete action to follow
             try:
-                heading_error = self.angle180(self.vec_to_heading(my_action) - self.heading)
+                heading_error = self.vec_to_heading(my_action)
 
                 if self.continuous:
                     if np.isnan(heading_error):
-                        heading_error = 0
-
-                    if np.abs(heading_error) < 5:
                         heading_error = 0
 
                     return (desired_speed, heading_error)
@@ -274,7 +235,7 @@ class BaseAttacker(BaseAgentPolicy):
             desired_speed = self.max_speed
 
             # If I'm close to a wall and driving towards it, add the closest point to the wall as an obstacle to avoid
-            if self.wall_distances[0] < 10 and (-90 < self.angle180(self.wall_bearings[0] - self.heading) < 90):
+            if self.wall_distances[0] < 10 and (-90 < self.wall_bearings[0] < 90):
                 wall_0_unit_vec = self.rb_to_rect(
                     np.array(
                         (
@@ -289,7 +250,7 @@ class BaseAttacker(BaseAgentPolicy):
                         self.wall_distances[0] * wall_0_unit_vec[1],
                     )
                 )
-            elif self.wall_distances[2] < 10 and (-90 < self.angle180(self.wall_bearings[2] - self.heading) < 90):
+            elif self.wall_distances[2] < 10 and (-90 < self.wall_bearings[2] < 90):
                 wall_2_unit_vec = self.rb_to_rect(
                     np.array(
                         (
@@ -304,7 +265,7 @@ class BaseAttacker(BaseAgentPolicy):
                         self.wall_distances[2] * wall_2_unit_vec[1],
                     )
                 )
-            if self.wall_distances[1] < 10 and (-90 < self.angle180(self.wall_bearings[1] - self.heading) < 90):
+            if self.wall_distances[1] < 10 and (-90 < self.wall_bearings[1] < 90):
                 wall_1_unit_vec = self.rb_to_rect(
                     np.array(
                         (
@@ -319,7 +280,7 @@ class BaseAttacker(BaseAgentPolicy):
                         self.wall_distances[1] * wall_1_unit_vec[1],
                     )
                 )
-            elif self.wall_distances[3] < 10 and (-90 < self.angle180(self.wall_bearings[3] - self.heading) < 90):
+            elif self.wall_distances[3] < 10 and (-90 < self.wall_bearings[3] < 90):
                 wall_3_unit_vec = self.rb_to_rect(
                     np.array(
                         (
@@ -341,7 +302,7 @@ class BaseAttacker(BaseAgentPolicy):
             # If I have the flag, go back to my side
             if self.has_flag:
                 goal_vect = np.multiply(
-                    1.25, self.bearing_to_vec(self.own_home_bearing)
+                    1.25, self.bearing_to_vec(unnorm_obs["own_home_bearing"])
                 )
                 avoid_vect = self.get_avoid_vect(
                     self.opp_team_pos, avoid_threshold=avoid_thresh
@@ -386,13 +347,10 @@ class BaseAttacker(BaseAgentPolicy):
 
             # Try to convert the heading to a discrete action
             try:
-                heading_error = self.angle180(self.vec_to_heading(my_action) - self.heading)
+                heading_error = self.vec_to_heading(my_action)
                 # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
                 if self.continuous:
                     if np.isnan(heading_error):
-                        heading_error = 0
-
-                    if np.abs(heading_error) < 5:
                         heading_error = 0
 
                     return (desired_speed, heading_error)
@@ -419,7 +377,7 @@ class BaseAttacker(BaseAgentPolicy):
             desired_speed = self.max_speed
 
             # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid
-            if self.wall_distances[0] < 10 and (-90 < self.angle180(self.wall_bearings[0] - self.heading) < 90):
+            if self.wall_distances[0] < 10 and (-90 < self.wall_bearings[0] < 90):
                 wall_0_unit_vec = self.rb_to_rect(
                     np.array(
                         (
@@ -434,7 +392,7 @@ class BaseAttacker(BaseAgentPolicy):
                         self.wall_distances[0] * wall_0_unit_vec[1],
                     )
                 )
-            elif self.wall_distances[2] < 10 and (-90 < self.angle180(self.wall_bearings[2] - self.heading) < 90):
+            elif self.wall_distances[2] < 10 and (-90 < self.wall_bearings[2] < 90):
                 wall_2_unit_vec = self.rb_to_rect(
                     np.array(
                         (
@@ -449,7 +407,7 @@ class BaseAttacker(BaseAgentPolicy):
                         self.wall_distances[2] * wall_2_unit_vec[1],
                     )
                 )
-            if self.wall_distances[1] < 10 and (-90 < self.angle180(self.wall_bearings[1] - self.heading) < 90):
+            if self.wall_distances[1] < 10 and (-90 < self.wall_bearings[1] < 90):
                 wall_1_unit_vec = self.rb_to_rect(
                     np.array(
                         (
@@ -464,7 +422,7 @@ class BaseAttacker(BaseAgentPolicy):
                         self.wall_distances[1] * wall_1_unit_vec[1],
                     )
                 )
-            elif self.wall_distances[3] < 10 and (-90 < self.angle180(self.wall_bearings[3] - self.heading) < 90):
+            elif self.wall_distances[3] < 10 and (-90 < self.wall_bearings[3] < 90):
                 wall_3_unit_vec = self.rb_to_rect(
                     np.array(
                         (
@@ -485,7 +443,7 @@ class BaseAttacker(BaseAgentPolicy):
             # If I or someone on my team has the flag, go back to my side
             if self.has_flag or self.my_team_has_flag:
                 goal_vect = np.multiply(
-                    1.25, self.bearing_to_vec(self.own_home_bearing)
+                    1.25, self.bearing_to_vec(unnorm_obs["own_home_bearing"])
                 )
                 avoid_vect = self.get_avoid_vect(
                     self.opp_team_pos, avoid_threshold=avoid_thresh
@@ -515,7 +473,7 @@ class BaseAttacker(BaseAgentPolicy):
                     top_dist = self.wall_distances[0]
                     bottom_dist = self.wall_distances[2]
 
-                    # Some bias towards teh bottom boundary to force it to stick with a
+                    # Some bias towards the bottom boundary to force it to stick with a
                     # direction.
                     if top_dist > 1.25 * bottom_dist:
                         my_action = self.rb_to_rect(
@@ -530,13 +488,10 @@ class BaseAttacker(BaseAgentPolicy):
 
             # Try to convert the heading to a discrete action
             try:
-                heading_error = self.angle180(self.vec_to_heading(my_action) - self.heading)
+                heading_error = self.vec_to_heading(my_action)
                 # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
                 if self.continuous:
                     if np.isnan(heading_error):
-                        heading_error = 0
-
-                    if np.abs(heading_error) < 5:
                         heading_error = 0
 
                     return (desired_speed, heading_error)

@@ -25,7 +25,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyquaticus"
-description = "Lightweight USV capture-the-flag environment with MOOS-IVP's uSimMarine dynamics"
+description = "Lightweight USV capture-the-flag environment based on MOOS-IVP Aquaticus Competition"
 dynamic = ["version"]
 authors = [
 	{ name = "Makai Mann",      email = "makai.mann@ll.mit.edu" },
@@ -33,11 +33,12 @@ authors = [
 	{ name = "Peter Crowley",   email = "petertc@bu.edu"},
 	{ name = "Zachary Serlin",  email = "zachary.serlin@ll.mit.edu"},
 	{ name = "Andrew Schoer",   email = "andrew.schoer@ll.mit.edu"},
-	{ name = "John Kliem",      email = "john.kliem@nrl.navy.mil"}
+	{ name = "John Kliem",      email = "john.kliem@nrl.navy.mil"},
+	{ name = "Brendan Long",    email = "brendan.long@ll.mit.edu"}
 ]
 readme = "README.md"
 urls = { repository = "https://github.com/mit-ll-trusted-autonomy/pyquaticus" }
-requires-python = ">=3.10,<=3.11"
+requires-python = ">=3.10,<3.11"
 classifiers = [
 	"Development Status :: 4 - Beta",
 	"Programming Language :: Python",
@@ -47,20 +48,21 @@ classifiers = [
 license = { file = "LICENSE" }
 # Requirements
 dependencies = [
+	"pynput==1.8.1",
 	"contextily==1.6.2",
 	"matplotlib==3.7.1",
 	"numpy==1.24.3",
 	"opencv-python==4.10.0.84",
 	"pettingzoo==1.24.3",
 	"pygame==2.4.0",
-	"pymoos==2022.1",
 	"scipy==1.14.1",
 	"shapely==2.0.6",
-	"sympy==1.12"
+	"sympy==1.13.1",
+	"pymoos==2022.1; sys_platform == 'linux' or sys_platform == 'darwin'"
 ]
 
 [project.optional-dependencies]
-torch = ["torch==1.13.1", "tensorflow-probability==0.19.0"]
+torch = ["torch==2.6.0", "tensorflow-probability==0.19.0"]
 ray = ["ray[rllib]==2.41.0"]
 
 [tool.setuptools.packages.find]

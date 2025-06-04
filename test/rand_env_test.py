@@ -29,7 +29,6 @@ import sys
 import time
 from pyquaticus.envs.pyquaticus import Team
 from pyquaticus import pyquaticus_v0
-import pyquaticus.utils.rewards as rew
 import pyquaticus.config
 
 RENDER_MODE = 'human'
@@ -39,7 +38,7 @@ runtime = 120 # seconds
 def run_one_episode(env, quittable=True, render=RENDER_MODE):
     env.reset()
     full_action = {agent_id:env.action_space(agent_id).sample() for agent_id in  env.players}
-    for i in range(int(runtime/env.tau)):
+    for i in range(int(runtime/env.dt)):
         if quittable and render:
             for event in pygame.event.get():
                 if event.type == QUIT or (
@@ -49,7 +48,6 @@ def run_one_episode(env, quittable=True, render=RENDER_MODE):
                     sys.exit()
 
         full_action = {agent_id:env.action_space(agent_id).sample() for agent_id in env.players}
-        #full_action[0] = "PM"
         new_obs, reward, terminated, truncated, info = env.step(full_action)
         for k in terminated:
             if terminated[k] == True or truncated[k] == True:
@@ -58,29 +56,21 @@ def run_one_episode(env, quittable=True, render=RENDER_MODE):
     env.close()
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Run random actions in a CTF environment')
-
-    reward_config = {1:rew.sparse, 2:rew.custom_v1, 3:None, 5:None}
-    args = parser.parse_args()
-
-    config = copy.deepcopy(pyquaticus.config.config_dict_std)
+    config = {}
     config["gps_env"] = True
     config["env_bounds"] = "auto"
     config["blue_flag_home"] = (42.352229714597705, -70.99992567997114)
     config["red_flag_home"] = (42.32710627259394, -70.96739585043458)
     config["flag_homes_unit"] = "ll"
-    config["sim_speedup_factor"] = 4
-    config["max_time"] = 700
+    config["sim_speedup_factor"] = 50
+    config["max_time"] = 10_000
     config["lidar_obs"] = True
     config["num_lidar_rays"] = 100
-    config["lidar_range"] = 120
+    config["lidar_range"] = 1000
     config["render_agent_ids"] = True
-    config["render_lidar"] = True
-    # config["render_traj_mode"] = "traj_agent"
-    config["render_traj_freq"] = 10
-    config["render_traj_cutoff"] = 55
-    config["render_saving"] = False
-    config["render_saving_format"] = "mp4"
+    config["render_lidar_mode"] = "detection"
+    config["catch_radius"] = 250
+    config["default_init"] = False
 
 
     env = pyquaticus_v0.PyQuaticusEnv(render_mode=RENDER_MODE, team_size=3, config_dict=config)

@@ -8,9 +8,9 @@ from pyquaticus.base_policies.base_defend import BaseDefender
 from pyquaticus.base_policies.base_combined import Heuristic_CTF_Agent
 from pyquaticus.envs.pyquaticus import Team
 from collections import OrderedDict
-from pyquaticus.config import config_dict_std, ACTION_MAP
+from pyquaticus.config import ACTION_MAP
 
-config_dict = config_dict_std
+config_dict = {}
 config_dict["max_time"] = 600.0
 config_dict["max_score"] = 100
 config_dict["render_agent_ids"] = True
@@ -23,28 +23,26 @@ truncated_g = {'agent_0':False,'agent_1':False}
 term = term_g
 trunc = truncated_g
 
-obs,_ = env.reset()
+reset_opts = {'normalize_obs': False, 'normalize_state': False}
+
+obs, info = env.reset(return_info=True, options=reset_opts)
 
 temp_captures = env.state["captures"]
 temp_grabs = env.state["grabs"]
 temp_tags = env.state["tags"]
 
-H_one = Heuristic_CTF_Agent('agent_2', Team.RED_TEAM, mode="hard")
-H_two = Heuristic_CTF_Agent('agent_3', Team.RED_TEAM, mode="hard")
+H_one = Heuristic_CTF_Agent('agent_2', Team.RED_TEAM, env, mode="hard", continuous=True)
+H_two = Heuristic_CTF_Agent('agent_3', Team.RED_TEAM, env, mode="hard", continuous=True)
 
-R_one = Heuristic_CTF_Agent('agent_0', Team.BLUE_TEAM, mode="hard")
-R_two = Heuristic_CTF_Agent('agent_1', Team.BLUE_TEAM, mode="hard")
+R_one = Heuristic_CTF_Agent('agent_0', Team.BLUE_TEAM, env, mode="hard", continuous=True)
+R_two = Heuristic_CTF_Agent('agent_1', Team.BLUE_TEAM, env, mode="hard", continuous=True)
 
 step = 0
 while True:
-    new_obs = {}
-    for k in obs:
-        new_obs[k] = env.agent_obs_normalizer.unnormalized(obs[k])
-
-    two = H_one.compute_action(new_obs)
-    three = H_two.compute_action(new_obs)
-    zero = R_one.compute_action(new_obs)
-    one = R_two.compute_action(new_obs)
+    two = H_one.compute_action(obs, info)
+    three = H_two.compute_action(obs, info)
+    zero = R_one.compute_action(obs, info)
+    one = R_two.compute_action(obs, info)
 
     
     obs, reward, term, trunc, info = env.step({'agent_0':zero,'agent_1':one, 'agent_2':two, 'agent_3':three})

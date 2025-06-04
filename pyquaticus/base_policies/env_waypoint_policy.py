@@ -40,7 +40,7 @@ from functools import partial
 
 
 class EnvWaypointPolicy:
-    """Waypoint policy for use inside Pyquaticus environment only."""
+    """Lightweight version of WaypointPolicy for use inside Pyquaticus environment only."""
 
     def __init__(
         self,

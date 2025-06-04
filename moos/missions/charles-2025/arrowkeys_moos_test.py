@@ -20,40 +20,36 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import argparse
-from collections import OrderedDict
-import gymnasium as gym
-import numpy as np
-import pygame
-from pygame import KEYDOWN, QUIT, K_ESCAPE, K_SPACE, K_LEFT, K_UP, K_RIGHT, K_a, K_w, K_d
 import sys
-import time
-from pyquaticus.envs.pyquaticus import Team
-from pyquaticus.moos.pyquaticus_moos_bridge import PyQuaticusMoosBridge
-from pyquaticus.moos.config import JervisBayConfig
-import pyquaticus
-from pyquaticus import pyquaticus_v0
-import pyquaticus.utils.rewards as reward
+from pyquaticus.moos_bridge.config import MITConfig2025, pyquaticus_config_std
+from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
+from pyquaticus.moos_bridge.pyquaticus_moos_bridge_ext import PyQuaticusMoosBridgeFullObs
 
 def main():
-    print("Warning: This script requires MOOS to be set up, which must be installed separately")
     no_op = 16
     straight = 4
     left = 6
     right = 2
     straightleft = 5
     straightright = 3
-    keys_to_action={0         : no_op,
-                         'w'       : straight,
-                         'a'      : left,
-                         'd'      : right,
-                        #  K_w + K_a : straightleft,
-                        #  K_w + K_d : straightright
-                            }
-
-
-    env = PyQuaticusMoosBridge("localhost", "red_one", 9011,
-                      ["red_two"], ["blue_one", "blue_two"], moos_config=JervisBayConfig(),
-                      timewarp=1, quiet=False)
+    keys_to_action={
+        0: no_op,
+        'w': straight,
+        'a': left,
+        'd': right
+    }
+    env = PyQuaticusMoosBridgeFullObs(
+        server="localhost",
+        agent_name="red_one",
+        agent_port=9011,
+        team_names=["red_two", "red_three"],
+        opponent_names=["blue_one", "blue_two", "blue_three"],
+        all_agent_names=["blue_one", "blue_two", "blue_three", "red_one", "red_two", "red_three"],
+        moos_config=MITConfig2025(),
+        pyquaticus_config=pyquaticus_config_std,
+        timewarp=1,
+        quiet=False
+    )
     env.reset()
     try:
         from pynput import keyboard
@@ -69,7 +65,7 @@ def main():
                 listener.start()
 
                 while True:
-                    self.env.step(self.action)
+                    obs, reward, terminated, truncated, info = self.env.step(self.action)
 
             def on_press(self, key):
                 try:
@@ -84,7 +80,7 @@ def main():
     except KeyboardInterrupt:
         print("Stopped by user")
     finally:
-        print("running finally block")
+        print("Running finally block")
         env.close()
 
 if __name__ == "__main__":

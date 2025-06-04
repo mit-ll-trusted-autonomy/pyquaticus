@@ -42,7 +42,7 @@ from functools import partial
 
 
 class WaypointPolicy(BaseAgentPolicy):
-    """This is a Policy class that contains logic for capturing the flag."""
+    """Base policy that drives to waypoints, avoiding obstacles using RRT*"""
 
     def __init__(
         self,
