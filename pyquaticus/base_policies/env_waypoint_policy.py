@@ -21,7 +21,12 @@
 
 import numpy as np
 
-from pyquaticus.base_policies.rrt.utils import Point
+from pyquaticus.base_policies.rrt.utils import (
+    Point,
+    intersect,
+    intersect_circles,
+    get_ungrouped_seglist,
+)
 from pyquaticus.base_policies.rrt.rrt_star import rrt_star
 from pyquaticus.structs import PolygonObstacle, CircleObstacle
 
@@ -59,7 +64,7 @@ class EnvWaypointPolicy:
 
         self.plan_process = Pool(processes=1)
 
-        self.poly_obstacles, self.circle_obstacles = self.get_env_geom(obstacles)
+        self.get_env_geom(obstacles)
 
         self.env_bounds = np.array(((0, 0), env_size))
 
@@ -72,23 +77,32 @@ class EnvWaypointPolicy:
     def get_env_geom(
         self, obstacles: list
     ) -> tuple[Optional[list[np.ndarray]], Optional[list[tuple[float, float, float]]]]:
-        final_obstacles = []
+        poly_obstacles = []
         circle_obstacles = []
         for obstacle in obstacles:
             assert isinstance(obstacle, (PolygonObstacle, CircleObstacle))
             if isinstance(obstacle, PolygonObstacle):
                 poly = np.array(obstacle.anchor_points).reshape(-1, 2)
-                final_obstacles.append(poly)
+                poly_obstacles.append(poly)
             else:
                 circle = (*obstacle.center_point, obstacle.radius)
                 circle_obstacles.append(circle)
 
-        if len(final_obstacles) == 0:
-            final_obstacles = None
+        if len(poly_obstacles) == 0:
+            poly_obstacles = None
         if len(circle_obstacles) == 0:
             circle_obstacles = None
 
-        return final_obstacles, circle_obstacles
+        self.poly_obstacles = poly_obstacles
+        self.circle_obstacles = circle_obstacles
+        if self.circle_obstacles is not None:
+            self.circles_for_intersect = np.array(circle_obstacles)
+        else:
+            self.circles_for_intersect = None
+        if poly_obstacles is not None:
+            self.ungrouped_seglist = get_ungrouped_seglist(poly_obstacles)
+        else:
+            self.ungrouped_seglist = None
 
     def compute_action(self, pos: np.ndarray, heading: float):
         """
@@ -130,8 +144,36 @@ class EnvWaypointPolicy:
         if len(self.wps) == 0:
             return
 
+        # Check if any future waypoints have an obstacle-free path
+        # If so, skip directly to the closest one to the goal
+        wps = np.array(self.wps).reshape((-1, 1, 2))
+        pos_array = np.repeat(pos.reshape((-1, 2)), len(self.wps), 0).reshape(-1, 1, 2)
+        segs = np.concatenate((pos_array, wps), axis=1)
+        clear = np.logical_not(
+            intersect(segs, self.ungrouped_seglist, radius=self.avoid_radius)
+        )
+        clear = np.logical_and(
+            clear,
+            np.logical_not(
+                intersect_circles(
+                    segs, self.circles_for_intersect, agent_radius=self.avoid_radius
+                )
+            ),
+        )
+        try:
+            last_free_wp_index = len(list(clear)) - 1 - list(clear)[::-1].index(True)
+        except ValueError:
+            # No points are obstacle-free, even the current waypoint
+            # TODO: Continue to current waypoint? Replan?
+            pass
+        else:
+            if last_free_wp_index > 0:
+                self.wps = self.wps[last_free_wp_index:]
+                self.cur_dist = None
+                return
+
         new_dist = np.linalg.norm(self.wps[0] - pos)
-        if new_dist <= self.capture_radius:
+        if (new_dist <= self.capture_radius) and clear[0]:
             self.wps.pop(0)
             self.cur_dist = None
         elif (
@@ -139,6 +181,7 @@ class EnvWaypointPolicy:
             and (self.cur_dist is not None)
             and (new_dist > self.cur_dist)
             and (new_dist <= self.slip_radius)
+            and clear[0]
         ):
             self.wps.pop(0)
             self.cur_dist = None

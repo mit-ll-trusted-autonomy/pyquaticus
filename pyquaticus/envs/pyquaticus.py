@@ -1848,7 +1848,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Agent spawn parameters
         self.default_init = config_dict.get("default_init", config_dict_std["default_init"])
-        self.on_sides_init = config_dict.get("on_sides_init", False) #config_dict_std["on_sides_init"]) #TODO: uncomment after 2025 AAMAS competition
+        self.on_sides_init = config_dict.get("on_sides_init", config_dict_std["on_sides_init"])
 
         if self.gps_env and self.default_init:
             print("Warning! Default initialization not supported in when self.gps_env is True.")
@@ -2324,6 +2324,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.dones["red"] = True
             self.dones["__all__"] = True
             self.message = "Red Wins!"
+
+        elif red_scores == self.max_score:
+            self.dones["red"] = True
+            self.dones["__all__"] = True
+            self.message = "Red Wins! Blue Loses"
 
         elif self.current_time > self.max_time or np.isclose(self.current_time, self.max_time):
             self.dones["__all__"] = True
