@@ -26,8 +26,7 @@ docs/tex/*.out
 docs/tex/*.toc
 
 # Ignore missions Log directory and other generated files
-missions/**/LOG*/
-missions/**/C*_LOG_*/
+missions/**/*LOG*/
 missions/**/*.txt
 targ_*
 .LastOpened*
