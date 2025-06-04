@@ -1,0 +1,425 @@
+ServerHost = localhost
+ServerPort = $(MOOS_PORT)
+Community  = $(RNAME)
+
+#include ../plug_origin_warp.moos
+
+//------------------------------------------------------------
+ProcessConfig = ANTLER
+{
+  MSBetweenLaunches = 100
+
+  Run = MOOSDB             @ NewConsole = false
+  Run = uProcessWatch      @ NewConsole = false
+  Run = pShare             @ NewConsole = false
+  Run = pLogger            @ NewConsole = false
+  Run = pNodeReporter      @ NewConsole = false
+  Run = pMarinePID         @ NewConsole = false
+  Run = pHelmIvP           @ NewConsole = false
+  Run = pHostInfo          @ NewConsole = false
+  Run = pContactMgrV20     @ NewConsole = false
+  Run = uFldNodeBroker     @ NewConsole = false
+  Run = pDeadManPost       @ NewConsole = false
+	Run = pRealm             @ NewConsole = false
+#ifdef SIM
+  Run = uSimMarine         @ NewConsole = false
+#else
+  Run = iM1_8		           @ NewConsole = false
+#endif
+  Run = uFldMessageHandler @ NewConsole = false
+  Run = pRangeEvent        @ NewConsole = false
+  //Run = pMapMarkers        @ NewConsole = false
+  Run = pNodeReportParse   @ NewConsole = false
+  Run = pZoneTrackOpponents @ NewConsole = false
+  Run = pAquaticusStateMgr @ NewConsole = false
+	Run = pRLMonitor         @ NewConsole = false
+
+// extra pav6 apps
+#ifdef MULTI_ENABLE yes
+  Run = pAqctNodeCtrl      @ NewConsole = false
+  Run = pOptionManager    @ NewConsole = false
+  Run = pMultiAgentColFilt @ NewConsole = false
+#endif
+
+
+}
+
+#ifdef SIM
+	#include plug_uSimMarine.moos
+#else
+	#include plug_iM1_8.moos
+#endif
+	
+#include ../plug_pShare.moos
+#include ../plug_pHostInfo.moos
+
+#include plug_pLogger.moos
+#include plug_uProcessWatch.moos
+#include plug_pZoneTrackOpponents.moos
+#include plug_pAquaticusStateMgr.moos
+#include ../plug_pRoleChooser.moos
+#include plug_pHelmIvP.moos
+
+
+//----------------------------------------------- 
+ProcessConfig = pContactMgrV20
+{
+  AppTick   = 2
+  CommsTick = 2
+
+  decay = 30,60
+
+  alert_verbose = true
+
+  post_all_ranges = true
+
+	post_closest_range  = true  // Default is false
+	post_closest_relbng = true  // Default is false
+	
+	//hold_alerts_for_helm = true
+	
+  contact_max_age = 1200
+
+	// display_radii_id = avd
+  display_radii   = true
+
+  contact_max_age = 35
+	display_radii_id = cut_rng
+
+  alert_range_color = gray70
+  cpa_range_color   = gray30
+
+  alert = id=trail, var=TRAIL_INFO, val="name=$[RNAME] # contact=mokai", alert_range=140
+
+	hold_alerts_for_helm = true
+}
+
+//------------------------------------------------
+// pRangeEvent config block
+
+ProcessConfig = pRangeEvent
+{
+  AppTick   = 4
+  CommsTick = 4
+
+  // Range within which the event is triggered
+  min_range = 0 // default
+  max_range = 10 // default
+
+  ignore_group = $(VTEAM)
+
+  event_var = TAG_REQUEST=vname=$[SELFVNAME]
+}
+	
+//--------------------------------------------------
+// uFldNodeBroker Config Block
+
+ProcessConfig = uFldNodeBroker
+{
+  AppTick   = 1
+  CommsTick = 1
+
+  try_shore_host = pshare_route=$(SHORE_IP):$(SHORE_PSHARE)
+
+  bridge = src=VIEW_POLYGON
+  bridge = src=VIEW_POINT
+  bridge = src=VIEW_SEGLIST
+  bridge = src=VIEW_CIRCLE
+  bridge = src=VIEW_MARKER
+  bridge = src=AVDCOL_MODE
+  bridge = src=FLAG_GRAB_REQUEST
+  bridge = src=TAG_REQUEST
+  bridge = src=APPCAST
+  bridge = src=NODE_REPORT_LOCAL,  alias=NODE_REPORT
+  bridge = src=NODE_MESSAGE_LOCAL, alias=NODE_MESSAGE
+}
+
+//--------------------------------------------------
+// pMarinePID Config Block
+
+ProcessConfig = pMarinePID
+{
+  AppTick    = 10
+  CommsTick  = 10
+
+  VERBOSE       = true
+  DEPTH_CONTROL = false
+  ACTIVE_START  = true
+
+  // Yaw PID controller (Set for M8_1)
+  YAW_PID_KP             = 1.2
+  YAW_PID_KD             = 3.0 
+  YAW_PID_KI             = 0.0  
+  YAW_PID_INTEGRAL_LIMIT = 0.00 
+	
+  // Speed PID controller
+  SPEED_PID_KP           = 0.5
+  SPEED_PID_KD           = 0.0
+  SPEED_PID_KI           = 0.0
+  SPEED_PID_INTEGRAL_LIMIT = 0.00
+
+  // Maximums
+  MAXRUDDER  = 100 // 100
+  MAXTHRUST  = 100
+
+  // A non-zero SPEED_FACTOR overrides use of SPEED_PID
+  // Will set DESIRED_THRUST = DESIRED_SPEED * SPEED_FACTOR
+  //SPEED_FACTOR = 20
+  deprecated_ok = true
+}
+	
+//--------------------------------------------------
+// pNodeReportParse Config Block
+
+ProcessConfig = pNodeReportParse
+{
+  AppTick   = 4
+  CommsTick = 4
+}
+
+//--------------------------------------------------
+// pNodeReporter Config Block
+
+ProcessConfig = pNodeReporter
+{
+  AppTick     = 2
+  CommsTick   = 2
+
+  vessel_type = $(VTYPE)
+  group       = $(VTEAM)
+  platform_color = $(VTEAM)
+}
+
+//--------------------------------------------------
+// uFldMessageHandler Config Block
+
+ProcessConfig = uFldMessageHandler
+{
+  AppTick   = 3
+  CommsTick = 3
+
+  strict_addressing = false
+}
+	
+//--------------------------------------------------
+// pDeadManPost Config Block
+
+ProcessConfig = pDeadManPost
+{
+  AppTick   = 4
+  CommsTick = 4
+
+  heartbeat_var   = HEARTBEAT
+  max_noheart     = 15
+  post_policy     = reset
+  active_at_start = false
+  deadflag        = DEPLOY = false
+}
+
+//--------------------------------------------------
+// uProcessWatch Config Block
+
+ProcessConfig = uProcessWatch
+{
+  AppTick   = 2
+  CommsTick = 2
+
+  allow_retractions = true
+
+  watch_all = true // default is true
+
+  nowatch = uMAC*
+  nowatch = uXMS*
+  nowatch = uPokeDB*
+  nowatch = pRLMonitor
+
+  summary_wait  = 12
+}
+	
+//--------------------------------------------------
+// pMapMarkers Config Block
+
+ProcessConfig = pMapMarkers
+{
+  AppTick       = 4
+  CommsTick     = 4
+
+	//app_logging = true
+
+	marker_key = $(RNAME)
+
+	//default_marker_color = $(VCOLOR)
+
+	// Part 1A ON-Field coords
+	opfield = "ppb=$(PPB)   # pb=$(PB)   # cb=$(CB)   # sb=$(SB)   # ssb=$(SSB)"
+	opfield = "ppf=$(PPF)   # pf=$(PF)   # cf=$(CF)   # sf=$(SF)   # ssf=$(SSF)"
+	opfield = "pph=$(PPH)   # ph=$(PH)   # ch=$(CH)   # sh=$(SH)   # ssh=$(SSH)"
+	opfield = "ppm=$(PPM)   # pm=$(PM)   # cm=$(CM)   # sm=$(SM)   # ssm=$(SSM)"
+	opfield = "ppc=$(PPC)   # pc=$(PC)   # cc=$(CC)   # sc=$(SC)   # ssc=$(SSC)"
+	opfield = "ppmx=$(PPMX) # pmx=$(PMX) # cmx=$(CMX) # smx=$(SMX) # ssmx=$(SSMX)"
+	opfield = "pphx=$(PPHX) # phx=$(PHX) # chx=$(CHX) # shx=$(SHX) # sshx=$(SSHX)"
+	opfield = "ppfx=$(PPFX) # pfx=$(PFX) # cfx=$(CFX) # sfx=$(SFX) # ssfx=$(SSFX)"
+	opfield = "ppbx=$(PPBX) # pbx=$(PBX) # cbx=$(CBX) # sbx=$(SBX) # ssbx=$(SSBX)"
+
+	// Part 1B ON-Field colors
+	opfield = "ppb=green   # pb=white   # cb=white   # sb=white   # ssb=green"
+	opfield = "ppf=white   # pf=white   # cf=white   # sf=white   # ssf=white"
+	opfield = "pph=white   # ph=white   # ch=white   # sh=white   # ssh=white"
+	opfield = "ppm=white   # pm=white   # cm=white   # sm=white   # ssm=white"
+	opfield = "ppc=green   # pc=green   # cc=green   # sc=green   # ssc=green"
+	opfield = "ppmx=gray40 # pmx=gray40 # cmx=gray40 # smx=gray40 # ssmx=gray40"
+	opfield = "pphx=gray40 # phx=gray40 # chx=gray40 # shx=gray40 # sshx=gray40"
+	opfield = "ppfx=gray40 # pfx=gray40 # cfx=gray40 # sfx=gray40 # ssfx=gray40"
+	opfield = "ppbx=green  # pbx=gray40 # cbx=gray40 # sbx=gray40 # ssbx=green"
+	
+	// Part 2A OFF-Field coords
+	opfield = "xxnw=$(XXNW) # xnw=$(XNW) # xne=$(XNE) # xxne=$(XXNE)"
+	opfield = "xxw=$(XXW)   # xw=$(XW)   # xe=$(XE)   # xxe=$(XXE)"
+	opfield = "xxsw=$(XXSW) # xsw=$(XSW) # xse=$(XSE) # xxse=$(XXSE)"
+	opfield = "xxn=$(XXN)   # xn=$(XN)   # xs=$(XS)   # xxs=$(XXS)"
+
+	opfield = "xnwf=$(XNWF) # xnwh=$(XNWH) # xnwm=$(XNWM) "
+	opfield = "xswf=$(XSWF) # xswh=$(XSWH) # xswm=$(XSWM) "
+	opfield = "xxnwf=$(XXNWF) # xxnwh=$(XXNWH) # xxnwm=$(XXNWM) "
+	opfield = "xxswf=$(XXSWF) # xxswh=$(XXSWH) # xxswm=$(XXSWM) "
+
+	// Part 2B OFF-Field colors
+	opfield = "xxnw=red  # xnw=red # xne=red # xxne=red "
+	opfield = "xxw=red   # xw=red  # xe=red  # xxe=red"
+	opfield = "xxsw=red  # xsw=red # xse=red # xxse=red"
+	opfield = "xxn=red   # xn=red  # xs=red  # xxs=red"
+
+	opfield = "xnwf=pink # xnwh=pink # xnwm=pink "
+	opfield = "xswf=pink # xswh=pink # xswm=pink "
+	opfield = "xxnwf=pink # xxnwh=pink # xxnwm=pink "
+	opfield = "xxswf=pink # xxswh=pink # xxswm=pink "
+
+}
+
+//------------------------------------------------                              
+// pRLMonitor config block                                                      
+
+ProcessConfig = pRLMonitor
+{
+   AppTick   = 4
+   CommsTick = 4
+}
+
+
+
+//  Add the configblocs for the pav6 apps
+
+#ifdef MULTI_ENABLE yes
+//----------------------------------------------- 
+ProcessConfig = pAqctNodeCtrl
+{
+  AppTick   = 4
+  CommsTick = 4
+
+  #ifdef VTEAM red
+  	 home_zone_poly = $(RED_ZONE)
+	 own_flag_location = $(RED_FLAG)
+	 
+  #elseifdef VTEAM blue
+  	 home_zone_poly = $(BLUE_ZONE)
+	 own_flag_location = $(BLUE_FLAG)
+  #endif
+
+     rname = $(RNAME)
+     
+ team_size = 3
+
+ 	   // opinion dynamics related
+          dist_to_own_flag_gain = -0.7   //-0.5 is a good defensive bias
+  enemy_agent_in_home_zone_gain = 50 // maybe 30.0
+   		    defend_bias = 0 // maybe -10 //  maybe 5?
+
+     // defense task allocation related
+      // 	       min_reallocate_interval = 5 // seconds
+      //	       max_reallocate_interval = 10 // seconds
+
+      //	  task_wait_to_resend_interval  = 3 // seconds
+	  
+   // defense task allocation 2.0 related
+      	  intercept_heading_penalty  = 0.1  // meters / degrees
+          intercept_static_lead_dist = 9.0
+              intercept_speed_extrap = 5.0 // seconds in the future
+   use_dynamic_speed_based_lead_dist = true
+
+   // loiter update related
+      near_loiter_pt = $(CH)
+      far_loiter_pt = $(CM)
+      loiter_offset = 15   //  meters
+      loiter_offset_angle = $(FLD_ANG)
+      
+		    
+  app_logging = log 
+
+}
+
+
+//------------------------------------------------
+// pOptionManager config block
+
+ProcessConfig = pOptionManager
+{
+   AppTick   = 10
+   CommsTick = 10
+   SocialTick = 1
+
+   group = leader    // leader, follower
+   
+   #ifdef VTEAM red
+   	  node_message_dest_group = red
+   #elseifdef VTEAM blue
+   	  node_message_dest_group = blue
+   #endif
+
+   option_file = aquaticus3.opt
+
+
+   satFunOrder = 2.0
+   u_th  = 30.0
+   tau_u = 10.0
+
+   min_attention = 0.50
+   max_attention = 0.50
+ 
+   opinion_thresh = 0.1
+
+   neighbor_msg_stale_thresh = 2.0 // seconds
+   // set sensitivity_g  and tau_u internally
+
+   // Example messages:
+   // OPINION_MESSAGE=VNAME,GROUP,OPTION1_NAME,OPTION1_OPINION,OPTION2_NAME,OPTION2_OPINION
+   // PROPOSAL_MESSAGE=VNAME,OPTIONX_NAME,VALUE_PROPOSITION
+
+   //app_logging = log
+   
+}
+
+
+//------------------------------------------------
+// pOpinionManager config block
+
+ProcessConfig = pMultiAgentColFilt
+{
+   AppTick   = 4
+   CommsTick = 4
+
+   	     verbose_visuals = true    // default is false
+   post_moos_manual_override = true    // default is true
+   	     post_rev_thrust = true    // default is false
+
+    emergency_rev_thrust_cmd = -70.0
+   
+   own_state_stale_thresh = 1.0
+   stale_node_rec_thresh  = 2.0
+
+   //nominal_fwd_reachable_set = pts={0.0,0.0:0.5,5.0:-0.5,5.0}
+   nominal_fwd_reachable_set = pts={0.0,0.0:1.5,7.0:-1.5,7.0}
+   nominal_fwd_speed = 2.0
+
+
+}
+#endif

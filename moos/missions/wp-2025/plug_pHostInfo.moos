@@ -1,0 +1,10 @@
+//--------------------------------------------------
+// pHostInfo Config Block
+	
+ProcessConfig = pHostInfo
+{
+  AppTick     = 1
+  CommsTick   = 1
+
+  default_hostip_force = $(IP_ADDR)
+}

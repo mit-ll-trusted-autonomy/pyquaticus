@@ -1,9 +1,9 @@
 #!/bin/bash -e
 #---------------------------------------------------------------
 #   Script: launch.sh
-#  Mission: jervis-2023
-#   Author: Mike Benjamin
-#   LastEd: Oct 2023
+#  Mission: wp_2024
+#   Author: Mike Benjamin, Tyler Paine
+#   LastEd: June 2024
 #-------------------------------------------------------
 #  Part 1: Set global var defaults
 #-------------------------------------------------------
@@ -14,7 +14,8 @@ VERBOSE=""
 AUTO_LAUNCHED="no"
 CMD_ARGS=""
 
-IP_ADDR="localhost"
+#IP_ADDR="192.168.1.199"
+IP_ADDR=localhost
 MOOS_PORT="9000"
 PSHARE_PORT="9300"
 
@@ -88,10 +89,9 @@ for ARGI; do
     fi
 done
 
-if [ "${AUTO_LAUNCHED}" != "yes" ]; then
-    ./genop.sh $FLD_ANG > targ_region.txt
-fi
-source targ_region.txt
+./jerop.sh $FLD_ANG > region_info.txt
+source region_info.txt
+
 
 #---------------------------------------------------------------
 #  Part 3: If verbose, show vars and confirm before launching

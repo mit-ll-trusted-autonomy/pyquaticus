@@ -1,0 +1,50 @@
+// Configuration file for pOpinionManager
+// The vehicle's opinion for every option is configured below
+//
+// General assumptions for reasonable group behavior:
+// gamma - delta > 0 : Cooperative
+// gamma - delta < 0 : Competitive
+// alpha >= 0
+// beta  < 0
+
+
+social_option
+{
+   name = attack
+   option_output = OPTION=ATTACK
+   resistance_weight = 0.5
+   social_mode = custom   
+   intra_agent_same_option_coupling = 0.25  // Self reinforcement  (alpha)
+   intra_agent_inter_option_coupling = defend = -0.3     //  (beta)
+   inter_agent_same_option_coupling = -0.55  // influence of others (gamma)
+   inter_agent_inter_option_coupling = defend = 0.0     //  (delta)
+   input = ATTACK_INPUT
+   input_gain = 1.0
+   input_function_type = none
+   input_max  = 100
+   input_min  = -100
+   input_gain = 1.8
+   active_condition = DEPLOY=true    // default options is 'always'
+   //active_condition = ACTIVE_OPINIONS=true
+}
+
+
+social_option
+{
+   name = defend
+   option_output = OPTION=DEFEND
+   resistance_weight = 0.5
+   social_mode = custom
+   intra_agent_same_option_coupling = 0.25  // self reinforcement  (alpha)
+   intra_agent_inter_option_coupling = attack = -0.3     //  (beta)
+   inter_agent_same_option_coupling = -0.55  // influence of others   (gamma)
+   inter_agent_inter_option_coupling = attack = 0.0     //  (delta)	
+   input = DEFEND_INPUT
+   input_function_type = none
+   input_max  = 100
+   input_min  = -100
+   input_gain = 1.8	
+   active_condition = DEPLOY=true    // default options is 'always'
+   //active_condition = ACTIVE_OPINIONS=true	
+}
+

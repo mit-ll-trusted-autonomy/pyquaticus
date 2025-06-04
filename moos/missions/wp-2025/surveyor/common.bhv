@@ -1,0 +1,125 @@
+<tag><inits>
+initialize DEPLOY  = false
+initialize RETURN  = false
+initialize TAGGED  = false
+initialize RETURN  = false
+
+<tag><modes>
+
+set MODE = ACTIVE {
+  DEPLOY = true
+} INACTIVE
+
+set MODE = STATION_KEEPING {
+  MODE = ACTIVE
+  STATION_KEEP = true
+}
+
+set MODE = RETURNING {
+	MODE = ACTIVE
+  RETURN = true
+}
+
+	
+<tag><bhvs>
+//----------------------------------------------
+Behavior = BHV_StationKeep
+{
+  name      = station_keep
+  pwt       = 100
+  condition = MODE==STATION_KEEPING 
+
+	hibernation_radius = 15
+  center_activate = true
+     inner_radius = 4
+     outer_radius = 10
+      outer_speed = 1.6
+    transit_speed = 2
+       swing_time = 10
+	
+     visual_hints = vertex_size = 1     
+     visual_hints = edge_color = light_blue 
+     visual_hints = edge_size = 1       
+     visual_hints = label_color = white 
+     visual_hints = vertex_color = red  
+}
+
+//----------------------------------------------
+Behavior = BHV_Waypoint
+{
+  name      = waypt_return_home
+  pwt       = 100
+  condition = MODE==RETURNING 
+  endflag   = DEPLOY=false
+//  endflag   = STATION_KEEP = true
+
+	crs_spd_zaic_ratio = 20
+               speed = 1.0
+              radius = 3.0
+         slip_radius = 15.0
+                lead = 8
+	       point = $(RETURN_POS)
+}
+
+//----------------------------------------------
+Behavior = BHV_OpRegionRecover
+{
+  name         = recover
+  pwt          = 300
+  updates      = RECOVER_UPDATES
+  condition    = MODE == ACTIVE
+  condition    = MODE != ACTIVE:RETURNING
+  // condition    = MODE != ACTIVE:STATION_KEEPING
+	
+                 polygon = $(REGION)
+         buffer_dist = 3	
+	trigger_entry_time = 1
+  trigger_exit_time  = 1
+	      visual_hints = edge_size = 2
+        visual_hints = edge_color = gray70
+				
+	// dynamic_region_var = RESCUE_REGION
+}
+
+//----------------------------------------------
+Behavior = BHV_AvdColregsV22
+{
+  name       = colavd_one_
+  pwt        = 300
+  updates    = CONTACT_INFO
+  condition  = MODE == ACTIVE
+
+  templating = spawn
+  endflag    = CONTACT_RESOLVED = $[CONTACT]
+
+           contact = name_provided_upon_spawn
+             decay = 15,30
+	on_no_contact_ok = true
+	    use_refinery = true
+       extrapolate = true
+//  ignore_contact_group = $(VTEAM)
+	
+     completed_dist = 18
+//        headon_only = true
+  max_util_cpa_dist = 6
+  min_util_cpa_dist = 3
+     pwt_inner_dist = 9
+     pwt_outer_dist = 15
+}
+
+
+//----------------------------------------------
+Behavior = BHV_MaxSpeed
+{
+  name      = max_spd2
+  pwt       = 500
+  updates   = UPDATES_MAX_SPD
+  condition = MODE == ACTIVE
+  condition = CONTACT_CLOSEST_RANGE < 20
+	//condition = CONTACT_CLOSEST_RELBNG < 35
+	condition = (CONTACT_CLOSEST_RELBNG < 55) or (CONTACT_CLOSEST_RELBNG > 305)
+	
+	max_speed = 0.5
+	
+}
+

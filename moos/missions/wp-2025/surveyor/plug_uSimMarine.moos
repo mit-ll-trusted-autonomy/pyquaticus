@@ -1,0 +1,21 @@
+//------------------------------------------------------
+// uSimMarine Config Block  (Created from plugin)
+
+ProcessConfig = uSimMarine
+{
+  AppTick   = 10
+  CommsTick = 10
+
+  start_pos = $(START_POS)
+  prefix    = NAV
+
+	turn_rate = 10    // see documantation
+ max_acceleration = 0.15     // m/s^2  (best guess)
+ max_deceleration = 0.25     // m/s^2  (best guess)
+ rotate_speed     = 0.0      // deg/sec (attempt at a thruster bias)
+
+
+  thrust_map = -100:-2, 0:0, 20:1, 40:1.5, 60:2.0, 70:2.25, 100:2.75
+
+  deprecated_ok = true
+}

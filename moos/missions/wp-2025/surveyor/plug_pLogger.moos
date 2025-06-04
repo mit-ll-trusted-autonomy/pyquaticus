@@ -1,0 +1,54 @@
+//--------------------------------------------------
+ProcessConfig = pLogger
+{
+  AppTick     = 10
+  CommsTick   = 10
+
+  File    = C%(CID)_LOG_%(VNAME)_%(RNAME)
+  PATH    = $(LOGPATH)
+  AsyncLog   = true
+  FileTimeStamp = true
+
+  Log = IVPHELM_LIFE_EVENT @ 0 nosync
+
+  // Log it all!!!!!
+  LogAuxSrc = true
+  WildCardLogging = true
+  WildCardOmitPattern = *_STATUS
+  WildCardOmitPattern = *_ITER_GAP
+  WildCardOmitPattern = *_ITER_LEN
+  WildCardOmitPattern = *_PID
+  WildCardOmitPattern = PSHARE_INPUT_SUMMARY
+  WildCardOmitPattern = PSHARE_OUTPUT_SUMMARY
+  WildCardOmitPattern = DB_VARSUMMARY
+  WildCardOmitPattern = DB_RWSUMMARY
+  WildCardOmitPattern = PID_REPORT
+  WildCardOmitPattern = NAV_DEPTH
+  WildCardOmitPattern = NAV_HEADING_OVER_GROUND
+  WildCardOmitPattern = NAV_PITCH
+  WildCardOmitPattern = NAV_SPEED_OVER_GROUND
+  WildCardOmitPattern = NAV_YAW
+  WildCardOmitPattern = NAV_Z
+  WildCardOmitPattern = NAV_LAT
+  WildCardOmitPattern = NAV_LONG
+  WildCardOmitPattern = TRUE_X
+  WildCardOmitPattern = TRUE_Y
+
+  WildCardOmitPattern = NODE_REPORT_BLUE_TWO
+  WildCardOmitPattern = NODE_REPORT_BLUE_ONE
+  WildCardOmitPattern = NODE_REPORT_RED_TWO
+  WildCardOmitPattern = NODE_REPORT_RED_ONE
+  WildCardOmitPattern = NODE_REPORT
+  WildCardOmitPattern = APPCAST
+  WildCardOmitPattern = APPCAST_REQ
+  WildCardOmitPattern = SIMULATION_MODE
+  WildCardOmitPattern = DB_QOS
+  WildCardOmitPattern = PNR_POST_GAP
+  WildCardOmitPattern = NODE_PSHARE_VARS
+  WildCardOmitPattern = OPR_DEBUG
+  WildCardOmitPattern = NODE_BROKER_ACK
+  WildCardOmitPattern = REALMCAST_CHANNELS
+  WildCardOmitPattern = IVPHELM_TOTAL_PCS_FORMED
+  WildCardOmitPattern = IVPHELM_TOTAL_PCS_CACHED
+  WildCardOmitPattern = NODE_BROKER_PING_0
+}

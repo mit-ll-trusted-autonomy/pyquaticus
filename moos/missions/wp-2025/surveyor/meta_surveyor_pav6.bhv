@@ -1,0 +1,494 @@
+#include common.bhv <inits>
+#include common_mit.bhv <inits>
+
+initialize HAS_FLAG  = false
+initialize TAGGED    = false
+initialize AGGRESSIVE  = false
+initialize SELF_IN_MY_ZONE = true
+initialize MY_ROLE = $(RNAME)
+initialize BURGLAR_IN_ZONE = false
+
+
+
+#include common.bhv <modes>
+#include common_mit.bhv <modes>
+
+
+// The basics..
+set MODE = TAGGED {
+  MODE = ACTIVE
+  TAGGED = true
+}
+
+set MODE = GRAB_RETURNING {
+    MODE = ACTIVE
+    HAS_FLAG = true
+}
+
+set MODE = INTERCEPT_FLAG_GRABBER {
+    MODE = ACTIVE:GRAB_RETURNING
+    BURGLAR_IN_ZONE = true
+    SELF_IN_MY_ZONE = true
+}
+
+
+//  Attacking
+set MODE = ATTACKING {
+  MODE = ACTIVE
+  OPTION = attack
+  HAS_FLAG = false // prevents agent already with flag from attacking again
+  TAGGED = false   // prevents a tagged agent from trying any attack
+}
+
+set MODE = GRABBING {
+       MODE = ACTIVE:ATTACKING
+       
+      // #ifdef VTEAM red
+      // 	      BLUE_FLAG_GRABBED = false
+      // #elseifdef VTEAM blue
+      // 	      RED_FLAG_GRABBED = false
+      // #endif
+	
+} //BLOCKING  // If I had the flag, I would already
+            // be in GRAB_RETURNING MODE
+
+
+//  Defending
+set MODE = DEFENDING {
+  MODE = ACTIVE   
+  OPTION = defend
+  TAGGED = false // prevents a tagged agent from trying any defending
+}
+
+set MODE = LOITERING {
+    MODE = ACTIVE:DEFENDING
+    ENEMY_IN_ZONE = false
+    HAS_FLAG = false // prevents agent already with the flag from loitering
+    
+}
+
+set MODE = PERSECUTING {
+    MODE = ACTIVE:DEFENDING
+    ENEMY_IN_ZONE = true
+    BURGLAR_IN_ZONE = false
+
+    #ifdef VTEAM red
+    	   //RED_FLAG_GRABBED = false
+    #elseifdef VTEAM blue
+       	   //BLUE_FLAG_GRABBED = false
+    #endif
+    
+    HAS_FLAG = false // prevents agent already with the flag from loitering
+    
+} INTERCEPT_FLAG_GRABBER // agent with the flag can still intercept
+            // with MODE = ACTIVE:GRAB_RETURNING:DEFENDING:INTERCEPT_FLAG_GRABBER
+	    // there will be two competing behaviors: capture the flag and tag
+	    // Need to confirm this....
+
+
+
+
+
+#include common.bhv <bhvs>
+#include common_mit.bhv <bhvs>
+//----------------------------------------------
+Behavior = BHV_Waypoint
+{
+  name      = waypt_score
+  pwt       = 100
+  condition = MODE == GRAB_RETURNING
+  endflag   = HAS_FLAG=false
+
+        speed = 3.5
+       radius = 3.0
+  slip_radius = 15.0
+       points = $(CFT)
+         lead = 8
+	 //patience = 30
+}
+
+//----------------------------------------------
+Behavior = BHV_Waypoint
+{
+  name      = waypt_grab
+  pwt       = 50
+  perpetual = true
+  condition = MODE == GRABBING
+  endflag   = FLAG_GRAB_REQUEST=vname=$(RNAME)
+	endflag   = GRABBING = false
+
+	   speed = 3.5 // meters per second
+    capture_line = false
+  capture_radius = 5.0
+     slip_radius = 10.0
+          points = $(CFXT)  // Format x,y
+	  //patience = 30
+}
+
+//----------------------------------------------
+Behavior = BHV_Waypoint
+{
+  name      = waypt_untag
+  pwt       = 50
+  perpetual = true
+  condition = MODE == TAGGED
+
+           speed = 3.5 // meters per second
+    capture_line = false
+  capture_radius = 5.0
+     slip_radius = 5.0
+          points = $(CFT)
+	  
+}
+
+
+//----------------------------------------------
+// 
+Behavior = BHV_StationKeep
+{
+  name      = defend_fwd_station_keep
+  pwt       = 30
+  condition = MODE==DEFENDING:LOITERING
+  updates   = DEFEND_FWD_UPDATES
+
+  //station_pt = $(CMT)
+  station_pt = $(CHT)	
+	hibernation_radius = 12
+  // center_activate = true
+     inner_radius = 8
+     outer_radius = 12
+      outer_speed = 1.6
+    transit_speed = 2
+       swing_time = 1
+	
+     visual_hints = vertex_size = 1     
+     visual_hints = edge_color = light_blue 
+     visual_hints = edge_size = 1       
+     visual_hints = label_color = white 
+     visual_hints = vertex_color = red
+     //patience = 30
+}
+
+
+
+Behavior = BHV_Trail
+{
+// General Behavior Parameters
+// ---------------------------
+   name         = trail_intercept_enemy_        
+   pwt          = 90
+   condition    = MODE==PERSECUTING
+   updates      = ENEMY_IN_ZONE_INTERCEPT_ONES_UPDATES
+
+
+             contact = red_one         
+
+                 nm_radius = 4        
+          no_alert_request = false     
+   post_trail_dist_on_idle = true      
+            pwt_outer_dist = 0         
+                    radius = 1         
+               trail_angle = 0         
+          trail_angle_type = relative  
+               trail_range = 9
+
+ }
+ 
+Behavior = BHV_Trail
+{
+// General Behavior Parameters
+// ---------------------------
+   name         = trail_intercept_grabber_        
+   pwt          = 90                            
+   condition    = MODE==INTERCEPT_FLAG_GRABBER
+   updates      = INTERCEPT_FLAG_GRABBER_UPDATES
+
+
+             contact = red_one         
+
+                 nm_radius = 7        
+          no_alert_request = false     
+   post_trail_dist_on_idle = true      
+            pwt_outer_dist = 0         
+                    radius = 1         
+               trail_angle = 0         
+          trail_angle_type = relative  
+               trail_range = 9         
+ }
+
+ Behavior = BHV_ConstantSpeed
+ {
+   // General Behavior Parameters
+   // ---------------------------
+   name         = const_spd_intercept  
+   pwt          = 400
+   condition    = (MODE==INTERCEPT_FLAG_GRABBER) or (MODE==PERSECUTING)
+   updates      = CONST_SPD_UPDATES  // example
+
+            basewidth = 0.2          
+             duration = no-time-limit    
+                speed = 3.5           
+   speed_mismatch_var = SPEED_DIFF   
+            peakwidth = 0            // default
+          summitdelta = 0            // default
+ }
+
+
+
+//----------------------------------------------
+Behavior = BHV_AvdColregsV22
+{
+  name       = avd_defender_lite_
+  pwt        = 100
+  updates    = CONTACT_INFO_ONE
+  condition  = MODE == ACTIVE
+  condition  = MODE != ACTIVE:RECOVERING
+//  condition  = ACTION = attack
+  condition  = SELF_IN_MY_ZONE = false
+  condition  = HAS_FLAG = false
+  templating = spawn
+  endflag    = CONTACT_RESOLVED = $[CONTACT]
+
+               contact = name_provided_upon_spawn
+                 decay = 15,30
+      on_no_contact_ok = true
+           extrapolate = true
+
+#ifdef VTEAM red
+	ignore_name = RED_ONE
+	ignore_name = RED_TWO
+	ignore_name = RED_THREE
+#elseifdef VTEAM blue
+	ignore_name = BLUE_ONE
+	ignore_name = BLUE_TWO
+	ignore_name = BLUE_THREE
+#endif	
+     completed_dist = 31
+
+	headon_only = true
+	
+  max_util_cpa_dist = 25
+  min_util_cpa_dist = 12
+     pwt_inner_dist = 8
+     pwt_outer_dist = 40
+     bearing_lines = true
+     bearing_lines = white:0, green:0.25, yellow:0.5, red:1.0
+}
+
+
+//----------------------------------------------
+Behavior = BHV_AvdColregsV22
+{
+  name       = avd_defender_agressive_
+  pwt        = 150
+  updates    = CONTACT_INFO_ONE
+  condition  = MODE == ACTIVE
+  condition  = MODE != ACTIVE:RECOVERING
+//  condition  = ACTION = attack
+  condition  = SELF_IN_MY_ZONE = false
+  condition  = HAS_FLAG = true
+  templating = spawn
+  endflag    = CONTACT_RESOLVED = $[CONTACT]
+
+               contact = name_provided_upon_spawn
+                 decay = 15,30
+      on_no_contact_ok = true
+           extrapolate = true
+
+#ifdef VTEAM red
+	ignore_name = RED_ONE
+	ignore_name = RED_TWO
+	ignore_name = RED_THREE
+#elseifdef VTEAM blue
+	ignore_name = BLUE_ONE
+	ignore_name = BLUE_TWO
+	ignore_name = BLUE_THREE
+#endif	
+     completed_dist = 21
+
+	headon_only = true
+	
+  max_util_cpa_dist = 15
+  min_util_cpa_dist = 12
+     pwt_inner_dist = 10
+     pwt_outer_dist = 20
+     bearing_lines = true
+     bearing_lines = white:0, green:0.25, yellow:0.5, red:1.0
+}
+
+
+
+//----------------------------------------------
+Behavior = BHV_StayInRegion
+{ 
+  name         = stay_in_region
+  pwt          = 1000
+  updates      = STAY_IN_REGION_UPDATES
+  condition    = MODE == ACTIVE
+  condition    = MODE != ACTIVE:RETURNING
+
+  perpetual = true
+   
+              speed = 3.5    
+   stale_nav_thresh = 5
+
+         region = $(REGION)
+
+	 hard_over_path = pts={0.0,0.0:0.0,8.0:0.5,10.0:2.0,12.0:3.0,13.0:4.0,13.0}
+	 hard_over_path_speed = 1.0  // speed coresponding to the hard over path
+	 half_length_path_speed = 0.5 // speed at which the hard over path is half as long
+	 
+
+	     patience = 80
+	
+   visual_hints = setpt_size   = 5
+   visual_hints = setpt_color  = dodger_blue 
+   visual_hints = setpt_label_color = off 
+}
+
+
+Behavior = BHV_Trail
+{
+// General Behavior Parameters
+// ---------------------------
+   name         = trail_block_                // example
+   pwt          = 600                   // default
+   updates      = TRAIL_INFO            // example
+  // templating   = spawn                 // example
+
+     condition  = MODE==BLOCKING
+ 
+// General Contact Behavior Parameters
+// -----------------------------------
+             contact = blue_one         // example
+               decay = 15,30            // default (seconds)
+         extrapolate = true             // default
+    on_no_contact_ok = true             // default
+         time_on_leg = 60               // default (seconds)
+
+
+// Parameters specific to this behavior
+// ------------------------------------
+                 nm_radius = 30        // default (meters)
+          no_alert_request = false      // default
+   post_trail_dist_on_idle = true       // default
+            pwt_outer_dist = 0          // default (meters)        
+                    radius = 5          // default (meters) 
+               trail_angle = 225       // this will get updated
+          trail_angle_type = absolute   // default (or absolute)             
+               trail_range = 10        // this will get updated
+ }
+
+
+//----------------------------------------------
+Behavior = BHV_StayInRegion
+{ 
+  name         = stay_in_has_flag
+  pwt          = 1000
+  updates      = STAY_IN_REGION_HAS_FLAG_UPDATES
+  condition    = MODE == ACTIVE
+  condition    = MODE == GRAB_RETURNING
+  condition    = SELF_IN_MY_ZONE == true
+
+
+  perpetual = true
+   
+              speed = 3.5    
+   stale_nav_thresh = 5
+
+   #ifdef VTEAM red
+  	 region = $(RED_ZONE)	 
+   #elseifdef VTEAM blue
+  	 region = $(BLUE_ZONE)
+   #endif
+
+	 hard_over_path = pts={0.0,0.0:0.0,8.0:0.5,10.0:2.0,12.0:3.0,13.0:4.0,13.0}
+	 hard_over_path_speed = 1.0  // speed coresponding to the hard over path
+	 half_length_path_speed = 0.5 // speed at which the hard over path is half as long
+	 
+
+	     patience = 80
+	
+   visual_hints = setpt_size   = 5
+   visual_hints = setpt_color  = dodger_blue 
+   visual_hints = setpt_label_color = off 
+}
+
+
+//  Collision avoidance with own team in own zone
+//----------------------------------------------
+Behavior = BHV_AvdColregsV22
+{
+  name       = avd_teammate_in_own_region_
+  pwt        = 30
+  updates    = CONTACT_INFO_ONE
+  condition  = MODE == ACTIVE
+  condition  = SELF_IN_MY_ZONE = true
+  templating = spawn
+  endflag    = CONTACT_RESOLVED = $[CONTACT]
+
+               contact = name_provided_upon_spawn
+                 decay = 15,30
+      on_no_contact_ok = true
+           extrapolate = true
+
+#ifdef VTEAM blue
+	ignore_name = RED_ONE
+	ignore_name = RED_TWO
+	ignore_name = RED_THREE
+#elseifdef VTEAM red
+	ignore_name = BLUE_ONE
+	ignore_name = BLUE_TWO
+	ignore_name = BLUE_THREE
+#endif	
+     completed_dist = 16
+
+	headon_only = true
+	
+  max_util_cpa_dist = 15
+  min_util_cpa_dist = 10
+     pwt_inner_dist = 9
+     pwt_outer_dist = 10
+     bearing_lines = true
+     bearing_lines = white:0, green:0.25, yellow:0.5, red:1.0 
+}
+
+// This one is for when there are no enemies in
+// our zone, so be more liberal with the ranges
+//----------------------------------------------
+Behavior = BHV_AvdColregsV22
+{
+  name       = avd_teammate_liberal
+  pwt        = 30
+  updates    = CONTACT_INFO_ONE
+  condition  = MODE == ACTIVE
+  condition  = SELF_IN_MY_ZONE = true
+  condition  = ENEMY_IN_ZONE = false
+  templating = spawn
+  endflag    = CONTACT_RESOLVED = $[CONTACT]
+
+               contact = name_provided_upon_spawn
+                 decay = 15,30
+      on_no_contact_ok = true
+           extrapolate = true
+
+#ifdef VTEAM blue
+	ignore_name = RED_ONE
+	ignore_name = RED_TWO
+	ignore_name = RED_THREE
+#elseifdef VTEAM red
+	ignore_name = BLUE_ONE
+	ignore_name = BLUE_TWO
+	ignore_name = BLUE_THREE
+#endif	
+     completed_dist = 25
+
+	headon_only = true
+	
+  max_util_cpa_dist = 30
+  min_util_cpa_dist = 15
+     pwt_inner_dist = 15
+     pwt_outer_dist = 30
+     bearing_lines = true
+     bearing_lines = white:0, green:0.25, yellow:0.5, red:1.0	
+}

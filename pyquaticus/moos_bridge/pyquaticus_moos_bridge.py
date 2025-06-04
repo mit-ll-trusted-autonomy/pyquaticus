@@ -122,10 +122,15 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
         # Agents (player objects) of each team
         self.agents_of_team = {t: [] for t in Team}
-        self.agent_inds_of_team = {t: [] for t in Team}
+        agent_ids_of_team = {t: [] for t in Team}
+        agent_inds_of_team = {t: [] for t in Team}
         for agent in self.players.values():
             self.agents_of_team[agent.team].append(agent)
-            self.agent_inds_of_team[agent.team].append(agent.idx)
+            agent_ids_of_team[agent.team].append(agent.id)
+            agent_inds_of_team[agent.team].append(agent.idx)
+
+        self.agent_ids_of_team = {t: np.array(v) for t, v in agent_ids_of_team.items()}
+        self.agent_inds_of_team = {t: np.array(v) for t, v in agent_inds_of_team.items()}
 
         # Create the list of flags that are indexed by self.flags[int(player.team)]
         if len(self.flag_homes) != len(Team):
@@ -145,7 +150,10 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
         # Setup action and observation spaces
         self.discrete_action_map = [[spd, hdg] for (spd, hdg) in ACTION_MAP]
-        self.action_space = self.get_agent_action_space(action_space, self.players[self._agent_name].idx)
+        self.act_space_str = action_space
+        self.action_space = self.get_agent_action_space(self.act_space_str, self.players[self._agent_name].idx)
+        self.act_space_checked = False
+        self.act_space_match = True
 
         self.agent_obs_normalizer, self.global_state_normalizer = self._register_state_elements(self.team_size, len(self.obstacles))
         self.observation_space = self.get_agent_observation_space()
@@ -424,7 +432,23 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
 
         # Translate incoming actions and publish them
         else:
-            desired_spd, rel_hdg = self._to_speed_heading(agent, action)
+            if not self.act_space_checked:
+                self.act_space_match = self.action_space.contains(
+                    np.asarray(action, dtype=self.action_space.dtype)
+                )
+                self.act_space_checked = True
+
+                if not self.act_space_match:
+                    print(f"Warning! Action passed in for {self._agent_name} ({action}) is not contained in agent's action space ({self.action_space}).")
+                    print(f"Auto-detecting action space for {self._agent_name}")
+                    print()
+
+            desired_spd, rel_hdg = self._to_speed_heading(
+                raw_action=action,
+                player=agent,
+                act_space_match=self.act_space_match,
+                act_space_str=self.act_space_str
+            )
             desired_hdg = self._relheading_to_global_heading(agent.heading, rel_hdg)
 
             #notify the moos agent that we're controlling it directly
@@ -653,7 +677,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         goal_flag = self.flags[not int(self.team)]
         flag_dist = np.hypot(goal_flag.home[0]-player.pos[0],
                              goal_flag.home[1]-player.pos[1])
-        if (flag_dist < self.flag_grab_radius):
+        if (flag_dist < self.catch_radius):
             print("SENDING A FLAG GRAB REQUEST!")
             self._moos_comm.notify('FLAG_GRAB_REQUEST', f'vname={self._agent_name}', -1)
 
@@ -782,7 +806,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             raise Exception(
                 f"agent_radius list length must be equal to the number of agents."
             )
-        self.flag_grab_radius = moos_config.flag_grab_radius
+        self.catch_radius = moos_config.flag_grab_radius
 
         #on sides
         scrim2blue = self.flag_homes[Team.BLUE_TEAM] - self.scrimmage_coords[0]

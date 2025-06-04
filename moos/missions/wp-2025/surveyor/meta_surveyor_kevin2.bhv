@@ -1,0 +1,261 @@
+#include common.bhv <inits>
+initialize HAS_FLAG  = false
+initialize AGGRESSIVE  = false
+initialize SELF_IN_MY_ZONE = true
+
+
+#ifdef RNAME red_one
+	initialize ACTION=defend
+#elseifdef RNAME red_two
+	initialize ACTION=attack
+#elseifdef RNAME blue_one
+	initialize ACTION=defend
+#elseifdef RNAME blue_two
+	initialize ACTION=attack
+#endif
+
+#include common.bhv <modes>
+	
+set MODE = TAGGED {
+  MODE = ACTIVE
+  TAGGED = true
+} 
+
+set MODE = ATTACKING {
+  MODE = ACTIVE
+  ACTION = attack
+}
+
+set MODE = GRABBING {
+  MODE = ACTIVE:ATTACKING
+	HAS_FLAG = false
+} GRAB_RETURNING
+
+set MODE = DEFENDING {
+    MODE = ACTIVE
+	ACTION = defend
+}
+
+set MODE = LOITERING {
+    MODE = ACTIVE:DEFENDING
+	ENEMY_IN_ZONE = false
+} INTERCEPT
+
+
+
+#include common.bhv <bhvs>
+//----------------------------------------------
+Behavior = BHV_Waypoint
+{
+  name      = waypt_score
+  pwt       = 100
+  condition = MODE == GRAB_RETURNING
+  endflag   = HAS_FLAG=false
+
+        speed = 2
+       radius = 3.0
+  slip_radius = 15.0
+       points = $(CFT)
+       repeat = 10
+         lead = 8
+}
+
+//----------------------------------------------
+Behavior = BHV_Waypoint
+{
+  name      = waypt_grab
+  pwt       = 50
+  perpetual = true
+  condition = MODE == GRABBING
+  endflag   = FLAG_GRAB_REQUEST=vname=$(RNAME)
+	endflag   = GRABBING = false
+
+	         speed = 2 // meters per second
+    capture_line = false
+  capture_radius = 5.0
+     slip_radius = 10.0
+          points = $(CFXT)  // Format x,y
+}
+
+//----------------------------------------------
+Behavior = BHV_Waypoint
+{
+  name      = waypt_untag
+  pwt       = 50
+  perpetual = true
+  condition = MODE == TAGGED
+
+           speed = 2 // meters per second
+    capture_line = false
+  capture_radius = 5.0
+     slip_radius = 5.0
+          points = $(CFT)
+}
+
+//----------------------------------------------
+Behavior = BHV_Loiter
+{
+  name      = loiter_defend
+  pwt       = 100
+  condition = MODE==LOITERING
+  // condition               = AGGRESSIVE==FALSE
+  updates   = LOITER_UPDATES
+
+          speed = 1.4
+        polygon = format=ellipse, x=0, y=0, degs=$(DANGX), major=50, minor=15, pts=16
+  center_assign = $(CH)
+      clockwise = true
+	acquire_dist = 5
+     patience = 80
+	
+   visual_hints = edge_color=gray50, vertex_size=0
+   visual_hints = nextpt_size=1
+}
+
+
+
+//----------------------------------------------
+Behavior = BHV_CutRange
+{
+  pwt                     = 100
+  condition               = MODE==INTERCEPT
+  updates                 = ENEMY_IN_ZONE_INTERCEPT_UPDATES
+  name                    = cutrange_attacker2_
+
+#ifdef RNAME red_one
+	contact                 = blue_two
+  condition               = ENEMY_IN_ZONE_CONTACT = blue_two
+  // condition               = BLUE_TWO_TAGGED = false
+#elseifdef RNAME red_two
+	contact                 = blue_two
+  condition               = ENEMY_IN_ZONE_CONTACT = blue_two
+  // condition               = BLUE_TWO_TAGGED = false
+#elseifdef RNAME blue_one
+	contact                 = red_two
+  condition               = ENEMY_IN_ZONE_CONTACT = red_two
+  // condition               = RED_TWO_TAGGED = false
+#elseifdef RNAME blue_two
+	contact                 = red_two
+  condition               = ENEMY_IN_ZONE_CONTACT = red_two
+  // condition               = RED_TWO_TAGGED = false
+#endif
+
+  perpetual = true
+  decay                   = 15,30
+  extrapolate             = true
+  time_on_leg             = 2000
+  pwt_inner_dist          = 10
+  pwt_outer_dist          = 150 //20
+  giveup_dist             = 1000
+  patience                = 50
+  updates                 = UPDATES_CUT
+}
+
+
+//----------------------------------------------
+Behavior = BHV_CutRange
+{
+  pwt                     = 10
+  condition               = MODE==INTERCEPT
+  updates                 = ENEMY_IN_ZONE_INTERCEPT_UPDATES
+  name                    = cutrange_attacker_
+
+#ifdef RNAME red_one
+	contact                 = blue_one
+  condition               = ENEMY_IN_ZONE_CONTACT = blue_one
+#elseifdef RNAME red_two
+	contact                 = blue_one
+  condition               = ENEMY_IN_ZONE_CONTACT = blue_one
+#elseifdef RNAME blue_one
+	contact                 = red_one
+  condition               = ENEMY_IN_ZONE_CONTACT = red_one
+#elseifdef RNAME blue_two
+	contact                 = red_one
+  condition               = ENEMY_IN_ZONE_CONTACT = red_one
+#endif
+
+  perpetual = true
+  decay                   = 15,30
+  extrapolate             = true
+  time_on_leg             = 2000
+  pwt_inner_dist          = 10
+  pwt_outer_dist          = 150 //20
+  giveup_dist             = 1000
+  patience                = 50
+  updates                 = UPDATES_CUT
+}
+
+
+
+//----------------------------------------------
+Behavior = BHV_AvdColregsV22
+{
+  name       = avd_defender_lite_
+  pwt        = 200
+  updates    = CONTACT_INFO_ONE
+  condition  = MODE == ACTIVE
+  condition  = MODE != ACTIVE:RECOVERING
+  condition  = ACTION = attack
+  condition  = SELF_IN_MY_ZONE = false
+  condition  = HAS_FLAG = false
+  templating = spawn
+  endflag    = CONTACT_RESOLVED = $[CONTACT]
+
+               contact = name_provided_upon_spawn
+                 decay = 15,30
+      on_no_contact_ok = true
+           extrapolate = true
+
+#ifdef VTEAM red
+	ignore_name = RED_ONE
+	ignore_name = RED_TWO
+#elseifdef VTEAM blue
+	ignore_name = BLUE_ONE
+	ignore_name = BLUE_TWO
+#endif	
+     completed_dist = 25
+
+	headon_only = true
+	
+  max_util_cpa_dist = 18
+  min_util_cpa_dist = 13
+     pwt_inner_dist = 8
+     pwt_outer_dist = 20
+}
+
+
+//----------------------------------------------
+Behavior = BHV_AvdColregsV22
+{
+  name       = avd_defender_agressive_
+  pwt        = 300
+  updates    = CONTACT_INFO_ONE
+  condition  = MODE == ACTIVE
+  condition  = MODE != ACTIVE:RECOVERING
+  condition  = ACTION = attack
+  condition  = SELF_IN_MY_ZONE = false
+  condition  = HAS_FLAG = true
+  templating = spawn
+  endflag    = CONTACT_RESOLVED = $[CONTACT]
+
+               contact = name_provided_upon_spawn
+                 decay = 15,30
+      on_no_contact_ok = true
+           extrapolate = true
+
+#ifdef VTEAM red
+	ignore_name = RED_ONE
+	ignore_name = RED_TWO
+#elseifdef VTEAM blue
+	ignore_name = BLUE_ONE
+	ignore_name = BLUE_TWO
+#endif	
+     completed_dist = 25
+
+	headon_only = true
+	
+  max_util_cpa_dist = 11
+  min_util_cpa_dist = 8
+     pwt_inner_dist = 8
+     pwt_outer_dist = 20
+}
