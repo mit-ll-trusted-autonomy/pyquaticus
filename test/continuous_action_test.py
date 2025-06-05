@@ -13,7 +13,7 @@ import copy
 
 config_dict = {}
 config_dict["max_time"] = 600.0
-config_dict["sim_speedup_factor"] = 16
+config_dict["sim_speedup_factor"] = 8
 config_dict["max_score"] = 100
 config_dict["render_agent_ids"] = True
 

@@ -1112,13 +1112,19 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         for player in self.players.values():
             if player.id in raw_action_dict:
                 if not self.act_space_checked[player.id]:
-                    self.act_space_match[player.id] = self.action_spaces[player.id].contains(
-                        np.asarray(raw_action_dict[player.id], dtype=self.action_spaces[player.id].dtype)
-                    )
+                    if isinstance(raw_action_dict[player.id], str):
+                        self.act_space_match[player.id] = self.action_spaces[player.id].contains(
+                            np.asarray(raw_action_dict[player.id])
+                        )
+                    else:
+                        self.act_space_match[player.id] = self.action_spaces[player.id].contains(
+                            np.asarray(raw_action_dict[player.id], dtype=self.action_spaces[player.id].dtype)
+                        )
                     self.act_space_checked[player.id] = True
 
                     if not self.act_space_match[player.id]:
-                        print(f"Warning! Action passed in for {player.id} ({raw_action_dict[player.id]}) is not contained in agent's action space ({self.action_spaces[player.id]}).")
+                        action_print = repr(raw_action_dict[player.id]) if isinstance(raw_action_dict[player.id], str) else raw_action_dict[player.id]
+                        print(f"Warning! Action passed in for {player.id} ({action_print}) is not contained in agent's action space ({self.action_spaces[player.id]}).")
                         print(f"Auto-detecting action space for {player.id}")
                         print()
 
@@ -1281,26 +1287,20 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     else:
                         desired_speed, heading_error = policy.compute_action(player.pos, player.heading)
                         if player.oob:
-                            desired_speed = player.get_max_speed()
-                            # desired_speed = player.get_max_speed() * self.oob_speed_frac
-                            #TODO: optimize based on MOOS behvior
+                            desired_speed = min(desired_speed, player.get_max_speed() * self.oob_speed_frac) #TODO: optimize based on MOOS behvior
             
                 #else go directly to home
                 else:
                     _, heading_error = mag_bearing_to(player.pos, flag_home, player.heading)
                     if player.oob:
-                        desired_speed = player.get_max_speed()
-                        # desired_speed = player.get_max_speed() * self.oob_speed_frac
-                        #TODO: optimize based on MOOS behvior
+                        desired_speed = player.get_max_speed() * self.oob_speed_frac #TODO: optimize based on MOOS behvior
                     else:
                         desired_speed = player.get_max_speed()
 
             # If agent is out of bounds, drive back in bounds at fraction of max speed
             elif player.oob:
                 heading_error = self._get_oob_recover_rel_heading(player.pos, player.heading)
-                desired_speed = player.get_max_speed()
-                # desired_speed = player.get_max_speed() * self.oob_speed_frac
-                #TODO: optimize based on MOOS behvior
+                desired_speed = player.get_max_speed() * self.oob_speed_frac
 
             # Else get desired speed and heading from action_dict
             else:

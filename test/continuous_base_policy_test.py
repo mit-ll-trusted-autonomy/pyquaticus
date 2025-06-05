@@ -41,7 +41,7 @@ env = pyquaticus_v0.PyQuaticusEnv(
     team_size=2, config_dict=config_dict, render_mode="human"
 )
 
-obs, info = env.reset(return_info=True)
+obs, info = env.reset()
 
 B_one = BaseDefender(
     "agent_1",

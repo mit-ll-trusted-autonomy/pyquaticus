@@ -18,7 +18,7 @@ import numpy as np
 config_dict = {}
 config_dict["max_time"] = 600.0
 config_dict["max_score"] = 100
-config_dict["sim_speedup_factor"] = 16
+config_dict["sim_speedup_factor"] = 8
 config_dict["normalize_obs"] = False
 
 env = pyquaticus_v0.PyQuaticusEnv(
@@ -36,7 +36,7 @@ obs, info = env.reset()
 r_one_old = OldBaseAttacker(
     "agent_2",
     Team.RED_TEAM,
-    3,
+    2,
     mode="hard",
     continuous=True,
     aquaticus_field_points=env.aquaticus_field_points,
@@ -48,7 +48,7 @@ r_one_new = BaseAttacker(
 r_two_old = OldBaseDefender(
     "agent_3",
     Team.RED_TEAM,
-    3,
+    2,
     mode="hard",
     continuous=True,
     flag_keepout=env.flag_keepout_radius,
@@ -61,7 +61,7 @@ r_two = BaseDefender(
 b_one_old = OldHeuristicAgent(
     "agent_0",
     Team.BLUE_TEAM,
-    3,
+    2,
     aquaticus_field_points=env.aquaticus_field_points,
     mode="hard",
     continuous=True,
