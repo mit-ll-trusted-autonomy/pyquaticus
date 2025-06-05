@@ -6,16 +6,20 @@ ProcessConfig = pCBF
    CommsTick = 4
 
    self_name = $(RNAME)
-   safety_radius = 3.0
-   delta = 20.0
+   safety_radius = 5.0
+   delta = 5.0
 	   
    debug_verbose = false
 
    preCBF_varname_postfix = _PRECBF
 
-   stale_thresh = 1
+   stale_thresh = 100000
    
    control_constraints = DESIRED_RUDDER=-INF:INF,DESIRED_THRUST=0.0:100.0
 
    agents_to_avoid = $(AGENTS_TO_AVOID)
+
+   turn_loss = 0.75
+   turn_rate = 80
+   thrust_map = -100:-2, 0:0, 20:1, 40:1.5, 60:2.0, 70:2.25, 100:2.75
 }

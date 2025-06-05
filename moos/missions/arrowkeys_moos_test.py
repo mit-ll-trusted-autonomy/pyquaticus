@@ -46,7 +46,7 @@ def main():
         all_agent_names=["blue_one", "blue_two", "blue_three", "red_one", "red_two", "red_three"],
         moos_config=WestPoint2025(),
         pyquaticus_config=pyquaticus_config_std,
-        timewarp=3,
+        timewarp=5,
         quiet=False
     )
     env.reset()
@@ -74,17 +74,22 @@ def main():
                     # print(info["global_state"][("red_three", "pos")])
 
             def on_press(self, key):
-                if key.char in keys_to_action:
-                    self.action = keys_to_action[key.char]
-                    if key.char not in self.pressed_keys:
-                        self.pressed_keys.append(key.char)
-                else:
-                    self.check_if_idle()
+                try:
+                    if key.char in keys_to_action:
+                        self.action = keys_to_action[key.char]
+                        if key.char not in self.pressed_keys:
+                            self.pressed_keys.append(key.char)
+                    else:
+                        self.check_if_idle()
+                except:
+                    pass
 
             def on_release(self, key):
-                self.pressed_keys.remove(key.char)
-                self.check_if_idle()
-
+                try:
+                    self.pressed_keys.remove(key.char)
+                    self.check_if_idle()
+                except:
+                    pass
             def check_if_idle(self):
                 if len(self.pressed_keys) > 0:
                     self.action = keys_to_action[self.pressed_keys[-1]]
