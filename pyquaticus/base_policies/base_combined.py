@@ -25,7 +25,7 @@ import numpy as np
 
 import pyquaticus.base_policies.base_attack as attack_policy
 import pyquaticus.base_policies.base_defend as defend_policy
-from pyquaticus.base_policies.base import BaseAgentPolicy
+from pyquaticus.base_policies.base_policy import BaseAgentPolicy
 from pyquaticus.base_policies.utils import (
     dist_rel_bearing_to_local_rect,
     get_avoid_vect,

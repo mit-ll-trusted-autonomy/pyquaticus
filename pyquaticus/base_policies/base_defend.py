@@ -23,7 +23,7 @@ from typing import Union
 
 import numpy as np
 
-from pyquaticus.base_policies.base import BaseAgentPolicy
+from pyquaticus.base_policies.base_policy import BaseAgentPolicy
 from pyquaticus.base_policies.utils import (
     dist_rel_bearing_to_local_rect,
     get_avoid_vect,

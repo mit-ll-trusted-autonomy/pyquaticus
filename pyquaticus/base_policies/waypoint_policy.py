@@ -21,7 +21,7 @@
 
 import numpy as np
 
-from pyquaticus.base_policies.base import BaseAgentPolicy
+from pyquaticus.base_policies.base_policy import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import Team
 from pyquaticus.envs.pyquaticus import PyQuaticusEnv
 from pyquaticus.base_policies.rrt.utils import (

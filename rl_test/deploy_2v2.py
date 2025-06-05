@@ -38,7 +38,7 @@ from ray import air, tune
 from ray.rllib.algorithms.ppo import PPOTF2Policy, PPOConfig
 from ray.rllib.policy.policy import PolicySpec
 import os
-from pyquaticus.base_policies.base_policies import DefendGen, AttackGen
+from pyquaticus.base_policies.base_policy_wrappers import DefendGen, AttackGen
 from pyquaticus.base_policies.base_attack import BaseAttacker
 from pyquaticus.base_policies.base_defend import BaseDefender
 from pyquaticus.base_policies.base_combined import Heuristic_CTF_Agent

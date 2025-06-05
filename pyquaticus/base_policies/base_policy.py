@@ -29,8 +29,7 @@ from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
 
 class BaseAgentPolicy:
     """
-    Class containing utility routines for agents to calculate useful info using
-    the observation space.
+    Parent class for all base policies.
     """
 
     def __init__(
@@ -61,7 +60,7 @@ class BaseAgentPolicy:
         if suppress_numpy_warnings:
             np.seterr(all="ignore")
 
-    def compute_action(self, obs, info) -> Any:
+    def compute_action(self, obs, info: dict[str, dict]) -> Any:
         """
         Compute an action from the given observation and global state.
 
