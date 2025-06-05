@@ -1,0 +1,14 @@
+//------------------------------------------------
+// pZoneTrackOpponents config block
+//zone is min_x, min_y, max_x, max_y
+ProcessConfig = pAquaticusStateMgr
+{
+   AppTick   = 4
+   CommsTick = 4
+
+   team_name=$(OPFOR)
+	home_zone=$(PPCT),$(PPBT),$(SSBT),$(SSCT)
+   high_value_pt=$(CFT)
+
+}
+

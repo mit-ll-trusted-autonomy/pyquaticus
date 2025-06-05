@@ -1,0 +1,12 @@
+//------------------------------------------------
+// pAuthority config block
+
+ProcessConfig = pRoleChooser
+{
+   AppTick   = 4
+   CommsTick = 4
+
+   //human over ride timer in seconds
+   override_timer = 10
+}
+

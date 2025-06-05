@@ -1,0 +1,10 @@
+
+Playing from the commandline:
+
+OSX:   say hello
+       afplay file.wav
+
+Linux: espeak hello
+       aplay file.wav
+
+  

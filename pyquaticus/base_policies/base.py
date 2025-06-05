@@ -76,7 +76,7 @@ class BaseAgentPolicy:
         """
         raise NotImplementedError
 
-    def update_state(self, obs, info) -> None:
+    def update_state(self, obs, info: dict[str, dict]) -> None:
         """
         Method to convert the gym obs and info into data useful for compute_action
 

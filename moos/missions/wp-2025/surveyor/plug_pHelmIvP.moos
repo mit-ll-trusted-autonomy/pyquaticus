@@ -1,0 +1,14 @@
+//---------------------------------------
+ProcessConfig = pHelmIvP
+{
+  AppTick    = 4
+  CommsTick  = 4
+  
+  //ivp_behavior_dirs = /home/tyler/moos-ivp/lib
+  Behaviors    = targ_$(RNAME).bhv
+  Verbose      = false
+  Domain       = course:0:359:360
+  Domain       = speed:0:3.5:36
+
+	hold_on_apps = pContactMgrV20
+}

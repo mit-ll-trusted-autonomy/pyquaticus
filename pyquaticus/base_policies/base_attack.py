@@ -102,6 +102,7 @@ class BaseAttacker(BaseAgentPolicy):
             return self.action_from_vector(None, 0)
 
         elif self.mode == "competition_easy":
+            assert self.aquaticus_field_points is not None
 
             assert self.aquaticus_field_points is not None
 
@@ -134,7 +135,6 @@ class BaseAttacker(BaseAgentPolicy):
 
             if self.is_tagged:
                 self.goal = "SC"
-
             if (
                 -2.5
                 <= dist(estimated_position, self.aquaticus_field_points[value])
@@ -155,8 +155,8 @@ class BaseAttacker(BaseAgentPolicy):
                 <= dist(estimated_position, self.aquaticus_field_points[value])
                 <= 6
             ):
-                self.goal = "SC"
 
+                self.goal = "SC"
             return self.goal
 
         elif self.mode == "medium":

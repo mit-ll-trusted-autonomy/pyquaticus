@@ -1,0 +1,167 @@
+<tag><inits>
+
+initialize MATCH_PREP = true
+initialize PERIMETER_CHECK = false
+initialize PRECISE_STATION_KEEP = false
+
+<tag><modes>
+
+set MODE = MATCH_PREPARING {
+  MODE = ACTIVE
+  MATCH_PREP = true
+  PERIMETER_CHECK = false
+}
+set MODE = PERIMETER_CHECKING {
+  MODE = ACTIVE
+  PERIMETER_CHECK = true
+  MATCH_PREP = true
+}
+
+set MODE = PRECISE_STATION_KEEPING {
+  MODE = ACTIVE
+  PRECISE_STATION_KEEP = true
+}
+	
+<tag><bhvs>
+
+//----------------------------------------------
+Behavior = BHV_Loiter
+{
+  name      = loiter_match_prep
+  pwt       = 30
+  condition = MODE==MATCH_PREPARING
+  runflag   = BOT_DIALOG_STATUS=Preparing_for_match
+  updates   = LOITER_UPDATES
+
+          speed = 5
+        polygon = radial:: x=0,y=0,radius=12,pts=8 
+
+  center_assign = $(CF)
+
+}
+
+
+
+//----------------------------------------------
+// 
+Behavior = BHV_StationKeep
+{
+  name      = precise_station_keep
+  pwt       = 30
+  condition = MODE==PRECISE_STATION_KEEPING
+
+	hibernation_radius = 15
+  center_activate = true
+     inner_radius = 5
+     outer_radius = 10
+     hibernation_radius = 6
+      outer_speed = 1.6
+    transit_speed = 2
+       swing_time = 1
+	
+     visual_hints = vertex_size = 1     
+     visual_hints = edge_color = light_blue 
+     visual_hints = edge_size = 1       
+     visual_hints = label_color = white 
+     visual_hints = vertex_color = red  
+}
+
+	
+	
+//----------------------------------------------
+// behavior that goes to each corner and the 
+// center of the long sides. Good visual check
+Behavior = BHV_Waypoint
+{ 
+  name      = waypt_perimeter
+  pwt       = 30
+  condition = MODE==PERIMETER_CHECKING
+
+  wptflag = PRECISE_STATION_KEEP=true
+  wptflag = PERIMETER_CHECK=false
+
+  perpetual  = true
+
+	    speed_alt = 1.2
+  use_alt_speed = true
+          lead = 8
+    lead_damper = 1
+  lead_to_start = true
+          speed = 5   // meters per second
+  capture_line = true
+capture_radius = 3.0
+         slip_radius = 15.0
+
+            //  polygon = $(NWT) : $(NET) : $(SET) : $(SWT)
+            //  polygon = $(PPBT) : $(SSBT) : $(SSBXT) : $(PPBXT)
+  polygon = $(PPBT) : $(SSBT) : $(SSCT) : $(SSBXT) : $(PPBXT) : $(PPCT)
+    
+               order = normal
+             //repeat  = 100000
+
+    visual_hints = nextpt_color=yellow
+    visual_hints = nextpt_vertex_size=8
+    visual_hints = nextpt_lcolor=gray70
+    visual_hints = vertex_color=dodger_blue, edge_color=white
+    visual_hints = vertex_size=5, edge_size=1
+}
+
+//----------------------------------------------
+// COLREGS bhv to run before the match
+// more agressive for extra buffer
+Behavior = BHV_AvdColregsV22
+{
+  name       = colavd_prematch_agro_
+  pwt        = 300
+  updates    = CONTACT_INFO
+  condition  = (((MODE == ACTIVE:PERIMETER_CHECKING) or (MODE == ACTIVE:PRECISE_STATION_KEEPING)) or (MODE == ACTIVE:MATCH_PREPARING)) or (MODE == ACTIVE:RETURNING) 
+
+  //condition  = MODE != ACTIVE:RETURNING
+  templating = spawn
+  endflag    = CONTACT_RESOLVED = $[CONTACT]
+
+           contact = name_provided_upon_spawn
+             decay = 15,30
+	on_no_contact_ok = true
+	    use_refinery = true
+       extrapolate = true
+	
+     completed_dist = 25
+     pwt_inner_dist = 8
+     pwt_outer_dist = 20
+  max_util_cpa_dist = 10
+  min_util_cpa_dist = 6
+
+        headon_only = true
+}
+
+//----------------------------------------------
+// COLREGS bhv to run during the match
+// tighter for higher performance
+
+Behavior = BHV_AvdColregsV22
+{
+  name       = colavd_match_
+  pwt        = 300
+  updates    = CONTACT_INFO
+  condition  = MODE == ACTIVE
+
+  //condition  = MODE != ACTIVE:RETURNING
+  templating = spawn
+  endflag    = CONTACT_RESOLVED = $[CONTACT]
+
+           contact = name_provided_upon_spawn
+             decay = 15,30
+	on_no_contact_ok = true
+	    use_refinery = true
+       extrapolate = true
+	
+     completed_dist = 12
+     pwt_inner_dist = 3
+     pwt_outer_dist = 6
+  max_util_cpa_dist = 10
+  min_util_cpa_dist = 6
+
+        headon_only = true
+}
+

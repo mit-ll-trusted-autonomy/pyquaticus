@@ -145,6 +145,7 @@ class BaseDefender(BaseAgentPolicy):
             return self.goal
 
         elif self.mode == "competition_medium":
+            assert self.aquaticus_field_points is not None
 
             assert self.aquaticus_field_points is not None
 
@@ -159,8 +160,8 @@ class BaseDefender(BaseAgentPolicy):
                 enemy_dis_dict[enem] = pos[0]
                 if (
                     pos[0] < min_enemy_distance
-                    and not global_state[(enem, "is_tagged")]
-                    and global_state[(enem, "on_side")] == 0
+                    and not unnorm_obs[(enem, "is_tagged")]
+                    and unnorm_obs[(enem, "on_side")] == 0
                 ):
                     min_enemy_distance = pos[0]
                     closest_enemy = enem
@@ -258,10 +259,7 @@ class BaseDefender(BaseAgentPolicy):
             enemy_loc = np.asarray((0, 0))
             for enem, pos in self.opp_team_pos_dict.items():
                 enemy_dis_dict[enem] = pos[0]
-                if (
-                    pos[0] < min_enemy_distance
-                    and not global_state[(enem, "is_tagged")]
-                ):
+                if pos[0] < min_enemy_distance and not unnorm_obs[(enem, "is_tagged")]:
                     min_enemy_distance = pos[0]
                     closest_enemy = enem
                     enemy_loc = dist_rel_bearing_to_local_rect(pos[0], pos[1])
@@ -287,11 +285,11 @@ class BaseDefender(BaseAgentPolicy):
 
                 if (
                     enemy_dist_2_flag > defense_perim
-                    or global_state[(closest_enemy, "is_tagged")]
+                    or unnorm_obs[(closest_enemy, "is_tagged")]
                 ):
                     if (
                         defend_pt_flag_dist > defense_perim
-                        or global_state[(closest_enemy, "is_tagged")]
+                        or unnorm_obs[(closest_enemy, "is_tagged")]
                     ):
                         guide_pt = [
                             self.my_flag_loc[0] + (unit_def_flag[0] * defense_perim),

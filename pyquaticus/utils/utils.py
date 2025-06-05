@@ -535,6 +535,3 @@ def check_segment_intersections(segments, query_segment):
     intersecting = valid & (t >= 0) & (t <= 1) & (u >= 0) & (u <= 1)
 
     return np.where(intersecting)[0]
-
-def dist(A, B):
-    return np.linalg.norm(B - A)
