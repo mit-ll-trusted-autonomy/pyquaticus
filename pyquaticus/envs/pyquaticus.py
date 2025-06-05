@@ -1052,6 +1052,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # RRT policies for driving back home
         self.rrt_policies = []
         if len(self.obstacles) > 0:
+            global EnvWaypointPolicy
             from pyquaticus.base_policies.env_waypoint_policy import EnvWaypointPolicy
             for i in range(self.num_agents):
                 self.rrt_policies.append(
@@ -2825,7 +2826,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         ### prep valid start poses tracker for gps environment ###
         if self.gps_env:
-            if self.default_init:
+            if self.on_sides_init:
                 valid_init_pos_inds = {
                     team: [i for i in range(len(self.valid_team_init_poses[int(team)]))] for team in self.agents_of_team
                 }
@@ -3030,6 +3031,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             )
 
         if self.gps_env:
+            global cx
+            global mt
+            global _sm2ll
+            global Geodesic
             import contextily as cx
             import mercantile as mt
             from contextily.tile import _sm2ll
