@@ -26,7 +26,7 @@ import pyquaticus.base_policies.deprecated.base_defend as defend_policy
 from pyquaticus.base_policies.deprecated.base import BaseAgentPolicy
 from pyquaticus.envs.pyquaticus import config_dict_std, Team, ACTION_MAP
 
-MODES = {"easy", "medium", "hard"}
+MODES = {"easy", "medium", "hard", "nothing"}
 
 
 class Heuristic_CTF_Agent(BaseAgentPolicy):
@@ -119,6 +119,12 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
 
         # Default no_op action in case somehow none of the below actions are triggered.
         action = 16
+
+        if self.mode == "nothing":
+            if self.continuous:
+                return (0, 0)
+            else:
+                return -1
 
         if self.mode == "easy":
             # Opp is close - needs to defend:
@@ -244,7 +250,6 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         home_y = []
         away_x = []
         away_y = []
-
         # TO DO: THIS NEEDS TO BE BY X and Y seperately
         for agp in friendly_positions:
             ag = self.rb_to_rect(agp)

@@ -292,35 +292,34 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
                 self.opp_team_has_flag or global_state[(id, "has_flag")]
             )
             self.opp_team_tag.append(global_state[(id, "is_tagged")])
-
+        team_str = self.team.name.lower().split("_")[0]
+        opp_str = "red" if team_str == "blue" else "blue"
+        self.my_flag_distance = dist(
+            global_state[(self.id, "pos")], global_state[team_str + "_flag_pos"]
+        )
+        self.my_flag_bearing = angle180(
+            global_rect_to_abs_bearing(
+                global_state[team_str + "_flag_pos"] - global_state[(self.id, "pos")]
+            )
+            - global_state[(self.id, "heading")]
+        )
+        self.my_flag_loc = dist_rel_bearing_to_local_rect(
+            self.my_flag_distance, self.my_flag_bearing
+        )
+        self.opp_flag_distance = dist(
+            global_state[(self.id, "pos")], global_state[opp_str + "_flag_pos"]
+        )
+        self.opp_flag_bearing = angle180(
+            global_rect_to_abs_bearing(
+                global_state[opp_str + "_flag_pos"] - global_state[(self.id, "pos")]
+            )
+            - global_state[(self.id, "heading")]
+        )
+        self.opp_flag_loc = dist_rel_bearing_to_local_rect(
+            self.opp_flag_distance, self.opp_flag_bearing
+        )
         # Initialize the scrimmage line as the mid point between the two flags
         if self.scrimmage is None:
-            team_str = self.team.name.lower().split("_")[0]
-            opp_str = "red" if team_str == "blue" else "blue"
-            self.my_flag_distance = dist(
-                global_state[(self.id, "pos")], global_state[team_str + "_flag_pos"]
-            )
-            self.my_flag_bearing = angle180(
-                global_rect_to_abs_bearing(
-                    global_state[team_str + "_flag_pos"] - global_state[(self.id, "pos")]
-                )
-                - global_state[(self.id, "heading")]
-            )
-            self.my_flag_loc = dist_rel_bearing_to_local_rect(
-                self.my_flag_distance, self.my_flag_bearing
-            )
-            self.opp_flag_distance = dist(
-                global_state[(self.id, "pos")], global_state[opp_str + "_flag_pos"]
-            )
-            self.opp_flag_bearing = angle180(
-                global_rect_to_abs_bearing(
-                    global_state[opp_str + "_flag_pos"] - global_state[(self.id, "pos")]
-                )
-                - global_state[(self.id, "heading")]
-            )
-            self.opp_flag_loc = dist_rel_bearing_to_local_rect(
-                self.opp_flag_distance, self.opp_flag_bearing
-            )
             self.scrimmage = self.opp_flag_loc[0] + self.my_flag_loc[0] / 2
 
         self.my_team_density, self.opp_team_density = self.get_team_density(
