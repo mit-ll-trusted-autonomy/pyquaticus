@@ -41,7 +41,7 @@ env = pyquaticus_v0.PyQuaticusEnv(
     team_size=2, config_dict=config_dict, render_mode="human"
 )
 
-obs, info = env.reset(return_info=True)
+obs, info = env.reset()
 
 B_one = BaseDefender(
     "agent_1",
@@ -78,7 +78,7 @@ R_two = BaseAttacker(
 R_three.update_state(obs, info)
 
 R_three.plan(
-    wp=env.flag_homes[Team.RED_TEAM], num_iters=500
+    wp=env.flag_homes[Team.BLUE_TEAM], num_iters=500
 )
 
 while True:

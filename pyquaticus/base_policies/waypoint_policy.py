@@ -32,6 +32,8 @@ from pyquaticus.base_policies.rrt.utils import (
 )
 from pyquaticus.base_policies.rrt.rrt_star import rrt_star
 from pyquaticus.structs import PolygonObstacle, CircleObstacle
+from pyquaticus.utils.utils import angle180
+from pyquaticus.base_policies.utils import global_rect_to_abs_bearing
 
 
 from typing import Optional
@@ -57,9 +59,13 @@ class WaypointPolicy(BaseAgentPolicy):
     ):
         super().__init__(agent_id, team, env)
 
+        self.state_normalizer = env.global_state_normalizer
+
         self.capture_radius = capture_radius
 
         self.slip_radius = slip_radius
+
+        self.max_speed = env.players[self.id].get_max_speed()
 
         self.cur_dist = None
 
@@ -90,6 +96,10 @@ class WaypointPolicy(BaseAgentPolicy):
                 circle = (*obstacle.center_point, obstacle.radius)
                 circle_obstacles.append(circle)
 
+        # add own flag as obstacle to avoid
+        circle = (*env.flag_homes[self.team], env.flag_keepout_radius)
+        circle_obstacles.append(circle)
+
         self.env_bounds = np.array(((0, 0), env.env_size))
 
         if len(poly_obstacles) == 0:
@@ -107,6 +117,15 @@ class WaypointPolicy(BaseAgentPolicy):
             self.ungrouped_seglist = get_ungrouped_seglist(poly_obstacles)
         else:
             self.ungrouped_seglist = None
+    
+    def update_state(self, obs, info: dict[str, dict]) -> None:
+        global_state = info[self.id]["global_state"]
+        if not isinstance(global_state, dict):
+            global_state = self.state_normalizer.unnormalized(global_state)
+
+        self.pos = global_state[(self.id, "pos")]
+        self.is_tagged = global_state[(self.id, "is_tagged")]
+        self.heading = global_state[(self.id, "heading")]
 
     def compute_action(self, obs, info):
         """
@@ -139,17 +158,11 @@ class WaypointPolicy(BaseAgentPolicy):
 
         pos_err = self.wps[0] - self.pos
 
-        desired_heading = self.angle180(-1 * self.vec_to_heading(pos_err) + 90)
+        desired_heading = global_rect_to_abs_bearing(pos_err)
 
-        heading_error = self.angle180(desired_heading - self.heading)
+        heading_error = angle180(desired_heading - self.heading)
 
         if self.continuous:
-            if np.isnan(heading_error):
-                heading_error = 0
-
-            if np.abs(heading_error) < 5:
-                heading_error = 0
-
             return (desired_speed, heading_error)
 
         else:
@@ -159,9 +172,6 @@ class WaypointPolicy(BaseAgentPolicy):
                 return 14
             elif heading_error > 1:
                 return 10
-            else:
-                # Should only happen if the act_heading is somehow NAN
-                return 12
 
     def update_wps(self, pos: np.ndarray):
         """
