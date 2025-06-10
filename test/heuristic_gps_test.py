@@ -51,7 +51,7 @@ term_g = {'agent_0': False, 'agent_1': False}
 truncated_g = {'agent_0': False, 'agent_1': False}
 term = term_g
 trunc = truncated_g
-obs, info = env.reset(return_info=True)
+obs, info = env.reset()
 
 temp_captures = env.state["captures"]
 temp_grabs = env.state["grabs"]

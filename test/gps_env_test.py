@@ -126,6 +126,7 @@ def main():
     config["render_lidar_mode"] = "detection"
     config["catch_radius"] = 250
     config["default_init"] = False
+    config["dynamics"] = "large_usv"
     
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
     env = pyquaticus_v0.PyQuaticusEnv(team_size=3, render_mode='human', config_dict=config)
