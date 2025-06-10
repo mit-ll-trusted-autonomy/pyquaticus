@@ -13,7 +13,7 @@ from pyquaticus.config import ACTION_MAP
 config_dict = {}
 config_dict["max_time"] = 600.0
 config_dict["max_score"] = 100
-config_dict["sim_speedup_factor"] = 16
+config_dict["sim_speedup_factor"] = 8
 
 env = pyquaticus_v0.PyQuaticusEnv(team_size=2, config_dict=config_dict,render_mode='human')
 term_g = {0:False,1:False}
@@ -21,7 +21,7 @@ truncated_g = {0:False,1:False}
 term = term_g
 trunc = truncated_g
 
-obs, info = env.reset(return_info=True)
+obs, info = env.reset()
 
 temp_captures = env.state["captures"]
 temp_grabs = env.state["grabs"]
