@@ -1,4 +1,4 @@
-from pyquaticus.base_policies.base import BaseAgentPolicy
+from pyquaticus.base_policies.base_policy import BaseAgentPolicy
 from pygame import K_a, K_w, K_d
 import pygame
 

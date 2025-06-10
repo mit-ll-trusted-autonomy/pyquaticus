@@ -78,7 +78,7 @@ R_two = BaseAttacker(
 R_three.update_state(obs, info)
 
 R_three.plan(
-    wp=env.flag_homes[Team.RED_TEAM], num_iters=500
+    wp=env.flag_homes[Team.BLUE_TEAM], num_iters=500
 )
 
 while True:

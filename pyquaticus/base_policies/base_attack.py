@@ -23,9 +23,17 @@ from typing import Union
 
 import numpy as np
 
-from pyquaticus.base_policies.base import BaseAgentPolicy
+from pyquaticus.base_policies.base_policy import BaseAgentPolicy
+from pyquaticus.base_policies.utils import (
+    dist_rel_bearing_to_local_rect,
+    get_avoid_vect,
+    global_rect_to_abs_bearing,
+    local_rect_to_rel_bearing,
+    rel_bearing_to_local_unit_rect,
+)
 from pyquaticus.envs.pyquaticus import PyQuaticusEnv, Team
 from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
+from pyquaticus.utils.utils import angle180, closest_point_on_line, dist
 
 MODES = {"nothing", "easy", "medium", "hard", "competition_easy", "competition_medium"}
 
@@ -51,6 +59,10 @@ class BaseAttacker(BaseAgentPolicy):
         self.continuous = continuous
         self.goal = "SC"
 
+        self.state_normalizer = env.global_state_normalizer
+        self.walls = env._walls[team.value]
+        self.max_speed = env.players[self.id].get_max_speed()
+
         if isinstance(env, PyQuaticusMoosBridge) or not env.gps_env:
             self.aquaticus_field_points = env.aquaticus_field_points
 
@@ -73,58 +85,24 @@ class BaseAttacker(BaseAgentPolicy):
             action: if continuous, a tuple containing desired speed and heading error.
             if discrete, an action index corresponding to ACTION_MAP in config.py
         """
-        self.update_state(obs, info)
 
-        unnorm_obs = info[self.id].get("unnorm_obs", None)
-        if unnorm_obs is None:
-            unnorm_obs = obs[self.id]
+        self.update_state(obs, info)
 
         if self.mode == "easy":
 
-            desired_speed = self.max_speed / 2
-
             # If I or someone on my team has the flag, go back home
             if self.has_flag or self.my_team_has_flag:
-                goal_vect = self.bearing_to_vec(unnorm_obs["own_home_bearing"])
+                return self.action_from_vector(self.home_loc, 0.5)
 
             # Otherwise go get the opponents flag
             else:
-                goal_vect = self.bearing_to_vec(self.opp_flag_bearing)
-
-            # Convert the vector to a heading, and then pick the best discrete action to perform
-            try:
-                heading_error = self.vec_to_heading(goal_vect)
-
-                if self.continuous:
-                    if np.isnan(heading_error):
-                        heading_error = 0
-
-                    return (desired_speed, heading_error)
-
-                else:
-                    if 1 >= heading_error >= -1:
-                        return 12
-                    elif heading_error < -1:
-                        return 14
-                    elif heading_error > 1:
-                        return 10
-                    else:
-                        # Should only happen if the heading error is somehow NAN
-                        return 12
-            except Exception:
-                # If there is an error converting the vector to a heading, just go straight
-                if self.continuous:
-                    return (desired_speed, 0)
-                else:
-                    return 12
+                return self.action_from_vector(self.opp_flag_loc, 0.5)
 
         elif self.mode == "nothing":
-            if self.continuous:
-                return (0, 0)
-            else:
-                return -1
+            return self.action_from_vector(None, 0)
 
         elif self.mode == "competition_easy":
+            
             assert self.aquaticus_field_points is not None
 
             if self.team == Team.RED_TEAM:
@@ -141,6 +119,7 @@ class BaseAttacker(BaseAgentPolicy):
                         self.wall_distances[2],
                     ]
                 )
+
             value = self.goal
 
             if self.team == Team.BLUE_TEAM:
@@ -152,13 +131,12 @@ class BaseAttacker(BaseAgentPolicy):
                     value += "X"
                 elif self.goal not in ["SC", "CC", "PC"]:
                     value = value[:-1]
+
             if self.is_tagged:
                 self.goal = "SC"
             if (
                 -2.5
-                <= self.get_distance_between_2_points(
-                    estimated_position, self.aquaticus_field_points[value]
-                )
+                <= dist(estimated_position, self.aquaticus_field_points[value])
                 <= 2.5
             ):
                 if self.goal == "SC":
@@ -169,12 +147,11 @@ class BaseAttacker(BaseAgentPolicy):
                     self.goal = "CF"
                 elif self.goal == "CF":
                     self.goal = "SC"
+
             if (
                 self.goal == "CF"
                 and -6
-                <= self.get_distance_between_2_points(
-                    estimated_position, self.aquaticus_field_points[value]
-                )
+                <= dist(estimated_position, self.aquaticus_field_points[value])
                 <= 6
             ):
 
@@ -183,116 +160,51 @@ class BaseAttacker(BaseAgentPolicy):
 
         elif self.mode == "medium":
 
-            desired_speed = self.max_speed / 2
-
             # If I or someone on my team has the flag, return to my side.
             if self.has_flag or self.my_team_has_flag:
 
                 # Weighted to follow goal more than avoiding others
-                goal_vect = np.multiply(
-                    2.00, self.bearing_to_vec(unnorm_obs["own_home_bearing"])
-                )
-                avoid_vect = self.get_avoid_vect(self.opp_team_pos)
+                goal_vect = 2 * rel_bearing_to_local_unit_rect(self.home_bearing)
+                avoid_vect = get_avoid_vect(self.opp_team_pos)
                 my_action = goal_vect + avoid_vect
 
             # Otherwise, go get the other teams flag
             else:
-                goal_vect = np.multiply(
-                    2.00, self.bearing_to_vec(self.opp_flag_bearing)
-                )
-                avoid_vect = self.get_avoid_vect(self.opp_team_pos)
+                goal_vect = 2 * rel_bearing_to_local_unit_rect(self.opp_flag_bearing)
+                avoid_vect = get_avoid_vect(self.opp_team_pos)
                 my_action = goal_vect + avoid_vect
 
-            # Convert the heading to a discrete action to follow
-            try:
-                heading_error = self.vec_to_heading(my_action)
-
-                if self.continuous:
-                    if np.isnan(heading_error):
-                        heading_error = 0
-
-                    return (desired_speed, heading_error)
-
-                else:
-                    if 1 >= heading_error >= -1:
-                        return 12
-                    elif heading_error < -1:
-                        return 14
-                    elif heading_error > 1:
-                        return 10
-                    else:
-                        # Should only happen if the act_heading is somehow NAN
-                        return 12
-            except Exception:
-                # If there is an error converting the vector to a heading, just go straight
-                if self.continuous:
-                    return (desired_speed, 0)
-                else:
-                    return 12
+            return self.action_from_vector(my_action, 0.5)
 
         elif self.mode == "competition_medium":
 
-            desired_speed = self.max_speed
-
-            # If I'm close to a wall and driving towards it, add the closest point to the wall as an obstacle to avoid
+            # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid
             if self.wall_distances[0] < 10 and (-90 < self.wall_bearings[0] < 90):
-                wall_0_unit_vec = self.rb_to_rect(
-                    np.array(
-                        (
-                            self.wall_distances[0],
-                            self.wall_bearings[0],
-                        )
-                    )
-                )
                 self.opp_team_pos.append(
                     (
-                        self.wall_distances[0] * wall_0_unit_vec[0],
-                        self.wall_distances[0] * wall_0_unit_vec[1],
+                        self.wall_distances[0],
+                        self.wall_bearings[0],
                     )
                 )
             elif self.wall_distances[2] < 10 and (-90 < self.wall_bearings[2] < 90):
-                wall_2_unit_vec = self.rb_to_rect(
-                    np.array(
-                        (
-                            self.wall_distances[2],
-                            self.wall_bearings[2],
-                        )
-                    )
-                )
                 self.opp_team_pos.append(
                     (
-                        self.wall_distances[2] * wall_2_unit_vec[0],
-                        self.wall_distances[2] * wall_2_unit_vec[1],
+                        self.wall_distances[2],
+                        self.wall_bearings[2],
                     )
                 )
             if self.wall_distances[1] < 10 and (-90 < self.wall_bearings[1] < 90):
-                wall_1_unit_vec = self.rb_to_rect(
-                    np.array(
-                        (
-                            self.wall_distances[1],
-                            self.wall_bearings[1],
-                        )
-                    )
-                )
                 self.opp_team_pos.append(
                     (
-                        self.wall_distances[1] * wall_1_unit_vec[0],
-                        self.wall_distances[1] * wall_1_unit_vec[1],
+                        self.wall_distances[1],
+                        self.wall_bearings[1],
                     )
                 )
             elif self.wall_distances[3] < 10 and (-90 < self.wall_bearings[3] < 90):
-                wall_3_unit_vec = self.rb_to_rect(
-                    np.array(
-                        (
-                            self.wall_distances[3],
-                            self.wall_bearings[3],
-                        )
-                    )
-                )
                 self.opp_team_pos.append(
                     (
-                        self.wall_distances[3] * wall_3_unit_vec[0],
-                        self.wall_distances[3] * wall_3_unit_vec[1],
+                        self.wall_distances[3],
+                        self.wall_bearings[3],
                     )
                 )
 
@@ -301,159 +213,16 @@ class BaseAttacker(BaseAgentPolicy):
 
             # If I have the flag, go back to my side
             if self.has_flag:
-                goal_vect = np.multiply(
-                    1.25, self.bearing_to_vec(unnorm_obs["own_home_bearing"])
-                )
-                avoid_vect = self.get_avoid_vect(
+                goal_vect = 1.25 * rel_bearing_to_local_unit_rect(self.home_bearing)
+                avoid_vect = get_avoid_vect(
                     self.opp_team_pos, avoid_threshold=avoid_thresh
                 )
-                my_action = goal_vect + (avoid_vect)
+                my_action = goal_vect + avoid_vect
 
             # Otherwise go get the flag
             else:
-                goal_vect = self.bearing_to_vec(self.opp_flag_bearing)
-                avoid_vect = self.get_avoid_vect(
-                    self.opp_team_pos, avoid_threshold=avoid_thresh
-                )
-                if (not np.any(goal_vect + (avoid_vect))) or (
-                    np.allclose(
-                        np.abs(np.abs(goal_vect) - np.abs(avoid_vect)),
-                        np.zeros(np.array(goal_vect).shape),
-                        atol=1e-01,
-                        rtol=1e-02,
-                    )
-                ):
-                    # Special case where a player is closely in line with the goal
-                    # vector such that the calculated avoid vector nearly negates the
-                    # action (the player is in a spot that causes the agent to just go
-                    # straight into them). In this case just start going towards the top
-                    # or bottom boundary, whichever is farthest.
-
-                    top_dist = self.wall_distances[0]
-                    bottom_dist = self.wall_distances[2]
-
-                    # Some bias towards teh bottom boundary to force it to stick with a
-                    # direction.
-                    if top_dist > 1.25 * bottom_dist:
-                        my_action = self.rb_to_rect(
-                            np.array((top_dist, self.wall_bearings[0]))
-                        )
-                    else:
-                        my_action = self.rb_to_rect(
-                            np.array((bottom_dist, self.wall_bearings[2]))
-                        )
-                else:
-                    my_action = np.multiply(1.25, goal_vect) + avoid_vect
-
-            # Try to convert the heading to a discrete action
-            try:
-                heading_error = self.vec_to_heading(my_action)
-                # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
-                if self.continuous:
-                    if np.isnan(heading_error):
-                        heading_error = 0
-
-                    return (desired_speed, heading_error)
-
-                else:
-                    if 1 >= heading_error >= -1:
-                        return 4
-                    elif heading_error < -1:
-                        return 6
-                    elif heading_error > 1:
-                        return 2
-                    else:
-                        # Should only happen if the act_heading is somehow NAN
-                        return 4
-            except Exception:
-                # If there is an error converting the vector to a heading, just go straight
-                if self.continuous:
-                    return (desired_speed, 0)
-                else:
-                    return 4
-
-        elif self.mode == "hard":
-
-            desired_speed = self.max_speed
-
-            # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid
-            if self.wall_distances[0] < 10 and (-90 < self.wall_bearings[0] < 90):
-                wall_0_unit_vec = self.rb_to_rect(
-                    np.array(
-                        (
-                            self.wall_distances[0],
-                            self.wall_bearings[0],
-                        )
-                    )
-                )
-                self.opp_team_pos.append(
-                    (
-                        self.wall_distances[0] * wall_0_unit_vec[0],
-                        self.wall_distances[0] * wall_0_unit_vec[1],
-                    )
-                )
-            elif self.wall_distances[2] < 10 and (-90 < self.wall_bearings[2] < 90):
-                wall_2_unit_vec = self.rb_to_rect(
-                    np.array(
-                        (
-                            self.wall_distances[2],
-                            self.wall_bearings[2],
-                        )
-                    )
-                )
-                self.opp_team_pos.append(
-                    (
-                        self.wall_distances[2] * wall_2_unit_vec[0],
-                        self.wall_distances[2] * wall_2_unit_vec[1],
-                    )
-                )
-            if self.wall_distances[1] < 10 and (-90 < self.wall_bearings[1] < 90):
-                wall_1_unit_vec = self.rb_to_rect(
-                    np.array(
-                        (
-                            self.wall_distances[1],
-                            self.wall_bearings[1],
-                        )
-                    )
-                )
-                self.opp_team_pos.append(
-                    (
-                        self.wall_distances[1] * wall_1_unit_vec[0],
-                        self.wall_distances[1] * wall_1_unit_vec[1],
-                    )
-                )
-            elif self.wall_distances[3] < 10 and (-90 < self.wall_bearings[3] < 90):
-                wall_3_unit_vec = self.rb_to_rect(
-                    np.array(
-                        (
-                            self.wall_distances[3],
-                            self.wall_bearings[3],
-                        )
-                    )
-                )
-                self.opp_team_pos.append(
-                    (
-                        self.wall_distances[3] * wall_3_unit_vec[0],
-                        self.wall_distances[3] * wall_3_unit_vec[1],
-                    )
-                )
-
-            # Increase the avoidance threshold to start avoiding when farther away
-            avoid_thresh = 30.0
-            # If I or someone on my team has the flag, go back to my side
-            if self.has_flag or self.my_team_has_flag:
-                goal_vect = np.multiply(
-                    1.25, self.bearing_to_vec(unnorm_obs["own_home_bearing"])
-                )
-                avoid_vect = self.get_avoid_vect(
-                    self.opp_team_pos, avoid_threshold=avoid_thresh
-                )
-                my_action = goal_vect + (avoid_vect)
-
-            # Otherwise go get the flag
-            else:
-                goal_vect = self.bearing_to_vec(self.opp_flag_bearing)
-                avoid_vect = self.get_avoid_vect(
+                goal_vect = rel_bearing_to_local_unit_rect(self.opp_flag_bearing)
+                avoid_vect = get_avoid_vect(
                     self.opp_team_pos, avoid_threshold=avoid_thresh
                 )
                 if (not np.any(goal_vect + (avoid_vect))) or (
@@ -476,45 +245,190 @@ class BaseAttacker(BaseAgentPolicy):
                     # Some bias towards the bottom boundary to force it to stick with a
                     # direction.
                     if top_dist > 1.25 * bottom_dist:
-                        my_action = self.rb_to_rect(
-                            np.array((top_dist, self.wall_bearings[0]))
+                        my_action = dist_rel_bearing_to_local_rect(
+                            top_dist, self.wall_bearings[0]
                         )
                     else:
-                        my_action = self.rb_to_rect(
-                            np.array((bottom_dist, self.wall_bearings[2]))
+                        my_action = dist_rel_bearing_to_local_rect(
+                            bottom_dist, self.wall_bearings[2]
+                        )
+                else:
+                    my_action = 1.25 * goal_vect + avoid_vect
+
+            return self.action_from_vector(my_action, 1)
+
+        elif self.mode == "hard":
+
+            # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid
+            if self.wall_distances[0] < 10 and (-90 < self.wall_bearings[0] < 90):
+                self.opp_team_pos.append(
+                    (
+                        self.wall_distances[0],
+                        self.wall_bearings[0],
+                    )
+                )
+            elif self.wall_distances[2] < 10 and (-90 < self.wall_bearings[2] < 90):
+                self.opp_team_pos.append(
+                    (
+                        self.wall_distances[2],
+                        self.wall_bearings[2],
+                    )
+                )
+            if self.wall_distances[1] < 10 and (-90 < self.wall_bearings[1] < 90):
+                self.opp_team_pos.append(
+                    (
+                        self.wall_distances[1],
+                        self.wall_bearings[1],
+                    )
+                )
+            elif self.wall_distances[3] < 10 and (-90 < self.wall_bearings[3] < 90):
+                self.opp_team_pos.append(
+                    (
+                        self.wall_distances[3],
+                        self.wall_bearings[3],
+                    )
+                )
+
+            # Increase the avoidance threshold to start avoiding when farther away
+            avoid_thresh = 30.0
+
+            # If I or someone on my team has the flag, go back to my side
+            if self.has_flag or self.my_team_has_flag:
+                goal_vect = 1.25 * rel_bearing_to_local_unit_rect(self.home_bearing)
+                avoid_vect = get_avoid_vect(
+                    self.opp_team_pos, avoid_threshold=avoid_thresh
+                )
+                my_action = goal_vect + (avoid_vect)
+
+            # Otherwise go get the flag
+            else:
+                goal_vect = rel_bearing_to_local_unit_rect(self.opp_flag_bearing)
+                avoid_vect = get_avoid_vect(
+                    self.opp_team_pos, avoid_threshold=avoid_thresh
+                )
+                if (not np.any(goal_vect + (avoid_vect))) or (
+                    np.allclose(
+                        np.abs(np.abs(goal_vect) - np.abs(avoid_vect)),
+                        np.zeros(np.array(goal_vect).shape),
+                        atol=1e-01,
+                        rtol=1e-02,
+                    )
+                ):
+                    # Special case where a player is closely in line with the goal
+                    # vector such that the calculated avoid vector nearly negates the
+                    # action (the player is in a spot that causes the agent to just go
+                    # straight into them). In this case just start going towards the top
+                    # or bottom boundary, whichever is farthest.
+
+                    top_dist = self.wall_distances[0]
+                    bottom_dist = self.wall_distances[2]
+
+                    # Some bias towards the bottom boundary to force it to stick with a
+                    # direction.
+                    if top_dist > 1.25 * bottom_dist:
+                        my_action = dist_rel_bearing_to_local_rect(
+                            top_dist, self.wall_bearings[0]
+                        )
+                    else:
+                        my_action = dist_rel_bearing_to_local_rect(
+                            bottom_dist, self.wall_bearings[2]
                         )
                 else:
                     my_action = np.multiply(1.25, goal_vect) + avoid_vect
 
-            # Try to convert the heading to a discrete action
-            try:
-                heading_error = self.vec_to_heading(my_action)
-                # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
-                if self.continuous:
-                    if np.isnan(heading_error):
-                        heading_error = 0
-
-                    return (desired_speed, heading_error)
-
-                else:
-                    if 1 >= heading_error >= -1:
-                        return 4
-                    elif heading_error < -1:
-                        return 6
-                    elif heading_error > 1:
-                        return 2
-                    else:
-                        # Should only happen if the act_heading is somehow NAN
-                        return 4
-            except Exception:
-                # If there is an error converting the vector to a heading, just go straight
-                if self.continuous:
-                    return (desired_speed, 0)
-                else:
-                    return 4
+            return self.action_from_vector(my_action, 1)
 
         else:
+            return self.action_from_vector(None, 0)
+
+    def action_from_vector(self, vector, desired_speed_normalized):
+        if desired_speed_normalized == 0:
             if self.continuous:
                 return (0, 0)
             else:
                 return -1
+        rel_bearing = local_rect_to_rel_bearing(vector)
+        if self.continuous:
+            return (desired_speed_normalized * self.max_speed, rel_bearing)
+        elif desired_speed_normalized == 0.5:
+            if 1 >= rel_bearing >= -1:
+                return 12
+            elif rel_bearing < -1:
+                return 14
+            elif rel_bearing > 1:
+                return 10
+        elif desired_speed_normalized == 1:
+            if 1 >= rel_bearing >= -1:
+                return 4
+            elif rel_bearing < -1:
+                return 6
+            elif rel_bearing > 1:
+                return 2
+
+    def update_state(self, obs, info: dict[str, dict]) -> None:
+        """
+        Method to convert the gym obs and info into data more relative to the
+        agent.
+
+        Note: all rectangular positions are in the ego agent's local coordinate frame.
+        Note: all bearings are relative, measured in degrees clockwise from the ego agent's heading.
+
+        Args:
+            obs: observation from gym
+            info: info from gym
+        """
+
+        global_state = info[self.id]["global_state"]
+        if not isinstance(global_state, dict):
+            global_state = self.state_normalizer.unnormalized(global_state)
+
+        my_pos = global_state[(self.id, "pos")]
+        my_heading = global_state[(self.id, "heading")]
+
+        self.has_flag = global_state[(self.id, "has_flag")]
+        self.is_tagged = global_state[(self.id, "is_tagged")]
+
+        # Calculate the rectangular coordinates for the flags location relative to the agent.
+        team_str = self.team.name.lower().split("_")[0]
+        opp_str = "red" if team_str == "blue" else "blue"
+
+        self.opp_flag_distance = dist(my_pos, global_state[opp_str + "_flag_pos"])
+        self.opp_flag_bearing = angle180(
+            global_rect_to_abs_bearing(global_state[opp_str + "_flag_pos"] - my_pos)
+            - my_heading
+        )
+        self.opp_flag_loc = dist_rel_bearing_to_local_rect(
+            self.opp_flag_distance, self.opp_flag_bearing
+        )
+
+        home_distance = dist(my_pos, global_state[team_str + "_flag_home"])
+        self.home_bearing = angle180(
+            global_rect_to_abs_bearing(global_state[team_str + "_flag_home"] - my_pos)
+            - my_heading
+        )
+        self.home_loc = dist_rel_bearing_to_local_rect(home_distance, self.home_bearing)
+
+        self.opp_team_pos = []
+        self.my_team_has_flag = False
+        for id in self.teammate_ids:
+            if id != self.id:
+                self.my_team_has_flag = (
+                    self.my_team_has_flag or global_state[(id, "has_flag")]
+                )
+        for id in self.opponent_ids:
+            distance = dist(my_pos, global_state[(id, "pos")])
+            bearing = angle180(
+                global_rect_to_abs_bearing(global_state[(id, "pos")] - my_pos)
+                - my_heading
+            )
+            self.opp_team_pos.append(np.array((distance, bearing)))
+
+        self.wall_distances = []
+        self.wall_bearings = []
+        for wall in self.walls:
+            closest = closest_point_on_line(wall[0], wall[1], my_pos)
+            self.wall_distances.append(dist(closest, my_pos))
+            bearing = angle180(
+                global_rect_to_abs_bearing(closest - my_pos) - my_heading
+            )
+            self.wall_bearings.append(bearing)

@@ -212,49 +212,17 @@ class BaseDefender(BaseAgentPolicy):
             # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid
             wall_pos = []
             if my_obs["wall_0_distance"] < 7 and (-90 < my_obs["wall_0_bearing"] < 90):
-                wall_0_unit_vec = self.rb_to_rect(
-                    (my_obs["wall_0_distance"], my_obs["wall_0_bearing"])
-                )
-                wall_pos.append(
-                    (
-                        my_obs["wall_0_distance"] * wall_0_unit_vec[0],
-                        my_obs["wall_0_distance"] * wall_0_unit_vec[1],
-                    )
-                )
+                wall_pos.append((my_obs["wall_0_distance"], my_obs["wall_0_bearing"]))
             elif my_obs["wall_2_distance"] < 7 and (
                 -90 < my_obs["wall_2_bearing"] < 90
             ):
-                wall_2_unit_vec = self.rb_to_rect(
-                    (my_obs["wall_2_distance"], my_obs["wall_2_bearing"])
-                )
-                wall_pos.append(
-                    (
-                        my_obs["wall_2_distance"] * wall_2_unit_vec[0],
-                        my_obs["wall_2_distance"] * wall_2_unit_vec[1],
-                    )
-                )
+                wall_pos.append((my_obs["wall_2_distance"], my_obs["wall_2_bearing"]))
             if my_obs["wall_1_distance"] < 7 and (-90 < my_obs["wall_1_bearing"] < 90):
-                wall_1_unit_vec = self.rb_to_rect(
-                    (my_obs["wall_1_distance"], my_obs["wall_1_bearing"])
-                )
-                wall_pos.append(
-                    (
-                        my_obs["wall_1_distance"] * wall_1_unit_vec[0],
-                        my_obs["wall_1_distance"] * wall_1_unit_vec[1],
-                    )
-                )
+                wall_pos.append((my_obs["wall_1_distance"], my_obs["wall_1_bearing"]))
             elif my_obs["wall_3_distance"] < 7 and (
                 -90 < my_obs["wall_3_bearing"] < 90
             ):
-                wall_3_unit_vec = self.rb_to_rect(
-                    (my_obs["wall_3_distance"], my_obs["wall_3_bearing"])
-                )
-                wall_pos.append(
-                    (
-                        my_obs["wall_3_distance"] * wall_3_unit_vec[0],
-                        my_obs["wall_3_distance"] * wall_3_unit_vec[1],
-                    )
-                )
+                wall_pos.append((my_obs["wall_3_distance"], my_obs["wall_3_bearing"]))
 
             ag_vect = [0, 0]
             defense_perim = 5 * self.flag_keepout
@@ -320,6 +288,8 @@ class BaseDefender(BaseAgentPolicy):
                 act_index = 4
 
         if self.continuous:
+            if self.mode == "nothing":
+                return [0, 0]
             speed = self.max_speed * ACTION_MAP[act_index][0]
             return [speed, act_heading]
         else:
