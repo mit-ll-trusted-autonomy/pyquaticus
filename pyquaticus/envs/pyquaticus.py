@@ -694,7 +694,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             return global_state
 
     def state(self):
-        return state_to_global_state(normalize=True)
+        return self.state['global_state_hist_buffer'][0]
 
     def _history_to_state(self):
         if self.state_hist_len > 1:
@@ -1043,14 +1043,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.observation_spaces = {agent_id: self.get_agent_observation_space() for agent_id in self.players}
 
         # Set up rewards
-        for a in self.players:
-            if a not in self.reward_config:
-                self.reward_config[a] = None
+        for agent_id in self.players:
+            if agent_id not in self.reward_config:
+                self.reward_config[agent_id] = None
 
         # Pygame
         self.screen = None
         self.clock = None
-        self.isopen = False
         self.render_ctr = 0
         self.render_buffer = []
         self.traj_render_buffer = {}
@@ -4128,7 +4127,6 @@ when gps environment bounds are specified in meters"
                 if self.render_mode == "human":
                     pygame.display.set_caption("Capture The Flag")
                     self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
-                    self.isopen = True
                 elif self.render_mode == "rgb_array":
                     self.screen = pygame.Surface((self.screen_width, self.screen_height))
                 else:
@@ -4425,10 +4423,10 @@ when gps environment bounds are specified in meters"
             raise Exception("Envrionment was not rendered. See the render_mode option in the config dictionary.")
 
     def close(self):
-        """Overridden method inherited from `Gym`."""
+        """Close the pygame window, if open."""
         if self.screen is not None:
             pygame.quit()
-            self.isopen = False
+            self.screen = None
 
     def _min(self, a, b):
         """Convenience method for determining a minimum value. The standard `min()` takes much longer to run."""
