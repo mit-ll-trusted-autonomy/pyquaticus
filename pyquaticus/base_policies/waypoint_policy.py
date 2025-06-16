@@ -19,28 +19,25 @@
 
 # SPDX-License-Identifier: BSD-3-Clause
 
+from functools import partial
+from multiprocessing.dummy import Pool
+from multiprocessing.pool import ThreadPool
+from typing import Optional
+
 import numpy as np
 
 from pyquaticus.base_policies.base_policy import BaseAgentPolicy
-from pyquaticus.envs.pyquaticus import Team
-from pyquaticus.envs.pyquaticus import PyQuaticusEnv
+from pyquaticus.base_policies.rrt.rrt_star import rrt_star
 from pyquaticus.base_policies.rrt.utils import (
     Point,
+    get_ungrouped_seglist,
     intersect,
     intersect_circles,
-    get_ungrouped_seglist,
 )
-from pyquaticus.base_policies.rrt.rrt_star import rrt_star
-from pyquaticus.structs import PolygonObstacle, CircleObstacle
-from pyquaticus.utils.utils import angle180
 from pyquaticus.base_policies.utils import global_rect_to_abs_bearing
-
-
-from typing import Optional
-
-from multiprocessing.dummy import Pool
-from multiprocessing.pool import ThreadPool
-from functools import partial
+from pyquaticus.envs.pyquaticus import PyQuaticusEnv, Team
+from pyquaticus.structs import CircleObstacle, PolygonObstacle
+from pyquaticus.utils.utils import angle180
 
 
 class WaypointPolicy(BaseAgentPolicy):
@@ -117,7 +114,7 @@ class WaypointPolicy(BaseAgentPolicy):
             self.ungrouped_seglist = get_ungrouped_seglist(poly_obstacles)
         else:
             self.ungrouped_seglist = None
-    
+
     def update_state(self, obs, info: dict[str, dict]) -> None:
         global_state = info[self.id]["global_state"]
         if not isinstance(global_state, dict):

@@ -19,10 +19,11 @@
 
 # SPDX-License-Identifier: BSD-3-Clause
 
-from ray.rllib.policy.policy import PolicySpec, Policy
+from ray.rllib.policy.policy import Policy, PolicySpec
+
 from pyquaticus.base_policies.base_attack import BaseAttacker
-from pyquaticus.base_policies.base_defend import BaseDefender
 from pyquaticus.base_policies.base_combined import Heuristic_CTF_Agent
+from pyquaticus.base_policies.base_defend import BaseDefender
 
 
 class RandPolicy(Policy):
