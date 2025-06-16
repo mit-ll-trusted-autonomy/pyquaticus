@@ -39,25 +39,25 @@ r_one_old = OldBaseAttacker(
     "agent_2",
     Team.RED_TEAM,
     2,
-    mode="hard",
+    mode="competition_medium",
     continuous=True,
     aquaticus_field_points=env.aquaticus_field_points,
 )
 r_one_new = BaseAttacker(
-    "agent_2", env, mode="hard", continuous=True
+    "agent_2", env, mode="competition_medium", continuous=True
 )
 
 r_two_old = OldBaseDefender(
     "agent_3",
     Team.RED_TEAM,
     2,
-    mode="medium",
+    mode="competition_medium",
     continuous=True,
     flag_keepout=env.flag_keepout_radius,
     aquaticus_field_points=env.aquaticus_field_points,
 )
 r_two = BaseDefender(
-    "agent_3", env, mode="medium", continuous=True
+    "agent_3", env, mode="competition_medium", continuous=True
 )
 
 b_one_old = OldHeuristicAgent(
@@ -65,12 +65,12 @@ b_one_old = OldHeuristicAgent(
     Team.BLUE_TEAM,
     2,
     aquaticus_field_points=env.aquaticus_field_points,
-    mode="hard",
+    mode="easy",
     continuous=True,
     flag_keepout=env.flag_keepout_radius,
 )
 b_one = Heuristic_CTF_Agent(
-    "agent_0", env, mode="hard", continuous=True
+    "agent_0", env, mode="easy", continuous=True
 )
 
 b_two = KeyAgent()
