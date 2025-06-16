@@ -118,11 +118,12 @@ def main():
         "circle": [(4, (6, 5))],
         "polygon": [((70, 10), (85, 21), (83, 51), (72, 35))]
     }
-    config["sim_speedup_factor"] = 16
+    config["sim_speedup_factor"] = 8
     config["render_traj_freq"] = 10
     config["render_traj_cutoff"] = 55
     config["blue_flag_home"] = [140,40]
     config["red_flag_home"] = [20,40]
+    config["max_time"] = 30
     config["flag_homes_unit"] = "m"
     config["scrimmage_coords"] = [[80,0],[80,80]]
     config["scrimmage_coords_unit"] = "m"

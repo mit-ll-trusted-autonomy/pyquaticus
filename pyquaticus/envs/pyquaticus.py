@@ -22,6 +22,7 @@
 import colorsys
 import copy
 import cv2
+import functools
 import itertools
 import math
 import numpy as np
@@ -692,6 +693,9 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         else:
             return global_state
 
+    def state(self):
+        return state_to_global_state(normalize=True)
+
     def _history_to_state(self):
         if self.state_hist_len > 1:
             global_state = self.state["global_state_hist_buffer"][self.state_hist_buffer_inds]
@@ -708,9 +712,11 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
         return agent_obs
 
+    @functools.lru_cache(maxsize=None)
     def action_space(self, agent_id: str):
         return self.action_spaces[agent_id]
 
+    @functools.lru_cache(maxsize=None)
     def observation_space(self, agent_id: str):
         return self.observation_spaces[agent_id]
 
@@ -859,7 +865,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         """
         Converts heading into env reference frame based on the boundary.
         """
-        return angle180(heading + self.env_rot_angle) #nautical headings are cw (not ccw)
+        return angle180(heading + np.rad2deg(self.env_rot_angle)) #nautical headings are cw (not ccw)
 
     def _check_on_sides(self, pos, team):
         """pos can be a single point or multiple points"""
@@ -922,7 +928,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     config_dict: a dictionary configuring the environment (see config_dict_std above)
     """
 
-    metadata = {"render_modes": ["human", "rgb_array"]}
+    metadata = {
+        "render_modes": ["human", "rgb_array"],
+        "name": "pyquaticus_v0",
+    }
 
     def __init__(
         self,
@@ -1052,6 +1061,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # RRT policies for driving back home
         self.rrt_policies = []
         if len(self.obstacles) > 0:
+            global EnvWaypointPolicy
             from pyquaticus.base_policies.env_waypoint_policy import EnvWaypointPolicy
             for i in range(self.num_agents):
                 self.rrt_policies.append(
@@ -1111,13 +1121,19 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         for player in self.players.values():
             if player.id in raw_action_dict:
                 if not self.act_space_checked[player.id]:
-                    self.act_space_match[player.id] = self.action_spaces[player.id].contains(
-                        np.asarray(raw_action_dict[player.id], dtype=self.action_spaces[player.id].dtype)
-                    )
+                    if isinstance(raw_action_dict[player.id], str):
+                        self.act_space_match[player.id] = self.action_spaces[player.id].contains(
+                            np.asarray(raw_action_dict[player.id])
+                        )
+                    else:
+                        self.act_space_match[player.id] = self.action_spaces[player.id].contains(
+                            np.asarray(raw_action_dict[player.id], dtype=self.action_spaces[player.id].dtype)
+                        )
                     self.act_space_checked[player.id] = True
 
                     if not self.act_space_match[player.id]:
-                        print(f"Warning! Action passed in for {player.id} ({raw_action_dict[player.id]}) is not contained in agent's action space ({self.action_spaces[player.id]}).")
+                        action_print = repr(raw_action_dict[player.id]) if isinstance(raw_action_dict[player.id], str) else raw_action_dict[player.id]
+                        print(f"Warning! Action passed in for {player.id} ({action_print}) is not contained in agent's action space ({self.action_spaces[player.id]}).")
                         print(f"Auto-detecting action space for {player.id}")
                         print()
 
@@ -1280,26 +1296,20 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     else:
                         desired_speed, heading_error = policy.compute_action(player.pos, player.heading)
                         if player.oob:
-                            desired_speed = player.get_max_speed()
-                            # desired_speed = player.get_max_speed() * self.oob_speed_frac
-                            #TODO: optimize based on MOOS behvior
+                            desired_speed = min(desired_speed, player.get_max_speed() * self.oob_speed_frac) #TODO: optimize based on MOOS behvior
             
                 #else go directly to home
                 else:
                     _, heading_error = mag_bearing_to(player.pos, flag_home, player.heading)
                     if player.oob:
-                        desired_speed = player.get_max_speed()
-                        # desired_speed = player.get_max_speed() * self.oob_speed_frac
-                        #TODO: optimize based on MOOS behvior
+                        desired_speed = player.get_max_speed() * self.oob_speed_frac #TODO: optimize based on MOOS behvior
                     else:
                         desired_speed = player.get_max_speed()
 
             # If agent is out of bounds, drive back in bounds at fraction of max speed
             elif player.oob:
                 heading_error = self._get_oob_recover_rel_heading(player.pos, player.heading)
-                desired_speed = player.get_max_speed()
-                # desired_speed = player.get_max_speed() * self.oob_speed_frac
-                #TODO: optimize based on MOOS behvior
+                desired_speed = player.get_max_speed() * self.oob_speed_frac
 
             # Else get desired speed and heading from action_dict
             else:
@@ -1848,7 +1858,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Agent spawn parameters
         self.default_init = config_dict.get("default_init", config_dict_std["default_init"])
-        self.on_sides_init = config_dict.get("on_sides_init", False) #config_dict_std["on_sides_init"]) #TODO: uncomment after 2025 AAMAS competition
+        self.on_sides_init = config_dict.get("on_sides_init", config_dict_std["on_sides_init"])
 
         if self.gps_env and self.default_init:
             print("Warning! Default initialization not supported in when self.gps_env is True.")
@@ -2324,6 +2334,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.dones["red"] = True
             self.dones["__all__"] = True
             self.message = "Red Wins!"
+
+        elif red_scores == self.max_score:
+            self.dones["red"] = True
+            self.dones["__all__"] = True
+            self.message = "Red Wins! Blue Loses"
 
         elif self.current_time > self.max_time or np.isclose(self.current_time, self.max_time):
             self.dones["__all__"] = True
@@ -2820,7 +2835,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         ### prep valid start poses tracker for gps environment ###
         if self.gps_env:
-            if self.default_init:
+            if self.on_sides_init:
                 valid_init_pos_inds = {
                     team: [i for i in range(len(self.valid_team_init_poses[int(team)]))] for team in self.agents_of_team
                 }
@@ -3025,6 +3040,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             )
 
         if self.gps_env:
+            global cx
+            global mt
+            global _sm2ll
+            global Geodesic
             import contextily as cx
             import mercantile as mt
             from contextily.tile import _sm2ll
@@ -4112,10 +4131,10 @@ when gps environment bounds are specified in meters"
                     self.isopen = True
                 elif self.render_mode == "rgb_array":
                     self.screen = pygame.Surface((self.screen_width, self.screen_height))
-            else:
-                raise Exception(
-                    f"Sorry, render modes other than f{self.metadata['render_modes']} are not supported"
-                )
+                else:
+                    raise ValueError(
+                        f"{self.render_mode} is not a valid render mode. Available modes are: {self.metadata['render_modes']}"
+                    )
 
         if self.clock is None:
             self.clock = pygame.time.Clock()
@@ -4404,7 +4423,6 @@ when gps environment bounds are specified in meters"
             cv2.imwrite(image_file_path, cv2.cvtColor(self.render_buffer[self.render_ctr - 1], cv2.COLOR_RGB2BGR))
         else:
             raise Exception("Envrionment was not rendered. See the render_mode option in the config dictionary.")
-
 
     def close(self):
         """Overridden method inherited from `Gym`."""

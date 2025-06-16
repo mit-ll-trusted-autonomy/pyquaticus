@@ -42,11 +42,13 @@ class RandPolicy(Policy):
     def compute_actions(
         self,
         obs_batch,
-        state_batches,
+        state_batches=None,
         prev_action_batch=None,
         prev_reward_batch=None,
         info_batch=None,
         episodes=None,
+        explore=None,
+        timestep=None,
         **kwargs,
     ):
 
@@ -74,11 +76,13 @@ class NoOp(Policy):
     def compute_actions(
         self,
         obs_batch,
-        state_batches,
+        state_batches=None,
         prev_action_batch=None,
         prev_reward_batch=None,
         info_batch=None,
         episodes=None,
+        explore=None,
+        timestep=None,
         **kwargs,
     ):
 
@@ -109,11 +113,13 @@ def AttackGen(agentid, team, env, mode):
         def compute_actions(
             self,
             obs_batch,
-            state_batches,
+            state_batches=None,
             prev_action_batch=None,
             prev_reward_batch=None,
             info_batch=None,
             episodes=None,
+            explore=None,
+            timestep=None,
             **kwargs,
         ):
 
@@ -125,7 +131,7 @@ def AttackGen(agentid, team, env, mode):
 
                 # Compute action and add it to the action dictionary
                 self.action_dict[agentid] = self.policy.compute_action(
-                    obs_batch[i], info_batch[i]
+                    obs_batch[i], {k: v[i] for k, v in info_batch.items()}
                 )
 
             return [self.action_dict[agentid]], [], {}
@@ -156,11 +162,13 @@ def DefendGen(agentid, team, env, mode):
         def compute_actions(
             self,
             obs_batch,
-            state_batches,
+            state_batches=None,
             prev_action_batch=None,
             prev_reward_batch=None,
             info_batch=None,
             episodes=None,
+            explore=None,
+            timestep=None,
             **kwargs,
         ):
 
@@ -172,7 +180,7 @@ def DefendGen(agentid, team, env, mode):
 
                 # Compute action and add it to the action dictionary
                 self.action_dict[agentid] = self.policy.compute_action(
-                    obs_batch[i], info_batch[i]
+                    obs_batch[i], {k: v[i] for k, v in info_batch.items()}
                 )
 
             return [self.action_dict[agentid]], [], {}
@@ -203,11 +211,13 @@ def CombinedGen(agentid, team, env, mode):
         def compute_actions(
             self,
             obs_batch,
-            state_batches,
+            state_batches=None,
             prev_action_batch=None,
             prev_reward_batch=None,
             info_batch=None,
             episodes=None,
+            explore=None,
+            timestep=None,
             **kwargs,
         ):  # Iterate over all observations in obs_batch
             if info_batch is None:
@@ -218,7 +228,7 @@ def CombinedGen(agentid, team, env, mode):
 
                 # Compute action and add it to the action dictionary
                 self.action_dict[agentid] = self.policy.compute_action(
-                    obs_batch[i], info_batch[i]
+                    obs_batch[i], {k: v[i] for k, v in info_batch.items()}
                 )
 
             return [self.action_dict[agentid]], [], {}

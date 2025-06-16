@@ -25,7 +25,7 @@ trunc = truncated_g
 
 reset_opts = {'normalize_obs': False, 'normalize_state': False}
 
-obs, info = env.reset(return_info=True, options=reset_opts)
+obs, info = env.reset(options=reset_opts)
 
 temp_captures = env.state["captures"]
 temp_grabs = env.state["grabs"]

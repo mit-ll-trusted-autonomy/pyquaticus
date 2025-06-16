@@ -244,7 +244,7 @@ def closest_point_on_line(A, B, P):
     elif proj_dist >= len_AB:
         return B
     else:
-        return [A[0] + (unit_AB[0] * proj_dist), A[1] + (unit_AB[1] * proj_dist)]
+        return np.array([A[0] + (unit_AB[0] * proj_dist), A[1] + (unit_AB[1] * proj_dist)])
 
 def vector_to(A, B, unit=False):
     """
@@ -535,3 +535,6 @@ def check_segment_intersections(segments, query_segment):
     intersecting = valid & (t >= 0) & (t <= 1) & (u >= 0) & (u <= 1)
 
     return np.where(intersecting)[0]
+
+def dist(A, B):
+    return np.linalg.norm(B - A)

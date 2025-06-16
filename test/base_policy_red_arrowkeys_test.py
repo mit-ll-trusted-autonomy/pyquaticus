@@ -45,7 +45,7 @@ class KeyTest:
         Args:
             env: the pyquaticus environment
         '''
-        self.obs, self.info = env.reset(return_info=True)
+        self.obs, self.info = env.reset()
         self.env = env
         self.red_policy = BaseAttacker(
             env.agents_of_team[Team.RED_TEAM][0].id,
@@ -84,7 +84,7 @@ class KeyTest:
             for k in terminated:
                 if terminated[k] == True or truncated[k]==True:
                     time.sleep(1.)
-                    self.obs, self.info = self.env.reset(return_info=True)
+                    self.obs, self.info = self.env.reset()
                     break
 
     def process_event(self, quittable):
@@ -110,7 +110,7 @@ class KeyTest:
     
 if __name__ == '__main__':
     config = {}
-    config['sim_speedup_factor'] = 16
+    config['sim_speedup_factor'] = 5
 
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
     env = pyquaticus_v0.PyQuaticusEnv(render_mode='human', team_size=1, config_dict=config)

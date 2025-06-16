@@ -116,7 +116,11 @@ class FieldReaderConfig:
         print(self.scrimmage_coords)
 
         # other geometry parameters
+        self.agent_radius = np.array(2 * [2.0]) #meters
         self.flag_grab_radius = 10 #meters
+
+        ####### Dynamics Parameters #######
+        self.max_speeds = np.array(2 * [2.0]) #meters/s
 
         ####### Simulation Parameters #######
         self.dt = 0.1 #moostime (sec) between steps
@@ -179,9 +183,11 @@ class MITConfig2025(FieldReaderConfig):
         ####### Dynamics Parameters #######
         self.max_speeds = 6 * [2.0]
 
+
 class WestPoint2025(FieldReaderConfig):
     def __init__(self):
-        super().__init__(str(Path.home() / "moos-ivp-aquaticus" / "missions" / "wp_2024"))
+        pyquaticus_root = Path(__file__).resolve().parents[2]
+        super().__init__(str(pyquaticus_root / "moos" / "missions" / "wp-2025"))
 
         ####### Geometry Parameters #######
         self.agent_radius = 6 * [2.0]

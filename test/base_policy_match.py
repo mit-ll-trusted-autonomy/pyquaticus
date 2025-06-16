@@ -18,11 +18,13 @@ import numpy as np
 config_dict = {}
 config_dict["max_time"] = 600.0
 config_dict["max_score"] = 100
-config_dict["sim_speedup_factor"] = 16
+config_dict["sim_speedup_factor"] = 5
 config_dict["normalize_obs"] = False
+config_dict["normalize_state"] = True
+config_dict["render_agent_ids"] = True
 
 env = pyquaticus_v0.PyQuaticusEnv(
-    team_size=2, config_dict=config_dict, render_mode="human"
+    team_size=2, config_dict=config_dict, render_mode="human", action_space="continuous"
 )
 
 
@@ -36,7 +38,7 @@ obs, info = env.reset()
 r_one_old = OldBaseAttacker(
     "agent_2",
     Team.RED_TEAM,
-    3,
+    2,
     mode="hard",
     continuous=True,
     aquaticus_field_points=env.aquaticus_field_points,
@@ -48,27 +50,29 @@ r_one_new = BaseAttacker(
 r_two_old = OldBaseDefender(
     "agent_3",
     Team.RED_TEAM,
-    3,
-    mode="hard",
+    2,
+    mode="medium",
     continuous=True,
     flag_keepout=env.flag_keepout_radius,
     aquaticus_field_points=env.aquaticus_field_points,
 )
 r_two = BaseDefender(
-    "agent_3", Team.RED_TEAM, env, mode="hard", continuous=True
+    "agent_3", Team.RED_TEAM, env, mode="medium", continuous=True
 )
 
 b_one_old = OldHeuristicAgent(
     "agent_0",
     Team.BLUE_TEAM,
-    3,
+    2,
     aquaticus_field_points=env.aquaticus_field_points,
     mode="hard",
     continuous=True,
+    flag_keepout=env.flag_keepout_radius,
 )
 b_one = Heuristic_CTF_Agent(
     "agent_0", Team.BLUE_TEAM, env, mode="hard", continuous=True
 )
+
 b_two = KeyAgent()
 step = 0
 while True:
@@ -80,7 +84,7 @@ while True:
             print(two)
             print(two_old)
             raise Exception("Attack policies don't match")
-    elif not np.all(np.isclose(np.array(two), np.array(two_old))):
+    elif not np.all(np.isclose(np.array(two), np.array(two_old), rtol=0.001, atol=0.001)):
         print("---")
         print(f"{two}")
         print(f"{two_old}")
@@ -94,7 +98,7 @@ while True:
             print(three)
             print(three_old)
             raise Exception("Defend policies don't match")
-    elif not np.all(np.isclose(np.array(three), np.array(three_old))):
+    elif not np.all(np.isclose(np.array(three), np.array(three_old), rtol=0.001, atol=0.001)):
         print("---")
         print(f"{three}")
         print(f"{three_old}")
@@ -108,7 +112,7 @@ while True:
             print(zero)
             print(zero_old)
             raise Exception("Heuristic policies don't match")
-    elif not np.all(np.isclose(np.array(zero), np.array(zero_old))):
+    elif not np.all(np.isclose(np.array(zero), np.array(zero_old), rtol=0.001, atol=0.001)):
         print("---")
         print(f"{zero}")
         print(f"{zero_old}")

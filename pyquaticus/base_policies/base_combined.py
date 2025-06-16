@@ -25,9 +25,17 @@ import numpy as np
 
 import pyquaticus.base_policies.base_attack as attack_policy
 import pyquaticus.base_policies.base_defend as defend_policy
-from pyquaticus.base_policies.base import BaseAgentPolicy
+from pyquaticus.base_policies.base_policy import BaseAgentPolicy
+from pyquaticus.base_policies.utils import (
+    dist_rel_bearing_to_local_rect,
+    get_avoid_vect,
+    global_rect_to_abs_bearing,
+    local_rect_to_rel_bearing,
+    rel_bearing_to_local_unit_rect,
+)
 from pyquaticus.envs.pyquaticus import PyQuaticusEnv, Team
 from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
+from pyquaticus.utils.utils import angle180, closest_point_on_line, dist
 
 MODES = {"easy", "medium", "hard", "nothing"}
 
@@ -40,17 +48,20 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         agent_id: str,
         team: Team,
         env: Union[PyQuaticusEnv, PyQuaticusMoosBridge],
+        flag_keepout: float = 3,
+        catch_radius: float = 10,
         continuous: bool = False,
         mode="easy",
         defensiveness=20.0,
     ):
         super().__init__(agent_id, team, env)
-
+        self.state_normalizer = env.global_state_normalizer
+        self.walls = env._walls[team.value]
+        self.max_speed = env.players[self.id].get_max_speed()
         self.set_mode(mode)
         self.defensiveness = defensiveness
-        self.id = agent_id
         self.continuous = continuous
-        self.flag_keepout = env.flag_keepout_radius
+        self.flag_keepout = flag_keepout
         self.base_attacker = attack_policy.BaseAttacker(
             self.id,
             team,
@@ -62,6 +73,8 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             self.id,
             team,
             env,
+            flag_keepout,
+            catch_radius,
             continuous,
             mode,
         )
@@ -90,10 +103,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         self.update_state(obs, info)
 
         if self.mode == "nothing":
-            if self.continuous:
-                return (0, 0)
-            else:
-                return -1
+            return self.action_from_vector(None, 0)
 
         if self.mode == "easy":
             # Opp is close - needs to defend:
@@ -126,25 +136,6 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
                 else:
                     return self.random_defense_action(self.opp_team_pos)
 
-    def update_state(self, obs, info):
-        """
-        Method to convert the observation space into one more relative to the
-        agent.
-
-        Args:
-            obs: The observation from the gym
-
-        """
-        super().update_state(obs, info)
-
-        # Initialize the scrimmage line as the mid point between the two flags
-        if self.scrimmage is None:
-            self.scrimmage = self.opp_flag_loc[0] + self.my_flag_loc[0] / 2
-
-        self.my_team_density, self.opp_team_density = self.get_team_density(
-            self.my_team_pos, self.opp_team_pos
-        )
-
     def random_defense_action(self, enem_positions):
         """
         Randomly compute an action that steers the agent to it's own side of the field and sometimes
@@ -168,59 +159,22 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
                     nearest_enemy = en
             assert nearest_enemy is not None
             if np.random.random() < 0.5:
-                goal_vec = self.bearing_to_vec(nearest_enemy[1])
+                goal_vec = rel_bearing_to_local_unit_rect(nearest_enemy[1])
             else:
                 own_flag_dist = self.my_flag_distance
                 if own_flag_dist > self.flag_keepout + 2.0:
-                    goal_vec = self.bearing_to_vec(self.my_flag_bearing)
+                    goal_vec = rel_bearing_to_local_unit_rect(self.my_flag_bearing)
                 else:
                     span_len = self.scrimmage - self.defensiveness
                     goal_vec = [np.random.random() * span_len, 0]
 
         if not self.on_sides:
-            direction = goal_vec + self.get_avoid_vect(
-                self.opp_team_pos, avoid_threshold=15
-            )
+            goal_vec = goal_vec + get_avoid_vect(self.opp_team_pos, avoid_threshold=15)
 
-        desired_speed = self.max_speed
-
-        try:
-            heading_error = self.vec_to_heading(direction)
-
-            if self.continuous:
-                if np.isnan(heading_error):
-                    heading_error = 0
-
-                if np.abs(heading_error) < 5:
-                    heading_error = 0
-
-                if self.mode != "hard":
-                    desired_speed = self.max_speed / 2
-
-                return (desired_speed, heading_error)
-
-            else:
-                if self.mode != "hard":
-                    if 1 >= heading_error >= -1:
-                        return 12
-                    elif heading_error < -1:
-                        return 14
-                    elif heading_error > 1:
-                        return 10
-                else:
-                    # Modified to use fastest speed and make big turns use a slower speed to increase turning radius
-                    if 1 >= heading_error >= -1:
-                        return 4
-                    elif heading_error < -1:
-                        return 6
-                    elif heading_error > 1:
-                        return 2
-        except Exception:
-            # Drive straights
-            if self.continuous:
-                return (desired_speed, 0)
-            else:
-                return 4
+        if self.mode == "hard":
+            return self.action_from_vector(goal_vec, 1)
+        else:
+            return self.action_from_vector(goal_vec, 0.5)
 
     def get_team_density(self, friendly_positions, enemy_positions):
         """This function returns the center of mass and varience of all the agents in the team."""
@@ -231,11 +185,11 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
 
         # TO DO: THIS NEEDS TO BE BY X and Y seperately
         for agp in friendly_positions:
-            ag = self.rb_to_rect(agp)
+            ag = dist_rel_bearing_to_local_rect(*agp)
             home_x.append(ag[0])
             home_y.append(ag[1])
         for agp in enemy_positions:
-            ag = self.rb_to_rect(agp)
+            ag = dist_rel_bearing_to_local_rect(*agp)
             away_x.append(ag[0])
             away_y.append(ag[1])
 
@@ -264,9 +218,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
                 "Must call update_state() before trying to get an action."
             )
 
-        dist_to_flag = self.get_distance_between_2_points(
-            self.opp_team_density[0], np.array(self.my_flag_loc)
-        )
+        dist_to_flag = dist(self.opp_team_density[0], np.array(self.my_flag_loc))
         return dist_to_flag < threshold
 
     def is_far_from_flag(self, threshold=50):
@@ -287,7 +239,113 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
                 "Must call update_state() before trying to get an action."
             )
 
-        dist_to_flag = self.get_distance_between_2_points(
-            self.opp_team_density[0], np.array(self.my_flag_loc)
-        )
+        dist_to_flag = dist(self.opp_team_density[0], np.array(self.my_flag_loc))
         return dist_to_flag > threshold
+
+    def update_state(self, obs, info: dict[str, dict]) -> None:
+        """
+        Method to convert the gym obs and info into data more relative to the
+        agent.
+
+        Note: all rectangular positions are in the ego agent's local coordinate frame.
+        Note: all bearings are relative, measured in degrees clockwise from the ego agent's heading.
+
+        Args:
+            obs: observation from gym
+            info: info from gym
+        """
+
+        global_state = info[self.id]["global_state"]
+        if not isinstance(global_state, dict):
+            global_state = self.state_normalizer.unnormalized(global_state)
+
+        self.on_sides = global_state[(self.id, "on_side")]
+        self.has_flag = global_state[(self.id, "has_flag")]
+
+        # Copy the polar positions of each agent, separated by team and get their tag status
+        self.opp_team_pos = []
+        self.my_team_pos = []
+        self.opp_team_tag = []
+        self.opp_team_has_flag = False
+        for id in self.teammate_ids:
+            if id != self.id:
+                distance = dist(
+                    global_state[(self.id, "pos")], global_state[(id, "pos")]
+                )
+                bearing = angle180(
+                    global_rect_to_abs_bearing(
+                        global_state[(id, "pos")] - global_state[(self.id, "pos")]
+                    )
+                    - global_state[(self.id, "heading")]
+                )
+                self.my_team_pos.append(np.array((distance, bearing)))
+        for id in self.opponent_ids:
+            distance = dist(global_state[(self.id, "pos")], global_state[(id, "pos")])
+            bearing = angle180(
+                global_rect_to_abs_bearing(
+                    global_state[(id, "pos")] - global_state[(self.id, "pos")]
+                )
+                - global_state[(self.id, "heading")]
+            )
+            self.opp_team_pos.append(np.array((distance, bearing)))
+            self.opp_team_has_flag = (
+                self.opp_team_has_flag or global_state[(id, "has_flag")]
+            )
+            self.opp_team_tag.append(global_state[(id, "is_tagged")])
+        team_str = self.team.name.lower().split("_")[0]
+        opp_str = "red" if team_str == "blue" else "blue"
+        self.my_flag_distance = dist(
+            global_state[(self.id, "pos")], global_state[team_str + "_flag_pos"]
+        )
+        self.my_flag_bearing = angle180(
+            global_rect_to_abs_bearing(
+                global_state[team_str + "_flag_pos"] - global_state[(self.id, "pos")]
+            )
+            - global_state[(self.id, "heading")]
+        )
+        self.my_flag_loc = dist_rel_bearing_to_local_rect(
+            self.my_flag_distance, self.my_flag_bearing
+        )
+        self.opp_flag_distance = dist(
+            global_state[(self.id, "pos")], global_state[opp_str + "_flag_pos"]
+        )
+        self.opp_flag_bearing = angle180(
+            global_rect_to_abs_bearing(
+                global_state[opp_str + "_flag_pos"] - global_state[(self.id, "pos")]
+            )
+            - global_state[(self.id, "heading")]
+        )
+        self.opp_flag_loc = dist_rel_bearing_to_local_rect(
+            self.opp_flag_distance, self.opp_flag_bearing
+        )
+        # Initialize the scrimmage line as the mid point between the two flags
+        if self.scrimmage is None:
+            self.scrimmage = self.opp_flag_loc[0] + self.my_flag_loc[0] / 2
+
+        self.my_team_density, self.opp_team_density = self.get_team_density(
+            self.my_team_pos, self.opp_team_pos
+        )
+
+    def action_from_vector(self, vector, desired_speed_normalized):
+        if desired_speed_normalized == 0:
+            if self.continuous:
+                return (0, 0)
+            else:
+                return -1
+        rel_bearing = local_rect_to_rel_bearing(vector)
+        if self.continuous:
+            return (desired_speed_normalized * self.max_speed, rel_bearing)
+        elif desired_speed_normalized == 0.5:
+            if 1 >= rel_bearing >= -1:
+                return 12
+            elif rel_bearing < -1:
+                return 14
+            elif rel_bearing > 1:
+                return 10
+        elif desired_speed_normalized == 1:
+            if 1 >= rel_bearing >= -1:
+                return 4
+            elif rel_bearing < -1:
+                return 6
+            elif rel_bearing > 1:
+                return 2
