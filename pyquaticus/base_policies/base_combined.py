@@ -46,7 +46,6 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
     def __init__(
         self,
         agent_id: str,
-        team: Team,
         env: Union[PyQuaticusEnv, PyQuaticusMoosBridge],
         flag_keepout: float = 3,
         catch_radius: float = 10,
@@ -54,9 +53,9 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         mode="easy",
         defensiveness=20.0,
     ):
-        super().__init__(agent_id, team, env)
+        super().__init__(agent_id, env)
         self.state_normalizer = env.global_state_normalizer
-        self.walls = env._walls[team.value]
+        self.walls = env._walls[self.team.value]
         self.max_speed = env.players[self.id].get_max_speed()
         self.set_mode(mode)
         self.defensiveness = defensiveness
@@ -64,14 +63,12 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         self.flag_keepout = flag_keepout
         self.base_attacker = attack_policy.BaseAttacker(
             self.id,
-            team,
             env,
             continuous,
             mode,
         )
         self.base_defender = defend_policy.BaseDefender(
             self.id,
-            team,
             env,
             flag_keepout,
             catch_radius,

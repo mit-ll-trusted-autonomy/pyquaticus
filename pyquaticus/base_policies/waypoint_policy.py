@@ -46,7 +46,6 @@ class WaypointPolicy(BaseAgentPolicy):
     def __init__(
         self,
         agent_id: str,
-        team: Team,
         env: PyQuaticusEnv,
         continuous: bool = False,
         capture_radius: float = 1,
@@ -54,7 +53,7 @@ class WaypointPolicy(BaseAgentPolicy):
         avoid_radius: float = 2,
         wps: list[np.ndarray] = [],
     ):
-        super().__init__(agent_id, team, env)
+        super().__init__(agent_id, env)
 
         self.state_normalizer = env.global_state_normalizer
 
@@ -77,9 +76,6 @@ class WaypointPolicy(BaseAgentPolicy):
         self.get_env_geom(env)
 
         self.tree = None
-
-        if team not in Team:
-            raise AttributeError(f"Invalid team {team}")
 
     def get_env_geom(self, env: PyQuaticusEnv):
         poly_obstacles = []

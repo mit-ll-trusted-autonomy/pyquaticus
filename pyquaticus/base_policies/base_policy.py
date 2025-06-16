@@ -35,27 +35,36 @@ class BaseAgentPolicy:
     def __init__(
         self,
         agent_id: str,
-        team: Team,
         env: Union[PyQuaticusEnv, PyQuaticusMoosBridge],
         suppress_numpy_warnings=True,
     ):
         self.id = agent_id
 
-        if isinstance(team, str):
-            if team == "red":
-                team = Team.RED_TEAM
-            elif team == "blue":
-                team = Team.BLUE_TEAM
-            else:
-                raise ValueError(f"Got unknown team: {team}")
-        self.team = team
-
-        if team == Team.BLUE_TEAM:
+        if self.id in env.agent_ids_of_team[Team.BLUE_TEAM]:
+            self.team = Team.BLUE_TEAM
             self.teammate_ids = env.agent_ids_of_team[Team.BLUE_TEAM]
             self.opponent_ids = env.agent_ids_of_team[Team.RED_TEAM]
         else:
+            self.team = Team.RED_TEAM
             self.teammate_ids = env.agent_ids_of_team[Team.RED_TEAM]
             self.opponent_ids = env.agent_ids_of_team[Team.BLUE_TEAM]
+
+
+        # if isinstance(team, str):
+        #     if team == "red":
+        #         team = Team.RED_TEAM
+        #     elif team == "blue":
+        #         team = Team.BLUE_TEAM
+        #     else:
+        #         raise ValueError(f"Got unknown team: {team}")
+        # self.team = team
+
+        # if team == Team.BLUE_TEAM:
+        #     self.teammate_ids = env.agent_ids_of_team[Team.BLUE_TEAM]
+        #     self.opponent_ids = env.agent_ids_of_team[Team.RED_TEAM]
+        # else:
+        #     self.teammate_ids = env.agent_ids_of_team[Team.RED_TEAM]
+        #     self.opponent_ids = env.agent_ids_of_team[Team.BLUE_TEAM]
 
         if suppress_numpy_warnings:
             np.seterr(all="ignore")

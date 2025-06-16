@@ -19,11 +19,14 @@
 
 # SPDX-License-Identifier: BSD-3-Clause
 
-from ray.rllib.policy.policy import Policy, PolicySpec
+from ray.rllib.policy.policy import Policy
+from typing import Union
 
 from pyquaticus.base_policies.base_attack import BaseAttacker
 from pyquaticus.base_policies.base_combined import Heuristic_CTF_Agent
 from pyquaticus.base_policies.base_defend import BaseDefender
+from pyquaticus.envs.pyquaticus import PyQuaticusEnv
+from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
 
 
 class RandPolicy(Policy):
@@ -99,7 +102,7 @@ class NoOp(Policy):
         pass
 
 
-def AttackGen(agentid, team, env, mode):
+def AttackGen(agent_id: str, env: Union[PyQuaticusEnv, PyQuaticusMoosBridge], mode: str):
 
     class AttackPolicy(Policy):
         """
@@ -108,7 +111,7 @@ def AttackGen(agentid, team, env, mode):
 
         def __init__(self, observation_space, action_space, config):
             Policy.__init__(self, observation_space, action_space, config)
-            self.policy = BaseAttacker(agentid, team, env, mode=mode)
+            self.policy = BaseAttacker(agent_id, env, mode=mode)
             self.action_dict = {}
 
         def compute_actions(
@@ -131,11 +134,11 @@ def AttackGen(agentid, team, env, mode):
             for i in range(len(obs_batch)):
 
                 # Compute action and add it to the action dictionary
-                self.action_dict[agentid] = self.policy.compute_action(
+                self.action_dict[agent_id] = self.policy.compute_action(
                     obs_batch[i], {k: v[i] for k, v in info_batch.items()}
                 )
 
-            return [self.action_dict[agentid]], [], {}
+            return [self.action_dict[agent_id]], [], {}
 
         def get_weights(self):
             return {}
@@ -149,7 +152,7 @@ def AttackGen(agentid, team, env, mode):
     return AttackPolicy
 
 
-def DefendGen(agentid, team, env, mode):
+def DefendGen(agent_id: str, env: Union[PyQuaticusEnv, PyQuaticusMoosBridge], mode: str):
     class DefendPolicy(Policy):
         """
         Creates a defender policy
@@ -157,7 +160,7 @@ def DefendGen(agentid, team, env, mode):
 
         def __init__(self, observation_space, action_space, config):
             Policy.__init__(self, observation_space, action_space, config)
-            self.policy = BaseDefender(agentid, team, env, mode=mode)
+            self.policy = BaseDefender(agent_id, env, mode=mode)
             self.action_dict = {}
 
         def compute_actions(
@@ -180,11 +183,11 @@ def DefendGen(agentid, team, env, mode):
             for i in range(len(obs_batch)):
 
                 # Compute action and add it to the action dictionary
-                self.action_dict[agentid] = self.policy.compute_action(
+                self.action_dict[agent_id] = self.policy.compute_action(
                     obs_batch[i], {k: v[i] for k, v in info_batch.items()}
                 )
 
-            return [self.action_dict[agentid]], [], {}
+            return [self.action_dict[agent_id]], [], {}
 
         def get_weights(self):
             return {}
@@ -198,7 +201,7 @@ def DefendGen(agentid, team, env, mode):
     return DefendPolicy
 
 
-def CombinedGen(agentid, team, env, mode):
+def CombinedGen(agent_id: str, env: Union[PyQuaticusEnv, PyQuaticusMoosBridge], mode: str):
     class CombinedPolicy(Policy):
         """
         Creates a combined (attacker and defender) policy
@@ -206,7 +209,7 @@ def CombinedGen(agentid, team, env, mode):
 
         def __init__(self, observation_space, action_space, config):
             Policy.__init__(self, observation_space, action_space, config)
-            self.policy = Heuristic_CTF_Agent(agentid, team, env, mode=mode)
+            self.policy = Heuristic_CTF_Agent(agent_id, env, mode=mode)
             self.action_dict = {}
 
         def compute_actions(
@@ -228,11 +231,11 @@ def CombinedGen(agentid, team, env, mode):
             for i in range(len(obs_batch)):
 
                 # Compute action and add it to the action dictionary
-                self.action_dict[agentid] = self.policy.compute_action(
+                self.action_dict[agent_id] = self.policy.compute_action(
                     obs_batch[i], {k: v[i] for k, v in info_batch.items()}
                 )
 
-            return [self.action_dict[agentid]], [], {}
+            return [self.action_dict[agent_id]], [], {}
 
         def get_weights(self):
             return {}

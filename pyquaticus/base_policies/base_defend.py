@@ -45,14 +45,13 @@ class BaseDefender(BaseAgentPolicy):
     def __init__(
         self,
         agent_id: str,
-        team: Team,
         env: Union[PyQuaticusEnv, PyQuaticusMoosBridge],
         flag_keepout: float = 3,
         catch_radius: float = 10,
         continuous: bool = False,
         mode: str = "easy",
     ):
-        super().__init__(agent_id, team, env)
+        super().__init__(agent_id, env)
 
         self.set_mode(mode)
         self.continuous = continuous
@@ -60,7 +59,7 @@ class BaseDefender(BaseAgentPolicy):
         self.catch_radius = catch_radius
         self.goal = "PM"
         self.state_normalizer = env.global_state_normalizer
-        self.walls = env._walls[team.value]
+        self.walls = env._walls[self.team.value]
         self.max_speed = env.players[self.id].get_max_speed()
 
         if isinstance(env, PyQuaticusMoosBridge) or not env.gps_env:

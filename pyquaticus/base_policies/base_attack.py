@@ -44,23 +44,19 @@ class BaseAttacker(BaseAgentPolicy):
     def __init__(
         self,
         agent_id: str,
-        team: Team,
         env: Union[PyQuaticusEnv, PyQuaticusMoosBridge],
         continuous: bool = False,
         mode: str = "easy",
     ):
-        super().__init__(agent_id, team, env)
+        super().__init__(agent_id, env)
 
         self.set_mode(mode)
-
-        if team not in Team:
-            raise AttributeError(f"Invalid team {team}")
 
         self.continuous = continuous
         self.goal = "SC"
 
         self.state_normalizer = env.global_state_normalizer
-        self.walls = env._walls[team.value]
+        self.walls = env._walls[self.team.value]
         self.max_speed = env.players[self.id].get_max_speed()
 
         if isinstance(env, PyQuaticusMoosBridge) or not env.gps_env:
