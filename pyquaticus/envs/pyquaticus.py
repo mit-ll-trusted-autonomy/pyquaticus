@@ -1820,6 +1820,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # Game parameters
         self.max_score = config_dict.get("max_score", config_dict_std["max_score"])
         self.max_time = config_dict.get("max_time", config_dict_std["max_time"])
+        self.max_cycles = ceil(self.max_time / (self.sim_speedup_factor * self.dt))
         self.tagging_cooldown = config_dict.get("tagging_cooldown", config_dict_std["tagging_cooldown"])
         self.tag_on_collision = config_dict.get("tag_on_collision", config_dict_std["tag_on_collision"])
         self.tag_on_oob = config_dict.get("tag_on_oob", config_dict_std["tag_on_oob"])
