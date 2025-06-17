@@ -26,18 +26,17 @@ import numpy as np
 import pyquaticus.base_policies.base_attack as attack_policy
 import pyquaticus.base_policies.base_defend as defend_policy
 from pyquaticus.base_policies.base_policy import BaseAgentPolicy
-from pyquaticus.base_policies.utils import (
-    dist_rel_bearing_to_local_rect,
-    get_avoid_vect,
-    global_rect_to_abs_bearing,
-    local_rect_to_rel_bearing,
-    rel_bearing_to_local_unit_rect,
-    unit_vect_between_points,
-    global_rect_to_local_rect,
-)
+from pyquaticus.base_policies.utils import (dist_rel_bearing_to_local_rect,
+                                            get_avoid_vect,
+                                            global_rect_to_abs_bearing,
+                                            global_rect_to_local_rect,
+                                            local_rect_to_rel_bearing,
+                                            rel_bearing_to_local_unit_rect,
+                                            unit_vect_between_points)
+from pyquaticus.config import config_dict_std
 from pyquaticus.envs.pyquaticus import PyQuaticusEnv, Team
 from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
-from pyquaticus.utils.utils import angle180, line_intersection, dist
+from pyquaticus.utils.utils import angle180, dist, line_intersection
 
 MODES = {"easy", "medium", "hard", "nothing"}
 
@@ -49,11 +48,11 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         self,
         agent_id: str,
         env: Union[PyQuaticusEnv, PyQuaticusMoosBridge],
-        flag_keepout: float = 3,
-        catch_radius: float = 10,
+        flag_keepout: float = config_dict_std["flag_keepout"],
+        catch_radius: float = config_dict_std["catch_radius"],
         continuous: bool = False,
-        mode="easy",
-        defensiveness=20.0,
+        mode: str = "easy",
+        defensiveness: float = 20.0,
     ):
         super().__init__(agent_id, env)
         self.state_normalizer = env.global_state_normalizer
@@ -79,7 +78,9 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         )
 
         scrimmage_line = env.scrimmage_coords
-        flag_line = np.array((env.flag_homes[Team.RED_TEAM], env.flag_homes[Team.BLUE_TEAM]))
+        flag_line = np.array(
+            (env.flag_homes[Team.RED_TEAM], env.flag_homes[Team.BLUE_TEAM])
+        )
         self.midpoint_global = line_intersection(scrimmage_line, flag_line)
 
     def set_mode(self, mode: str):
@@ -166,8 +167,17 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
                 else:
                     # want random point on segment between my flag and scrimmage line, but at least <defensiveness> meters from scrimmage line
                     t = np.random.random()
-                    unit_vec = unit_vect_between_points(self.midpoint_local, self.my_flag_loc)
-                    endpoint = self.midpoint_local + min(self.defensiveness, dist(self.midpoint_local, self.my_flag_loc)) * unit_vec
+                    unit_vec = unit_vect_between_points(
+                        self.midpoint_local, self.my_flag_loc
+                    )
+                    endpoint = (
+                        self.midpoint_local
+                        + min(
+                            self.defensiveness,
+                            dist(self.midpoint_local, self.my_flag_loc),
+                        )
+                        * unit_vec
+                    )
                     goal_vec = (1 - t) * self.my_flag_loc + t * endpoint
 
         if not self.on_sides:
@@ -325,7 +335,11 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             self.my_team_pos, self.opp_team_pos
         )
 
-        self.midpoint_local = global_rect_to_local_rect(self.midpoint_global, global_state[(self.id, "pos")], global_state[(self.id, "heading")])
+        self.midpoint_local = global_rect_to_local_rect(
+            self.midpoint_global,
+            global_state[(self.id, "pos")],
+            global_state[(self.id, "heading")],
+        )
 
     def action_from_vector(self, vector, desired_speed_normalized):
         if desired_speed_normalized == 0:

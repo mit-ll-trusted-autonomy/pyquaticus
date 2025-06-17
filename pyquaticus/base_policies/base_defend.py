@@ -24,14 +24,13 @@ from typing import Union
 import numpy as np
 
 from pyquaticus.base_policies.base_policy import BaseAgentPolicy
-from pyquaticus.base_policies.utils import (
-    dist_rel_bearing_to_local_rect,
-    get_avoid_vect,
-    global_rect_to_abs_bearing,
-    local_rect_to_rel_bearing,
-    rel_bearing_to_local_unit_rect,
-    unit_vect_between_points,
-)
+from pyquaticus.base_policies.utils import (dist_rel_bearing_to_local_rect,
+                                            get_avoid_vect,
+                                            global_rect_to_abs_bearing,
+                                            local_rect_to_rel_bearing,
+                                            rel_bearing_to_local_unit_rect,
+                                            unit_vect_between_points)
+from pyquaticus.config import config_dict_std
 from pyquaticus.envs.pyquaticus import PyQuaticusEnv, Team
 from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
 from pyquaticus.utils.utils import angle180, closest_point_on_line, dist
@@ -46,8 +45,8 @@ class BaseDefender(BaseAgentPolicy):
         self,
         agent_id: str,
         env: Union[PyQuaticusEnv, PyQuaticusMoosBridge],
-        flag_keepout: float = 3,
-        catch_radius: float = 10,
+        flag_keepout: float = config_dict_std["flag_keepout"],
+        catch_radius: float = config_dict_std["catch_radius"],
         continuous: bool = False,
         mode: str = "easy",
     ):
