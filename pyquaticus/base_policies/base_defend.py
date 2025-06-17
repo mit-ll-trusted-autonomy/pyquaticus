@@ -257,14 +257,10 @@ class BaseDefender(BaseAgentPolicy):
             enemy_loc = np.asarray((0, 0))
             for enem, pos in self.opp_team_pos_dict.items():
                 enemy_dis_dict[enem] = pos[0]
-<<<<<<< HEAD
-                if pos[0] < min_enemy_distance and not global_state[(enem, "is_tagged")]:
-=======
                 if (
                     pos[0] < min_enemy_distance
                     and not global_state[(enem, "is_tagged")]
                 ):
->>>>>>> 7b4b689f60fcc3ed5c6299f12a724056127c63b7
                     min_enemy_distance = pos[0]
                     closest_enemy = enem
                     enemy_loc = dist_rel_bearing_to_local_rect(pos[0], pos[1])

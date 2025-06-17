@@ -98,11 +98,6 @@ class BaseAttacker(BaseAgentPolicy):
             return self.action_from_vector(None, 0)
 
         elif self.mode == "competition_easy":
-<<<<<<< HEAD
-            
-=======
-
->>>>>>> 7b4b689f60fcc3ed5c6299f12a724056127c63b7
             assert self.aquaticus_field_points is not None
 
             if self.team == Team.RED_TEAM:
