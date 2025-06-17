@@ -1013,7 +1013,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Agents (player objects) of each team
         self.agents_of_team = {Team.BLUE_TEAM: b_players, Team.RED_TEAM: r_players}
-        self.agent_ids_of_team = {team: np.array([player.id for player in self.agents_of_team[team]]) for team in Team}
+        self.agent_ids_of_team = {team: [player.id for player in self.agents_of_team[team]] for team in Team}
         self.agent_inds_of_team = {team: np.array([player.idx for player in self.agents_of_team[team]]) for team in Team}
 
         # Create the list of flags that are indexed by self.flags[int(player.team)]
