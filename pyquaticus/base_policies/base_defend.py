@@ -45,14 +45,13 @@ class BaseDefender(BaseAgentPolicy):
     def __init__(
         self,
         agent_id: str,
-        team: Team,
         env: Union[PyQuaticusEnv, PyQuaticusMoosBridge],
         flag_keepout: float = 3,
         catch_radius: float = 10,
         continuous: bool = False,
         mode: str = "easy",
     ):
-        super().__init__(agent_id, team, env)
+        super().__init__(agent_id, env)
 
         self.set_mode(mode)
         self.continuous = continuous
@@ -60,7 +59,7 @@ class BaseDefender(BaseAgentPolicy):
         self.catch_radius = catch_radius
         self.goal = "PM"
         self.state_normalizer = env.global_state_normalizer
-        self.walls = env._walls[team.value]
+        self.walls = env._walls[self.team.value]
         self.max_speed = env.players[self.id].get_max_speed()
 
         if isinstance(env, PyQuaticusMoosBridge) or not env.gps_env:
@@ -258,7 +257,14 @@ class BaseDefender(BaseAgentPolicy):
             enemy_loc = np.asarray((0, 0))
             for enem, pos in self.opp_team_pos_dict.items():
                 enemy_dis_dict[enem] = pos[0]
+<<<<<<< HEAD
                 if pos[0] < min_enemy_distance and not global_state[(enem, "is_tagged")]:
+=======
+                if (
+                    pos[0] < min_enemy_distance
+                    and not global_state[(enem, "is_tagged")]
+                ):
+>>>>>>> 7b4b689f60fcc3ed5c6299f12a724056127c63b7
                     min_enemy_distance = pos[0]
                     closest_enemy = enem
                     enemy_loc = dist_rel_bearing_to_local_rect(pos[0], pos[1])

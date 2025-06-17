@@ -45,14 +45,12 @@ obs, info = env.reset()
 
 B_one = BaseDefender(
     "agent_1",
-    Team.BLUE_TEAM,
     env,
     mode="medium",
     continuous=True
 )
 B_zero = BaseDefender(
     "agent_0",
-    Team.BLUE_TEAM,
     env,
     mode="medium",
     continuous=True
@@ -60,7 +58,6 @@ B_zero = BaseDefender(
 
 R_three = WaypointPolicy(
     "agent_3",
-    Team.RED_TEAM,
     env,
     capture_radius=4,
     slip_radius=8,
@@ -69,7 +66,6 @@ R_three = WaypointPolicy(
 )
 R_two = BaseAttacker(
     "agent_2",
-    Team.RED_TEAM,
     env,
     mode="nothing",
     continuous=True

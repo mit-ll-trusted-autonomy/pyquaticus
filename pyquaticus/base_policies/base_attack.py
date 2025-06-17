@@ -44,23 +44,19 @@ class BaseAttacker(BaseAgentPolicy):
     def __init__(
         self,
         agent_id: str,
-        team: Team,
         env: Union[PyQuaticusEnv, PyQuaticusMoosBridge],
         continuous: bool = False,
         mode: str = "easy",
     ):
-        super().__init__(agent_id, team, env)
+        super().__init__(agent_id, env)
 
         self.set_mode(mode)
-
-        if team not in Team:
-            raise AttributeError(f"Invalid team {team}")
 
         self.continuous = continuous
         self.goal = "SC"
 
         self.state_normalizer = env.global_state_normalizer
-        self.walls = env._walls[team.value]
+        self.walls = env._walls[self.team.value]
         self.max_speed = env.players[self.id].get_max_speed()
 
         if isinstance(env, PyQuaticusMoosBridge) or not env.gps_env:
@@ -102,7 +98,11 @@ class BaseAttacker(BaseAgentPolicy):
             return self.action_from_vector(None, 0)
 
         elif self.mode == "competition_easy":
+<<<<<<< HEAD
             
+=======
+
+>>>>>>> 7b4b689f60fcc3ed5c6299f12a724056127c63b7
             assert self.aquaticus_field_points is not None
 
             if self.team == Team.RED_TEAM:
