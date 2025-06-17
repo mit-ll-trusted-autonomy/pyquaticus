@@ -22,6 +22,7 @@
 import colorsys
 import copy
 import cv2
+import functools
 import itertools
 import math
 import numpy as np
@@ -692,6 +693,9 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         else:
             return global_state
 
+    def state(self):
+        return state_to_global_state(normalize=True)
+
     def _history_to_state(self):
         if self.state_hist_len > 1:
             global_state = self.state["global_state_hist_buffer"][self.state_hist_buffer_inds]
@@ -708,9 +712,11 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
         return agent_obs
 
+    @functools.lru_cache(maxsize=None)
     def action_space(self, agent_id: str):
         return self.action_spaces[agent_id]
 
+    @functools.lru_cache(maxsize=None)
     def observation_space(self, agent_id: str):
         return self.observation_spaces[agent_id]
 
@@ -922,7 +928,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     config_dict: a dictionary configuring the environment (see config_dict_std above)
     """
 
-    metadata = {"render_modes": ["human", "rgb_array"]}
+    metadata = {
+        "render_modes": ["human", "rgb_array"],
+        "name": "pyquaticus_v0",
+    }
 
     def __init__(
         self,
@@ -4122,10 +4131,10 @@ when gps environment bounds are specified in meters"
                     self.isopen = True
                 elif self.render_mode == "rgb_array":
                     self.screen = pygame.Surface((self.screen_width, self.screen_height))
-            else:
-                raise Exception(
-                    f"Sorry, render modes other than f{self.metadata['render_modes']} are not supported"
-                )
+                else:
+                    raise ValueError(
+                        f"{self.render_mode} is not a valid render mode. Available modes are: {self.metadata['render_modes']}"
+                    )
 
         if self.clock is None:
             self.clock = pygame.time.Clock()
@@ -4414,7 +4423,6 @@ when gps environment bounds are specified in meters"
             cv2.imwrite(image_file_path, cv2.cvtColor(self.render_buffer[self.render_ctr - 1], cv2.COLOR_RGB2BGR))
         else:
             raise Exception("Envrionment was not rendered. See the render_mode option in the config dictionary.")
-
 
     def close(self):
         """Overridden method inherited from `Gym`."""

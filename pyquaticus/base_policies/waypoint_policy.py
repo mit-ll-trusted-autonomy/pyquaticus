@@ -53,6 +53,8 @@ class WaypointPolicy(BaseAgentPolicy):
 
         self.state_normalizer = env.global_state_normalizer
 
+        self.state_normalizer = env.global_state_normalizer
+
         self.capture_radius = capture_radius
 
         self.slip_radius = slip_radius
@@ -106,6 +108,15 @@ class WaypointPolicy(BaseAgentPolicy):
             self.ungrouped_seglist = get_ungrouped_seglist(poly_obstacles)
         else:
             self.ungrouped_seglist = None
+    
+    def update_state(self, obs, info: dict[str, dict]) -> None:
+        global_state = info[self.id]["global_state"]
+        if not isinstance(global_state, dict):
+            global_state = self.state_normalizer.unnormalized(global_state)
+
+        self.pos = global_state[(self.id, "pos")]
+        self.is_tagged = global_state[(self.id, "is_tagged")]
+        self.heading = global_state[(self.id, "heading")]
 
     def update_state(self, obs, info: dict[str, dict]) -> None:
         global_state = info[self.id]["global_state"]
