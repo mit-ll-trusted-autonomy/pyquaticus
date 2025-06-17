@@ -32,10 +32,12 @@ from pyquaticus.base_policies.utils import (
     global_rect_to_abs_bearing,
     local_rect_to_rel_bearing,
     rel_bearing_to_local_unit_rect,
+    unit_vect_between_points,
+    global_rect_to_local_rect,
 )
 from pyquaticus.envs.pyquaticus import PyQuaticusEnv, Team
 from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
-from pyquaticus.utils.utils import angle180, closest_point_on_line, dist
+from pyquaticus.utils.utils import angle180, line_intersection, dist
 
 MODES = {"easy", "medium", "hard", "nothing"}
 
@@ -56,7 +58,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         super().__init__(agent_id, env)
         self.state_normalizer = env.global_state_normalizer
         self.walls = env._walls[self.team.value]
-        self.max_speed = env.players[self.id].get_max_speed()
+        self.max_speed = env.max_speeds[env.agents.index(self.id)]
         self.set_mode(mode)
         self.defensiveness = defensiveness
         self.continuous = continuous
@@ -75,7 +77,10 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
             continuous,
             mode,
         )
-        self.scrimmage = None
+
+        scrimmage_line = env.scrimmage_coords
+        flag_line = np.array((env.flag_homes[Team.RED_TEAM], env.flag_homes[Team.BLUE_TEAM]))
+        self.midpoint_global = line_intersection(scrimmage_line, flag_line)
 
     def set_mode(self, mode: str):
         """Sets difficulty mode."""
@@ -138,14 +143,11 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         Randomly compute an action that steers the agent to it's own side of the field and sometimes
         towards its flag.
         """
-        if self.scrimmage is None:
-            raise RuntimeWarning(
-                "Must call update_state() before trying to get an action."
-            )
-
         if np.random.random() < 0.25:
-            span_len = self.scrimmage
-            goal_vec = [np.random.random() * span_len, 0]
+            # go to random point on segment between my flag and scrimmage line
+            t = np.random.random()
+            goal_vec = (1 - t) * self.my_flag_loc + t * self.midpoint_local
+
         else:
             near_enemy_dist = np.inf
             nearest_enemy = None
@@ -162,8 +164,11 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
                 if own_flag_dist > self.flag_keepout + 2.0:
                     goal_vec = rel_bearing_to_local_unit_rect(self.my_flag_bearing)
                 else:
-                    span_len = self.scrimmage - self.defensiveness
-                    goal_vec = [np.random.random() * span_len, 0]
+                    # want random point on segment between my flag and scrimmage line, but at least <defensiveness> meters from scrimmage line
+                    t = np.random.random()
+                    unit_vec = unit_vect_between_points(self.midpoint_local, self.my_flag_loc)
+                    endpoint = self.midpoint_local + min(self.defensiveness, dist(self.midpoint_local, self.my_flag_loc)) * unit_vec
+                    goal_vec = (1 - t) * self.my_flag_loc + t * endpoint
 
         if not self.on_sides:
             goal_vec = goal_vec + get_avoid_vect(self.opp_team_pos, avoid_threshold=15)
@@ -315,13 +320,12 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         self.opp_flag_loc = dist_rel_bearing_to_local_rect(
             self.opp_flag_distance, self.opp_flag_bearing
         )
-        # Initialize the scrimmage line as the mid point between the two flags
-        if self.scrimmage is None:
-            self.scrimmage = self.opp_flag_loc[0] + self.my_flag_loc[0] / 2
 
         self.my_team_density, self.opp_team_density = self.get_team_density(
             self.my_team_pos, self.opp_team_pos
         )
+
+        self.midpoint_local = global_rect_to_local_rect(self.midpoint_global, global_state[(self.id, "pos")], global_state[(self.id, "heading")])
 
     def action_from_vector(self, vector, desired_speed_normalized):
         if desired_speed_normalized == 0:

@@ -1,6 +1,6 @@
 import numpy as np
 
-from pyquaticus.utils.utils import angle180
+from pyquaticus.utils.utils import angle180, dist
 
 
 def get_avoid_vect(avoid_pos, avoid_threshold=10.0):
@@ -51,9 +51,9 @@ def global_rect_to_abs_bearing(vec):
     return angle180(90 - np.degrees(np.arctan2(vec[1], vec[0])))
 
 
-def dist_rel_bearing_to_local_rect(dist, rel_bearing):
+def dist_rel_bearing_to_local_rect(distance, rel_bearing):
     """Calculates the local frame rectangular vector given a distance and relative bearing."""
-    return dist * rel_bearing_to_local_unit_rect(rel_bearing)
+    return distance * rel_bearing_to_local_unit_rect(rel_bearing)
 
 
 def rel_bearing_to_local_unit_rect(rel_bearing):
@@ -65,3 +65,9 @@ def rel_bearing_to_local_unit_rect(rel_bearing):
 def local_rect_to_rel_bearing(vec):
     """Calculates the relative bearing of a rectangular vector in the local frame."""
     return global_rect_to_abs_bearing(vec)
+
+def global_rect_to_local_rect(global_vec, ego_pos, ego_heading):
+    distance = dist(global_vec, ego_pos)
+    abs_bearing = global_rect_to_abs_bearing(global_vec - ego_pos)
+    rel_bearing = abs_bearing - ego_heading
+    return dist_rel_bearing_to_local_rect(distance, rel_bearing)
