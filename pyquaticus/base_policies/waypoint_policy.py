@@ -108,15 +108,6 @@ class WaypointPolicy(BaseAgentPolicy):
             self.ungrouped_seglist = get_ungrouped_seglist(poly_obstacles)
         else:
             self.ungrouped_seglist = None
-    
-    def update_state(self, obs, info: dict[str, dict]) -> None:
-        global_state = info[self.id]["global_state"]
-        if not isinstance(global_state, dict):
-            global_state = self.state_normalizer.unnormalized(global_state)
-
-        self.pos = global_state[(self.id, "pos")]
-        self.is_tagged = global_state[(self.id, "is_tagged")]
-        self.heading = global_state[(self.id, "heading")]
 
     def update_state(self, obs, info: dict[str, dict]) -> None:
         global_state = info[self.id]["global_state"]

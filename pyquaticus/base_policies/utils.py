@@ -67,6 +67,7 @@ def local_rect_to_rel_bearing(vec):
     return global_rect_to_abs_bearing(vec)
 
 def global_rect_to_local_rect(global_vec, ego_pos, ego_heading):
+    """Converts a rectangular vector in the global frame to one in the local frame."""
     distance = dist(global_vec, ego_pos)
     abs_bearing = global_rect_to_abs_bearing(global_vec - ego_pos)
     rel_bearing = abs_bearing - ego_heading
