@@ -538,3 +538,6 @@ def check_segment_intersections(segments, query_segment):
 
 def dist(A, B):
     return np.linalg.norm(B - A)
+
+def cross2d(A, B):
+    return A[0]*B[1] - A[1]*B[0] 

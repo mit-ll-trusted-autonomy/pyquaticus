@@ -693,8 +693,14 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         else:
             return global_state
 
-    def state(self):
-        return self.state['global_state_hist_buffer'][0]
+    def get_state(self):
+        """ Get current normalized global state"""
+        global_state = self.state['global_state_hist_buffer'][0]
+
+        if not self.normalize_state:
+            global_state = self.global_state_normalizer.normalized(global_state)
+
+        return global_state
 
     def _history_to_state(self):
         if self.state_hist_len > 1:
@@ -726,8 +732,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             return Discrete(len(self.discrete_action_map))
         elif action_space == "continuous":
             return Box(
-                low=np.array([0, -180]), #speed, relative heading
-                high=np.array([self.max_speeds[agent_idx], 180]) #speed, relative heading
+                low=np.array([0, -180], dtype=np.float32), #speed, relative heading
+                high=np.array([self.max_speeds[agent_idx], 180], dtype=np.float32) #speed, relative heading
             )
         elif action_space == "afp":
             return Discrete(len(self.aquaticus_field_points))
