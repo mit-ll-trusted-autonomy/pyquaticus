@@ -59,7 +59,7 @@ class WaypointPolicy(BaseAgentPolicy):
 
         self.slip_radius = slip_radius
 
-        self.max_speed = env.max_speeds[env.agents.index(self.id)]
+        self.max_speed = env.max_speeds[env.players[self.id].idx]
 
         self.cur_dist = None
 

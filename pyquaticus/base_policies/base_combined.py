@@ -57,7 +57,7 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
         super().__init__(agent_id, env)
         self.state_normalizer = env.global_state_normalizer
         self.walls = env._walls[self.team.value]
-        self.max_speed = env.max_speeds[env.agents.index(self.id)]
+        self.max_speed = env.max_speeds[env.players[self.id].idx]
         self.set_mode(mode)
         self.defensiveness = defensiveness
         self.continuous = continuous

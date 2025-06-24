@@ -59,7 +59,7 @@ class BaseDefender(BaseAgentPolicy):
         self.goal = "PM"
         self.state_normalizer = env.global_state_normalizer
         self.walls = env._walls[self.team.value]
-        self.max_speed = env.max_speeds[env.agents.index(self.id)]
+        self.max_speed = env.max_speeds[env.players[self.id].idx]
 
         if isinstance(env, PyQuaticusMoosBridge) or not env.gps_env:
             self.aquaticus_field_points = env.aquaticus_field_points
