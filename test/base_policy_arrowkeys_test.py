@@ -50,7 +50,6 @@ class KeyTest:
         self.env = env
         self.blue_policy = BaseAttacker(
             env.agents_of_team[Team.BLUE_TEAM][0].id,
-            Team.BLUE_TEAM,
             env,
             mode='competition_medium',
             continuous=True

@@ -19,24 +19,18 @@
 
 # SPDX-License-Identifier: BSD-3-Clause
 
-import numpy as np
-
-from pyquaticus.base_policies.rrt.utils import (
-    Point,
-    intersect,
-    intersect_circles,
-    get_ungrouped_seglist,
-)
-from pyquaticus.base_policies.rrt.rrt_star import rrt_star
-from pyquaticus.structs import PolygonObstacle, CircleObstacle
-
-
-from typing import Optional
-
+from functools import partial
 from multiprocessing.dummy import Pool
 from multiprocessing.pool import ThreadPool
+from typing import Optional
 
-from functools import partial
+import numpy as np
+
+from pyquaticus.base_policies.rrt.rrt_star import rrt_star
+from pyquaticus.base_policies.rrt.utils import (Point, get_ungrouped_seglist,
+                                                intersect, intersect_circles)
+from pyquaticus.base_policies.utils import angle180, global_rect_to_abs_bearing
+from pyquaticus.structs import CircleObstacle, PolygonObstacle
 
 
 class EnvWaypointPolicy:
@@ -74,9 +68,7 @@ class EnvWaypointPolicy:
 
         self.planning = False
 
-    def get_env_geom(
-        self, obstacles: list
-    ) -> tuple[Optional[list[np.ndarray]], Optional[list[tuple[float, float, float]]]]:
+    def get_env_geom(self, obstacles: list) -> None:
         poly_obstacles = []
         circle_obstacles = []
         for obstacle in obstacles:
@@ -106,16 +98,13 @@ class EnvWaypointPolicy:
 
     def compute_action(self, pos: np.ndarray, heading: float):
         """
-        Compute an action for the given position. This function uses observations
-        of both teams.
+        Compute an action for the given position and heading
 
         Args:
-            obs: Unnormalized observation from the gym
-
-        Returns
-        -------
-            desired_speed: m/s
-            heading_error: deg
+            pos: global position of agent
+            heading: absolute heading of agent
+        Returns:
+            (desired_speed, heading_error): (m/s, deg)
         """
         desired_speed = self.max_speed
         heading_error = 0
@@ -127,15 +116,9 @@ class EnvWaypointPolicy:
 
         pos_err = self.wps[0] - pos
 
-        desired_heading = self.angle180(-1 * self.vec_to_heading(pos_err) + 90)
+        desired_heading = global_rect_to_abs_bearing(pos_err)
 
-        heading_error = self.angle180(desired_heading - heading)
-
-        if np.isnan(heading_error):
-            heading_error = 0
-
-        if np.abs(heading_error) < 5:
-            heading_error = 0
+        heading_error = angle180(desired_heading - heading)
 
         return (desired_speed, heading_error)
 
@@ -276,16 +259,3 @@ class EnvWaypointPolicy:
         self.tree = tree
 
         self.wps = wps
-
-    def angle180(self, deg):
-        """Rotates an angle to be between -180 and +180 degrees."""
-        while deg > 180:
-            deg -= 360
-        while deg < -180:
-            deg += 360
-        return deg
-
-    def vec_to_heading(self, vec):
-        """Converts a vector to a magnitude and heading (deg)."""
-        angle = np.degrees(np.arctan2(vec[1], vec[0]))
-        return self.angle180(angle)

@@ -24,14 +24,13 @@ from typing import Union
 import numpy as np
 
 from pyquaticus.base_policies.base_policy import BaseAgentPolicy
-from pyquaticus.base_policies.utils import (
-    dist_rel_bearing_to_local_rect,
-    get_avoid_vect,
-    global_rect_to_abs_bearing,
-    local_rect_to_rel_bearing,
-    rel_bearing_to_local_unit_rect,
-    unit_vect_between_points,
-)
+from pyquaticus.base_policies.utils import (dist_rel_bearing_to_local_rect,
+                                            get_avoid_vect,
+                                            global_rect_to_abs_bearing,
+                                            local_rect_to_rel_bearing,
+                                            rel_bearing_to_local_unit_rect,
+                                            unit_vect_between_points)
+from pyquaticus.config import config_dict_std
 from pyquaticus.envs.pyquaticus import PyQuaticusEnv, Team
 from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
 from pyquaticus.utils.utils import angle180, closest_point_on_line, dist
@@ -45,14 +44,13 @@ class BaseDefender(BaseAgentPolicy):
     def __init__(
         self,
         agent_id: str,
-        team: Team,
         env: Union[PyQuaticusEnv, PyQuaticusMoosBridge],
-        flag_keepout: float = 3,
-        catch_radius: float = 10,
+        flag_keepout: float = config_dict_std["flag_keepout"],
+        catch_radius: float = config_dict_std["catch_radius"],
         continuous: bool = False,
         mode: str = "easy",
     ):
-        super().__init__(agent_id, team, env)
+        super().__init__(agent_id, env)
 
         self.set_mode(mode)
         self.continuous = continuous
@@ -60,8 +58,8 @@ class BaseDefender(BaseAgentPolicy):
         self.catch_radius = catch_radius
         self.goal = "PM"
         self.state_normalizer = env.global_state_normalizer
-        self.walls = env._walls[team.value]
-        self.max_speed = env.players[self.id].get_max_speed()
+        self.walls = env._walls[self.team.value]
+        self.max_speed = env.max_speeds[env.players[self.id].idx]
 
         if isinstance(env, PyQuaticusMoosBridge) or not env.gps_env:
             self.aquaticus_field_points = env.aquaticus_field_points
@@ -258,7 +256,10 @@ class BaseDefender(BaseAgentPolicy):
             enemy_loc = np.asarray((0, 0))
             for enem, pos in self.opp_team_pos_dict.items():
                 enemy_dis_dict[enem] = pos[0]
-                if pos[0] < min_enemy_distance and not global_state[(enem, "is_tagged")]:
+                if (
+                    pos[0] < min_enemy_distance
+                    and not global_state[(enem, "is_tagged")]
+                ):
                     min_enemy_distance = pos[0]
                     closest_enemy = enem
                     enemy_loc = dist_rel_bearing_to_local_rect(pos[0], pos[1])

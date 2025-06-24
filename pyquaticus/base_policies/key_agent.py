@@ -1,6 +1,7 @@
-from pyquaticus.base_policies.base_policy import BaseAgentPolicy
-from pygame import K_a, K_w, K_d
 import pygame
+from pygame import K_a, K_d, K_w
+
+from pyquaticus.base_policies.base_policy import BaseAgentPolicy
 
 
 class KeyAgent(BaseAgentPolicy):
@@ -28,6 +29,12 @@ class KeyAgent(BaseAgentPolicy):
 
     def compute_action(self, obs, info):
         is_key_pressed = pygame.key.get_pressed()
-        keys = self.right*is_key_pressed[self.right] + self.left*is_key_pressed[self.left]*(is_key_pressed[self.left] - is_key_pressed[self.right]) + self.up*is_key_pressed[self.up]
+        keys = (
+            self.right * is_key_pressed[self.right]
+            + self.left
+            * is_key_pressed[self.left]
+            * (is_key_pressed[self.left] - is_key_pressed[self.right])
+            + self.up * is_key_pressed[self.up]
+        )
         action = self.keys_to_action[keys]
         return action

@@ -35,27 +35,21 @@ class BaseAgentPolicy:
     def __init__(
         self,
         agent_id: str,
-        team: Team,
         env: Union[PyQuaticusEnv, PyQuaticusMoosBridge],
         suppress_numpy_warnings=True,
     ):
         self.id = agent_id
 
-        if isinstance(team, str):
-            if team == "red":
-                team = Team.RED_TEAM
-            elif team == "blue":
-                team = Team.BLUE_TEAM
-            else:
-                raise ValueError(f"Got unknown team: {team}")
-        self.team = team
-
-        if team == Team.BLUE_TEAM:
+        if self.id in env.agent_ids_of_team[Team.BLUE_TEAM]:
+            self.team = Team.BLUE_TEAM
             self.teammate_ids = env.agent_ids_of_team[Team.BLUE_TEAM]
             self.opponent_ids = env.agent_ids_of_team[Team.RED_TEAM]
-        else:
+        elif self.id in env.agent_ids_of_team[Team.RED_TEAM]:
+            self.team = Team.RED_TEAM
             self.teammate_ids = env.agent_ids_of_team[Team.RED_TEAM]
             self.opponent_ids = env.agent_ids_of_team[Team.BLUE_TEAM]
+        else:
+            raise ValueError(f"{self.id} not on a team")
 
         if suppress_numpy_warnings:
             np.seterr(all="ignore")
@@ -72,15 +66,5 @@ class BaseAgentPolicy:
         -------
             action: if continuous, a tuple containing desired speed and relative bearing.
             if discrete, an action index corresponding to ACTION_MAP in config.py
-        """
-        raise NotImplementedError
-
-    def update_state(self, obs, info: dict[str, dict]) -> None:
-        """
-        Method to convert the gym obs and info into data useful for compute_action
-
-        Args:
-            obs: observation from gym
-            info: info from gym
         """
         raise NotImplementedError
