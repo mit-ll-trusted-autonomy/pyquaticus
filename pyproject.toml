@@ -20,7 +20,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 [build-system]
-requires = ["setuptools>=46.1.0,<80.0", "setuptools_scm[toml]>=5"]
+requires = ["setuptools>=46.1.0", "setuptools_scm[toml]>=5"]
 build-backend = "setuptools.build_meta"
 
 [project]
