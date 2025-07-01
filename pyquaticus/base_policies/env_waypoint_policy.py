@@ -27,12 +27,8 @@ from typing import Optional
 import numpy as np
 
 from pyquaticus.base_policies.rrt.rrt_star import rrt_star
-from pyquaticus.base_policies.rrt.utils import (
-    Point,
-    get_ungrouped_seglist,
-    intersect,
-    intersect_circles,
-)
+from pyquaticus.base_policies.rrt.utils import (Point, get_ungrouped_seglist,
+                                                intersect, intersect_circles)
 from pyquaticus.base_policies.utils import angle180, global_rect_to_abs_bearing
 from pyquaticus.structs import CircleObstacle, PolygonObstacle
 

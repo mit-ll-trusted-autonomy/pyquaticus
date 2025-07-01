@@ -55,11 +55,11 @@ from pyquaticus.config import (
     POLAR_RADIUS
 )
 from pyquaticus.dynamics.dynamics_registry import dynamics_registry
+from pyquaticus.dynamics.dynamics import Dynamics
 from pyquaticus.structs import (
     CircleObstacle,
     Flag,
     PolygonObstacle,
-    RenderingPlayer,
     Team
 )
 from pyquaticus.utils.obs_utils import ObsNormalizer
@@ -1012,7 +1012,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 )
             )
 
-        self.players = {player.id: player for player in itertools.chain(b_players, r_players)}  #maps player ids (or names) to player objects
+        self.players: dict[str, Dynamics] = {player.id: player for player in itertools.chain(b_players, r_players)}  #maps player ids (or names) to player objects
         self.agents = [agent_id for agent_id in self.players] #maps agent indices to ids
         self.possible_agents = [agent_id for agent_id in self.players]
         self.max_speeds = [player.get_max_speed() for player in self.players.values()]

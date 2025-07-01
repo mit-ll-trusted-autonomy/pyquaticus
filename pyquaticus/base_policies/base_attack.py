@@ -24,13 +24,11 @@ from typing import Union
 import numpy as np
 
 from pyquaticus.base_policies.base_policy import BaseAgentPolicy
-from pyquaticus.base_policies.utils import (
-    dist_rel_bearing_to_local_rect,
-    get_avoid_vect,
-    global_rect_to_abs_bearing,
-    local_rect_to_rel_bearing,
-    rel_bearing_to_local_unit_rect,
-)
+from pyquaticus.base_policies.utils import (dist_rel_bearing_to_local_rect,
+                                            get_avoid_vect,
+                                            global_rect_to_abs_bearing,
+                                            local_rect_to_rel_bearing,
+                                            rel_bearing_to_local_unit_rect)
 from pyquaticus.envs.pyquaticus import PyQuaticusEnv, Team
 from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
 from pyquaticus.utils.utils import angle180, closest_point_on_line, dist
@@ -57,7 +55,7 @@ class BaseAttacker(BaseAgentPolicy):
 
         self.state_normalizer = env.global_state_normalizer
         self.walls = env._walls[self.team.value]
-        self.max_speed = env.players[self.id].get_max_speed()
+        self.max_speed = env.max_speeds[env.players[self.id].idx]
 
         if isinstance(env, PyQuaticusMoosBridge) or not env.gps_env:
             self.aquaticus_field_points = env.aquaticus_field_points

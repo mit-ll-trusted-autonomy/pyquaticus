@@ -110,7 +110,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             raise ValueError(f"Expecting equal team sizes but got: {own_team_len} and {opp_team_len}")
 
         # Create players
-        self.players = {}
+        self.players: dict[str, Player] = {}
         for i, name in enumerate(self.agents):
             if (
                 name == self._agent_name or
