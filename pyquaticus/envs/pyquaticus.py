@@ -270,7 +270,6 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             min_dist_lidar = self.num_lidar_rays * [0.0]
             max_bool, min_bool = [1.0], [0.0]
             max_speed, min_speed = [max(self.max_speeds)], [0.0]
-            max_score, min_score = [self.max_score], [0.0]
             max_lidar_label = self.num_lidar_rays * [len(LIDAR_DETECTION_CLASS_MAP) - 1]
             min_lidar_label = self.num_lidar_rays * [0.0]
 
@@ -287,17 +286,15 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             agent_obs_normalizer.register("on_side", max_bool, min_bool)
             agent_obs_normalizer.register("tagging_cooldown", [self.tagging_cooldown], [0.0])
             agent_obs_normalizer.register("is_tagged", max_bool, min_bool)
-            agent_obs_normalizer.register("team_score", max_score, min_score)
-            agent_obs_normalizer.register("opponent_score", max_score, min_score)
             agent_obs_normalizer.register("ray_distances", max_dist_lidar, min_dist_lidar)
             agent_obs_normalizer.register("ray_labels", max_lidar_label, min_lidar_label)
+
         else:
             max_bearing = [180]
             max_dist = [self.env_diag]
             min_dist = [0.0]
             max_bool, min_bool = [1.0], [0.0]
             max_speed, min_speed = [max(self.max_speeds)], [0.0]
-            max_score, min_score = [self.max_score], [0.0]
 
             agent_obs_normalizer.register("opponent_home_bearing", max_bearing)
             agent_obs_normalizer.register("opponent_home_distance", max_dist, min_dist)
@@ -311,15 +308,13 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             agent_obs_normalizer.register("wall_2_distance", max_dist, min_dist)
             agent_obs_normalizer.register("wall_3_bearing", max_bearing)
             agent_obs_normalizer.register("wall_3_distance", max_dist, min_dist)
-            agent_obs_normalizer.register("scrimmage_line_bearing", max_bearing)
-            agent_obs_normalizer.register("scrimmage_line_distance", max_dist, min_dist)
+            # agent_obs_normalizer.register("scrimmage_line_bearing", max_bearing)
+            # agent_obs_normalizer.register("scrimmage_line_distance", max_dist, min_dist)
             agent_obs_normalizer.register("speed", max_speed, min_speed)
             agent_obs_normalizer.register("has_flag", max_bool, min_bool)
             agent_obs_normalizer.register("on_side", max_bool, min_bool)
             agent_obs_normalizer.register("tagging_cooldown", [self.tagging_cooldown], [0.0])
             agent_obs_normalizer.register("is_tagged", max_bool, min_bool)
-            agent_obs_normalizer.register("team_score", max_score, min_score)
-            agent_obs_normalizer.register("opponent_score", max_score, min_score)
 
             for i in range(num_on_team - 1):
                 teammate_name = f"teammate_{i}"
@@ -356,15 +351,14 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         min_dist = [0.0]
         max_bool, min_bool = [1.0], [0.0]
         max_speed, min_speed = [max(self.max_speeds)], [0.0]
-        max_score, min_score = [self.max_score], [0.0]
 
         for player in self.players.values():
             player_name = player.id
 
             global_state_normalizer.register((player_name, "pos"), pos_max, pos_min)
             global_state_normalizer.register((player_name, "heading"), max_heading)
-            global_state_normalizer.register((player_name, "scrimmage_line_bearing"), max_bearing)
-            global_state_normalizer.register((player_name, "scrimmage_line_distance"), max_dist, min_dist)
+            # global_state_normalizer.register((player_name, "scrimmage_line_bearing"), max_bearing)
+            # global_state_normalizer.register((player_name, "scrimmage_line_distance"), max_dist, min_dist)
             global_state_normalizer.register((player_name, "speed"), max_speed, min_speed)
             global_state_normalizer.register((player_name, "has_flag"), max_bool, min_bool)
             global_state_normalizer.register((player_name, "on_side"), max_bool, min_bool)
@@ -381,10 +375,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         global_state_normalizer.register("blue_flag_pos", pos_max, pos_min)
         global_state_normalizer.register("red_flag_pos", pos_max, pos_min)
 
-        global_state_normalizer.register("blue_flag_pickup", max_bool, min_bool)
-        global_state_normalizer.register("red_flag_pickup", max_bool, min_bool)
-        global_state_normalizer.register("blue_team_score", max_score, min_score)
-        global_state_normalizer.register("red_team_score", max_score, min_score)
+        # global_state_normalizer.register("blue_flag_pickup", max_bool, min_bool)
+        # global_state_normalizer.register("red_flag_pickup", max_bool, min_bool)
 
         return agent_obs_normalizer, global_state_normalizer
 
@@ -517,10 +509,6 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             # Is tagged
             obs["is_tagged"] = self.state["agent_is_tagged"][agent.idx]
 
-            # Team score and Opponent score
-            obs["team_score"] = self.state["captures"][team_idx]
-            obs["opponent_score"] = self.state["captures"][other_team_idx]
-
             # Lidar
             obs["ray_distances"] = self.state["lidar_distances"][agent_id]
             obs["ray_labels"] = self.obj_ray_detection_states[own_team][self.state["lidar_labels"][agent_id]]
@@ -552,14 +540,14 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                 obs[f"wall_{i}_distance"] = wall_dist
 
             # Scrimmage line
-            scrimmage_line_closest_point = closest_point_on_line(
-                self.scrimmage_coords[0], self.scrimmage_coords[1], pos
-            )
-            scrimmage_line_dist, scrimmage_line_bearing = mag_bearing_to(
-                pos, scrimmage_line_closest_point, heading
-            )
-            obs["scrimmage_line_bearing"] = scrimmage_line_bearing
-            obs["scrimmage_line_distance"] = scrimmage_line_dist
+            # scrimmage_line_closest_point = closest_point_on_line(
+            #     self.scrimmage_coords[0], self.scrimmage_coords[1], pos
+            # )
+            # scrimmage_line_dist, scrimmage_line_bearing = mag_bearing_to(
+            #     pos, scrimmage_line_closest_point, heading
+            # )
+            # obs["scrimmage_line_bearing"] = scrimmage_line_bearing
+            # obs["scrimmage_line_distance"] = scrimmage_line_dist
 
             # Own speed
             obs["speed"] = self.state["agent_speed"][agent.idx]
@@ -571,10 +559,6 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             obs["tagging_cooldown"] = self.state["agent_tagging_cooldown"][agent.idx]
             # Is tagged
             obs["is_tagged"] = self.state["agent_is_tagged"][agent.idx]
-
-            # Team score and Opponent score
-            obs["team_score"] = self.state["captures"][team_idx]
-            obs["opponent_score"] = self.state["captures"][other_team_idx]
 
             # Relative observations to other agents (teammates first)
             for team in [own_team, other_team]:
@@ -650,17 +634,17 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             pos = self.state["agent_position"][agent.idx]
             heading = self.state["agent_heading"][agent.idx]
 
-            scrimmage_line_closest_point = closest_point_on_line(
-                self.scrimmage_coords[0], self.scrimmage_coords[1], pos
-            )
-            scrimmage_line_dist, scrimmage_line_bearing = mag_bearing_to(
-                pos, scrimmage_line_closest_point, heading
-            )
+            # scrimmage_line_closest_point = closest_point_on_line(
+            #     self.scrimmage_coords[0], self.scrimmage_coords[1], pos
+            # )
+            # scrimmage_line_dist, scrimmage_line_bearing = mag_bearing_to(
+            #     pos, scrimmage_line_closest_point, heading
+            # )
 
             global_state[(agent_id, "pos")] = self._standard_pos(pos)
             global_state[(agent_id, "heading")] = self._standard_heading(heading)
-            global_state[(agent_id, "scrimmage_line_bearing")] = scrimmage_line_bearing
-            global_state[(agent_id, "scrimmage_line_distance")] = scrimmage_line_dist
+            # global_state[(agent_id, "scrimmage_line_bearing")] = scrimmage_line_bearing
+            # global_state[(agent_id, "scrimmage_line_distance")] = scrimmage_line_dist
             global_state[(agent_id, "speed")] = self.state["agent_speed"][agent.idx]
             global_state[(agent_id, "has_flag")] = self.state["agent_has_flag"][agent.idx]
             global_state[(agent_id, "on_side")] = self.state["agent_on_sides"][agent.idx]
@@ -683,10 +667,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         global_state["red_flag_home"] = self._standard_pos(self.state["flag_home"][red_team_idx])
         global_state["blue_flag_pos"] = self._standard_pos(self.state["flag_position"][blue_team_idx])
         global_state["red_flag_pos"] = self._standard_pos(self.state["flag_position"][red_team_idx])
-        global_state["blue_flag_pickup"] = self.state["flag_taken"][blue_team_idx]
-        global_state["red_flag_pickup"] = self.state["flag_taken"][red_team_idx]
-        global_state["blue_team_score"] = self.state["captures"][blue_team_idx]
-        global_state["red_team_score"] = self.state["captures"][red_team_idx]
+        # global_state["blue_flag_pickup"] = self.state["flag_taken"][blue_team_idx]
+        # global_state["red_flag_pickup"] = self.state["flag_taken"][red_team_idx]
 
         if normalize:
             return self.global_state_normalizer.normalized(global_state)
