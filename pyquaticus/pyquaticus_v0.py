@@ -20,3 +20,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 from .envs.pyquaticus import PyQuaticusEnv
+
+def env(**kwargs):
+    return PyQuaticusEnv(**kwargs)

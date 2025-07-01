@@ -693,8 +693,14 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         else:
             return global_state
 
-    def state(self):
-        return state_to_global_state(normalize=True)
+    def get_state(self):
+        """ Get current normalized global state"""
+        global_state = self.state['global_state_hist_buffer'][0]
+
+        if not self.normalize_state:
+            global_state = self.global_state_normalizer.normalized(global_state)
+
+        return global_state
 
     def _history_to_state(self):
         if self.state_hist_len > 1:
@@ -726,8 +732,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             return Discrete(len(self.discrete_action_map))
         elif action_space == "continuous":
             return Box(
-                low=np.array([0, -180]), #speed, relative heading
-                high=np.array([self.max_speeds[agent_idx], 180]) #speed, relative heading
+                low=np.array([0, -180], dtype=np.float32), #speed, relative heading
+                high=np.array([self.max_speeds[agent_idx], 180], dtype=np.float32) #speed, relative heading
             )
         elif action_space == "afp":
             return Discrete(len(self.aquaticus_field_points))
@@ -1013,7 +1019,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Agents (player objects) of each team
         self.agents_of_team = {Team.BLUE_TEAM: b_players, Team.RED_TEAM: r_players}
-        self.agent_ids_of_team = {team: np.array([player.id for player in self.agents_of_team[team]]) for team in Team}
+        self.agent_ids_of_team = {team: [player.id for player in self.agents_of_team[team]] for team in Team}
         self.agent_inds_of_team = {team: np.array([player.idx for player in self.agents_of_team[team]]) for team in Team}
 
         # Create the list of flags that are indexed by self.flags[int(player.team)]
@@ -1043,14 +1049,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.observation_spaces = {agent_id: self.get_agent_observation_space() for agent_id in self.players}
 
         # Set up rewards
-        for a in self.players:
-            if a not in self.reward_config:
-                self.reward_config[a] = None
+        for agent_id in self.players:
+            if agent_id not in self.reward_config:
+                self.reward_config[agent_id] = None
 
         # Pygame
         self.screen = None
         self.clock = None
-        self.isopen = False
         self.render_ctr = 0
         self.render_buffer = []
         self.traj_render_buffer = {}
@@ -1821,6 +1826,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # Game parameters
         self.max_score = config_dict.get("max_score", config_dict_std["max_score"])
         self.max_time = config_dict.get("max_time", config_dict_std["max_time"])
+        self.max_cycles = ceil(self.max_time / (self.sim_speedup_factor * self.dt))
         self.tagging_cooldown = config_dict.get("tagging_cooldown", config_dict_std["tagging_cooldown"])
         self.tag_on_collision = config_dict.get("tag_on_collision", config_dict_std["tag_on_collision"])
         self.tag_on_oob = config_dict.get("tag_on_oob", config_dict_std["tag_on_oob"])
@@ -4128,7 +4134,6 @@ when gps environment bounds are specified in meters"
                 if self.render_mode == "human":
                     pygame.display.set_caption("Capture The Flag")
                     self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
-                    self.isopen = True
                 elif self.render_mode == "rgb_array":
                     self.screen = pygame.Surface((self.screen_width, self.screen_height))
                 else:
@@ -4425,10 +4430,10 @@ when gps environment bounds are specified in meters"
             raise Exception("Envrionment was not rendered. See the render_mode option in the config dictionary.")
 
     def close(self):
-        """Overridden method inherited from `Gym`."""
+        """Close the pygame window, if open."""
         if self.screen is not None:
             pygame.quit()
-            self.isopen = False
+            self.screen = None
 
     def _min(self, a, b):
         """Convenience method for determining a minimum value. The standard `min()` takes much longer to run."""

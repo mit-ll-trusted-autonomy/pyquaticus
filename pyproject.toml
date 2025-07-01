@@ -48,16 +48,16 @@ classifiers = [
 license = { file = "LICENSE" }
 # Requirements
 dependencies = [
-	"pynput==1.8.1",
+	"pynput",
 	"contextily==1.6.2",
-	"matplotlib==3.7.1",
-	"numpy==1.24.3",
-	"opencv-python==4.10.0.84",
+	"matplotlib",
+	"numpy<2.0",
+	"opencv-python-headless",
 	"pettingzoo==1.25.0",
 	"pygame==2.4.0",
-	"scipy==1.14.1",
-	"shapely==2.0.6",
-	"sympy==1.13.1",
+	"scipy",
+	"shapely",
+	"sympy",
 	"pymoos==2022.1; sys_platform == 'linux' or sys_platform == 'darwin'"
 ]
 

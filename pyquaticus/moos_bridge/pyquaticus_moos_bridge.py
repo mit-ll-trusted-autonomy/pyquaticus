@@ -406,7 +406,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             info: additional information
         """
         # Previous state
-        # self.prev_state = copy.deepcopy(self.state) #TODO: uncomment if prev_state is needed 
+        # self.prev_state = copy.deepcopy(self.state) #NOTE: uncomment if prev_state is needed 
         #NOTE: prev_state not currently tracked in PyQuaticusMoosBridge to optimize speed (avoid calling copy.deepcopy)
 
         agent = self.players[self._agent_name]

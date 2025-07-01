@@ -28,8 +28,17 @@ import numpy as np
 
 from pyquaticus.base_policies.base_policy import BaseAgentPolicy
 from pyquaticus.base_policies.rrt.rrt_star import rrt_star
+<<<<<<< HEAD
+from pyquaticus.base_policies.rrt.utils import (
+    Point,
+    get_ungrouped_seglist,
+    intersect,
+    intersect_circles,
+)
+=======
 from pyquaticus.base_policies.rrt.utils import (Point, get_ungrouped_seglist,
                                                 intersect, intersect_circles)
+>>>>>>> main
 from pyquaticus.base_policies.utils import global_rect_to_abs_bearing
 from pyquaticus.envs.pyquaticus import PyQuaticusEnv, Team
 from pyquaticus.structs import CircleObstacle, PolygonObstacle
@@ -108,6 +117,15 @@ class WaypointPolicy(BaseAgentPolicy):
             self.ungrouped_seglist = get_ungrouped_seglist(poly_obstacles)
         else:
             self.ungrouped_seglist = None
+
+    def update_state(self, obs, info: dict[str, dict]) -> None:
+        global_state = info[self.id]["global_state"]
+        if not isinstance(global_state, dict):
+            global_state = self.state_normalizer.unnormalized(global_state)
+
+        self.pos = global_state[(self.id, "pos")]
+        self.is_tagged = global_state[(self.id, "is_tagged")]
+        self.heading = global_state[(self.id, "heading")]
 
     def update_state(self, obs, info: dict[str, dict]) -> None:
         global_state = info[self.id]["global_state"]
