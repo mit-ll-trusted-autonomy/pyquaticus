@@ -308,8 +308,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             agent_obs_normalizer.register("wall_2_distance", max_dist, min_dist)
             agent_obs_normalizer.register("wall_3_bearing", max_bearing)
             agent_obs_normalizer.register("wall_3_distance", max_dist, min_dist)
-            # agent_obs_normalizer.register("scrimmage_line_bearing", max_bearing)
-            # agent_obs_normalizer.register("scrimmage_line_distance", max_dist, min_dist)
+            agent_obs_normalizer.register("scrimmage_line_bearing", max_bearing)
+            agent_obs_normalizer.register("scrimmage_line_distance", max_dist, min_dist)
             agent_obs_normalizer.register("speed", max_speed, min_speed)
             agent_obs_normalizer.register("has_flag", max_bool, min_bool)
             agent_obs_normalizer.register("on_side", max_bool, min_bool)
@@ -540,14 +540,14 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                 obs[f"wall_{i}_distance"] = wall_dist
 
             # Scrimmage line
-            # scrimmage_line_closest_point = closest_point_on_line(
-            #     self.scrimmage_coords[0], self.scrimmage_coords[1], pos
-            # )
-            # scrimmage_line_dist, scrimmage_line_bearing = mag_bearing_to(
-            #     pos, scrimmage_line_closest_point, heading
-            # )
-            # obs["scrimmage_line_bearing"] = scrimmage_line_bearing
-            # obs["scrimmage_line_distance"] = scrimmage_line_dist
+            scrimmage_line_closest_point = closest_point_on_line(
+                self.scrimmage_coords[0], self.scrimmage_coords[1], pos
+            )
+            scrimmage_line_dist, scrimmage_line_bearing = mag_bearing_to(
+                pos, scrimmage_line_closest_point, heading
+            )
+            obs["scrimmage_line_bearing"] = scrimmage_line_bearing
+            obs["scrimmage_line_distance"] = scrimmage_line_dist
 
             # Own speed
             obs["speed"] = self.state["agent_speed"][agent.idx]
