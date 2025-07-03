@@ -2922,13 +2922,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             ## speed ##
             if player.id not in agent_spd_dict:
-                if self.default_init:
-                    speed = 0.0
-                else:
-                    speed = self.max_speeds[i] * np.random.rand()
-
                 # save speed
-                agent_spd_dict[player.id] = speed
+                agent_spd_dict[player.id] = 0.0
 
             ## heading ##
             if player.id not in agent_hdg_dict:
