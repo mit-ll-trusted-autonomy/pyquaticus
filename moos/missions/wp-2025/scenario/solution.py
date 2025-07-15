@@ -43,6 +43,9 @@ def angle180(deg):
         deg += 360
     return deg
 
+def dist(A, B):
+    return np.linalg.norm(B - A)
+
 def heading_angle_conversion(deg):
     """
     Converts a world-frame angle to a heading and vice-versa
@@ -94,6 +97,71 @@ def mag_bearing_to(A, B, relative_hdg=None):
     if relative_hdg is not None:
         hdg = (hdg - relative_hdg) % 360
     return mag, angle180(hdg)
+
+def get_avoid_vect(avoid_pos, avoid_threshold=10.0):
+    """
+    This function finds the vector most pointing away to all enemy agents.
+
+    Args:
+        agent: An agents position
+        avoid_pos: All other agent (polar) positions we potentially need to avoid.
+        avoid_threshold: The threshold that, when the agent is closer than this range,
+            is attempted to be avoided.
+
+    Returns
+    -------
+        np.array vector that points away from as many agents as possible
+    """
+    avoid_vects = []
+    need_avoid = False
+    for avoid_ag in avoid_pos:
+        if avoid_ag[0] < avoid_threshold:
+            coeff = np.divide(avoid_threshold, avoid_ag[0])
+            ag_vect = rel_bearing_to_local_unit_rect(avoid_ag[1])
+            avoid_vects.append([coeff * ag_vect[0], coeff * ag_vect[1]])
+            need_avoid = True
+    av_x = 0.0
+    av_y = 0.0
+    if need_avoid:
+        for vects in avoid_vects:
+            av_x += vects[0]
+            av_y += vects[1]
+        norm = np.linalg.norm(np.array([av_x, av_y]))
+        final_avoid_unit_vect = np.array(
+            [-1.0 * np.divide(av_x, norm), -1.0 * np.divide(av_y, norm)]
+        )
+    else:
+        final_avoid_unit_vect = np.array([0, 0])
+
+    return final_avoid_unit_vect
+
+def unit_vect_between_points(start: np.ndarray, end: np.ndarray):
+    """Calculates the unit vector between two rectangular points."""
+    return (end - start) / np.linalg.norm(end - start)
+
+def global_rect_to_abs_bearing(vec):
+    """Calculates the absolute bearing of a rectangular vector in the global frame."""
+    return angle180(90 - np.degrees(np.arctan2(vec[1], vec[0])))
+
+def dist_rel_bearing_to_local_rect(distance, rel_bearing):
+    """Calculates the local frame rectangular vector given a distance and relative bearing."""
+    return distance * rel_bearing_to_local_unit_rect(rel_bearing)
+
+def rel_bearing_to_local_unit_rect(rel_bearing):
+    """Calculates the local frame rectangular unit vector in the direction of the given relative bearing."""
+    rad = np.deg2rad(rel_bearing)
+    return np.array((np.sin(rad), np.cos(rad)))
+
+def local_rect_to_rel_bearing(vec):
+    """Calculates the relative bearing of a rectangular vector in the local frame."""
+    return global_rect_to_abs_bearing(vec)
+
+def global_rect_to_local_rect(global_vec, ego_pos, ego_heading):
+    """Converts a rectangular vector in the global frame to one in the local frame."""
+    distance = dist(global_vec, ego_pos)
+    abs_bearing = global_rect_to_abs_bearing(global_vec - ego_pos)
+    rel_bearing = abs_bearing - ego_heading
+    return dist_rel_bearing_to_local_rect(distance, rel_bearing)
 
 
 class Defender:
@@ -188,24 +256,170 @@ class A:
 
 
 class Attacker:
-    def __init__(self, agent_id, max_speed, targ_agent_id, tag_radius):
-        self.agent_id = agent_id
-        self.max_speed = max_speed
-        self.targ_agent_id = targ_agent_id
-        self.tag_radius = tag_radius
-    
-    def compute_action(self, global_state):
-        pos = global_state[(agent_id_moos_map[self.agent_id], "pos")]
-        heading = global_state[(agent_id_moos_map[self.agent_id], "heading")]
+    """This is a Policy class that contains logic for capturing the flag."""
 
-        goal_pos = global_state[(agent_id_moos_map[self.targ_agent_id], "pos")]
-        goal_dist, goal_bearing = mag_bearing_to(pos, goal_pos, relative_hdg=heading)
+    def __init__(self, agent_id, max_speed, tag_radius, env_size, team: str, targ_agent_id: list, opp_ids: list):
+        self.id = agent_id
+        self.max_speed = max_speed
+        self.env_size = env_size
+        self.team = team
+        self.tag_radius = tag_radius
+
+        self.targ_id = targ_agent_id
+        self.opponent_ids = opp_ids
+
+    def compute_action(self, global_state):
+        """
+        Compute an action from the given observation and global state.
+
+        Args:
+            obs: observation from the gym
+            info: info from the gym
+
+        Returns
+        -------
+            action: if continuous, a tuple containing desired speed and heading error.
+            if discrete, an action index corresponding to ACTION_MAP in config.py
+        """
+
+        self.update_state(global_state)
+
+        # If I'm close to a wall, add the closest point to the wall as an obstacle to avoid
+        if self.wall_distances[0] < 10 and (-90 < self.wall_bearings[0] < 90):
+            self.opp_team_pos.append(
+                (
+                    self.wall_distances[0],
+                    self.wall_bearings[0],
+                )
+            )
+        elif self.wall_distances[2] < 10 and (-90 < self.wall_bearings[2] < 90):
+            self.opp_team_pos.append(
+                (
+                    self.wall_distances[2],
+                    self.wall_bearings[2],
+                )
+            )
+        if self.wall_distances[1] < 10 and (-90 < self.wall_bearings[1] < 90):
+            self.opp_team_pos.append(
+                (
+                    self.wall_distances[1],
+                    self.wall_bearings[1],
+                )
+            )
+        elif self.wall_distances[3] < 10 and (-90 < self.wall_bearings[3] < 90):
+            self.opp_team_pos.append(
+                (
+                    self.wall_distances[3],
+                    self.wall_bearings[3],
+                )
+            )
+
+        # Increase the avoidance threshold to start avoiding when farther away
+        avoid_thresh = 30.0
+
+        # Otherwise go get the flag
+        goal_vect = rel_bearing_to_local_unit_rect(self.opp_flag_bearing)
+        avoid_vect = get_avoid_vect(
+            self.opp_team_pos, avoid_threshold=avoid_thresh
+        )
+        if (not np.any(goal_vect + (avoid_vect))) or (
+            np.allclose(
+                np.abs(np.abs(goal_vect) - np.abs(avoid_vect)),
+                np.zeros(np.array(goal_vect).shape),
+                atol=1e-01,
+                rtol=1e-02,
+            )
+        ):
+            # Special case where a player is closely in line with the goal
+            # vector such that the calculated avoid vector nearly negates the
+            # action (the player is in a spot that causes the agent to just go
+            # straight into them). In this case just start going towards the top
+            # or bottom boundary, whichever is farthest.
+
+            top_dist = self.wall_distances[3]
+            bottom_dist = self.wall_distances[1]
+
+            # Some bias towards the bottom boundary to force it to stick with a
+            # direction.
+            if top_dist > 1.25 * bottom_dist:
+                my_action = dist_rel_bearing_to_local_rect(
+                    top_dist, self.wall_bearings[0]
+                )
+            else:
+                my_action = dist_rel_bearing_to_local_rect(
+                    bottom_dist, self.wall_bearings[2]
+                )
+        else:
+            my_action = np.multiply(1.25, goal_vect) + avoid_vect
 
         tag = False
-        if goal_dist <= self.tag_radius:
+        if self.opp_flag_distance <= self.tag_radius:
             tag = True
 
-        return [self.max_speed, goal_bearing], tag
+        return self.action_from_vector(my_action, 1), tag
+
+    def action_from_vector(self, vector, desired_speed_normalized):
+        if desired_speed_normalized == 0:
+            return (0, 0)
+        rel_bearing = local_rect_to_rel_bearing(vector)
+
+        return (desired_speed_normalized * self.max_speed, rel_bearing)
+
+    def update_state(self, global_state) -> None:
+        """
+        Method to convert the gym obs and info into data more relative to the
+        agent.
+
+        Note: all rectangular positions are in the ego agent's local coordinate frame.
+        Note: all bearings are relative, measured in degrees clockwise from the ego agent's heading.
+
+        Args:
+            obs: observation from gym
+            info: info from gym
+        """
+
+        my_pos = global_state[(agent_id_moos_map[self.id], "pos")]
+        my_heading = global_state[(agent_id_moos_map[self.id], "heading")]
+
+        self.has_flag = global_state[(agent_id_moos_map[self.id], "has_flag")]
+        self.is_tagged = global_state[(agent_id_moos_map[self.id], "is_tagged")]
+
+        # Calculate the rectangular coordinates for the flags location relative to the agent.
+        team_str = self.team
+        opp_str = "red" if team_str == "blue" else "blue"
+
+        self.opp_flag_distance = dist(my_pos, global_state[(agent_id_moos_map[self.targ_id], "pos")])
+        self.opp_flag_bearing = angle180(
+            global_rect_to_abs_bearing(global_state[(agent_id_moos_map[self.targ_id], "pos")] - my_pos)
+            - my_heading
+        )
+        self.opp_flag_loc = dist_rel_bearing_to_local_rect(
+            self.opp_flag_distance, self.opp_flag_bearing
+        )
+
+        home_distance = dist(my_pos, global_state[team_str + "_flag_home"])
+        self.home_bearing = angle180(
+            global_rect_to_abs_bearing(global_state[team_str + "_flag_home"] - my_pos)
+            - my_heading
+        )
+        self.home_loc = dist_rel_bearing_to_local_rect(home_distance, self.home_bearing)
+
+        self.opp_team_pos = []
+        for id in self.opponent_ids:
+            distance = dist(my_pos, global_state[(agent_id_moos_map[id], "pos")])
+            bearing = angle180(
+                global_rect_to_abs_bearing(global_state[(agent_id_moos_map[id], "pos")] - my_pos)
+                - my_heading
+            )
+            self.opp_team_pos.append(np.array((distance, bearing)))
+
+        self.wall_distances = [my_pos[0], my_pos[1], self.env_size[0] - my_pos[0], self.env_size[1] - my_pos[1]]
+        self.wall_bearings = [
+            angle180(global_rect_to_abs_bearing(np.array([0, my_pos[1]]) - my_pos) - my_heading),
+            angle180(global_rect_to_abs_bearing(np.array([my_pos[0], 0]) - my_pos) - my_heading),
+            angle180(global_rect_to_abs_bearing(np.array([self.env_size[0], my_pos[1]]) - my_pos) - my_heading),
+            angle180(global_rect_to_abs_bearing(np.array([my_pos[0], self.env_size[1]]) - my_pos) - my_heading)
+        ]
 
 
 #Load in your trained model and return the corresponding agent action based on the information provided in step()
@@ -237,19 +451,28 @@ class solution:
             "agent_3": Attacker(
                 agent_id=f"agent_3",
                 max_speed=2.0,
+                env_size=[160, 80],
+                team="red",
                 targ_agent_id="agent_0",
+                opp_ids=["agent_1", "agent_2"],
                 tag_radius=14
             ),
             "agent_4": Attacker(
                 agent_id=f"agent_4",
                 max_speed=2.0,
+                env_size=[160, 80],
+                team="red",
                 targ_agent_id="agent_0",
+                opp_ids=["agent_1", "agent_2"],
                 tag_radius=14
             ),
             "agent_5": Attacker(
                 agent_id=f"agent_5",
                 max_speed=2.0,
+                env_size=[160, 80],
+                team="red",
                 targ_agent_id="agent_0",
+                opp_ids=["agent_1", "agent_2"],
                 tag_radius=14
             ), 
         }
