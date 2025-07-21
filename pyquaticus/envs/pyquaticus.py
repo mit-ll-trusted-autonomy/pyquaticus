@@ -2681,7 +2681,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
                         # position
                         if state_var == "agent_position":
-                            val = np.array(val)
+                            val = np.array(val, dtype=float)
                             if self.gps_env:
                                 if agent_pos_unit == "ll":
                                     val = np.asarray(mt.xy(val[1], val[0]))
