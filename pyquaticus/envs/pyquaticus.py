@@ -204,8 +204,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         if act_space_match:
             # Continuous actions
             if act_space_str == "continuous":
-                speed = raw_action[0]
-                rel_heading = raw_action[1]
+                speed = raw_action[0] * self.max_speeds[player.idx]
+                rel_heading = raw_action[1] * 180
             # Discrete action space
             elif act_space_str == "discrete":    
                 speed, rel_heading = self._discrete_action_to_speed_relheading(raw_action)
@@ -216,8 +216,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         else:
             # Continuous actions
             if isinstance(raw_action, (list, tuple, np.ndarray)):
-                speed = raw_action[0]
-                rel_heading = raw_action[1]
+                speed = raw_action[0] * self.max_speeds[player.idx]
+                rel_heading = raw_action[1] * 180
             # Aquaticus point field
             elif isinstance(raw_action, str):
                 speed, rel_heading = self._afp_to_speed_relheading(raw_action, player)

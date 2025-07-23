@@ -342,7 +342,7 @@ class BaseAttacker(BaseAgentPolicy):
                 return -1
         rel_bearing = local_rect_to_rel_bearing(vector)
         if self.continuous:
-            return (desired_speed_normalized * self.max_speed, rel_bearing)
+            return (desired_speed_normalized, rel_bearing/180)
         elif desired_speed_normalized == 0.5:
             if 1 >= rel_bearing >= -1:
                 return 12
