@@ -714,8 +714,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             return Discrete(len(self.discrete_action_map))
         elif action_space == "continuous":
             return Box(
-                low=np.array([0, -180], dtype=np.float32), #speed, relative heading
-                high=np.array([self.max_speeds[agent_idx], 180], dtype=np.float32) #speed, relative heading
+                low=np.array([0, -1], dtype=np.float32), #speed, relative heading
+                high=np.array([1, 1], dtype=np.float32) #speed, relative heading
             )
         elif action_space == "afp":
             return Discrete(len(self.aquaticus_field_points))
