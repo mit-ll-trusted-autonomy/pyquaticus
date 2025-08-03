@@ -1022,7 +1022,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Setup action and observation spaces
         self.discrete_action_map = [[spd, hdg] for (spd, hdg) in ACTION_MAP]
-        self.act_space_str = self.multiagent_var(action_space, dict, "action_space")
+        self.act_space_str = self.multiagent_var(action_space, type(action_space), "action_space")
+
+        if not isinstance(self.act_space_str, dict):
+            self.act_space_str = {agent_id: self.act_space_str[i] for i, agent_id in enumerate(self.players)}
+
         self.action_spaces = {agent_id: self.get_agent_action_space(self.act_space_str[agent_id], i) for i, agent_id in enumerate(self.players)}
         self.act_space_checked = {agent_id: False for agent_id in self.players}
         self.act_space_match = {agent_id: True for agent_id in self.players}
