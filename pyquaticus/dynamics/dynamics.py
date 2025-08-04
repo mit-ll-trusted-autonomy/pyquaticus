@@ -520,7 +520,7 @@ class Heron(BaseUSV):
                 dt=kwargs["dt"],
                 kp=0.9,
                 kd=0.6,
-                ki=0.3,
+                ki=0.0,
                 integral_limit=0.3,
                 output_limit=max_rudder
             )

@@ -918,6 +918,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
     metadata = {
         "render_modes": ["human", "rgb_array"],
+        "render_fps": 10,
         "name": "pyquaticus_v0",
     }
 
@@ -960,11 +961,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.set_config_values(config_dict)
 
         # Create players
-        if self.render_mode:
-            dt = 1 / self.render_fps
-        else:
-            dt = self.dt
-
         b_players = []
         r_players = []
         for i in range(0, self.num_blue):
@@ -972,7 +968,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 dynamics_registry[self.dynamics[i]](
                     gps_env=self.gps_env,
                     meters_per_mercator_xy=getattr(self, "meters_per_mercator_xy", None),
-                    dt=dt,
+                    dt=self.dt,
                     id=f'agent_{i}',
                     idx=i,
                     team=Team.BLUE_TEAM,
@@ -985,7 +981,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 dynamics_registry[self.dynamics[i]](
                     gps_env=self.gps_env,
                     meters_per_mercator_xy=getattr(self, "meters_per_mercator_xy", None),
-                    dt=dt,
+                    dt=self.dt,
                     id=f'agent_{i}',
                     idx=i,
                     team=Team.RED_TEAM,
@@ -1141,18 +1137,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             action_dict[player.id] = np.array([speed, rel_heading], dtype=np.float32)
 
         # Move agents and render
-        if self.render_mode:
-            for _i in range(self.num_renders_per_step):
-                for _j in range(self.sim_speedup_factor):
-                    self._move_agents(action_dict)
-                if self.lidar_obs:
-                    self._update_lidar()
-                self._render()
-        else:
-            for _ in range(self.sim_speedup_factor):
-                self._move_agents(action_dict)
-            if self.lidar_obs:
-                self._update_lidar()
+        for _ in range(self.sim_speedup_factor):
+            self._move_agents(action_dict)
+        if self.lidar_obs:
+            self._update_lidar()
 
         # Set the time
         self.current_time += self.sim_speedup_factor * self.dt
@@ -1836,7 +1824,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.long_state_hist_interval = config_dict.get("long_state_hist_interval", config_dict_std["long_state_hist_interval"])
 
         # Rendering parameters
-        self.render_fps = config_dict.get("render_fps", config_dict_std["render_fps"])
         self.screen_frac = config_dict.get("screen_frac", config_dict_std["screen_frac"])
         self.arena_buffer_frac = config_dict.get("arena_buffer_frac", config_dict_std["arena_buffer_frac"])
         self.render_ids = config_dict.get("render_agent_ids", config_dict_std["render_agent_ids"])
@@ -2005,16 +1992,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.a2a_line_width = 5  #pixels
             self.flag_render_radius = np.clip(self.pixel_size * self.flag_radius, 10, None)  #pixels
             self.agent_render_radius = np.clip(self.pixel_size * self.agent_radius, 15, None)  #pixels
-
-            # miscellaneous
-            self.num_renders_per_step = round(self.render_fps * self.dt)
+            self.num_renders_per_step = 1
 
             # check that time between frames (1/render_fps) is not larger than timestep (self.dt)
             frame_rate_err_msg = (
-                "Specified frame rate ({}) creates time intervals between frames larger"
-                " than specified timestep ({})".format(self.render_fps, self.dt)
+                "Frame rate ({}) creates time intervals between frames larger"
+                " than specified timestep ({})".format(self.metadata['render_fps'], self.dt)
             )
-            assert 1 / self.render_fps <= self.dt, frame_rate_err_msg
+            assert 1 / self.metadata['render_fps'] <= self.dt, frame_rate_err_msg
 
             # check that time warp is an integer >= 1
             if self.sim_speedup_factor < 1:
@@ -2553,7 +2538,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.traj_render_buffer = {agent_id: {"traj": [], "agent": [], "history": []} for agent_id in self.players}
 
             self.render_ctr = 0
-            self._render()
+            self.render()
 
         # Observations
         obs = {agent_id: self._history_to_obs(agent_id, "obs_hist_buffer") for agent_id in self.players}
@@ -4096,10 +4081,6 @@ when gps environment bounds are specified in meters"
             )
 
     def render(self):
-        """Overridden method inherited from `Gym`."""
-        return self._render()
-
-    def _render(self):
         """
         Overridden method inherited from `Gym`.
 
@@ -4325,7 +4306,7 @@ when gps environment bounds are specified in meters"
         # Render
         if self.render_mode == "human":
             pygame.event.pump()
-            self.clock.tick(self.render_fps)
+            self.clock.tick(self.metadata['render_fps'])
             pygame.display.flip()
 
         # Record
@@ -4364,7 +4345,7 @@ when gps environment bounds are specified in meters"
                 video_file_path = os.path.join(video_file_dir, video_file_name)
 
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                out = cv2.VideoWriter(video_file_path, fourcc, self.render_fps, (self.screen_width, self.screen_height))
+                out = cv2.VideoWriter(video_file_path, fourcc, self.metadata['render_fps'], (self.screen_width, self.screen_height))
                 for img in self.render_buffer:
                     out.write(cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
 
