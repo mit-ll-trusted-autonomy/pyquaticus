@@ -2538,7 +2538,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.traj_render_buffer = {agent_id: {"traj": [], "agent": [], "history": []} for agent_id in self.players}
 
             self.render_ctr = 0
-            self.render()
 
         # Observations
         obs = {agent_id: self._history_to_obs(agent_id, "obs_hist_buffer") for agent_id in self.players}
