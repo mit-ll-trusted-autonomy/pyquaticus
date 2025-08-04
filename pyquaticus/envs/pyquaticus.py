@@ -1182,8 +1182,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     self.obj_ray_detection_states[team][self.ray_int_label_map[agent_id]] = LIDAR_DETECTION_CLASS_MAP[detection_class_name]
 
         # Message
-        if self.message and self.render_mode:
-            print(self.message)
+        # if self.message and self.render_mode:
+        #     print(self.message)
 
         # Observations
         for agent_id in raw_action_dict:
