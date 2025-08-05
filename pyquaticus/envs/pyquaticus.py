@@ -918,8 +918,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
     metadata = {
         "render_modes": ["human", "rgb_array"],
-        "render_fps": 10,
-        "name": "pyquaticus_v0",
+        "name": "pyquaticus_v0"
     }
 
     def __init__(
@@ -1955,6 +1954,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         ### Environment Rendering ###
         if self.render_mode:
+            self.render_fps = round(1 / self.dt)
+
             # pygame orientation vector
             self.PYGAME_UP = Vector2((0.0, 1.0))
 
@@ -1992,14 +1993,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.a2a_line_width = 5  #pixels
             self.flag_render_radius = np.clip(self.pixel_size * self.flag_radius, 10, None)  #pixels
             self.agent_render_radius = np.clip(self.pixel_size * self.agent_radius, 15, None)  #pixels
-            self.num_renders_per_step = 1
 
             # check that time between frames (1/render_fps) is not larger than timestep (self.dt)
             frame_rate_err_msg = (
                 "Frame rate ({}) creates time intervals between frames larger"
-                " than specified timestep ({})".format(self.metadata['render_fps'], self.dt)
+                " than specified timestep ({})".format(self.render_fps, self.dt)
             )
-            assert 1 / self.metadata['render_fps'] <= self.dt, frame_rate_err_msg
+            assert 1 / self.render_fps <= self.dt, frame_rate_err_msg
 
             # check that time warp is an integer >= 1
             if self.sim_speedup_factor < 1:
@@ -4241,17 +4241,14 @@ when gps environment bounds are specified in meters"
                 self.screen.blit(rotated_surface, rotated_blit_pos)
 
                 # save agent surface for trajectory rendering
-                if (
-                    self.render_traj_mode
-                    and (self.render_ctr-1) % self.num_renders_per_step == 0
-                ):
+                if self.render_traj_mode:
                     # add traj/ agent render data
                     if self.render_traj_mode.startswith("traj"):
                         self.traj_render_buffer[player.id]["traj"].insert(0, blit_pos)
 
                     if (
                         self.render_traj_mode.endswith("agent") and
-                        ((self.render_ctr-1) / self.num_renders_per_step) % self.render_traj_freq == 0
+                        (self.render_ctr-1) % self.render_traj_freq == 0
                     ):
                         self.traj_render_buffer[player.id]['agent'].insert(0, (rotated_blit_pos, rotated_surface))
 
@@ -4268,7 +4265,7 @@ when gps environment bounds are specified in meters"
                                 floor(self.render_traj_cutoff / self.render_traj_freq) +
                                 (
                                     (
-                                        ((self.render_ctr-1) / self.num_renders_per_step) % self.render_traj_freq +
+                                        (self.render_ctr-1) % self.render_traj_freq +
                                         self.render_traj_freq * floor(self.render_traj_cutoff / self.render_traj_freq)
                                     ) <= self.render_traj_cutoff
                                 )
@@ -4305,7 +4302,7 @@ when gps environment bounds are specified in meters"
         # Render
         if self.render_mode == "human":
             pygame.event.pump()
-            self.clock.tick(self.metadata['render_fps'])
+            self.clock.tick(self.render_fps)
             pygame.display.flip()
 
         # Record
@@ -4344,7 +4341,7 @@ when gps environment bounds are specified in meters"
                 video_file_path = os.path.join(video_file_dir, video_file_name)
 
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                out = cv2.VideoWriter(video_file_path, fourcc, self.metadata['render_fps'], (self.screen_width, self.screen_height))
+                out = cv2.VideoWriter(video_file_path, fourcc, self.render_fps, (self.screen_width, self.screen_height))
                 for img in self.render_buffer:
                     out.write(cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
 
