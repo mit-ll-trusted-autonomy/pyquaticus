@@ -1218,6 +1218,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             if self.normalize_obs:
                 info[agent_id]["unnorm_obs"] = self._history_to_obs(agent_id, "unnorm_obs_hist_buffer")
 
+            #low-level action
+            info[agent_id]["low_level_action"] = action_dict[agent_id]
+
         return obs, rewards, terminated, truncated, info
 
     def _move_agents(self, action_dict):
