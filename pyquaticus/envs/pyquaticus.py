@@ -372,8 +372,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
         global_state_normalizer.register("blue_flag_home", pos_max, pos_min)
         global_state_normalizer.register("red_flag_home", pos_max, pos_min)
-        global_state_normalizer.register("blue_flag_pos", pos_max, pos_min)
-        global_state_normalizer.register("red_flag_pos", pos_max, pos_min)
+        # global_state_normalizer.register("blue_flag_pos", pos_max, pos_min)
+        # global_state_normalizer.register("red_flag_pos", pos_max, pos_min)
 
         # global_state_normalizer.register("blue_flag_pickup", max_bool, min_bool)
         # global_state_normalizer.register("red_flag_pickup", max_bool, min_bool)
@@ -895,7 +895,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     (https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarine#section5).
 
     ### Arguments
+    n_envs: number of vectorized environments to run
+
+    n_cfs: number of counterfactuals to run from each state
+
     team_size: number of agents per team
+
+    action_repeat: number of times the step function is called before game-state checks are run and counterfactuals are re-synced
     
     action_space: type of action space for each agent ('discrete', 'continuous', or 'afp')
         (1) 'discrete': discrete action space with all combinations of max speed, half speed; and 45 degree relative heading intervals
@@ -909,7 +915,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         Note 2: All agents can take each type of action input to the step function regardless of the type action space specified.
                 This parameter is just used to set the PettingZoo standard action_spaces attribute.
 
-        Note 3: Inputs to the step function for the 'afp' action space will be strings AQUATICUS_FIELD_POINTS (see config.py)
+        Note 3: Inputs to the step function for the 'afp' action space will be strings from AQUATICUS_FIELD_POINTS (see config.py)
     
     reward_config: a dictionary configuring the reward structure (see rewards.py)
     
@@ -923,7 +929,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
     def __init__(
         self,
+        n_envs: int = 1,
+        n_cfs: int = 1,
         team_size: int = 1,
+        action_repeat: int = 1,
         action_space: Union[str, list[str], dict[str, str]] = "discrete",
         reward_config: dict = None,
         config_dict = config_dict_std,
@@ -931,7 +940,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     ):
         super().__init__()
 
+        self.n_envs = n_envs
+        self.n_cfs = n_cfs
         self.team_size = team_size
+        self.action_repeat = action_repeat
         self.num_blue = team_size
         self.num_red = team_size
         self.reward_config = {} if reward_config is None else reward_config
@@ -948,10 +960,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.active_collisions = None #current collisions between all agents
         self.game_events = {
             team: {
-                "scores": 0,
-                "grabs": 0,
-                "tags": 0,
-                "collisions": 0,
+                "scores": np.zeros((n_envs, n_cfs), dtype=int),
+                "grabs": np.zeros((n_envs, n_cfs), dtype=int),
+                "tags": np.zeros((n_envs, n_cfs), dtype=int),
+                "collisions": np.zeros((n_envs, n_cfs), dtype=int),
             }
             for team in Team
         }
@@ -1771,6 +1783,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 print("Please consult config.py for variable names.")
                 print()
 
+        # Environment parameters
+        self.n_envs = config_dict.get("n_envs", config_dict_std["n_envs"])
+        self.n_cfs = config_dict.get("n_cfs", config_dict_std["n_cfs"])
+
         # Geometry parameters
         self.gps_env = config_dict.get("gps_env", config_dict_std["gps_env"])
         self.topo_contour_eps = config_dict.get("topo_contour_eps", config_dict_std["topo_contour_eps"])
@@ -1931,29 +1947,24 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             lidar_range=lidar_range
         )
 
-        # Scale the aquaticus point field by env size
+        # Scale the aquaticus point field by env size 
         if not self.gps_env:
+            self.aquaticus_field_points = get_afp()
+
             if not np.all(np.isclose(self.scrimmage_coords[:, 0], 0.5*self.env_size[0])):
                 print("Warning! Aquaticus field points are not side/team agnostic when environment is not symmetric.")
                 print(f"Environment dimensions: {self.env_size}")
                 print(f"Scrimmage line coordinates: {self.scrimmage_coords}")
-
                 self.afp_sym = False
-                self.aquaticus_field_points = get_afp()
-                for k, v in self.aquaticus_field_points.items():
-                    pt = self.env_rot_matrix @ np.asarray(v)
-                    pt += self.env_ll
-                    pt *= self.env_size
-                    self.aquaticus_field_points[k] = pt
-
             else:
                 self.afp_sym = True
-                self.aquaticus_field_points = get_afp()
-                for k, v in self.aquaticus_field_points.items():
-                    pt = self.env_rot_matrix @ np.asarray(v)
-                    pt += self.env_ll
-                    pt *= self.env_size
-                    self.aquaticus_field_points[k] = pt
+                #TODO: pre-compute blue/ red symmetric field points so not necessary to be done every time _afp_to_speed_relheading() is called 
+
+            for k, v in self.aquaticus_field_points.items():
+                pt = self.env_rot_matrix @ np.asarray(v)
+                pt += self.env_ll
+                pt *= self.env_size
+                self.aquaticus_field_points[k] = pt
 
         ### Environment Rendering ###
         if self.render_mode:
