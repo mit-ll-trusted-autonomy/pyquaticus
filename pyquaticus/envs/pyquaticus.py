@@ -256,10 +256,10 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
     def _relheading_to_global_heading(self, player_heading, relheading):
         return angle180((player_heading + relheading) % 360)
 
-    def _register_state_elements(self, num_on_team, num_obstacles):
+    def _register_state_elements(self, num_on_team, num_obstacles, n_cfs):
         """Initializes the normalizers."""
-        agent_obs_normalizer = ObsNormalizer(False)
-        global_state_normalizer = ObsNormalizer(False)
+        agent_obs_normalizer = ObsNormalizer(False, n_cfs)
+        global_state_normalizer = ObsNormalizer(False, n_cfs)
 
         ### Agent Observation Normalizer ###
         if self.lidar_obs:
@@ -895,7 +895,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     (https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarine#section5).
 
     ### Arguments
-    n_envs: number of vectorized environments to run
+    n_envs: number of vectorized environments to run (not implemented yet)
 
     n_cfs: number of counterfactuals to run from each state
 
@@ -929,7 +929,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
     def __init__(
         self,
-        n_envs: int = 1,
+        # n_envs: int = 1,
         n_cfs: int = 1,
         team_size: int = 1,
         action_repeat: int = 1,
@@ -940,7 +940,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     ):
         super().__init__()
 
-        self.n_envs = n_envs
+        # self.n_envs = n_envs
         self.n_cfs = n_cfs
         self.team_size = team_size
         self.action_repeat = action_repeat
@@ -960,10 +960,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.active_collisions = None #current collisions between all agents
         self.game_events = {
             team: {
-                "scores": np.zeros((n_envs, n_cfs), dtype=int),
-                "grabs": np.zeros((n_envs, n_cfs), dtype=int),
-                "tags": np.zeros((n_envs, n_cfs), dtype=int),
-                "collisions": np.zeros((n_envs, n_cfs), dtype=int),
+                "scores": np.zeros(n_cfs, dtype=int),
+                "grabs": np.zeros(n_cfs, dtype=int),
+                "tags": np.zeros(n_cfs, dtype=int),
+                "collisions": np.zeros(n_cfs, dtype=int),
             }
             for team in Team
         }
@@ -1038,7 +1038,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.act_space_checked = {agent_id: False for agent_id in self.players}
         self.act_space_match = {agent_id: True for agent_id in self.players}
 
-        self.agent_obs_normalizer, self.global_state_normalizer = self._register_state_elements(team_size, len(self.obstacles))
+        self.agent_obs_normalizer, self.global_state_normalizer = self._register_state_elements(team_size, len(self.obstacles), n_cfs)
         self.observation_spaces = {agent_id: self.get_agent_observation_space() for agent_id in self.players}
 
         # Set up rewards

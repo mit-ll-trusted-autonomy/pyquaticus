@@ -51,16 +51,10 @@ class Player:
     id: str
     idx: int
     team: Team
-    pos: list[float] = field(init=False, default_factory=list)
-    speed: float = field(init=False, default_factory=float)
-    heading: float = field(init=False, default_factory=float)
-    prev_pos: list[float] = field(init=False, default_factory=list)
-    has_flag: bool = field(init=False, default=False)
-    on_own_side: bool = field(init=False, default=True)
-    tagging_cooldown: float = field(init=False)
-    cantag_time: float = field(init=False, default=0.0)
-    is_tagged: bool = field(init=False, default=False)
-    oob: bool = field(init=False, default=False)
+    pos: Optional[np.ndarray] = field(init=False, default=None)
+    speed: Optional[np.ndarray] = field(init=False, default=None)
+    heading: Optional[np.ndarray] = field(init=False, default=None)
+    prev_pos: Optional[np.ndarray] = field(init=False, default=None)
 
 @dataclass
 class RenderingPlayer(Player):
@@ -207,14 +201,11 @@ class Flag:
 
     team: Team
     home: list[float] = field(init=False, default_factory=list)
-    pos: list[float] = field(init=False, default_factory=list)
-    taken: bool = field(init=False, default=False)
+    pos: Optional[np.ndarray] = field(init=False, default=None)
 
-    def reset(self):
+    def reset(self, idxs):
         """Resets the flags `pos` to be `home`."""
-        self.pos = self.home.copy()
-        self.taken = False
-
+        self.pos[idxs] = self.home[idxs]
 
 @dataclass
 class Obstacle:
