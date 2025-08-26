@@ -256,10 +256,10 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
     def _relheading_to_global_heading(self, player_heading, relheading):
         return angle180((player_heading + relheading) % 360)
 
-    def _register_state_elements(self, num_on_team, num_obstacles, n_cfs):
+    def _register_state_elements(self, num_on_team, num_obstacles, n_envs):
         """Initializes the normalizers."""
-        agent_obs_normalizer = ObsNormalizer(False, n_cfs)
-        global_state_normalizer = ObsNormalizer(False, n_cfs)
+        agent_obs_normalizer = ObsNormalizer(False, n_envs)
+        global_state_normalizer = ObsNormalizer(False, n_envs)
 
         ### Agent Observation Normalizer ###
         if self.lidar_obs:
@@ -895,13 +895,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     (https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarine#section5).
 
     ### Arguments
-    n_envs: number of vectorized environments to run (not implemented yet)
-
-    n_cfs: number of counterfactuals to run from each state
+    n_envs: number of vectorized environments to run
 
     team_size: number of agents per team
 
-    action_repeat: number of times the step function is called before game-state checks are run and counterfactuals are re-synced
+    action_repeat: number of times the step function is called before game-state checks are run
     
     action_space: type of action space for each agent ('discrete', 'continuous', or 'afp')
         (1) 'discrete': discrete action space with all combinations of max speed, half speed; and 45 degree relative heading intervals
@@ -929,8 +927,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
     def __init__(
         self,
-        # n_envs: int = 1,
-        n_cfs: int = 1,
+        n_envs: int = 1,
         team_size: int = 1,
         action_repeat: int = 1,
         action_space: Union[str, list[str], dict[str, str]] = "discrete",
@@ -940,8 +937,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     ):
         super().__init__()
 
-        # self.n_envs = n_envs
-        self.n_cfs = n_cfs
+        self.n_envs = n_envs
         self.team_size = team_size
         self.action_repeat = action_repeat
         self.num_blue = team_size
@@ -950,23 +946,29 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.config_dict = config_dict
         self.render_mode = render_mode
 
-        self.reset_count = 0
-        self.current_time = 0
+        self.reset_count = np.zeros(n_envs, dtype=int)
+        self.step_count = np.zeros(n_envs, dtype=int)
+        self.current_time = np.zeros(n_envs)
         self.state = None
         self.prev_state = None
-        self.dones = {}
+        self.dones = {
+            "blue": np.zeros(n_envs, dtype=bool),
+            "red": np.zeros(n_envs, dtype=bool),
+            "__all__": np.zeros(n_envs, dtype=bool)
+        }
         self.aquaticus_field_points = None
         self.afp_sym = True
-        self.active_collisions = None #current collisions between all agents
+        self.active_collisions = np.zeros((n_envs, 2*team_size, 2*team_size), dtype=bool) #current collisions between all agents
         self.game_events = {
             team: {
-                "scores": np.zeros(n_cfs, dtype=int),
-                "grabs": np.zeros(n_cfs, dtype=int),
-                "tags": np.zeros(n_cfs, dtype=int),
-                "collisions": np.zeros(n_cfs, dtype=int),
+                "scores": np.zeros(n_envs, dtype=int),
+                "grabs": np.zeros(n_envs, dtype=int),
+                "tags": np.zeros(n_envs, dtype=int),
+                "collisions": np.zeros(n_envs, dtype=int),
             }
             for team in Team
         }
+        self.message = np.array(["" for i in range(n_envs)])
 
         # Set variables from config
         self.set_config_values(config_dict)
@@ -1038,7 +1040,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.act_space_checked = {agent_id: False for agent_id in self.players}
         self.act_space_match = {agent_id: True for agent_id in self.players}
 
-        self.agent_obs_normalizer, self.global_state_normalizer = self._register_state_elements(team_size, len(self.obstacles), n_cfs)
+        self.agent_obs_normalizer, self.global_state_normalizer = self._register_state_elements(team_size, len(self.obstacles), n_envs)
         self.observation_spaces = {agent_id: self.get_agent_observation_space() for agent_id in self.players}
 
         # Set up rewards
@@ -1061,17 +1063,19 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if len(self.obstacles) > 0:
             global EnvWaypointPolicy
             from pyquaticus.base_policies.env_waypoint_policy import EnvWaypointPolicy
-            for i in range(self.num_agents):
-                self.rrt_policies.append(
-                    EnvWaypointPolicy(
-                        self.obstacles,
-                        self.env_size,
-                        self.max_speeds[i],
-                        capture_radius=0.45 * self.catch_radius,
-                        slip_radius=self.slip_radius[i],
-                        avoid_radius=2 * self.agent_radius[i]
+            for i in range(self.n_envs):
+                self.rrt_policies.append([])
+                for j in range(self.num_agents):
+                    self.rrt_policies[i].append(
+                        EnvWaypointPolicy(
+                            self.obstacles,
+                            self.env_size,
+                            self.max_speeds[j],
+                            capture_radius=0.45*self.catch_radius,
+                            slip_radius=self.slip_radius[j],
+                            avoid_radius=2*self.agent_radius[j]
+                        )
                     )
-                )
 
     def step(self, raw_action_dict):
         """
@@ -1783,10 +1787,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 print("Please consult config.py for variable names.")
                 print()
 
-        # Environment parameters
-        self.n_envs = config_dict.get("n_envs", config_dict_std["n_envs"])
-        self.n_cfs = config_dict.get("n_cfs", config_dict_std["n_cfs"])
-
         # Geometry parameters
         self.gps_env = config_dict.get("gps_env", config_dict_std["gps_env"])
         self.topo_contour_eps = config_dict.get("topo_contour_eps", config_dict_std["topo_contour_eps"])
@@ -2363,19 +2363,18 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             tagging_cooldown=self.tagging_cooldown
         )
 
-    def _reset_dones(self):
+    def _reset_dones(self, env_idxs):
         """Resets the environments done indicators."""
-        dones = {}
-        dones["red"] = False
-        dones["blue"] = False
-        dones["__all__"] = False
-        return dones
+        self.dones["blue"][env_idxs] = False
+        self.dones["red"][env_idxs] = False
+        self.dones["__all__"][env_idxs] = False
 
-    def reset(self, seed=None, options: Optional[dict] = None):
+    def reset(self, env_idxs=None, seed=None, options: Optional[dict] = None):
         """
         Resets the environment so that it is ready to be used.
 
         Args:
+            env_idxs (optional): Which environments to reset.
             seed (optional): Starting seed.
             options (optional): Additonal options for resetting the environment:
                 -"normalize_obs": whether or not to normalize observations (sets self.normalize_obs)
@@ -2410,11 +2409,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         """
         self._seed(seed=seed)
 
-        self.message = ""
-        self.current_time = 0
-        self.reset_count += 1
-        self.dones = self._reset_dones()
-        self.active_collisions = np.zeros((self.num_agents, self.num_agents), dtype=bool)
+        if not env_idxs:
+            env_idxs = np.arange(self.n_envs)
+
+        self.message[env_idxs] = ""
+        self.reset_count[env_idxs] += 1
+        self.current_time[env_idxs] = 0.
+        self._reset_dones(env_idxs)
+        self.active_collisions[env_idxs] = np.zeros((self.num_agents, self.num_agents), dtype=bool)
 
         if options is not None:
             self.normalize_obs = options.get("normalize_obs", self.normalize_obs)

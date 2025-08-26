@@ -38,10 +38,10 @@ class ObsNormalizer:
     to the registered observation elements.
     """
 
-    def __init__(self, debug=False, n_cfs=1):
+    def __init__(self, debug=False, n_envs=1):
         self._bounds = OrderedDict()
         self._debug = debug
-        self.n_cfs = n_cfs
+        self.n_envs = n_envs
 
     @property
     def flattened_length(self):
@@ -107,12 +107,12 @@ class ObsNormalizer:
 
         Returns
         -------
-            np.ndarray[float32]: flattened state vector
+            np.ndarray[float32]: flattened state vector(s)
         """
         arrays = [self._reshape_value(k, obs[k]) for k in self._bounds]
         state_array = np.concatenate(arrays, axis=-1)
-        assert len(state_array.shape[1:]) == 1, "Expecting flattened vectors for each counterfactual"
-        assert state_array.shape[0] == 1, f"Expecting {self.n_cfs} counterfactual vectors"
+        assert len(state_array.shape) == 2, "Expecting flattened state vectors for each environment"
+        assert state_array.shape[0] == self.n_envs, f"Expecting {self.n_envs} environment state vector(s)"
         return state_array
 
     def normalized(self, obs: Dict[str, np.ndarray]):
@@ -143,7 +143,7 @@ class ObsNormalizer:
         r = (high - low) / 2.0
         assert state_array.shape[-1] == avg.shape
         norm_obs = (state_array - avg) / r
-        return norm_obs.reshape(self.normalized_space.shape)
+        return norm_obs.reshape(self.n_envs, self.normalized_space.shape)
 
     def unnormalized(self, norm_obs: np.ndarray) -> Dict[Union[str, tuple], Union[np.ndarray, float]]:
         """
@@ -179,8 +179,8 @@ class ObsNormalizer:
     def _reshape_value(self, key, value):
         assert key in self._bounds, "Expecting to run only on registered keys"
         value = np.asarray(value, dtype=np.float32)
-        if value.shape[-1] != self._bounds[key].shape:
-            value = np.reshape(value, (*value.shape[:-2], *self._bounds[key].shape))
+        if value.shape[1:] != self._bounds[key].shape:
+            value = np.reshape(value, (*value.shape[0], *self._bounds[key].shape))
         if self._debug and not self._bounds[key].contains(value):
             raise ValueError(
                 f"Provided value for {key} is not within bound:\n\t"
