@@ -109,10 +109,10 @@ class ObsNormalizer:
         -------
             np.ndarray[float32]: flattened state vector(s)
         """
-        arrays = [self._reshape_value(k, obs[k]) for k in self._bounds]
+        arrays = [self._reshape_value(k, obs[k]).reshape(self.n_envs, -1) for k in self._bounds]
         state_array = np.concatenate(arrays, axis=-1)
-        assert len(state_array.shape) == 2, "Expecting flattened state vectors for each environment"
         assert state_array.shape[0] == self.n_envs, f"Expecting {self.n_envs} environment state vector(s)"
+        assert len(state_array.shape) == 2, "Expecting flattened state vectors for each environment"
         return state_array
 
     def normalized(self, obs: Dict[str, np.ndarray]):
@@ -167,8 +167,8 @@ class ObsNormalizer:
             r = (high - low) / 2.0
             assert len(low.shape) == 1
             num_entries = low.shape[0]
-            obs_slice = norm_obs[idx: idx + num_entries]
-            new_entry = (r * obs_slice + avg).reshape(bound.low.shape)
+            obs_slice = norm_obs[:, idx: idx + num_entries]
+            new_entry = (r * obs_slice + avg).reshape(self.n_envs, bound.low.shape)
             if num_entries == 1:
                 # unpack
                 new_entry = new_entry.item()
@@ -180,7 +180,7 @@ class ObsNormalizer:
         assert key in self._bounds, "Expecting to run only on registered keys"
         value = np.asarray(value, dtype=np.float32)
         if value.shape[1:] != self._bounds[key].shape:
-            value = np.reshape(value, (*value.shape[0], *self._bounds[key].shape))
+            value = np.reshape(value, (value.shape[0], *self._bounds[key].shape))
         if self._debug and not self._bounds[key].contains(value):
             raise ValueError(
                 f"Provided value for {key} is not within bound:\n\t"

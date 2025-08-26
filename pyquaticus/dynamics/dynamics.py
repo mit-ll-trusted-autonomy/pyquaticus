@@ -27,7 +27,7 @@ class Dynamics(RenderingPlayer):
 
         raise NotImplementedError
 
-    def reset(self):
+    def reset(self, env_idxs):
         """
         Set all model-specific time-varying state/control values in the state dictionary
         to their initialization values. Do not change pos, speed, heading, is_tagged,
@@ -290,14 +290,14 @@ class BaseUSV(Dynamics):
             "heading": PID(dt=kwargs["dt"], kp=0.5, kd=0.1, ki=0.012, integral_limit=0.2, output_limit=max_rudder)
         }
 
-    def reset(self):
+    def reset(self, env_idxs):
         """
         Set all model-specific time-varying state/control values in the state dictionary
         to their initialization values. Do not change pos, speed, heading, is_tagged,
         has_flag, or on_own_side or other common state values found in base Player class.
         """
-        self.state['thrust'] = 0
-        self.state['rudder'] = 0
+        self.state['thrust'][env_idxs] = 0
+        self.state['rudder'][env_idxs] = 0
 
     def rotate(self, theta=180):
         """

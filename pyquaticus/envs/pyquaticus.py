@@ -882,10 +882,10 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
     def _set_game_events_from_state(self):
         for team in self.game_events:
-            self.game_events[team]['scores'] = self.state['captures'][int(team)]
-            self.game_events[team]['tags'] = self.state['tags'][int(team)]
-            self.game_events[team]['grabs'] = self.state['grabs'][int(team)]
-            self.game_events[team]['collisions'] = np.sum(self.state['agent_collisions'][self.agent_inds_of_team[team]])
+            self.game_events[team]['scores'] = self.state['captures'][:, int(team)]
+            self.game_events[team]['tags'] = self.state['tags'][:, int(team)]
+            self.game_events[team]['grabs'] = self.state['grabs'][:, int(team)]
+            self.game_events[team]['collisions'] = np.sum(self.state['agent_collisions'][:, self.agent_inds_of_team[team]], axis=-1)
 
 
 class PyQuaticusEnv(PyQuaticusEnvBase):
@@ -2432,35 +2432,40 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Reset env from state_dict 
         if state_dict != None:
-            if self.reset_count == 0:
+            if np.any(self.reset_count[env_idxs] == 0):
                 raise Exception(
                     "Resetting from state_dict should only be done for an environment that has been previously reset."
                 )
-            self.state = copy.deepcopy(state_dict)
+            for k in self.state:
+                self.state[k][env_idxs] = copy.deepcopy(state_dict[k])
             self._set_player_attributes_from_state()
             self._set_flag_attributes_from_state()
             self._set_game_events_from_state()
-            for i, player in enumerate(self.players.values()):
-                player.state = self.state['agent_dynamics'][i]
 
-            # unnormalized obs
+            # obs history buffer
             if self.normalize_obs:
-                if "unnorm_obs_hist_buffer" not in state_dict:
-                    self.state["unnorm_obs_hist_buffer"] = copy.deepcopy(self.state["obs_hist_buffer"])
+                if self.state["obs_hist_buffer"][self.agents[0]].dtype == object:
                     self.state["obs_hist_buffer"] = {
-                        agent_id: np.array(
-                            [self.agent_obs_normalizer.normalized(unnorm_obs) for unnorm_obs in self.state["obs_hist_buffer"][agent_id]]
-                        )
+                        agent_id: np.array([
+                            [self.agent_obs_normalizer.normalized(unnorm_obs) for unnorm_obs in self.state["obs_hist_buffer"][agent_id][env_idx]]
+                            for env_idx in env_idxs
+                        ])
                         for agent_id in self.agents
                     }
             else:
-                if "unnorm_obs_hist_buffer" in state_dict:
-                   del self.state["unnorm_obs_hist_buffer"] 
+                if not self.state["obs_hist_buffer"][self.agents[0]].dtype == object:
+                    self.state["obs_hist_buffer"] = {
+                        agent_id: np.array([
+                            [self.agent_obs_normalizer.unnormalized(obs) for obs in self.state["obs_hist_buffer"][agent_id][env_idx]]
+                            for env_idx in env_idxs
+                        ])
+                        for agent_id in self.agents
+                    }
 
         # Reset env from init_dict or standard init
         else:
             if init_dict != None:
-                self._set_state_from_init_dict(init_dict)
+                self._set_state_from_init_dict(init_dict, env_idxs)
             else:
                 flag_homes = [flag.home for flag in self.flags]
                 agent_positions, agent_spd_hdg, agent_on_sides = self._generate_agent_starts(flag_homes)
@@ -2483,7 +2488,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     "captures":                  np.zeros(len(self.agents_of_team), dtype=int), #total number of flag captures made by this team
                     "tags":                      np.zeros(len(self.agents_of_team), dtype=int), #total number of tags made by this team
                     "grabs":                     np.zeros(len(self.agents_of_team), dtype=int), #total number of flag grabs made by this team
-                    "agent_collisions":          np.zeros(len(self.players), dtype=int) #total number of collisions per agent
+                    "agent_collisions":          np.zeros(self.num_agents, dtype=int) #total number of collisions per agent
                 }
 
             # set player and flag attributes and self.game_events
@@ -2491,7 +2496,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self._set_flag_attributes_from_state()
             self._set_game_events_from_state()
             for player in self.players.values():
-                player.reset() #reset agent-specific dynamics
+                player.reset(env_idxs) #reset agent-specific dynamics
 
             self.state['agent_dynamics'] = np.array([player.state for player in self.players.values()])
 
@@ -2621,7 +2626,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             "captures":                  np.zeros(len(self.agents_of_team), dtype=int),
             "tags":                      np.zeros(len(self.agents_of_team), dtype=int),
             "grabs":                     np.zeros(len(self.agents_of_team), dtype=int),
-            "agent_collisions":          np.zeros(len(self.players), dtype=int), #total number of collisions per agent
+            "agent_collisions":          np.zeros(self.num_agents, dtype=int), #total number of collisions per agent
         }
 
         ### Set Agents ###
@@ -2769,21 +2774,16 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
     def _set_player_attributes_from_state(self):
         for i, player in enumerate(self.players.values()):
-            player.pos = self.state["agent_position"][i]
-            player.prev_pos = self.state["prev_agent_position"][i]
-            player.speed = self.state["agent_speed"][i]
-            player.heading = self.state["agent_heading"][i]
-            player.on_own_side = self.state["agent_on_sides"][i]
-            player.oob = self.state["agent_oob"][i]
-            player.has_flag = self.state["agent_has_flag"][i]
-            player.is_tagged = self.state["agent_is_tagged"][i]
-            player.tagging_cooldown = self.state["agent_tagging_cooldown"][i]
+            player.pos = self.state['agent_position'][:, i]
+            player.prev_pos = self.state['prev_agent_position'][:, i]
+            player.speed = self.state['agent_speed'][:, i]
+            player.heading = self.state['agent_heading'][:, i]
+            player.state = self.state['agent_dynamics'][:, i]
 
     def _set_flag_attributes_from_state(self):
         for flag in self.flags:
             team_idx = int(flag.team)
-            flag.pos = self.state['flag_position'][team_idx]
-            flag.taken = self.state['flag_taken'][team_idx]
+            flag.pos = self.state['flag_position'][:, team_idx]
 
             #note: we do not set flag.home because this should already
             #be set in __init__() and match what is in the state dictionary
