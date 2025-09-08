@@ -2578,7 +2578,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         return obs, info
 
-    def _set_state_from_init_dict(self, init_dict: dict):
+    def _set_state_from_init_dict(self, init_dict: dict, env_idxs: list):
         """
         Args:
             "init_dict": partial state dictionary for initializing the environment with the following optional keys:
@@ -2614,10 +2614,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             "agent_speed":               None, #to be set with init_dict and _generate_agent_starts()
             "agent_heading":             None, #to be set with init_dict and _generate_agent_starts()
             "agent_on_sides":            None, #to be set with init_dict and _generate_agent_starts()
-            "agent_oob":                 np.zeros(self.num_agents, dtype=bool), 
-            "agent_has_flag":            np.zeros(self.num_agents, dtype=bool),
-            "agent_is_tagged":           np.zeros(self.num_agents, dtype=bool),
-            "agent_made_tag":            [None] * self.num_agents,
+            "agent_oob":                 np.zeros((self.n_envs, self.num_agents), dtype=bool), 
+            "agent_has_flag":            np.zeros((self.n_envs, self.num_agents), dtype=bool),
+            "agent_is_tagged":           np.zeros((self.n_envs, self.num_agents), dtype=bool),
+            "agent_made_tag":            -np.ones((self.n_envs, self.num_agents), dtype=int),
             "agent_tagging_cooldown":    np.array([self.tagging_cooldown] * self.num_agents),
             "dist_bearing_to_obstacles": {agent_id: np.zeros((len(self.obstacles), 2)) for agent_id in self.players},
             "flag_home":                 np.array(flag_homes),

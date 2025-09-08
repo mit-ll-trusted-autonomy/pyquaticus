@@ -168,10 +168,10 @@ class ObsNormalizer:
             assert len(low.shape) == 1
             num_entries = low.shape[0]
             obs_slice = norm_obs[:, idx: idx + num_entries]
-            new_entry = (r * obs_slice + avg).reshape(self.n_envs, bound.low.shape)
-            if num_entries == 1:
-                # unpack
-                new_entry = new_entry.item()
+            new_entry = (r * obs_slice + avg).reshape(self.n_envs, *bound.low.shape)
+            # if num_entries == 1:
+            #     # unpack
+            #     new_entry = new_entry.item()
             obs[k] = new_entry
             idx += num_entries
         return obs
