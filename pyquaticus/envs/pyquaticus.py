@@ -2568,7 +2568,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
                   *Note 1: These variables can either be specified as a dict with agent id's as keys, in which case it is not
                            required to specify variable-specific information for all agents and _generate_agent_starts() will
-                           be used to generate unspecified information, or as an array, which must be be of length self.num_agents
+                           be used to generate unspecified information, or as an array, which must be be of shape (self.n_envs, self.num_agents)
                            and the indices of the entries must match the indices of the corresponding agents' ids in self.agents
 
                  **Note 2: 'agent_pos_unit' can be either "m" (meters relative to origin), "wm_xy" (web mercator xy),
@@ -2630,53 +2630,111 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         agent_spd_dict = {}
         agent_hdg_dict = {}
 
-        for state_var in ["agent_position", "agent_speed", "agent_heading"]:
+        #position
+        for state_var in ["agent_position"]:
             if state_var in init_dict:
-                if (
-                    isinstance(init_dict[state_var], (list, tuple, np.ndarray)) and
-                    len(init_dict[state_var]) != self.num_agents
-                ):
-                    raise Exception(f"{state_var} {str(type(init_dict[state_var]))[8:-2]} must be be of length self.num_agents with entries matching order of self.agents")
-                else:
-                    for i, agent_id in enumerate(self.agents):
-                        if isinstance(init_dict[state_var], (list, tuple, np.ndarray)):
-                            val = init_dict[state_var][i]
-                        else: 
-                            val = init_dict.get(state_var).get(agent_id, None)
-                            if val == None:
-                                continue
+                if isinstance(init_dict[state_var], (list, tuple, np.ndarray)):
+                    try:
+                        init_dict[state_var] = np.asarray(init_dict[state_var]).reshape(-1, self.num_agents, 2)
+                    except:
+                        raise Exception(
+                            f"{state_var} {str(type(init_dict[state_var]))[8:-2]} must be be of shape (<={self.n_envs}, {self.num_agents}, 2) with entries matching order of self.agents"
+                        )
 
-                        val = copy.deepcopy(val)
+                for i, agent_id in enumerate(self.agents):
+                    if isinstance(init_dict[state_var], np.ndarray):
+                        val = init_dict[state_var][:, i]
+                    else: 
+                        val = init_dict.get(state_var).get(agent_id, None)
+                        if val == None:
+                            continue
 
-                        # position
-                        if state_var == "agent_position":
-                            val = np.array(val, dtype=float)
-                            if self.gps_env:
-                                if agent_pos_unit == "ll":
-                                    val = np.asarray(mt.xy(val[1], val[0]))
-                                    val = wrap_mercator_x_dist(val - self.env_bounds[0])
-                                elif agent_pos_unit == "wm_xy":
-                                    val = wrap_mercator_x_dist(val - self.env_bounds[0])
-                                else:
-                                    val /= self.meters_per_mercator_xy
-                            agent_pos_dict[agent_id] = val
-                        # speed
-                        elif state_var == "agent_speed":
-                            agent_spd_dict[agent_id] = val
-                        # heading
+                        val = val.reshape(-1, 2)
+
+
+                    val = copy.deepcopy(val)
+
+                    # position
+                    if state_var == "agent_position":
+                        val = np.array(val, dtype=float)
+                        if self.gps_env:
+                            if agent_pos_unit == "ll":
+                                for i in range(self.n_envs):
+                                    val[i] = np.asarray(mt.xy(val[i][1], val[i][0]))
+                                val = wrap_mercator_x_dist(val - self.env_bounds[0])
+                            elif agent_pos_unit == "wm_xy":
+                                val = wrap_mercator_x_dist(val - self.env_bounds[0])
+                            else:
+                                val /= self.meters_per_mercator_xy
+                        agent_pos_dict[agent_id] = val
+                    # speed
+                    elif state_var == "agent_speed":
+                        agent_spd_dict[agent_id] = val
+                    # heading
+                    else:
+                        agent_hdg_dict[agent_id] = val
+
+        #speed and heading
+        for state_var in ["agent_speed", "agent_heading"]:
+            if state_var in init_dict:
+                if isinstance(init_dict[state_var], (list, tuple, np.ndarray)):
+                    try:
+                        init_dict[state_var] = np.asarray(init_dict[state_var])
+                        if len(init_dict[state_var].shape) == 1:
+                            init_dict[state_var] = init_dict[state_var].reshape(1, self.num_agents)
                         else:
-                            agent_hdg_dict[agent_id] = val
+                            init_dict[state_var] = init_dict[state_var].reshape(init_dict[state_var].shape[0], self.num_agents)
+                    except:
+                        raise Exception(
+                            f"{state_var} {str(type(init_dict[state_var]))[8:-2]} must be be of shape (<={self.n_envs}, {self.num_agents}, ...) with entries matching order of self.agents"
+                        )
+
+                for i, agent_id in enumerate(self.agents):
+                    if isinstance(init_dict[state_var], np.ndarray):
+                        val = init_dict[state_var][:, i]
+                    else: 
+                        val = init_dict.get(state_var).get(agent_id, None)
+                        if val == None:
+                            continue
+
+                    val = copy.deepcopy(val)
+
+                    # position
+                    if state_var == "agent_position":
+                        val = np.array(val, dtype=float)
+                        if self.gps_env:
+                            if agent_pos_unit == "ll":
+                                for i in range(self.n_envs):
+                                    val[i] = np.asarray(mt.xy(val[i][1], val[i][0]))
+                                val = wrap_mercator_x_dist(val - self.env_bounds[0])
+                            elif agent_pos_unit == "wm_xy":
+                                val = wrap_mercator_x_dist(val - self.env_bounds[0])
+                            else:
+                                val /= self.meters_per_mercator_xy
+                        agent_pos_dict[agent_id] = val
+                    # speed
+                    elif state_var == "agent_speed":
+                        agent_spd_dict[agent_id] = val
+                    # heading
+                    else:
+                        agent_hdg_dict[agent_id] = val
 
         ## has_flag and flag_taken ##
         if "agent_has_flag" in init_dict:
             if isinstance(init_dict['agent_has_flag'], (list, tuple, np.ndarray)):
-                if len(init_dict['agent_has_flag']) == self.num_agents:
+                try:
+                    init_dict['agent_has_flag'] = np.asarray(init_dict['agent_has_flag']).reshape(self.n_envs, -1)
+                except:
+                    raise Exception(
+                        f"{'agent_has_flag'} {str(type(init_dict['agent_has_flag']))[8:-2]} must be be of shape ({self.n_envs}, {self.num_agents}, ...) with entries matching order of self.agents"
+                    )
+                if init_dict['agent_has_flag'].shape == (self.n_envs, self.num_agents):
                     self.state['agent_has_flag'] = init_dict['agent_has_flag']
                 else:
                     raise Exception("agent_has_flag array must be be of length self.num_agents with entries matching order of self.agents")
             else:
                 for i, player in enumerate(self.players.values()):
-                    self.state['agent_has_flag'][i] = init_dict.get('agent_has_flag').get(player.id, 0)
+                    self.state['agent_has_flag'][:, i] = init_dict.get('agent_has_flag').get(player.id, 0)
 
             # check for contradiction with number of flags
             for team, agent_inds in self.agent_inds_of_team.items():
