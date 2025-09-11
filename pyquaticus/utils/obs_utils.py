@@ -38,10 +38,9 @@ class ObsNormalizer:
     to the registered observation elements.
     """
 
-    def __init__(self, debug=False, n_envs=1):
+    def __init__(self, debug=False):
         self._bounds = OrderedDict()
         self._debug = debug
-        self.n_envs = n_envs
 
     @property
     def flattened_length(self):
@@ -109,10 +108,9 @@ class ObsNormalizer:
         -------
             np.ndarray[float32]: flattened state vector(s)
         """
-        arrays = [self._reshape_value(k, obs[k]).reshape(self.n_envs, -1) for k in self._bounds]
+        arrays = [self._reshape_value(k, obs[k]) for k in self._bounds]
         state_array = np.concatenate(arrays, axis=-1)
-        assert state_array.shape[0] == self.n_envs, f"Expecting {self.n_envs} environment state vector(s)"
-        assert len(state_array.shape) == 2, "Expecting flattened state vectors for each environment"
+        assert len(state_array.shape) <= 2, "Expecting flattened state vectors for each environment"
         return state_array
 
     def normalized(self, obs: Dict[str, np.ndarray]):
@@ -143,7 +141,7 @@ class ObsNormalizer:
         r = (high - low) / 2.0
         assert state_array.shape[-1] == avg.shape
         norm_obs = (state_array - avg) / r
-        return norm_obs.reshape(self.n_envs, self.normalized_space.shape)
+        return norm_obs.squeeze()
 
     def unnormalized(self, norm_obs: np.ndarray) -> Dict[Union[str, tuple], Union[np.ndarray, float]]:
         """
@@ -157,6 +155,9 @@ class ObsNormalizer:
             dict: dictionary mapping strings to arrays, with an entry
                  for every registered state component
         """
+        if norm_obs.shape == self.normalized_space.shape:
+            norm_obs = np.expand_dims(norm_obs, axis=0)
+
         obs = {}
         idx = 0
         for k, bound in self._bounds.items():
@@ -167,11 +168,12 @@ class ObsNormalizer:
             r = (high - low) / 2.0
             assert len(low.shape) == 1
             num_entries = low.shape[0]
+            num_obs = norm_obs.shape[0]
             obs_slice = norm_obs[:, idx: idx + num_entries]
-            new_entry = (r * obs_slice + avg).reshape(self.n_envs, *bound.low.shape)
-            # if num_entries == 1:
-            #     # unpack
-            #     new_entry = new_entry.item()
+            new_entry = (r * obs_slice + avg).reshape(num_obs, *bound.low.shape).squeeze()
+            if num_entries*num_obs == 1:
+                # unpack
+                new_entry = new_entry.item()
             obs[k] = new_entry
             idx += num_entries
         return obs
@@ -180,7 +182,7 @@ class ObsNormalizer:
         assert key in self._bounds, "Expecting to run only on registered keys"
         value = np.asarray(value, dtype=np.float32)
         if value.shape[1:] != self._bounds[key].shape:
-            value = np.reshape(value, (value.shape[0], *self._bounds[key].shape))
+            value = np.reshape(value, (-1, *self._bounds[key].shape))
         if self._debug and not self._bounds[key].contains(value):
             raise ValueError(
                 f"Provided value for {key} is not within bound:\n\t"

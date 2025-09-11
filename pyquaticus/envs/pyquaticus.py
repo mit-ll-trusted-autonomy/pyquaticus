@@ -2361,6 +2361,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 -"normalize_obs": whether or not to normalize observations (sets self.normalize_obs)
                 -"normalize_state": whether or not to normalize the global state (sets self.normalize_state)
                     *note: will be overwritten and set to False if self.normalize_obs is False
+                -"sync_start": identical initial conditions across vector environments
                 -"state_dict": self.state dictionary from a previous episode
 
                     note: state_dict should be produced by the same (or an equivalently configured) instance of
@@ -2402,12 +2403,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if options is not None:
             self.normalize_obs = options.get("normalize_obs", self.normalize_obs)
             self.normalize_state = options.get("normalize_state", self.normalize_state)
+            sync_start = options.get("sync_start", False)
 
             state_dict = options.get("state_dict", None)
             init_dict = options.get("init_dict", None)
             if state_dict != None and init_dict != None:
                 raise Exception("Cannot reset environment with both state_dict and init_dict. Choose either/or.")
         else:
+            sync_start = False
             state_dict = None
             init_dict = None
 
@@ -2418,6 +2421,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     "Resetting from state_dict should only be done for an environment that has been previously reset."
                 )
             for k in self.state:
+                if sync_start and state_dict[k].shape[0] > 1:
+                    raise Exception(
+                        "Cannot reset environment with sync_start and state_dict if state_dict contains mulitple vector environments."
+                    )
                 self.state[k][env_idxs] = copy.deepcopy(state_dict[k])
             self._set_player_attributes_from_state()
             self._set_flag_attributes_from_state()
@@ -2425,16 +2432,19 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             # obs history buffer
             if self.normalize_obs:
-                if self.state["obs_hist_buffer"][self.agents[0]].dtype == object:
-                    self.state["obs_hist_buffer"] = {
-                        agent_id: np.array([
-                            [self.agent_obs_normalizer.normalized(unnorm_obs) for unnorm_obs in self.state["obs_hist_buffer"][agent_id][env_idx]]
-                            for env_idx in env_idxs
-                        ])
-                        for agent_id in self.agents
-                    }
+                if self.state["obs_hist_buffer"].dtype == object:
+                    obs_hist_buffer = np.zeros((self.n_envs, self.num_agents, self.obs_hist_buffer_len, *self.observation_spaces[self.agents[0]].shape), dtype=float)
+                    for env_idx in env_idxs:
+                        for i in range(self.num_agents):
+                            obs_hist_buffer[env_idx, i] = self.agent_obs_normalizer.normalized(self.state["obs_hist_buffer"][env_idx, i])
+                    self.state["obs_hist_buffer"] = obs_hist_buffer
             else:
-                if not self.state["obs_hist_buffer"][self.agents[0]].dtype == object:
+                if not self.state["obs_hist_buffer"].dtype == object:
+                    obs_hist_buffer = np.empty((self.n_envs, self.num_agents, self.obs_hist_buffer_len, *self.observation_spaces[self.agents[0]].shape), dtype=object)
+                    for env_idx in env_idxs:
+                        for i in range(self.num_agents):
+                            obs_hist_buffer[env_idx, i] = self.agent_obs_normalizer.unnormalized(self.state["obs_hist_buffer"][env_idx, i])
+
                     self.state["obs_hist_buffer"] = {
                         agent_id: np.array([
                             [self.agent_obs_normalizer.unnormalized(obs) for obs in self.state["obs_hist_buffer"][agent_id][env_idx]]
@@ -2480,9 +2490,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.state['agent_dynamics'] = np.array([player.state for player in self.players.values()])
 
             # run event checks
-            self._check_flag_pickups_vectorized() if self.team_size >= 7 else self._check_flag_pickups()
-            self._check_agent_made_tag_vectorized() if self.team_size >= 14 else self._check_agent_made_tag()
-            self._check_untag_vectorized() if self.team_size >= 5 else self._check_untag()
+            self._check_flag_pickups(env_idxs)
+            self._check_agent_made_tag(env_idxs)
+            self._check_untag(env_idxs)
             #note 1: _check_oob is not currently necessary b/c initializtion does not allow 
             #for out-of-bounds, and state_dict initialization will have up-to-date out-of-bounds info.
 
@@ -2491,7 +2501,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             #(it would have been detected in the step function checks).
 
             # obstacles
-            self._update_dist_bearing_to_obstacles()
+            self._update_dist_bearing_to_obstacles(env_idxs) #TODO: peter check over
 
             # lidar
             if self.lidar_obs:
@@ -2732,29 +2742,19 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         continue
                 self.state['agent_has_flag'][:len(agent_val), i] = agent_val
 
-            # check for contradiction with number of flags
+            # set flag_taken (note: assumes two teams, and one flag per team)
             for team, agent_inds in self.agent_inds_of_team.items():
+                #check for contradiction with number of flags
                 n_agents_have_flag = np.sum(self.state["agent_has_flag"][:, agent_inds], axis=-1)
                 if np.any(n_agents_have_flag > (len(self.agents_of_team) - 1)):
-                    #note: assumes two teams, and one flag per team
                     raise Exception(
                         f"Team {team} has {n_agents_have_flag} agents with a flag in the {self.n_envs} environments and there should not be more than {len(self.agents_of_team) - 1}"
                     )
-
-            # set flag_taken
-            for team, agent_inds in self.agent_inds_of_team.items():
-                if self.state
-            for i, player in enumerate(self.players.values()):
-                if self.state['agent_has_flag'][i]:
-                    #note: assumes two teams, and one flag per team
-                    team_idx = int(player.team)
-                    other_team_idx = int(not team_idx)
-
-                    self.state['flag_taken'][other_team_idx] = 1
+                other_team_idx = int(not int(player.team))
+                self.state['flag_taken'][:, other_team_idx] = n_agents_have_flag.astype(bool)
 
         ## set agent positions and flag positions now that flag pickups have been initialized ##
-        flag_homes_not_picked_up = [flag_home for i, flag_home in enumerate(flag_homes) if not self.state['flag_taken'][i]]
-
+        flag_homes_not_picked_up = [[flag_home for j, flag_home in enumerate(flag_homes) if not self.state['flag_taken'][i, j]] for i in range(self.n_envs)]
         agent_positions, agent_spd_hdg, agent_on_sides = self._generate_agent_starts(
             flag_homes_not_picked_up,
             agent_pos_dict=agent_pos_dict,
