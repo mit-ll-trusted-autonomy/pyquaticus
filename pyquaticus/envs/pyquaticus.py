@@ -2391,8 +2391,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         """
         self._seed(seed=seed)
 
-        if not env_idxs:
+        if env_idxs is None:
             env_idxs = np.arange(self.n_envs)
+        else:
+            env_idxs = np.unique(env_idxs)
 
         self.message[env_idxs] = ""
         self.reset_count[env_idxs] += 1
@@ -2430,35 +2432,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self._set_flag_attributes_from_state()
             self._set_game_events_from_state()
 
-            # obs history buffer
-            if self.normalize_obs:
-                if self.state["obs_hist_buffer"].dtype == object:
-                    obs_hist_buffer = np.zeros((self.n_envs, self.num_agents, self.obs_hist_buffer_len, *self.observation_spaces[self.agents[0]].shape), dtype=float)
-                    for env_idx in env_idxs:
-                        for i in range(self.num_agents):
-                            obs_hist_buffer[env_idx, i] = self.agent_obs_normalizer.normalized(self.state["obs_hist_buffer"][env_idx, i])
-                    self.state["obs_hist_buffer"] = obs_hist_buffer
-            else:
-                if not self.state["obs_hist_buffer"].dtype == object:
-                    obs_hist_buffer = np.empty((self.n_envs, self.num_agents, self.obs_hist_buffer_len, *self.observation_spaces[self.agents[0]].shape), dtype=object)
-                    for env_idx in env_idxs:
-                        for i in range(self.num_agents):
-                            obs_hist_buffer[env_idx, i] = self.agent_obs_normalizer.unnormalized(self.state["obs_hist_buffer"][env_idx, i])
-
-                    self.state["obs_hist_buffer"] = {
-                        agent_id: np.array([
-                            [self.agent_obs_normalizer.unnormalized(obs) for obs in self.state["obs_hist_buffer"][agent_id][env_idx]]
-                            for env_idx in env_idxs
-                        ])
-                        for agent_id in self.agents
-                    }
-
         # Reset env from init_dict or standard init
         else:
             if init_dict != None:
                 self._set_state_from_init_dict(init_dict, env_idxs)
             else:
-                flag_homes = [flag.home for flag in self.flags]
+                flag_homes = np.array([flag.home for flag in self.flags], dtype=float)
                 agent_positions, agent_spd_hdg, agent_on_sides = self._generate_agent_starts(flag_homes)
 
                 self.state = {
@@ -2595,27 +2574,39 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         Note 4: assumes two teams, and one flag per team.
         """
         ### Setup order of state dictionary ###
-        flag_homes = [flag.home for flag in self.flags]
+        flag_homes = np.array([flag.home for flag in self.flags], dtype=float)
 
-        self.state = {
-            "agent_position":            None, #to be set with init_dict and _generate_agent_starts()
-            "prev_agent_position":       None, #to be set with init_dict and _generate_agent_starts()
-            "agent_speed":               None, #to be set with init_dict and _generate_agent_starts()
-            "agent_heading":             None, #to be set with init_dict and _generate_agent_starts()
-            "agent_on_sides":            None, #to be set with init_dict and _generate_agent_starts()
-            "agent_oob":                 np.zeros((self.n_envs, self.num_agents), dtype=bool),
-            "agent_has_flag":            np.zeros((self.n_envs, self.num_agents), dtype=bool),
-            "agent_is_tagged":           np.zeros((self.n_envs, self.num_agents), dtype=bool),
-            "agent_made_tag":            -np.ones((self.n_envs, self.num_agents), dtype=int),
-            "agent_tagging_cooldown":    self.tagging_cooldown * np.ones((self.n_envs, self.num_agents))
-            "flag_home":                 np.array(flag_homes),
-            "flag_position":             np.array([flag_homes for _ in range(self.n_envs)]),
-            "flag_taken":                np.zeros((self.n_envs, len(self.flags)), dtype=bool),
-            "captures":                  np.zeros((self.n_envs, len(self.agents_of_team)), dtype=int),
-            "tags":                      np.zeros((self.n_envs, len(self.agents_of_team)), dtype=int),
-            "grabs":                     np.zeros((self.n_envs, len(self.agents_of_team)), dtype=int),
-            "agent_collisions":          np.zeros((self.n_envs, self.num_agents), dtype=int) #total number of collisions per agent
-        }
+        if self.reset_count == 0:
+            self.state = {
+                "agent_position":            None, #to be set with init_dict and _generate_agent_starts()
+                "prev_agent_position":       None, #to be set with init_dict and _generate_agent_starts()
+                "agent_speed":               None, #to be set with init_dict and _generate_agent_starts()
+                "agent_heading":             None, #to be set with init_dict and _generate_agent_starts()
+                "agent_on_sides":            None, #to be set with init_dict and _generate_agent_starts()
+                "agent_oob":                 np.zeros((self.n_envs, self.num_agents), dtype=bool),
+                "agent_has_flag":            np.zeros((self.n_envs, self.num_agents), dtype=bool),
+                "agent_is_tagged":           np.zeros((self.n_envs, self.num_agents), dtype=bool),
+                "agent_made_tag":            -np.ones((self.n_envs, self.num_agents), dtype=int),
+                "agent_tagging_cooldown":    self.tagging_cooldown * np.ones((self.n_envs, self.num_agents))
+                "flag_position":             np.array([flag_homes for _ in range(self.n_envs)]),
+                "flag_taken":                np.zeros((self.n_envs, len(self.flags)), dtype=bool),
+                "captures":                  np.zeros((self.n_envs, len(self.agents_of_team)), dtype=int),
+                "tags":                      np.zeros((self.n_envs, len(self.agents_of_team)), dtype=int),
+                "grabs":                     np.zeros((self.n_envs, len(self.agents_of_team)), dtype=int),
+                "agent_collisions":          np.zeros((self.n_envs, self.num_agents), dtype=int) #total number of collisions per agent
+            }
+        else:
+            self.state["agent_oob"][env_idxs] = False
+            self.state["agent_has_flag"][env_idxs] = False
+            self.state["agent_is_tagged"][env_idxs] = False
+            self.state["agent_made_tag"][env_idxs] = -1
+            self.state["agent_tagging_cooldown"][env_idxs] = self.tagging_cooldown
+            self.state["flag_position"][env_idxs] = flag_homes
+            self.state["flag_taken"][env_idxs] = False
+            self.state["captures"][env_idxs] = 0
+            self.state["tags"][env_idxs] = 0
+            self.state["grabs"][env_idxs] = 0
+            self.state["agent_collisions"][env_idxs] = 0
 
         ### Set Agents ###
         ## setup agent pos unit ##
@@ -2740,27 +2731,28 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     agent_val = val.get(agent_id, None)
                     if agent_val == None:
                         continue
-                self.state['agent_has_flag'][:len(agent_val), i] = agent_val
+                self.state['agent_has_flag'][env_idxs[:len(agent_val)], i] = agent_val
 
             # set flag_taken (note: assumes two teams, and one flag per team)
             for team, agent_inds in self.agent_inds_of_team.items():
                 #check for contradiction with number of flags
-                n_agents_have_flag = np.sum(self.state["agent_has_flag"][:, agent_inds], axis=-1)
+                n_agents_have_flag = np.sum(self.state["agent_has_flag"][env_idxs, agent_inds], axis=-1)
                 if np.any(n_agents_have_flag > (len(self.agents_of_team) - 1)):
                     raise Exception(
                         f"Team {team} has {n_agents_have_flag} agents with a flag in the {self.n_envs} environments and there should not be more than {len(self.agents_of_team) - 1}"
                     )
                 other_team_idx = int(not int(player.team))
-                self.state['flag_taken'][:, other_team_idx] = n_agents_have_flag.astype(bool)
+                self.state['flag_taken'][env_idxs, other_team_idx] = n_agents_have_flag.astype(bool)
 
         ## set agent positions and flag positions now that flag pickups have been initialized ##
-        flag_homes_not_picked_up = [[flag_home for j, flag_home in enumerate(flag_homes) if not self.state['flag_taken'][i, j]] for i in range(self.n_envs)]
+        flag_homes_not_picked_up = [[flag_home for j, flag_home in enumerate(flag_homes) if not self.state['flag_taken'][i, j]] for i in env_idxs]
         agent_positions, agent_spd_hdg, agent_on_sides = self._generate_agent_starts(
+            env_idxs,
             flag_homes_not_picked_up,
             agent_pos_dict=agent_pos_dict,
             agent_spd_dict=agent_spd_dict,
             agent_hdg_dict=agent_hdg_dict,
-            agent_has_flag=self.state['agent_has_flag']
+            agent_has_flag=self.state['agent_has_flag'][env_idxs]
         )
         self.state['agent_position'] = agent_positions
         self.state['prev_agent_position'] = copy.deepcopy(agent_positions)
@@ -2826,6 +2818,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
     def _generate_agent_starts(
         self,
+        env_idxs: Union[list, np.ndarray],
         flag_homes_not_picked_up: Union[list, np.ndarray],
         agent_pos_dict: Optional[dict] = None,
         agent_spd_dict: Optional[dict] = None,
@@ -2856,7 +2849,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if agent_hdg_dict is None:
             agent_hdg_dict = {}
         if agent_has_flag is None:
-            agent_has_flag = np.zeros(self.num_agents, dtype=bool)
+            agent_has_flag = np.zeros((len(env_idxs), self.num_agents), dtype=bool)
 
         agent_positions = [pos for pos in agent_pos_dict.values()] #for vectorized calculations
         agent_on_sides = []
@@ -4487,7 +4480,7 @@ when gps environment bounds are specified in meters"
         name: variable name
         """
         if isinstance(val, (list, tuple, np.ndarray)):
-            if len(val) != 2*self.team_size:
+            if len(val) != len(self.agents):
                 raise Exception(f"{name} list incorrect length")
         elif isinstance(val, dict):
             if dtype is dict:
@@ -4508,6 +4501,6 @@ when gps environment bounds are specified in meters"
                 val = {agent_id: val for agent_id in self.players}
                 return val
             else:
-                val = [val for _ in range(2*self.team_size)]
+                val = [val for _ in range(len(self.agents))]
 
         return np.array(val, dtype=dtype)
