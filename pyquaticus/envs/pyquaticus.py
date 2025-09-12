@@ -2422,12 +2422,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 raise Exception(
                     "Resetting from state_dict should only be done for an environment that has been previously reset."
                 )
+            sync_start_warning = True
             for k in self.state:
-                if sync_start and state_dict[k].shape[0] > 1:
-                    raise Exception(
-                        "Cannot reset environment with sync_start and state_dict if state_dict contains mulitple vector environments."
-                    )
-                self.state[k][env_idxs] = copy.deepcopy(state_dict[k])
+                if sync_start and len(state_dict['agent_position'].shape) > 2:
+                    if sync_start_warning:
+                        print("Warning! Taking only information from the first environment in state dict for sync_start.")
+                    self.state[k][env_idxs] = copy.deepcopy(state_dict[k][0])
+                else:
+                    self.state[k][env_idxs] = copy.deepcopy(state_dict[k])
             self._set_player_attributes_from_state()
             self._set_flag_attributes_from_state()
             self._set_game_events_from_state()
@@ -2435,7 +2437,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # Reset env from init_dict or standard init
         else:
             if init_dict != None:
-                self._set_state_from_init_dict(init_dict, env_idxs)
+                self._set_state_from_init_dict(init_dict, env_idxs, sync_start)
             else:
                 flag_homes = np.array([flag.home for flag in self.flags], dtype=float)
                 agent_positions, agent_spd_hdg, agent_on_sides = self._generate_agent_starts(flag_homes)
@@ -2546,7 +2548,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         return obs, info
 
-    def _set_state_from_init_dict(self, init_dict: dict, env_idxs: list):
+    def _set_state_from_init_dict(self, init_dict: dict, env_idxs: list, sync_start: bool):
         """
         Args:
             "init_dict": partial state dictionary for initializing the environment with the following optional keys:
@@ -2637,6 +2639,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 if isinstance(init_dict[state_var], (list, tuple, np.ndarray)):
                     try:
                         val = np.array(init_dict[state_var], dtype=float).reshape(-1, self.num_agents, 2)
+                        assert val.shape[0] <= self.n_envs
                     except:
                         raise Exception(
                             f"{state_var} {str(type(init_dict[state_var]))[8:-2]} must be be of shape (<={self.n_envs}, {self.num_agents}, 2) with entries matching order of self.agents"
@@ -2646,6 +2649,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     for agent_id, v in init_dict[state_var]:
                         try:
                             val[agent_id] = np.array(v, dtype=float).reshape(-1, 2)
+                            assert val.shape[0] <= self.n_envs
                         except:
                             raise Exception(
                                 f"{state_var} {str(type(init_dict[state_var]))[8:-2]} values must be be of shape (<={self.n_envs}, 2)"
@@ -2659,9 +2663,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         if agent_val == None:
                             continue
 
+                    if sync_start and agent_val.shape[0] > 1:
+                        agent_val = agent_val[:1]
+                        print(f"Warning! For sync_start, only the first item from {state_var} will be used.")
+
                     if self.gps_env:
                         if agent_pos_unit == "ll":
-                            for i in range(self.n_envs):
+                            for i in range(agent_val.shape[0]):
                                 agent_val[i] = np.asarray(mt.xy(agent_val[i][1], agent_val[i][0]))
                             agent_val = wrap_mercator_x_dist(agent_val - self.env_bounds[0])
                         elif agent_pos_unit == "wm_xy":
@@ -2676,6 +2684,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 if isinstance(init_dict[state_var], (list, tuple, np.ndarray)):
                     try:
                         val = np.array(init_dict[state_var], dtype=float).reshape(-1, self.num_agents)
+                        assert val.shape[0] <= self.n_envs
                     except:
                         raise Exception(
                             f"{state_var} {str(type(init_dict[state_var]))[8:-2]} must be be of shape (<={self.n_envs}, {self.num_agents}) with entries matching order of self.agents"
@@ -2685,6 +2694,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     for agent_id, v in init_dict[state_var]:
                         try:
                             val[agent_id] = np.array(v, dtype=float).reshape(-1)
+                            assert val.shape[0] <= self.n_envs
                         except:
                             raise Exception(
                                 f"{state_var} {str(type(init_dict[state_var]))[8:-2]} values must be be of shape (<={self.n_envs},)"
@@ -2698,6 +2708,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         if agent_val == None:
                             continue
 
+                    if sync_start:
+                        agent_val = agent_val[:1]
+
                     # speed
                     if state_var == "agent_speed":
                         agent_spd_dict[agent_id] = agent_val
@@ -2710,6 +2723,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             if isinstance(init_dict['agent_has_flag'], (list, tuple, np.ndarray)):
                 try:
                     val = np.array(init_dict['agent_has_flag'], dtype=bool).reshape(-1, self.num_agents)
+                    assert val.shape[0] <= self.n_envs
                 except:
                     raise Exception(
                         f"agent_has_flag {str(type(init_dict['agent_has_flag']))[8:-2]} must be be of shape (<={self.n_envs}, {self.num_agents}) with entries matching order of self.agents"
@@ -2719,6 +2733,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 for agent_id, v in init_dict['agent_has_flag']:
                     try:
                         val[agent_id] = np.array(v, dtype=bool).reshape(-1)
+                        assert val.shape[0] <= self.n_envs
                     except:
                         raise Exception(
                             f"agent_has_flag {str(type(init_dict['agent_has_flag']))[8:-2]} values must be be of shape (<={self.n_envs},)"
