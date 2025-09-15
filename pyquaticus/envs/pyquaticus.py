@@ -73,6 +73,7 @@ from pyquaticus.utils.utils import (
     crop_tiles,
     vector_to,
     detect_collision,
+    flatten_generic,
     get_rot_angle,
     get_screen_res,
     heading_angle_conversion,
@@ -2426,7 +2427,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             for k in self.state:
                 if sync_start and len(state_dict['agent_position'].shape) > 2:
                     if sync_start_warning:
-                        print("Warning! Taking only information from the first environment in state dict for sync_start.")
+                        print("Warning! Only information from the first environment in state_dict will be used for sync_start.")
                     self.state[k][env_idxs] = copy.deepcopy(state_dict[k][0])
                 else:
                     self.state[k][env_idxs] = copy.deepcopy(state_dict[k])
@@ -2638,21 +2639,23 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             if state_var in init_dict:
                 if isinstance(init_dict[state_var], (list, tuple, np.ndarray)):
                     try:
-                        val = np.array(init_dict[state_var], dtype=float).reshape(-1, self.num_agents, 2)
-                        assert val.shape[0] <= self.n_envs
+                        val_flat = [p for v in flatten_generic(init_dict[state_var]) for p in ([np.nan, np.nan] if (v is None or v == np.nan) else [v])]
+                        val = np.array(val_flat, dtype=float).reshape(-1, self.num_agents, 2)
+                        assert val.shape[0] <= env_idxs.shape[0]
                     except:
                         raise Exception(
-                            f"{state_var} {str(type(init_dict[state_var]))[8:-2]} must be be of shape (<={self.n_envs}, {self.num_agents}, 2) with entries matching order of self.agents"
+                            f"{state_var} {str(type(init_dict[state_var]))[8:-2]} must be be of shape (<={env_idxs.shape[0]}, {self.num_agents}, 2) with entries matching order of self.agents"
                         )
                 else:
                     val = {}
-                    for agent_id, v in init_dict[state_var]:
+                    for agent_id, av in init_dict[state_var]:
                         try:
-                            val[agent_id] = np.array(v, dtype=float).reshape(-1, 2)
-                            assert val.shape[0] <= self.n_envs
+                            agent_val_flat = [p for v in flatten_generic(av) for p in ([np.nan, np.nan] if (v is None or v == np.nan) else [v])]
+                            val[agent_id] = np.array(agent_val_flat, dtype=float).reshape(-1, 2)
+                            assert val[agent_id].shape[0] <= env_idxs.shape[0]
                         except:
                             raise Exception(
-                                f"{state_var} {str(type(init_dict[state_var]))[8:-2]} values must be be of shape (<={self.n_envs}, 2)"
+                                f"{state_var} {str(type(init_dict[state_var]))[8:-2]} values must be be of shape (<={env_idxs.shape[0]}, 2)"
                             )
 
                 for i, agent_id in enumerate(self.agents):
@@ -2660,12 +2663,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         agent_val = val[:, i]
                     else: 
                         agent_val = val.get(agent_id, None)
-                        if agent_val == None:
+                        if agent_val is None:
                             continue
 
                     if sync_start and agent_val.shape[0] > 1:
-                        agent_val = agent_val[:1]
-                        print(f"Warning! For sync_start, only the first item from {state_var} will be used.")
+                        agent_val[:] = agent_val[0]
+                        print(f"Warning! Only first item from {state_var} will be used for sync_start.")
 
                     if self.gps_env:
                         if agent_pos_unit == "ll":
@@ -2683,21 +2686,23 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             if state_var in init_dict:
                 if isinstance(init_dict[state_var], (list, tuple, np.ndarray)):
                     try:
-                        val = np.array(init_dict[state_var], dtype=float).reshape(-1, self.num_agents)
-                        assert val.shape[0] <= self.n_envs
+                        val_flat = [np.nan if v is None else v for v in flatten_generic(init_dict[state_var])]
+                        val = np.array(val_flat, dtype=float).reshape(-1, self.num_agents)
+                        assert val.shape[0] <= env_idxs.shape[0]
                     except:
                         raise Exception(
-                            f"{state_var} {str(type(init_dict[state_var]))[8:-2]} must be be of shape (<={self.n_envs}, {self.num_agents}) with entries matching order of self.agents"
+                            f"{state_var} {str(type(init_dict[state_var]))[8:-2]} must be be of shape (<={env_idxs.shape[0]}, {self.num_agents}) with entries matching order of self.agents"
                         )
                 else:
                     val = {}
-                    for agent_id, v in init_dict[state_var]:
+                    for agent_id, av in init_dict[state_var]:
                         try:
-                            val[agent_id] = np.array(v, dtype=float).reshape(-1)
-                            assert val.shape[0] <= self.n_envs
+                            agent_val_flat = [np.nan if v is None else v for v in flatten_generic(av)]
+                            val[agent_id] = np.array(agent_val_flat, dtype=float).reshape(-1)
+                            assert val[agent_id].shape[0] <= env_idxs.shape[0]
                         except:
                             raise Exception(
-                                f"{state_var} {str(type(init_dict[state_var]))[8:-2]} values must be be of shape (<={self.n_envs},)"
+                                f"{state_var} {str(type(init_dict[state_var]))[8:-2]} values must be be of shape (<={env_idxs.shape[0]},)"
                             )
 
                 for i, agent_id in enumerate(self.agents):
@@ -2705,11 +2710,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         agent_val = val[:, i]
                     else: 
                         agent_val = val.get(agent_id, None)
-                        if agent_val == None:
+                        if agent_val is None:
                             continue
 
-                    if sync_start:
-                        agent_val = agent_val[:1]
+                    if sync_start and agent_val.shape[0] > 1:
+                        agent_val[:] = agent_val[0]
+                        print(f"Warning! Only first item from {state_var} will be used for sync_start.")
 
                     # speed
                     if state_var == "agent_speed":
@@ -2722,21 +2728,23 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if "agent_has_flag" in init_dict:
             if isinstance(init_dict['agent_has_flag'], (list, tuple, np.ndarray)):
                 try:
-                    val = np.array(init_dict['agent_has_flag'], dtype=bool).reshape(-1, self.num_agents)
-                    assert val.shape[0] <= self.n_envs
+                    val_flat = [False if (v is None or v == np.nan) else v for v in flatten_generic(init_dict['agent_has_flag'])]
+                    val = np.array(val_flat, dtype=bool).reshape(-1, self.num_agents)
+                    assert val.shape[0] <= env_idxs.shape[0]
                 except:
                     raise Exception(
-                        f"agent_has_flag {str(type(init_dict['agent_has_flag']))[8:-2]} must be be of shape (<={self.n_envs}, {self.num_agents}) with entries matching order of self.agents"
+                        f"agent_has_flag {str(type(init_dict['agent_has_flag']))[8:-2]} must be be of shape (<={env_idxs.shape[0]}, {self.num_agents}) with entries matching order of self.agents"
                     )
             else:
                 val = {}
-                for agent_id, v in init_dict['agent_has_flag']:
+                for agent_id, av in init_dict['agent_has_flag']:
                     try:
-                        val[agent_id] = np.array(v, dtype=bool).reshape(-1)
-                        assert val.shape[0] <= self.n_envs
+                        agent_val_flat = [np.nan if (v is None or v == np.nan) else v for v in flatten_generic(av)]
+                        val[agent_id] = np.array(agent_val_flat, dtype=bool).reshape(-1)
+                        assert val[agent_id].shape[0] <= env_idxs.shape[0]
                     except:
                         raise Exception(
-                            f"agent_has_flag {str(type(init_dict['agent_has_flag']))[8:-2]} values must be be of shape (<={self.n_envs},)"
+                            f"agent_has_flag {str(type(init_dict['agent_has_flag']))[8:-2]} values must be be of shape (<={env_idxs.shape[0]},)"
                         )
 
             for i, agent_id in enumerate(self.agents):
@@ -2744,9 +2752,17 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     agent_val = val[:, i]
                 else: 
                     agent_val = val.get(agent_id, None)
-                    if agent_val == None:
+                    if agent_val is None:
                         continue
-                self.state['agent_has_flag'][env_idxs[:len(agent_val)], i] = agent_val
+
+                if sync_start and agent_val.shape[0] > 1:
+                    agent_val[:] = agent_val[0]
+                    print(f"Warning! Only first item from {state_var} will be used for sync_start.")
+
+                if sync_start:
+                    self.state['agent_has_flag'][env_idxs, i] = agent_val
+                else:
+                    self.state['agent_has_flag'][env_idxs[:len(agent_val)], i] = agent_val
 
             # set flag_taken (note: assumes two teams, and one flag per team)
             for team, agent_inds in self.agent_inds_of_team.items():
@@ -2754,7 +2770,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 n_agents_have_flag = np.sum(self.state["agent_has_flag"][env_idxs, agent_inds], axis=-1)
                 if np.any(n_agents_have_flag > (len(self.agents_of_team) - 1)):
                     raise Exception(
-                        f"Team {team} has {n_agents_have_flag} agents with a flag in the {self.n_envs} environments and there should not be more than {len(self.agents_of_team) - 1}"
+                        f"Team {team} has {n_agents_have_flag} agents with a flag in the {env_idxs.shape[0]} envs and there should not be more than {len(self.agents_of_team) - 1} per env."
                     )
                 other_team_idx = int(not int(player.team))
                 self.state['flag_taken'][env_idxs, other_team_idx] = n_agents_have_flag.astype(bool)
@@ -2763,7 +2779,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         flag_homes_not_picked_up = [[flag_home for j, flag_home in enumerate(flag_homes) if not self.state['flag_taken'][i, j]] for i in env_idxs]
         agent_positions, agent_spd_hdg, agent_on_sides = self._generate_agent_starts(
             env_idxs,
-            flag_homes_not_picked_up,
+            sync_start,
+            flag_homes_not_picked_up=flag_homes_not_picked_up,
             agent_pos_dict=agent_pos_dict,
             agent_spd_dict=agent_spd_dict,
             agent_hdg_dict=agent_hdg_dict,
@@ -2834,6 +2851,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     def _generate_agent_starts(
         self,
         env_idxs: Union[list, np.ndarray],
+        sync_start: bool,
         flag_homes_not_picked_up: Union[list, np.ndarray],
         agent_pos_dict: Optional[dict] = None,
         agent_spd_dict: Optional[dict] = None,
@@ -2866,7 +2884,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if agent_has_flag is None:
             agent_has_flag = np.zeros((len(env_idxs), self.num_agents), dtype=bool)
 
-        agent_positions = [pos for pos in agent_pos_dict.values()] #for vectorized calculations
+        agent_positions = [ #for vectorized calculations
+            [pos[i] for pos in agent_pos_dict.values() if (i < pos.shape[0] and ~np.any(np.isnan(pos[i])))]
+            for i in range(env_idxs.shape[0])
+        ]
         agent_on_sides = []
 
         ### prep valid start poses tracker for gps environment ###
@@ -2884,7 +2905,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             other_team_idx = int(not team_idx)
 
             ## position ##
-            if player.id not in agent_pos_dict:
+            agent_pos = np.zeros((env_idxs.shape[0], 2), dtype=float)
+            agent_poses_preset = agent_pos_dict.get(player.id, np.full((env_idxs.shape[0], 2), np.nan))
+            agent_pos[ :agent_poses_preset.shape[0]] = agent_poses_preset
+
+            envs_to_init = np.where(np.any(np.isnan(agent_pos), axis=-1))[0]
+            if len(envs_to_init) > 0:
                 if self.gps_env:
                     valid_pos = False
                     while not valid_pos:

@@ -23,6 +23,7 @@ import math
 import numpy as np
 import pygame
 
+from collections.abc import Iterable
 from pyquaticus.config import EPSG_3857_EXT_X
 from numpy.linalg import norm
 
@@ -541,3 +542,12 @@ def dist(A, B):
 
 def cross2d(A, B):
     return A[0]*B[1] - A[1]*B[0] 
+
+def flatten_generic(seq):
+    result = []
+    for item in seq:
+        if isinstance(item, Iterable) and not isinstance(item, (str, bytes)):
+            result.extend(flatten_generic(item))
+        else:
+            result.append(item)
+    return result
