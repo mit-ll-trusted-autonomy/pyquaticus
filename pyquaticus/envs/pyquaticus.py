@@ -2894,10 +2894,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if self.gps_env:
             if self.on_sides_init:
                 valid_init_pos_inds = {
-                    team: [i for i in range(len(self.valid_team_init_poses[int(team)]))] for team in self.agents_of_team
+                    team: np.tile([i for i in range(len(self.valid_team_init_poses[int(team)]))], (env_idxs.shape[0], 1)) for team in self.agents_of_team
                 }
             else:
-                valid_init_pos_inds = [i for i in range(len(self.valid_init_poses))]
+                valid_init_pos_inds = np.tile([i for i in range(len(self.valid_init_poses))], (env_idxs.shape[0], 1))
 
         ### initialize agents ###
         for i, player in enumerate(self.players.values()):
@@ -2905,15 +2905,22 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             other_team_idx = int(not team_idx)
 
             ## position ##
-            agent_pos = np.zeros((env_idxs.shape[0], 2), dtype=float)
-            agent_poses_preset = agent_pos_dict.get(player.id, np.full((env_idxs.shape[0], 2), np.nan))
-            agent_pos[ :agent_poses_preset.shape[0]] = agent_poses_preset
+            agent_pos = np.full((env_idxs.shape[0], 2), np.nan)
+            agent_pos_preset = agent_pos_dict.get(player.id, None)
+            if agent_pos_preset is not None:
+                agent_pos[ :agent_pos_preset.shape[0]] = agent_pos_preset
 
             envs_to_init = np.where(np.any(np.isnan(agent_pos), axis=-1))[0]
-            if len(envs_to_init) > 0:
+            if envs_to_init.shape[0] > 0:
                 if self.gps_env:
-                    valid_pos = False
-                    while not valid_pos:
+                    valid_pos = np.zeros(env_idxs.shape[0], dtype=bool)
+                    while not np.all(valid_pos):
+                        if sync_start:
+                            pass
+                        else:
+                            agent_pos[]
+
+                        ###############################################################################################
                         if agent_has_flag[i]:
                             pos = random.choice(self.valid_team_init_poses[other_team_idx])
                         else:
