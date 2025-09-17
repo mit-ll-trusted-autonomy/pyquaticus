@@ -2903,6 +2903,16 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             agent_pos = np.full((env_idxs.shape[0], 2), np.nan)
             agent_pos_preset = agent_pos_dict.get(player.id, None)
             if agent_pos_preset is not None:
+                agent_pos_preset_idxs = np.where(np.all(~np.isnan(agent_pos_preset), axis=-1))[0]
+                if agent_pos_preset_idxs.shape[0] > 0:
+                    valid_pos, collision_type = self._check_valid_pos(
+                        new_pos=agent_pos_preset[agent_pos_preset_idxs],
+                        agent_idx=i,
+                        agent_poses=agent_poses,
+                        flag_homes=flag_homes_not_picked_up
+                    )
+
+
                 agent_pos[ :agent_pos_preset.shape[0]] = agent_pos_preset
 
             agent_pos_to_init = np.isnan(agent_pos)
@@ -3004,7 +3014,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         return np.array(agent_poses), np.array(agent_spd_hdg), np.array(agent_on_sides, dtype=bool)
 
-    def _check_valid_pos(self, new_pos, agent_idx, agent_positions, flag_homes):
+    def _check_valid_pos(self, new_pos, agent_idx, agent_poses, flag_homes):
         """
         Returns
         -------
@@ -3012,13 +3022,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             collision bool
         """
         new_pos = np.asarray(new_pos)
-        agent_positions = np.asarray(agent_positions)
+        agent_poses = np.asarray(agent_poses)
         flag_homes = np.asarray(flag_homes)
 
         #agents
-        if len(agent_positions) > 0:
-            ag_distance = np.linalg.norm(agent_positions - new_pos, axis=-1)
-            radii = np.array(self.agent_radius[:len(agent_positions)])
+        agent_dists = np.linalg.norm(agent_poses - new_pos[:, np.newaxis, :], axis=-1)
+
+        if len(agent_poses) > 0:
+            ag_distance = np.linalg.norm(agent_poses - new_pos, axis=-1)
+            radii = np.array(self.agent_radius[:len(agent_poses)])
             if np.any(ag_distance <= self.agent_radius[agent_idx] + radii):
                 return False, "agent"
 
