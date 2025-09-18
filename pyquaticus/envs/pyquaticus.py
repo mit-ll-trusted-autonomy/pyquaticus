@@ -2916,8 +2916,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     valid_preset_pos, collision_types = self._check_valid_pos(
                         new_pos=agent_pos_preset[agent_pos_preset_idxs],
                         agent_idx=i,
-                        agent_poses=agent_poses,
-                        flag_homes=flag_homes_not_picked_up
+                        agent_poses=agent_poses[agent_pos_preset_idxs],
+                        flag_homes=flag_homes_not_picked_up[agent_pos_preset_idxs]
                     )
                     if not np.all(valid_preset_pos):
                         preset_pos_idxs_in_collision = np.where(~valid_preset_pos)[0]
@@ -2995,43 +2995,40 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         if sync_start:
                             pass
                         else:
-                            #initialize agent off-sides in environments where it has flag
-                            agent_to_init_has_flag = agent_has_flag[:, i] & ~valid_pos
-                            agent_has_flag_x = np.where(agent_to_init_has_flag & agent_pos_to_init[:, 0])[0]
-                            agent_has_flag_y = np.where(agent_to_init_has_flag & agent_pos_to_init[:, 1])[0]
+                            envs_to_init_x = np.where(~valid_pos & agent_pos_to_init[:, 0])[0]
+                            envs_to_init_y = np.where(~valid_pos & agent_pos_to_init[:, 1])[0]
 
-                            agent_pos[agent_has_flag_x, 0] = (
-                                np.random.choice([-1, 1], size=agent_has_flag_x.shape[0]) *
-                                np.random.rand(agent_has_flag_x.shape[0]) *
+                            agent_pos[envs_to_init_x, 0] = (
+                                np.random.choice([-1, 1], size=envs_to_init_xshape[0]) *
+                                np.random.rand(envs_to_init_x.shape[0]) *
                                 (self.env_size[0]/2 - self.agent_radius[i]) + self.env_size[0]/2
                             )
-                            agent_pos[agent_has_flag_y, 1] = (
-                                np.random.choice([-1, 1], size=agent_has_flag_y.shape[0]) *
-                                np.random.rand(agent_has_flag_y.shape[0]) *
+                            agent_pos[envs_to_init_y, 1] = (
+                                np.random.choice([-1, 1], size=envs_to_init_y.shape[0]) *
+                                np.random.rand(envs_to_init_y.shape[0]) *
                                 (self.env_size[1]/2 - self.agent_radius[i]) + self.env_size[1]/2
                             )
 
-                            #initialize position in other environments
-                            other_idxs_x = np.where(~valid_pos & ~agent_has_flag[:, i])[0]
-                            other_idxs_y = np.where(~valid_pos & ~agent_has_flag[:, i])[0]
-                            agent_pos[other_idxs]
+                        #check if valid pos
+                        collision_free = self._check_valid_pos(agent_pos, i, agent_poses, flag_homes_not_picked_up)[0]
+                        on_sides = self._check_on_sides(agent_pos, player.team)
 
-                    #####################################33
-                    agent_to_init_has_flag = agent_has_flag[:, i] & ~valid_pos
-                    agent_has_flag_x = np.where(agent_to_init_has_flag & np.isnan(agent_pos.T))[0]
-                    agent_has_flag_y = np.where(agent_to_init_has_flag & np.isnan(agent_pos.T))[0]
+                        envs_to_init_with_flag = np.where(~valid_pos & agent_has_flag[:, i])[0]
+                        other_envs_to_init = np.where(~valid_pos & ~agent_has_flag[:, i])[0]
 
-                    agent_to_init_has_flag = agent_has_flag[:, i] & ~valid_pos
-                    agent_has_flag_idxs_to_init_x = np.where(agent_has_flag[:, i] & ~valid_pos & np.isnan(agent_pos.T))[0]
-                    agent_has_flag_idxs_y = np.where(~valid_pos & agent_has_flag[:, i])[0]
+                        valid_pos[envs_to_init_with_flag] = collision_free[envs_to_init_with_flag] & ~on_sides[envs_to_init_with_flag]
 
-                    other_idxs_x = np.where(~valid_pos & ~agent_has_flag[:, i])[0]
-                    other_idxs_y = np.where(~valid_pos & ~agent_has_flag[:, i])[0]
+                        if self.on_sides_init:
+                            valid_pos[other_envs_to_init] = collision_free[other_envs_to_init] & on_sides[other_envs_to_init]
+                        else:
+                            valid_pos[other_envs_to_init] = collision_free[other_envs_to_init]
 
-                    agent_pos[agent_has_flag_idxs]
-                    agent_pos[other_idxs]
-                    #######################################
+                        #initialize agent off-sides in environments where it has flag
+                        #initialize position in other environments
+                        agent_to_init_has_flag = ~valid_pos & agent_has_flag[:, i]
+                        other_agents_to_init_has_flag = ~valid_pos & agent_has_flag[:, i]
 
+                    ##############################################################################
                     if agent_has_flag[i]:
                         valid_pos = False
                         while not valid_pos:
