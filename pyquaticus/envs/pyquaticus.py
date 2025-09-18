@@ -2917,8 +2917,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     if not np.all(valid_preset_pos):
                         preset_pos_idxs_in_collision = np.where(~valid_preset_pos)[0]
                         collision_types_by_env = [
-                            [k for k in collision_type if collision_type[k][i]]
-                            for i in range(agent_pos_preset_idxs.shape[0]) if i in preset_pos_idxs_in_collision
+                            [k for k in collision_type if collision_type[k][j]]
+                            for j in range(agent_pos_preset_idxs.shape[0]) if j in preset_pos_idxs_in_collision
                         ]
                         raise Exception(
                             f"Specified initial pos(es) ({agent_pos_preset[agent_pos_preset_idxs][preset_pos_idxs_in_collision]}) "
@@ -2950,8 +2950,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         if sync_start:
                             pass
                         else:
-                            agent_to_init_has_flag = agent_has_flag[:, i] & ~valid_pos & np.isnan(agent_pos.T)
-                            agent_has_flag_idxs_x = np.where(agent_has_flag[:, i] & ~valid_pos & np.isnan(agent_pos.T))[0]
+                            agent_to_init_has_flag = agent_has_flag[:, i] & ~valid_pos
+                            agent_has_flag_idxs_to_init_x = np.where(agent_has_flag[:, i] & ~valid_pos & np.isnan(agent_pos.T))[0]
                             agent_has_flag_idxs_y = np.where(~valid_pos & agent_has_flag[:, i])[0]
 
                             other_idxs_x = np.where(~valid_pos & ~agent_has_flag[:, i])[0]
