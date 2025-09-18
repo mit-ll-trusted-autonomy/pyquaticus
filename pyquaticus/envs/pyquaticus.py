@@ -2901,30 +2901,56 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             ## position ##
             agent_pos = np.full((env_idxs.shape[0], 2), np.nan)
+
+            # check preset poses
             agent_pos_preset = agent_pos_dict.get(player.id, None)
             if agent_pos_preset is not None:
                 agent_pos_preset_idxs = np.where(np.all(~np.isnan(agent_pos_preset), axis=-1))[0]
                 if agent_pos_preset_idxs.shape[0] > 0:
-                    valid_pos, collision_type = self._check_valid_pos(
+                    #check if specified initial pos is in collision
+                    valid_preset_pos, collision_types = self._check_valid_pos(
                         new_pos=agent_pos_preset[agent_pos_preset_idxs],
                         agent_idx=i,
                         agent_poses=agent_poses,
                         flag_homes=flag_homes_not_picked_up
                     )
+                    if not np.all(valid_preset_pos):
+                        preset_pos_idxs_in_collision = np.where(~valid_preset_pos)[0]
+                        collision_types_by_env = [
+                            [k for k in collision_type if collision_type[k][i]]
+                            for i in range(agent_pos_preset_idxs.shape[0]) if i in preset_pos_idxs_in_collision
+                        ]
+                        raise Exception(
+                            f"Specified initial pos(es) ({agent_pos_preset[agent_pos_preset_idxs][preset_pos_idxs_in_collision]}) "
+                            f"for agent {player.id} in env(s) {env_idxs[agent_pos_preset_idxs[preset_pos_idxs_in_collision]]} "
+                            f"are in collision with environment object types '{collision_types_by_env}'"
+                        )
 
-
+                    #if applicable, check that agents with flag are not on-sides
+                    preset_pos_idxs_on_sides_with_flag = np.where(
+                        agent_has_flag[agent_pos_preset_idxs] &
+                        self._check_on_sides(agent_pos_preset[agent_pos_preset_idxs], player.team)
+                    )[0]
+                    if preset_pos_idxs_on_sides_with_flag.shape[0] > 0:
+                        raise Exception(
+                            f"Agent {player.id} was specified as having a flag in env(s) "
+                            f"{env_idxs[agent_pos_preset_idxs[preset_pos_idxs_on_sides_with_flag]]}, "
+                            f"but its specified initial pos(es) ({agent_pos_preset[agent_pos_preset_idxs][preset_pos_idxs_on_sides_with_flag]})"
+                            "are on-sides. This combination is not allowed."
+                        )
                 agent_pos[ :agent_pos_preset.shape[0]] = agent_pos_preset
 
+            # generate poses where not already set
             agent_pos_to_init = np.isnan(agent_pos)
             if np.any(agent_pos_to_init):
                 if self.gps_env:
-                    valid_pos = np.zeros(env_idxs.shape[0], dtype=bool)
+                    valid_pos = np.ones(env_idxs.shape[0], dtype=bool)
                     valid_pos[np.where(np.any(agent_pos_to_init, axis=-1))[0]] = False
                     while not np.all(valid_pos):
                         if sync_start:
                             pass
                         else:
-                            agent_has_flag_to_init = agent_has_flag[:, i] & ~valid_pos & np.isnan(agent_pos.T)
+                            agent_to_init_has_flag = agent_has_flag[:, i] & ~valid_pos & np.isnan(agent_pos.T)
                             agent_has_flag_idxs_x = np.where(agent_has_flag[:, i] & ~valid_pos & np.isnan(agent_pos.T))[0]
                             agent_has_flag_idxs_y = np.where(~valid_pos & agent_has_flag[:, i])[0]
 
@@ -3025,32 +3051,34 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         agent_poses = np.asarray(agent_poses)
         flag_homes = np.asarray(flag_homes)
 
-        #agents
-        agent_dists = np.linalg.norm(agent_poses - new_pos[:, np.newaxis, :], axis=-1)
+        valid_pos = np.ones(new_pos.shape[0])
+        collision_types = {
+            "agent": np.zeros(new_pos.shape[0], dtype=bool),
+            "flag": np.zeros(new_pos.shape[0], dtype=bool),
+            "obstacle": np.zeros(new_pos.shape[0], dtype=bool)
+        }
 
-        if len(agent_poses) > 0:
-            ag_distance = np.linalg.norm(agent_poses - new_pos, axis=-1)
-            radii = np.array(self.agent_radius[:len(agent_poses)])
-            if np.any(ag_distance <= self.agent_radius[agent_idx] + radii):
-                return False, "agent"
+        #agents
+        new_pos_by_env = new_pos[:, np.newaxis, :]
+        agent_dists = np.linalg.norm(new_pos_by_env - agent_poses, axis=-1)
+        radii = np.tile(self.agent_radius, (self.agent_radius.shape[0], 1))
+        envs_with_agent_collision = np.where(np.any(agent_dists <= self.agent_radius[agent_idx] + radii, axis=-1))[0]
+        valid_pos[envs_with_agent_collision] = False
+        collision_types['agent'][envs_with_agent_collision] = True
 
         #flags
-        if flag_homes.shape[0] != 0:
-            flag_distance = np.linalg.norm(flag_homes - new_pos, axis=-1)
-            if np.any(flag_distance <= self.flag_keepout_radius):
-                return False, "flag"
+        flag_dists = np.linalg.norm(new_pos_by_env - flag_homes, axis=-1)
+        envs_with_flag_collision = np.where(np.any(flag_dists <= self.flag_keepout_radius, axis=-1))[0]
+        valid_pos[envs_with_flag_collision] = False
+        collision_types['flag'][envs_with_flag_collision] = True
 
         #obstacles
         ## TODO: add check to make sure agent isn't spawned inside an obstacle
-        if detect_collision(new_pos, self.agent_radius[agent_idx], self.obstacle_geoms):
-            return False, "obstacle"
+        envs_with_obstacle_collision = np.where(detect_collision(new_pos, self.agent_radius[agent_idx], self.obstacle_geoms))[0]
+        valid_pos[envs_with_obstacle_collision] = False
+        collision_types['obstacle'][envs_with_obstacle_collision] = True
 
-        #boundary
-        #NOTE: different from out-of-bounds condition
-        if not np.all((self.agent_radius[agent_idx] < new_pos) & (new_pos < (self.env_size - self.agent_radius[agent_idx]))):
-            return False, "boundary"
-
-        return True, None
+        return valid_pos, collision_types
 
     def _update_dist_bearing_to_obstacles(self):
         """Computes the distance and heading from each player to each obstacle"""
