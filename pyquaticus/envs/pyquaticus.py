@@ -2872,8 +2872,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         agent_poses = np.full((env_idxs.shape[0], self.num_agents, 2), np.nan)
         agent_speeds = np.zeros((env_idxs.shape[0], self.num_agents))
-        agent_headings = 360 * np.random.rand(env_idxs.shape[0], self.num_agents) - 180
-        agent_on_sides = np.ones((self.n_envs, self.num_agents), dtype=bool)
+        agent_on_sides = np.ones((env_idxs.shape[0], self.num_agents), dtype=bool)
+        if sync_start:
+            agent_headings = np.tile(360 * np.random.rand(self.num_agents) - 180, (env_idxs.shape[0], 1))
+        else:
+            agent_headings = 360 * np.random.rand(env_idxs.shape[0], self.num_agents) - 180
 
         ### prep valid start poses tracker for gps environment ###
         if self.gps_env:
@@ -2931,7 +2934,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                             f"but its specified initial pos(es) ({agent_pos_preset[agent_pos_preset_idxs][preset_pos_idxs_on_sides_with_flag]})"
                             "are on-sides. This combination is not allowed."
                         )
-                agent_pos[ :agent_pos_preset.shape[0]] = agent_pos_preset
+                if sync_start:
+                    agent_pos[:] = agent_pos_preset[0]
+                else:
+                    agent_pos[ :agent_pos_preset.shape[0]] = agent_pos_preset
 
             # generate poses where not already set
             agent_pos_to_init = np.isnan(agent_pos)
@@ -2981,13 +2987,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 else:
                     while not np.all(valid_pos):
                         if sync_start:
-                            pass
+                            agent_pos[:] = np.random.choice((-1,1), size=2) * np.random.rand(2) * (self.env_size/2 - self.agent_radius[i]) + self.env_size/2
                         else:
                             envs_to_init_x = np.where(~valid_pos & agent_pos_to_init[:, 0])[0]
                             envs_to_init_y = np.where(~valid_pos & agent_pos_to_init[:, 1])[0]
 
                             agent_pos[envs_to_init_x, 0] = (
-                                np.random.choice([-1, 1], size=envs_to_init_xshape[0]) *
+                                np.random.choice([-1, 1], size=envs_to_init_x.shape[0]) *
                                 np.random.rand(envs_to_init_x.shape[0]) *
                                 (self.env_size[0]/2 - self.agent_radius[i]) + self.env_size[0]/2
                             )
@@ -3025,18 +3031,23 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             ## speed ##
             if player.id in agent_spd_dict:
                 agent_spd_preset = np.where(np.isnan(agent_spd_dict[player.id]), 0., agent_spd_dict[player.id])
-                agent_speeds[ :agent_spd_preset.shape[0], i] = agent_spd_preset
+                if sync_start:
+                    agent_speeds[:, i] = agent_spd_preset[0]
+                else:
+                    agent_speeds[ :agent_spd_preset.shape[0], i] = agent_spd_preset
 
             ## heading ##
             if player.id in agent_hdg_dict:
                 agent_hdg_preset = agent_hdg_dict[player.id]
-                agent_hdg_preset_idxs = np.where(~np.isnan(agent_hdg_preset))[0]
-
-                if np.any((agent_hdg_preset < -180) | (agent_hdg_preset > 180)):
-                    raise Exception(
-                        f"At least one initial heading specified for {player.id} ({agent_hdg_preset}) does not fall between -180 and 180 degrees."
-                    )
-                agent_headings[agent_hdg_preset_idxs, i] = agent_hdg_preset[agent_hdg_preset_idxs]
+                if sync_start:
+                    agent_headings[:, i] = agent_hdg_preset[0] if not np.isnan(agent_hdg_preset[0]) else agent_headings[0, i]
+                else:
+                    agent_hdg_preset_idxs = np.where(~np.isnan(agent_hdg_preset))[0]
+                    if np.any((agent_hdg_preset < -180) | (agent_hdg_preset > 180)):
+                        raise Exception(
+                            f"At least one initial heading specified for {player.id} ({agent_hdg_preset}) does not fall between -180 and 180 degrees."
+                        )
+                    agent_headings[agent_hdg_preset_idxs, i] = agent_hdg_preset[agent_hdg_preset_idxs]
 
         return agent_poses, agent_speeds, agent_headings, agent_on_sides
 
