@@ -2502,21 +2502,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                             else:
                                 self.obj_ray_detection_states[team][label_idx] = LIDAR_DETECTION_CLASS_MAP["opponent"]
 
-            # observation history
-            self.state["obs_hist_buffer"] = {agent_id: None for agent_id in self.agents}
-            if self.normalize_obs:
-                self.state["unnorm_obs_hist_buffer"] = {agent_id: None for agent_id in self.agents}
-
-            for agent_id in self.agents:
-                reset_obs, reset_unnorm_obs = self.state_to_obs(agent_id, self.normalize_obs)
-                self.state["obs_hist_buffer"][agent_id] = np.array(self.obs_hist_buffer_len * [reset_obs])
-
-                if self.normalize_obs:
-                    self.state["unnorm_obs_hist_buffer"][agent_id] = np.array(self.obs_hist_buffer_len * [reset_unnorm_obs])
-
-            # global state history
-            self.state["global_state_hist_buffer"] = np.array(self.state_hist_buffer_len * [self.state_to_global_state(self.normalize_state)])
-
         # Rendering
         if self.render_mode:
             if self.render_saving:
