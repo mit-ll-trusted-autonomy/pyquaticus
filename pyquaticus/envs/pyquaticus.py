@@ -2556,7 +2556,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         Note 4: assumes two teams, and one flag per team.
         """
-        ### Setup order of state dictionary ###
+        ### Setup Order of State Dictionary ###
         flag_homes = np.array([flag.home for flag in self.flags], dtype=float)
 
         if self.reset_count == 0:
@@ -2591,7 +2591,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.state["grabs"][env_idxs] = 0
             self.state["agent_collisions"][env_idxs] = 0
 
-        ### Set Agents ###
+        ### Set Agents from init_dict ###
         ## setup agent pos unit ##
         if "agent_position" in init_dict:
             agent_pos_unit = init_dict.get('agent_pos_unit', None)
@@ -2609,12 +2609,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                             "Agent poses must be specified in meters relative to the origin ('m') when self.gps_env is False"
                         )
 
-        ## get position, speed, and heading from init_dict ##
+        ## position (float variables with 2 values) ##
         agent_pos_dict = {}
-        agent_spd_dict = {}
-        agent_hdg_dict = {}
-
-        #position (float variables with 2 values)
         for state_var in ["agent_position"]:
             if state_var in init_dict:
                 if isinstance(init_dict[state_var], (list, tuple, np.ndarray)):
@@ -2661,8 +2657,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                             agent_val /= self.meters_per_mercator_xy
                     agent_pos_dict[agent_id] = agent_val
 
-        #speed and heading (float variables with a single value)
-        for state_var in ["agent_speed", "agent_heading"]:
+        ## speed, heading, and tagging_cooldown (float variables with a single value) ##
+        agent_spd_dict = {}
+        agent_hdg_dict = {}
+        for state_var in ["agent_speed", "agent_heading", "agent_tagging_cooldown"]:
             if state_var in init_dict:
                 if isinstance(init_dict[state_var], (list, tuple, np.ndarray)):
                     try:
@@ -2697,69 +2695,77 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         agent_val[:] = agent_val[0]
                         print(f"Warning! Only first item from {state_var} will be used for sync_start.")
 
-                    # speed
+                    #speed
                     if state_var == "agent_speed":
                         agent_spd_dict[agent_id] = agent_val
-                    # heading
+                    #heading
                     elif state_var == "agent_heading":
                         agent_hdg_dict[agent_id] = agent_val
+                    #tagging cooldown
+                    elif state_var == "agent_tagging_cooldown":
+                        self.state['agent_tagging_cooldown'][:agent_val.shape[0], i] = np.where(
+                            ~np.isnan(agent_val),
+                            agent_val, 
+                            self.state['agent_tagging_cooldown'][:agent_val.shape[0], i]
+                        )
 
-        ## has_flag and flag_taken ##
-        if "agent_has_flag" in init_dict:
-            if isinstance(init_dict['agent_has_flag'], (list, tuple, np.ndarray)):
-                try:
-                    val_flat = [False if (v is None or v == np.nan) else v for v in flatten_generic(init_dict['agent_has_flag'])]
-                    val = np.array(val_flat, dtype=bool).reshape(-1, self.num_agents)
-                    assert val.shape[0] <= env_idxs.shape[0]
-                except:
-                    raise Exception(
-                        f"agent_has_flag {str(type(init_dict['agent_has_flag']))[8:-2]} "
-                        f"must be be of shape (<={env_idxs.shape[0]}, {self.num_agents}) "
-                        f"with entries matching order of self.agents"
-                    )
-            else:
-                val = {}
-                for agent_id, av in init_dict['agent_has_flag']:
+        ## has_flag and is_tagged (boolean variables with a single value) ##
+        for state_var in ["agent_has_flag", "agent_is_tagged"]:
+            if state_var in init_dict:
+                if isinstance(init_dict[state_var], (list, tuple, np.ndarray)):
                     try:
-                        agent_val_flat = [np.nan if (v is None or v == np.nan) else v for v in flatten_generic(av)]
-                        val[agent_id] = np.array(agent_val_flat, dtype=bool).reshape(-1)
-                        assert val[agent_id].shape[0] <= env_idxs.shape[0]
+                        val_flat = [False if (v is None or v == np.nan) else v for v in flatten_generic(init_dict['agent_has_flag'])]
+                        val = np.array(val_flat, dtype=bool).reshape(-1, self.num_agents)
+                        assert val.shape[0] <= env_idxs.shape[0]
                     except:
                         raise Exception(
                             f"agent_has_flag {str(type(init_dict['agent_has_flag']))[8:-2]} "
-                            f"values must be be of shape (<={env_idxs.shape[0]},)"
+                            f"must be be of shape (<={env_idxs.shape[0]}, {self.num_agents}) "
+                            f"with entries matching order of self.agents"
                         )
-
-            for i, agent_id in enumerate(self.agents):
-                if isinstance(val, np.ndarray):
-                    agent_val = val[:, i]
-                else: 
-                    agent_val = val.get(agent_id, None)
-                    if agent_val is None:
-                        continue
-
-                if sync_start and agent_val.shape[0] > 1:
-                    agent_val[:] = agent_val[0]
-                    print(f"Warning! Only first item from {state_var} will be used for sync_start.")
-
-                if sync_start:
-                    self.state['agent_has_flag'][env_idxs, i] = agent_val
                 else:
-                    self.state['agent_has_flag'][env_idxs[:len(agent_val)], i] = agent_val
+                    val = {}
+                    for agent_id, av in init_dict['agent_has_flag']:
+                        try:
+                            agent_val_flat = [np.nan if (v is None or v == np.nan) else v for v in flatten_generic(av)]
+                            val[agent_id] = np.array(agent_val_flat, dtype=bool).reshape(-1)
+                            assert val[agent_id].shape[0] <= env_idxs.shape[0]
+                        except:
+                            raise Exception(
+                                f"agent_has_flag {str(type(init_dict['agent_has_flag']))[8:-2]} "
+                                f"values must be be of shape (<={env_idxs.shape[0]},)"
+                            )
 
-            # set flag_taken (note: assumes two teams, and one flag per team)
-            for team, agent_inds in self.agent_inds_of_team.items():
-                #check for contradiction with number of flags
-                n_agents_have_flag = np.sum(self.state["agent_has_flag"][env_idxs, agent_inds], axis=-1)
-                if np.any(n_agents_have_flag > (len(self.agents_of_team) - 1)):
-                    raise Exception(
-                        f"Team {team} has {n_agents_have_flag} agents with a flag in the {env_idxs.shape[0]} "
-                        f"envs and there should not be more than {len(self.agents_of_team) - 1} per env."
-                    )
-                other_team_idx = int(not int(player.team))
-                self.state['flag_taken'][env_idxs, other_team_idx] = n_agents_have_flag.astype(bool)
+                for i, agent_id in enumerate(self.agents):
+                    if isinstance(val, np.ndarray):
+                        agent_val = val[:, i]
+                    else: 
+                        agent_val = val.get(agent_id, None)
+                        if agent_val is None:
+                            continue
 
-        ## set agent positions and flag positions now that flag pickups have been initialized ##
+                    if sync_start and agent_val.shape[0] > 1:
+                        agent_val[:] = agent_val[0]
+                        print(f"Warning! Only first item from {state_var} will be used for sync_start.")
+
+                    if sync_start:
+                        self.state['agent_has_flag'][env_idxs, i] = agent_val
+                    else:
+                        self.state['agent_has_flag'][env_idxs[:len(agent_val)], i] = agent_val
+
+        ## set flag_taken (note: assumes two teams, and one flag per team) ##
+        for team, agent_inds in self.agent_inds_of_team.items():
+            #check for contradiction with number of flags
+            n_agents_have_flag = np.sum(self.state["agent_has_flag"][env_idxs, agent_inds], axis=-1)
+            if np.any(n_agents_have_flag > (len(self.agents_of_team) - 1)):
+                raise Exception(
+                    f"Team {team} has {n_agents_have_flag} agents with a flag in the {env_idxs.shape[0]} "
+                    f"envs and there should not be more than {len(self.agents_of_team) - 1} per env."
+                )
+            other_team_idx = int(not int(player.team))
+            self.state['flag_taken'][env_idxs, other_team_idx] = n_agents_have_flag.astype(bool)
+
+        ## set/generate agent positions and flag positions now that flag pickups have been initialized ##
         flag_homes_not_picked_up = np.array(
             [[2*[np.nan] if self.state['flag_taken'][i, j] else flag_home for j, flag_home in enumerate(flag_homes)]
             for i in env_idxs]
@@ -2782,8 +2788,37 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.state['agent_on_sides'] = agent_on_sides
 
         ## agent_is_tagged and agent_tagging_cooldown ##
+        ###############################################################
+        if isinstance(init_dict['agent_has_flag'], (list, tuple, np.ndarray)):
+            try:
+                val_flat = [False if (v is None or v == np.nan) else v for v in flatten_generic(init_dict['agent_has_flag'])]
+                val = np.array(val_flat, dtype=bool).reshape(-1, self.num_agents)
+                assert val.shape[0] <= env_idxs.shape[0]
+            except:
+                raise Exception(
+                    f"agent_has_flag {str(type(init_dict['agent_has_flag']))[8:-2]} "
+                    f"must be be of shape (<={env_idxs.shape[0]}, {self.num_agents}) "
+                    f"with entries matching order of self.agents"
+                )
+        else:
+            val = {}
+            for agent_id, av in init_dict['agent_has_flag']:
+                try:
+                    agent_val_flat = [np.nan if (v is None or v == np.nan) else v for v in flatten_generic(av)]
+                    val[agent_id] = np.array(agent_val_flat, dtype=bool).reshape(-1)
+                    assert val[agent_id].shape[0] <= env_idxs.shape[0]
+                except:
+                    raise Exception(
+                        f"agent_has_flag {str(type(init_dict['agent_has_flag']))[8:-2]} "
+                        f"values must be be of shape (<={env_idxs.shape[0]},)"
+                    )
+        ###############################################################
+
         for state_var in ["agent_is_tagged", "agent_tagging_cooldown"]:
             if state_var in init_dict:
+                if isinstance(init_dict[state_var], (list, tuple, np.ndarray)):
+                    try:
+                ##############################################################################################
                 if isinstance(init_dict[state_var], (list, tuple, np.ndarray)):
                     if len(init_dict[state_var]) == self.num_agents:
                         self.state[state_var] = init_dict[state_var]
@@ -2795,6 +2830,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     for i, agent_id in enumerate(init_dict[state_var]):
                         self.state[state_var][i] = init_dict[state_var][agent_id]
 
+        ### Set Score and Game Events ###
         ## captures, tags, grabs ##
         for state_var in ["captures", "tags", "grabs"]:
             if state_var in init_dict:
