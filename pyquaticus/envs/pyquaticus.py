@@ -2714,25 +2714,25 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             if state_var in init_dict:
                 if isinstance(init_dict[state_var], (list, tuple, np.ndarray)):
                     try:
-                        val_flat = [False if (v is None or v == np.nan) else v for v in flatten_generic(init_dict['agent_has_flag'])]
+                        val_flat = [False if (v is None or v == np.nan) else v for v in flatten_generic(init_dict[state_var])]
                         val = np.array(val_flat, dtype=bool).reshape(-1, self.num_agents)
                         assert val.shape[0] <= env_idxs.shape[0]
                     except:
                         raise Exception(
-                            f"agent_has_flag {str(type(init_dict['agent_has_flag']))[8:-2]} "
+                            f"{state_var} {str(type(init_dict[state_var]))[8:-2]} "
                             f"must be be of shape (<={env_idxs.shape[0]}, {self.num_agents}) "
                             f"with entries matching order of self.agents"
                         )
                 else:
                     val = {}
-                    for agent_id, av in init_dict['agent_has_flag']:
+                    for agent_id, av in init_dict[state_var]:
                         try:
-                            agent_val_flat = [np.nan if (v is None or v == np.nan) else v for v in flatten_generic(av)]
+                            agent_val_flat = [False if (v is None or v == np.nan) else v for v in flatten_generic(av)]
                             val[agent_id] = np.array(agent_val_flat, dtype=bool).reshape(-1)
                             assert val[agent_id].shape[0] <= env_idxs.shape[0]
                         except:
                             raise Exception(
-                                f"agent_has_flag {str(type(init_dict['agent_has_flag']))[8:-2]} "
+                                f"{state_var} {str(type(init_dict[state_var]))[8:-2]} "
                                 f"values must be be of shape (<={env_idxs.shape[0]},)"
                             )
 
