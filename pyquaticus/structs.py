@@ -203,9 +203,9 @@ class Flag:
     home: list[float] = field(init=False, default_factory=list)
     pos: Optional[np.ndarray] = field(init=False, default=None)
 
-    def reset(self, idxs):
+    def reset(self, env_idxs):
         """Resets the flags `pos` to be `home`."""
-        self.pos[idxs] = self.home[idxs]
+        self.pos[env_idxs] = np.array(self.home)
 
 @dataclass
 class Obstacle:

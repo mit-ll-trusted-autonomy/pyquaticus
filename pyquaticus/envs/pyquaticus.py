@@ -952,6 +952,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.current_time = np.zeros(n_envs)
         self.state = None
         self.prev_state = None
+        self.dist_bearing_to_obstacles = None
         self.dones = {
             "blue": np.zeros(n_envs, dtype=bool),
             "red": np.zeros(n_envs, dtype=bool),
@@ -1162,14 +1163,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.current_time += self.sim_speedup_factor * self.dt
 
         # Agent and flag checks and more
-        self._check_oob_vectorized()
-        self._check_flag_pickups_vectorized() if self.team_size >= 7 else self._check_flag_pickups()
-        self._check_agent_made_tag()
-        self._check_flag_captures()
-        self._check_untag_vectorized() if self.team_size >= 5 else self._check_untag()
-        self._set_dones()
-        self._update_dist_bearing_to_obstacles()
-        self._check_agent_collisions()
+        self._check_oob(env_idxs)
+        self._check_untag(env_idxs)
+        self._check_agent_made_tag(env_idxs)
+        self._check_flag_pickups(env_idxs)
+        self._check_flag_captures(env_idxs)
+        self._set_dones(env_idxs)
+        self._update_dist_bearing_to_obstacles(env_idxs)
+        self._check_agent_collisions(env_idxs)
 
         if self.lidar_obs:
             for team in self.agents_of_team:
@@ -1451,145 +1452,50 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.state["lidar_ends"][agent_id] = ray_intersections[i]
             self.state["lidar_distances"][agent_id] = ray_int_dists[i]
 
-    def _check_oob(self):
+    def _check_oob(self, env_idxs):
         """Checks if players are out of bounds and updates their states (and any flags in their possesion) accordingly."""
-        for i, player in enumerate(self.players.values()): 
-            if not np.all((0 < player.pos) & (player.pos < self.env_size)):
-                team_idx = int(player.team)
-                other_team_idx = int(not team_idx)
-
-                # Set out-of-bounds
-                player.oob = True
-                self.state['agent_oob'][i] = 1
-
-                # Set tag (if applicable)
-                if self.tag_on_oob:
-                    self.state['agent_is_tagged'][i] = 1
-                    player.is_tagged = True
-
-                # Reset picked-up flag (if applicable)
-                if player.has_flag:
-                    # update agent
-                    player.has_flag = False
-                    self.state['agent_has_flag'][i] = 0
-
-                    # update flag
-                    self.flags[other_team_idx].reset()
-                    self.state['flag_position'][other_team_idx] = self.flags[other_team_idx].pos
-                    self.state['flag_taken'][other_team_idx] = 0
-
-            else:
-                # Set in-bounds
-                player.oob = False
-                self.state['agent_oob'][i] = 0
-
-    def _check_oob_vectorized(self):
-        """Checks if players are out of bounds and updates their states (and any flags in their possesion) accordingly."""
-        # Set out-of-bounds
-        agent_poses = self.state['agent_position']
-        agent_oob = np.any((agent_poses <= 0) | (self.env_size <= agent_poses), axis=-1)
-
-        self.state['agent_oob'] = agent_oob
-        for i, oob in enumerate(agent_oob):
-            self.players[self.agents[i]].oob = oob
+        prev_agent_oob = self.state['agent_oob'][env_idxs]
         
-        if not np.any(agent_oob):
+        # Set out-of-bounds
+        agent_poses = self.state['agent_position'][env_idxs]
+        agent_oob = np.any((agent_poses <= 0) | (self.env_size <= agent_poses), axis=-1)
+        self.state['agent_oob'][env_idxs] = agent_oob
+
+        new_oob = agent_oob & ~prev_agent_oob
+        if not np.any(new_oob):
             return
 
-        agent_oob_inds = np.where(agent_oob)[0]
+        agent_oob_idxs = np.where(new_oob)
 
         # Set tag (if applicable)
         if self.tag_on_oob:
-            self.state['agent_is_tagged'][agent_oob_inds] = 1
-            for i in agent_oob_inds:
-                self.players[self.agents[i]].is_tagged = True
+            self.state['agent_is_tagged'][env_idxs, agent_oob_idxs] = True
 
         # Reset picked-up flag (if applicable)
-        agent_has_flag_oob = self.state['agent_has_flag'] & agent_oob
+        agent_has_flag_oob = self.state['agent_has_flag'][env_idxs] & new_oob
         if np.any(agent_has_flag_oob):
             # update agent
-            self.state['agent_has_flag'][agent_oob_inds] = 0
-            for i in agent_oob_inds:
-                self.players[self.agents[i]].has_flag = False
+            self.state['agent_has_flag'][env_idxs, agent_oob_idxs] = False
             # update flag
-            for team, agent_inds in self.agent_inds_of_team.items():
-                if np.any(agent_has_flag_oob[agent_inds]):
+            for team, agent_idxs in self.agent_inds_of_team.items():
+                team_has_flag_oob = np.any(agent_has_flag_oob[:, agent_idxs], axis=-1)
+                if np.any(team_has_flag_oob):
                     #note: assumes two teams, and one flag per team
-                    team_idx = int(team)
-                    other_team_idx = int(not team_idx)
+                    other_team_idx = int(not int(team))
 
-                    self.flags[other_team_idx].reset()
-                    self.state['flag_position'][other_team_idx] = self.flags[other_team_idx].pos
-                    self.state['flag_taken'][other_team_idx] = 0
+                    flag_oob_env_idxs = env_idxs[np.where(team_has_flag_oob)[0]]
+                    self.flag[other_team_idx].reset(flag_oob_env_idxs)
+                    self.state['flag_position'][flag_oob_env_idxs, other_team_idx] = self.flags[other_team_idx].pos[flag_oob_env_idxs]
+                    self.state['flag_taken'][flag_oob_env_idxs, other_team_idx] = False
 
-    def _check_flag_pickups(self):
-        """
-        Updates player states if they picked up the flag.
-        Note: assumes two teams, and one flag per team.
-        """
-        for i, player in enumerate(self.players.values()):
-            team_idx = int(player.team)
-            other_team_idx = int(not team_idx)
-            if not (player.has_flag or self.flags[other_team_idx].taken) and not player.on_own_side and not player.is_tagged:
-                flag_pos = self.flags[other_team_idx].pos
-                flag_distance = self.get_distance_between_2_points(player.pos, flag_pos)
+    def _check_untag(self, env_idxs):
+        """Untags the player if they return to their own flag."""
+        for team, agent_idxs in self.agent_inds_of_team.items():
+            agent_poses = self.state['agent_position'][env_idxs, agent_idxs]
+            flag_home = self.flags[int(team)].home
 
-                if flag_distance < self.catch_radius:
-                    # update agent
-                    player.has_flag = True
-                    self.state['agent_has_flag'][i] = 1
-
-                    # update flag
-                    self.flags[other_team_idx].taken = True
-                    self.flags[other_team_idx].pos = np.array(player.pos)
-                    self.state['flag_position'][other_team_idx] = self.flags[other_team_idx].pos
-                    self.state['flag_taken'][other_team_idx] = 1
-
-                    # update grabs
-                    self.state['grabs'][team_idx] += 1
-                    self.game_events[player.team]['grabs'] += 1
-
-    def _check_flag_pickups_vectorized(self):
-        """
-        Updates player states if they picked up the flag.
-        Note: assumes two teams, and one flag per team.
-        """
-        for team, agent_inds in self.agent_inds_of_team.items():
-            team_idx = int(team)
-            other_team_idx = int(not team_idx)
-
-            if not self.flags[other_team_idx].taken:
-                flag_distances = np.linalg.norm(self.flags[other_team_idx].pos - self.state['agent_position'][agent_inds])
-                agent_on_sides = self.state['agent_on_sides'][agent_inds]
-                agent_oob = self.state['agent_oob'][agent_inds]
-                agent_has_flag = self.state['agent_has_flag'][agent_inds]
-                agent_is_tagged = self.state['agent_is_tagged'][agent_inds]
-
-                agent_flag_pickups = (flag_distances < self.catch_radius) & \
-                    np.logical_not(agent_on_sides) & \
-                    np.logical_not(agent_oob) & \
-                    np.logical_not(agent_has_flag) & \
-                    np.logical_not(agent_is_tagged)
-
-                if np.any(agent_flag_pickups):
-                    #note: we choose the agent for the flag pickup based on index (not distance)
-                    #to match the unvectorized version of this function which loops through agents
-                    agent_flag_pickup_ind = agent_inds[np.where(agent_flag_pickups)[0][0]]
-                    
-                    # update agent
-                    self.players[self.agents[agent_flag_pickup_ind]].has_flag = True
-                    self.state['agent_has_flag'][agent_flag_pickup_ind] = 1
-
-                    # update flags
-                    self.flags[other_team_idx].taken = True
-                    self.flags[other_team_idx].pos = np.array(
-                        self.state['agent_position'][agent_flag_pickup_ind]
-                    )
-                    self.state['flag_position'][other_team_idx] = self.flags[other_team_idx].pos
-                    self.state['flag_taken'][other_team_idx] = 1
-
-                    # update grabs
-                    self.grabs[team_idx] += 1
+            flag_distances = np.linalg.norm(flag_home - agent_poses, axis=-1)
+            self.state['agent_is_tagged'][env_idxs, agent_idxs] &= flag_distances >= self.catch_radius
 
     def _check_agent_made_tag(self):
         """
@@ -1701,33 +1607,50 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if len(tagger_idxs) == 0:
             return
 
-    def _check_untag(self):
-        """Untags the player if they return to their own flag."""
-        for i, player in enumerate(self.players.values()):
-            team = int(player.team)
-            flag_home = self.flags[team].home
-            flag_distance = self.get_distance_between_2_points(
-                player.pos, flag_home
-            )
-            if flag_distance < self.catch_radius and player.is_tagged:
-                player.is_tagged = False
-                self.state['agent_is_tagged'][i] = 0
+    def _check_flag_pickups(self, env_idxs):
+        """
+        Updates player states if they picked up the flag.
+        Note: assumes two teams, and one flag per team.
+        """
+        for team, agent_idxs in self.agent_idxs_of_team.items():
+            team_idx = int(team)
+            other_team_idx = int(not team_idx)
 
-    def _check_untag_vectorized(self):
-        """Untags the player if they return to their own flag."""
-        for team, team_agent_inds in self.agent_inds_of_team.items():
-            agent_poses = self.state['agent_position'][team_agent_inds]
-            flag_home = self.flags[int(team)].home
+            other_team_flag_not_taken = ~self.state['flag_taken'][env_idxs, other_team_idx]
+            if np.any(other_team_flag_not_taken):
+                flag_not_taken_env_idxs = env_idxs[np.where(other_team_flag_not_taken)[0]]
 
-            flag_distances = np.linalg.norm(flag_home - agent_poses)
-            agent_is_tagged = self.state['agent_is_tagged'][team_agent_inds]
+                flag_distances = np.linalg.norm(
+                    self.flags[other_team_idx].home - self.state['agent_position'][flag_not_taken_env_idxs, agent_idxs],
+                    axis=-1
+                )
+                agent_on_sides = self.state['agent_on_sides'][flag_not_taken_env_idxs, agent_idxs]
+                agent_oob = self.state['agent_oob'][flag_not_taken_env_idxs, agent_idxs]
+                agent_has_flag = self.state['agent_has_flag'][flag_not_taken_env_idxs, agent_idxs]
+                agent_is_tagged = self.state['agent_is_tagged'][flag_not_taken_env_idxs, agent_idxs]
 
-            agent_untagged = (flag_distances < self.catch_radius) & agent_is_tagged
-            agent_untagged_inds = team_agent_inds[np.where(agent_untagged)[0]]
+                agent_flag_pickups = (
+                    (flag_distances < self.catch_radius) & ~agent_on_sides &
+                    ~agent_oob & ~agent_has_flag & ~agent_is_tagged
+                )
+                if np.any(agent_flag_pickups):
+                    #NOTE: we choose the agent for the flag pickup based on index priority (not distance)
+                    flag_pickup_idxs = np.where(np.any(agent_flag_pickups, axis=-1))[0]
+                    flag_pickup_env_idxs = flag_not_taken_env_idxs[flag_pickup_idxs]
+                    flag_pickup_agent_idxs = agent_idxs[np.argmax(agent_flag_pickups[flag_pickup_idxs], axis=-1)]
 
-            self.state['agent_is_tagged'][agent_untagged_inds] = 0
-            for agent_idx in agent_untagged_inds:
-                self.players[self.agents[agent_idx]].is_tagged = False
+                    # update agent
+                    self.state['agent_has_flag'][flag_pickup_env_idxs, flag_pickup_agent_idxs] = True
+
+                    # update flags
+                    self.flags[other_team_idx].pos[flag_pickup_env_idxs] = np.array(
+                        self.state['agent_position'][flag_pickup_env_idxs, flag_pickup_agent_idxs]
+                    )
+                    self.state['flag_position'][flag_pickup_env_idxs, other_team_idx] = self.flags[other_team_idx].pos[flag_pickup_env_idxs]
+                    self.state['flag_taken'][flag_pickup_env_idxs, other_team_idx] = True
+
+                    # update grabs
+                    self.state['grabs'][flag_pickup_env_idxs, team_idx] += 1
 
     def _check_flag_captures(self):
         """
@@ -2491,15 +2414,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             # run event checks
             self._check_oob(env_idxs)
-            self._check_flag_pickups(env_idxs)
-            self._check_agent_made_tag(env_idxs)
             self._check_untag(env_idxs)
+            self._check_agent_made_tag(env_idxs)
+            self._check_flag_pickups(env_idxs)
             #NOTE: _check_flag_captures is not currently necessary b/c initialization does not allow
             #for starting with flag on-sides and state_dict initialization would not start with capture
             #(it would have been detected in the step function checks).
 
             # obstacles
-            self._update_dist_bearing_to_obstacles(env_idxs) #TODO: peter check over
+            self._update_dist_bearing_to_obstacles(env_idxs)
 
             # lidar
             if self.lidar_obs:
@@ -3116,18 +3039,19 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         return valid_pos, collision_types
 
-    def _update_dist_bearing_to_obstacles(self):
+    def _update_dist_bearing_to_obstacles(self, env_idxs):
         """Computes the distance and heading from each player to each obstacle"""
-        dist_bearing_to_obstacles = dict()
-        for i, player in enumerate(self.players.values()):
-            player_pos = player.pos
-            player_dists_to_obstacles = list()
-            for obstacle in self.obstacles:
-                # TODO: vectorize
-                dist_to_obstacle = obstacle.distance_from(player_pos, radius=self.agent_radius[i], heading=player.heading)
-                player_dists_to_obstacles.append(dist_to_obstacle)
-            dist_bearing_to_obstacles[player.id] = player_dists_to_obstacles
-        self.state["dist_bearing_to_obstacles"] = dist_bearing_to_obstacles
+        # dist_bearing_to_obstacles = dict()
+        # for i, player in enumerate(self.players.values()):
+        #     player_pos = player.pos
+        #     player_dists_to_obstacles = list()
+        #     for obstacle in self.obstacles:
+        #         # TODO: vectorize
+        #         dist_to_obstacle = obstacle.distance_from(player_pos, radius=self.agent_radius[i], heading=player.heading)
+        #         player_dists_to_obstacles.append(dist_to_obstacle)
+        #     dist_bearing_to_obstacles[player.id] = player_dists_to_obstacles
+        # self.dist_bearing_to_obstacles = dist_bearing_to_obstacles
+        pass
 
     def _build_base_env_geom(
         self,
