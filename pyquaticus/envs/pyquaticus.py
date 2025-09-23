@@ -863,21 +863,22 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
         return (cp_sign == self._on_sides_sign[team]) | (cp_sign == 0)
 
-    def _check_agent_collisions(self):
+    def _check_agent_collisions(self, env_idxs):
         """
         Updates game state attribute agent_collisions
         Note: Checks collisions between all players teammates and opponents
         """
-        agent_poses = self.state['agent_position']
-        dists = np.linalg.norm(agent_poses[:, None, :] - agent_poses[None, :, :], axis=-1)
-        sum_agent_radii = self.agent_radius[:, None] + self.agent_radius[None, :]
+        agent_poses = self.state['agent_position'][env_idxs]
+        dists = np.linalg.norm(agent_poses[:, :, None, :] - agent_poses[:, None, :, :], axis=-1)
+        sum_agent_radii = self.agent_radius[:, :, None] + self.agent_radius[:, None, :]
 
         active_collisions = (dists <= sum_agent_radii) & (~np.eye(self.num_agents, dtype=bool)) #remove self-collisions
         new_active_collisions = active_collisions & ~self.active_collisions
 
-        for team, agent_inds in self.agent_inds_of_team.items():
-            self.state["agent_collisions"][agent_inds] += np.sum(new_active_collisions[agent_inds], axis=-1)
-            self.game_events[team]["collisions"] += np.sum(new_active_collisions[agent_inds])
+        for team, agent_idxs in self.agent_inds_of_team.items():
+            env_agent_ixgrid = np.ix_(env_idxs, agent_idxs)
+            self.state["agent_collisions"][env_agent_ixgrid] += np.sum(new_active_collisions[env_agent_ixgrid], axis=-1)
+            self.game_events[team]["collisions"][env_idxs] += np.sum(new_active_collisions[env_agent_ixgrid], axis=(1, 2))
 
         self.active_collisions = active_collisions
 
