@@ -878,13 +878,13 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         for team, agent_idxs in self.agent_inds_of_team.items():
             env_agent_ixgrid = np.ix_(env_idxs, agent_idxs)
             self.state["agent_collisions"][env_agent_ixgrid] += np.sum(new_active_collisions[env_agent_ixgrid], axis=-1)
-            self.game_events[team]["collisions"][env_idxs] += np.sum(new_active_collisions[env_agent_ixgrid], axis=(1, 2))
+            self.game_events[team]["collisions"][env_idxs] += np.sum(new_active_collisions[env_agent_ixgrid], axis=(-2, -1))
 
         self.active_collisions = active_collisions
 
     def _set_game_events_from_state(self):
         for team in self.game_events:
-            self.game_events[team]['scores'] = self.state['captures'][:, int(team)]
+            self.game_events[team]['captures'] = self.state['captures'][:, int(team)]
             self.game_events[team]['tags'] = self.state['tags'][:, int(team)]
             self.game_events[team]['grabs'] = self.state['grabs'][:, int(team)]
             self.game_events[team]['collisions'] = np.sum(self.state['agent_collisions'][:, self.agent_inds_of_team[team]], axis=-1)
@@ -964,14 +964,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.active_collisions = np.zeros((n_envs, 2*team_size, 2*team_size), dtype=bool) #current collisions between all agents
         self.game_events = {
             team: {
-                "scores": np.zeros(n_envs, dtype=int),
+                "captures": np.zeros(n_envs, dtype=int),
                 "grabs": np.zeros(n_envs, dtype=int),
                 "tags": np.zeros(n_envs, dtype=int),
                 "collisions": np.zeros(n_envs, dtype=int),
             }
             for team in Team
         }
-        self.message = np.array(["" for i in range(n_envs)])
+        self.cli_message = ""
 
         # Set variables from config
         self.set_config_values(config_dict)
@@ -1080,7 +1080,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         )
                     )
 
-    def step(self, raw_action_dict):
+    def step(self, raw_action_dict, env_idxs):
         """
         Steps the environment forward in time by self.dt seconds, applying actions.
 
@@ -1169,7 +1169,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self._check_agent_made_tag(env_idxs)
         self._check_flag_pickups(env_idxs)
         self._check_flag_captures(env_idxs)
-        self._set_dones(env_idxs)
+        cli_message = self._set_dones(env_idxs)
         self._update_dist_bearing_to_obstacles(env_idxs)
         self._check_agent_collisions(env_idxs)
 
@@ -1188,8 +1188,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     self.obj_ray_detection_states[team][self.ray_int_label_map[agent_id]] = LIDAR_DETECTION_CLASS_MAP[detection_class_name]
 
         # Message
-        # if self.message and self.render_mode:
-        #     print(self.message)
+        if cli_message and self.render_mode == 'human':
+            print(cli_message)
 
         # Observations
         for agent_id in raw_action_dict:
@@ -1533,14 +1533,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             env_other_agent_ixgrid = np.ix_(env_idxs, other_agent_idxs)
 
             a2a_dists = np.linalg.norm(
-                self.state["agent_position"][env_agent_ixgrid][:, :, np.newaxis, :] - self.state["agent_position"][env_other_agent_ixgrid][:, np.newaxis, :, :],
+                self.state["agent_position"][env_agent_ixgrid][:, :, None, :] - self.state["agent_position"][env_other_agent_ixgrid][:, None, :, :],
                 axis=-1
             )
             a2a_dists_in_range = a2a_dists < self.catch_radius
             if not np.any(a2a_dists_in_range):
                 continue
 
-            tag_matrix = (cantag[:, agent_idxs][:, :, np.newaxis] & taggable[:, other_agent_idxs][:, np.newaxis, :]) & a2a_dists_in_range
+            tag_matrix = (cantag[:, agent_idxs][:, :, None] & taggable[:, other_agent_idxs][:, None, :]) & a2a_dists_in_range
             for i, j in enumerate(agent_idxs):
                 made_tag = np.any(tag_matrix[:, i], axis=-1)
                 if np.any(made_tag):
@@ -1616,30 +1616,36 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
                     # update grabs
                     self.state['grabs'][flag_pickup_env_idxs, team_idx] += 1
+                    self.game_events[team]['grabs'][flag_pickup_env_idxs] += 1
 
     def _check_flag_captures(self, env_idxs):
         """
         Updates states if a player captured a flag.
         Note: assumes two teams, and one flag per team.
         """
-        for i, player in enumerate(self.players.values()):
-            team_idx = int(player.team)
+        for team, agent_idxs in self.agent_idxs_of_team.items():
+            team_idx = int(team)
+            other_team_idx = int(not team_idx)
+            env_agent_ixgrid = np.ix_(env_idxs, agent_idxs)
 
-            if player.on_own_side and player.has_flag:
-                other_team_idx = int(not team_idx)
+            captures = self.state['agent_on_sides'][env_agent_ixgrid] & self.state['agent_has_flag'][env_agent_ixgrid]
+            if np.any(captures):
+                captures_idxs = np.where(np.any(captures, axis=-1))[0]
+                captures_env_idxs = env_idxs[captures_idxs]
+                captures_agent_idxs = agent_idxs[np.argmax(captures[captures_idxs], axis=-1)]
 
                 # Update agent
-                player.has_flag = False
-                self.state['agent_has_flag'][i] = 0
+                self.state['agent_has_flag'][captures_env_idxs, captures_agent_idxs] = False
 
                 # Update flag
-                self.flags[other_team_idx].reset()
-                self.state['flag_position'][other_team_idx] = self.flags[other_team_idx].pos
-                self.state['flag_taken'][other_team_idx] = 0
+                self.flags[other_team_idx].reset(captures_env_idxs)
+                self.state['flag_position'][captures_env_idxs, other_team_idx] = self.flags[other_team_idx].pos[captures_env_idxs]
+                self.state['flag_taken'][captures_env_idxs, other_team_idx] = False
 
                 # Update captures
-                self.state['captures'][team_idx] += 1
-                self.game_events[player.team]['scores'] += 1
+                new_team_captures = np.sum(captures[captures_idxs], axis=-1)
+                self.state['captures'][captures_env_idxs, team_idx] += new_team_captures
+                self.game_events[player.team]['captures'][captures_env_idxs] += new_team_captures
 
     def set_config_values(self, config_dict):
         """
@@ -2175,38 +2181,28 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         """
         return np.linalg.norm(np.asarray(start) - np.asarray(end))
 
-    def _set_dones(self):
+    def _set_dones(self, env_idxs):
         """Check all of the end game conditions."""
-        blue_scores = self.game_events[Team.BLUE_TEAM]['scores']
-        red_scores = self.game_events[Team.RED_TEAM]['scores']
-        final_score_msg = f"Final score: {blue_scores}\u2013{red_scores} (Blue\u2013Red). "
+        blue_scores = self.game_events[Team.BLUE_TEAM]['captures'][env_idxs]
+        red_scores = self.game_events[Team.RED_TEAM]['captures'][env_idxs]
 
-        if (blue_scores == self.max_score) and (red_scores != self.max_score):
-            self.dones["blue"] = True
-            self.dones["__all__"] = True
-            self.message = "Blue Wins!"
+        self.dones["blue"][env_idxs] = (blue_scores == self.max_score) & (red_scores != self.max_score)
+        self.dones["red"][env_idxs] = (red_scores == self.max_score) & (bluescores != self.max_score)
+        self.dones["__all__"][env_idxs] = (
+            (blue_scores == self.max_score) | (red_scores == self.max_score) |
+            (self.current_time[env_idxs] >= self.max_time) | np.isclose(self.current_time[env_idxs], self.max_time)
+        )
 
-        elif red_scores == self.max_score:
-            self.dones["red"] = True
-            self.dones["__all__"] = True
-            self.message = "Red Wins!"
-
-        elif red_scores == self.max_score:
-            self.dones["red"] = True
-            self.dones["__all__"] = True
-            self.message = "Red Wins! Blue Loses"
-
-        elif self.current_time > self.max_time or np.isclose(self.current_time, self.max_time):
-            self.dones["__all__"] = True
-            if blue_scores > red_scores:
-                self.message = "Blue Wins!"
-            elif blue_scores < red_scores:
-                self.message = "Red Wins!"
-            else:
-                self.message = "No Winner"
-
-        if self.dones["__all__"]:
-            self.message = final_score_msg + self.message
+        # CLI Message
+        cli_message = ""
+        if self.render_mode == "human" and np.any(self.dones["__all__"][env_idxs]):
+            done_env_idxs = env_idxs[np.where(self.dones["__all__"][env_idxs])[0]]
+            cli_message = (
+                f"Envs {done_env_idxs} are done with final scores: "
+                f"{blue_scores[done_env_idx]}\u2013{red_scores[done_env_idx]} (Blue\u2013Red). "
+            )
+        
+        return cli_message
 
     def compute_rewards(self, agent_id, team):
         if self.reward_config[agent_id] is None:
@@ -2280,7 +2276,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         else:
             env_idxs = np.unique(env_idxs)
 
-        self.message[env_idxs] = ""
         self.current_time[env_idxs] = 0.
         self._reset_dones(env_idxs)
         self.active_collisions[env_idxs] = False
@@ -2985,7 +2980,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         }
 
         #agents
-        new_pos_by_env = new_pos[:, np.newaxis, :]
+        new_pos_by_env = new_pos[:, None, :]
         agent_dists = np.linalg.norm(new_pos_by_env - agent_poses, axis=-1)
         radii = np.tile(self.agent_radius, (self.agent_radius.shape[0], 1))
         envs_with_agent_collision = np.where(np.any(agent_dists <= self.agent_radius[agent_idx] + radii, axis=-1))[0]
