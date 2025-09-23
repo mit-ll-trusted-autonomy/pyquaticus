@@ -1466,16 +1466,17 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             return
 
         agent_oob_idxs = np.where(new_oob)
+        agent_oob_idxs[0] = env_idxs[agent_oob_idxs[0]] 
 
         # Set tag (if applicable)
         if self.tag_on_oob:
-            self.state['agent_is_tagged'][env_idxs, agent_oob_idxs] = True
+            self.state['agent_is_tagged'][agent_oob_idxs] = True
 
         # Reset picked-up flag (if applicable)
         agent_has_flag_oob = self.state['agent_has_flag'][env_idxs] & new_oob
         if np.any(agent_has_flag_oob):
             # update agent
-            self.state['agent_has_flag'][env_idxs, agent_oob_idxs] = False
+            self.state['agent_has_flag'][agent_oob_idxs] = False
             # update flag
             for team, agent_idxs in self.agent_inds_of_team.items():
                 team_has_flag_oob = np.any(agent_has_flag_oob[:, agent_idxs], axis=-1)
@@ -1491,121 +1492,83 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     def _check_untag(self, env_idxs):
         """Untags the player if they return to their own flag."""
         for team, agent_idxs in self.agent_inds_of_team.items():
-            agent_poses = self.state['agent_position'][env_idxs, agent_idxs]
+            env_agent_ixgrid = np.ix_(env_idxs, agent_idxs)
+            agent_poses = self.state['agent_position'][env_agent_ixgrid]
             flag_home = self.flags[int(team)].home
 
             flag_distances = np.linalg.norm(flag_home - agent_poses, axis=-1)
-            self.state['agent_is_tagged'][env_idxs, agent_idxs] &= flag_distances >= self.catch_radius
+            self.state['agent_is_tagged'][env_agent_ixgrid] &= flag_distances >= self.catch_radius
 
-    def _check_agent_made_tag(self):
+    def _check_agent_made_tag(self, env_idxs):
         """
         Updates player states if they tagged another player.
         Note 1: assumes one tag allowed per tagging cooldown recharge.
         Note 2: assumes two teams, and one flag per team.
         """
-        self.state["agent_made_tag"] = -np.ones(self.num_agents)
+        self.state["agent_made_tag"][env_idxs] = -1
 
         # Check tagging cooldown, on-sides, tagged status, and out-of-bounds status
         cantag = (
-            (self.state["agent_tagging_cooldown"] == self.tagging_cooldown) &
-            self.state["agent_on_sides"] &
-            np.logical_not(self.state["agent_is_tagged"]) & 
-            np.logical_not(self.state["agent_oob"])
+            (self.state["agent_tagging_cooldown"][env_idxs] == self.tagging_cooldown) &
+            self.state["agent_on_sides"][env_idxs] &
+            ~self.state["agent_is_tagged"][env_idxs] & 
+            ~self.state["agent_oob"][env_idxs]
         )
         if not np.any(cantag):
             return
 
         # Check on-sides, and tagged status
-        taggable = np.logical_not(self.state["agent_on_sides"]) & np.logical_not(self.state["agent_is_tagged"])
+        taggable = ~self.state["agent_on_sides"][env_idxs] & ~self.state["agent_is_tagged"][env_idxs]
         if not np.any(taggable):
             return
 
-        # Check agent-to-agent distances
-        blue_team_idxs = self.agent_inds_of_team[Team.BLUE_TEAM]
-        red_team_idxs = self.agent_inds_of_team[Team.RED_TEAM]
+        # Update tags (if any)
+        for team, agent_idxs in self.agent_inds_of_team.items():
+            team_idx = int(team)
+            other_team_idx = int(not team_idx)
+            other_agent_idxs = np.setdiff1d(np.arange(self.num_agents), agent_idxs)
 
-        a2a_dists = np.linalg.norm(
-            self.state["agent_position"][blue_team_idxs][:, np.newaxis, :] - self.state["agent_position"][red_team_idxs][np.newaxis, :, :],
-            axis=-1
-        )
-        a2a_dists_in_range = a2a_dists < self.catch_radius
-        if not np.any(a2a_dists_in_range):
-            return
+            env_agent_ixgrid = np.ix_(env_idxs, agent_idxs)
+            env_other_agent_ixgrid = np.ix_(env_idxs, other_agent_idxs)
 
-        tagger_idxs = []
-        target_idxs = []
+            a2a_dists = np.linalg.norm(
+                self.state["agent_position"][env_agent_ixgrid][:, :, np.newaxis, :] - self.state["agent_position"][env_other_agent_ixgrid][:, np.newaxis, :, :],
+                axis=-1
+            )
+            a2a_dists_in_range = a2a_dists < self.catch_radius
+            if not np.any(a2a_dists_in_range):
+                continue
 
-        # Check blue tags
-        blue_tag_red = np.logical_and(cantag[blue_team_idxs][:, np.newaxis], taggable[red_team_idxs][np.newaxis, :]) & a2a_dists_in_range
-        for i, j in enumerate(blue_team_idxs):
-            if np.any(blue_tag_red[i]):
-                target = np.argmin(np.where(blue_tag_red[i], a2a_dists_in_range[i], np.inf))
-                blue_tag_red[i:, target] = False
-                tagger_idxs.append(j)
-                target_idx = red_team_idxs[target]
-                target_idxs.append(target_idx)
+            tag_matrix = (cantag[:, agent_idxs][:, :, np.newaxis] & taggable[:, other_agent_idxs][:, np.newaxis, :]) & a2a_dists_in_range
+            for i, j in enumerate(agent_idxs):
+                made_tag = np.any(tag_matrix[:, i], axis=-1)
+                if np.any(made_tag):
+                    made_tag_idxs = np.where(made_tag)[0]
+                    target = np.argmin(np.where(tag_matrix[made_tag_idxs, i], a2a_dists_in_range[made_tag_idxs, i], np.inf), axis=-1)
 
-                #updates
-                tagger_player = self.players[self.agents[j]]
-                target_player = self.players[self.agents[target_idx]]
+                    tag_matrix[made_tag_idxs, i+1:, target] = False
+                    
+                    #update tagger agent
+                    made_tag_env_idxs = env_idxs[made_tag_idxs]
+                    target_idx = other_agent_idxs[target]
 
-                target_player.is_tagged = True
-                self.state['agent_is_tagged'][target_idx] = True
-                self.state['agent_made_tag'][j] = target_idx
-                self.state['tags'][int(tagger_player.team)] += 1
-                self.game_events[tagger_player.team]['tags'] += 1
+                    self.state['agent_made_tag'][made_tag_env_idxs, j] = target_idx
+                    self.state['agent_tagging_cooldown'][made_tag_env_idxs, j] = 0.0
+                    self.state['tags'][made_tag_env_idxs, team_idx] += 1
+                    self.game_events[team]['tags'][made_tag_env_idxs] += 1
 
-                if target_player.has_flag:
-                    #update tagged agent
-                    target_player.has_flag = False
-                    self.state['agent_has_flag'][target_idx] = False
+                    #update target agent
+                    self.state['agent_is_tagged'][made_tag_env_idxs, target_idx] = True
 
-                    #update flag
-                    self.flags[int(tagger_player.team)].reset()
-                    self.state['flag_position'][int(tagger_player.team)] = self.flags[int(tagger_player.team)].pos
-                    self.state['flag_taken'][int(tagger_player.team)] = False
+                    #update flag and has_flag
+                    target_has_flag = self.state['agent_has_flag'][made_tag_env_idxs, target_idx]
+                    if np.any(target_has_flag):
+                        target_has_flag_env_idxs = made_tag_env_idxs[np.where(target_has_flag)[0]]
 
-                #set players tagging cooldown
-                tagger_player.tagging_cooldown = 0.0
-                self.state['agent_tagging_cooldown'][j] = 0.0
-
-        # Check red tags
-        red_tag_blue = np.logical_and(cantag[red_team_idxs][:, np.newaxis], taggable[blue_team_idxs][np.newaxis, :]) & a2a_dists_in_range.T
-        for i, j in enumerate(red_team_idxs):
-            if np.any(red_tag_blue[i]):
-                target = np.argmin(np.where(red_tag_blue[i], a2a_dists_in_range[i], np.inf))
-                red_tag_blue[i:, target] = False
-                tagger_idxs.append(j)
-                target_idx = blue_team_idxs[target]
-                target_idxs.append(target_idx)
-
-                #updates
-                tagger_player = self.players[self.agents[j]]
-                target_player = self.players[self.agents[target_idx]]
-
-                target_player.is_tagged = True
-                self.state['agent_is_tagged'][target_idx] = True
-                self.state['agent_made_tag'][j] = target_idx
-                self.state['tags'][int(tagger_player.team)] += 1
-                self.game_events[tagger_player.team]['tags'] += 1
-
-                if target_player.has_flag:
-                    #update tagged agent
-                    target_player.has_flag = False
-                    self.state['agent_has_flag'][target_idx] = False
-
-                    #update flag
-                    self.flags[int(tagger_player.team)].reset()
-                    self.state['flag_position'][int(tagger_player.team)] = self.flags[int(tagger_player.team)].pos
-                    self.state['flag_taken'][int(tagger_player.team)] = False
-
-                #set players tagging cooldown
-                tagger_player.tagging_cooldown = 0.0
-                self.state['agent_tagging_cooldown'][j] = 0.0
-
-        # Update tags
-        if len(tagger_idxs) == 0:
-            return
+                        self.flags[other_team_idx].reset(target_has_flag_env_idxs)
+                        self.state['flag_position'][target_has_flag_env_idxs, other_team_idx] = self.flags[other_team_idx].pos[target_has_flag_env_idxs]
+                        self.state['flag_taken'][target_has_flag_env_idxs, other_team_idx] = False
+                        self.state['agent_has_flag'][made_tag_env_idxs, target_idx] = False
 
     def _check_flag_pickups(self, env_idxs):
         """
@@ -1619,15 +1582,16 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             other_team_flag_not_taken = ~self.state['flag_taken'][env_idxs, other_team_idx]
             if np.any(other_team_flag_not_taken):
                 flag_not_taken_env_idxs = env_idxs[np.where(other_team_flag_not_taken)[0]]
+                env_agent_ixgrid = np.ix_(flag_not_taken_env_idxs, agent_idxs)
 
                 flag_distances = np.linalg.norm(
-                    self.flags[other_team_idx].home - self.state['agent_position'][flag_not_taken_env_idxs, agent_idxs],
+                 j   self.flags[other_team_idx].home - self.state['agent_position'][env_agent_ixgrid],
                     axis=-1
                 )
-                agent_on_sides = self.state['agent_on_sides'][flag_not_taken_env_idxs, agent_idxs]
-                agent_oob = self.state['agent_oob'][flag_not_taken_env_idxs, agent_idxs]
-                agent_has_flag = self.state['agent_has_flag'][flag_not_taken_env_idxs, agent_idxs]
-                agent_is_tagged = self.state['agent_is_tagged'][flag_not_taken_env_idxs, agent_idxs]
+                agent_on_sides = self.state['agent_on_sides'][env_agent_ixgrid]
+                agent_oob = self.state['agent_oob'][env_agent_ixgrid]
+                agent_has_flag = self.state['agent_has_flag'][env_agent_ixgrid]
+                agent_is_tagged = self.state['agent_is_tagged'][env_agent_ixgrid]
 
                 agent_flag_pickups = (
                     (flag_distances < self.catch_radius) & ~agent_on_sides &
@@ -1639,7 +1603,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     flag_pickup_env_idxs = flag_not_taken_env_idxs[flag_pickup_idxs]
                     flag_pickup_agent_idxs = agent_idxs[np.argmax(agent_flag_pickups[flag_pickup_idxs], axis=-1)]
 
-                    # update agent
+                 j   # update agent
                     self.state['agent_has_flag'][flag_pickup_env_idxs, flag_pickup_agent_idxs] = True
 
                     # update flags
@@ -1652,7 +1616,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     # update grabs
                     self.state['grabs'][flag_pickup_env_idxs, team_idx] += 1
 
-    def _check_flag_captures(self):
+    def _check_flag_captures(self, env_idxs):
         """
         Updates states if a player captured a flag.
         Note: assumes two teams, and one flag per team.
@@ -2316,10 +2280,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             env_idxs = np.unique(env_idxs)
 
         self.message[env_idxs] = ""
-        self.reset_count[env_idxs] += 1
         self.current_time[env_idxs] = 0.
         self._reset_dones(env_idxs)
-        self.active_collisions[env_idxs] = np.zeros((self.num_agents, self.num_agents), dtype=bool)
+        self.active_collisions[env_idxs] = False
 
         if options is not None:
             self.normalize_obs = options.get("normalize_obs", self.normalize_obs)
@@ -2360,7 +2323,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             else:
                 flag_homes = np.array([flag.home for flag in self.flags], dtype=float)
 
-                if self.reset_count == 0:
+                if np.all(self.reset_count == 0):
                     self.state = {
                         "agent_position":            np.full((self.n_envs, self.num_agents, 2), np.nan),
                         "prev_agent_position":       np.full((self.n_envs, self.num_agents, 2), np.nan),
@@ -2471,6 +2434,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             if self.normalize_obs:
                 info[agent_id]["unnorm_obs"] = self._history_to_obs(agent_id, "unnorm_obs_hist_buffer")
 
+        # Reset Count
+        self.reset_count[env_idxs] += 1
+
         return obs, info
 
     def _set_state_from_init_dict(self, init_dict: dict, env_idxs: list, sync_start: bool):
@@ -2503,7 +2469,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         ### Setup Order of State Dictionary ###
         flag_homes = np.array([flag.home for flag in self.flags], dtype=float)
 
-        if self.reset_count == 0:
+        if np.all(self.reset_count == 0):
             self.state = {
                 "agent_position":            np.full((self.n_envs, self.num_agents, 2), np.nan),
                 "prev_agent_position":       np.full((self.n_envs, self.num_agents, 2), np.nan),
@@ -2707,9 +2673,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         agent_spd_dict[agent_id] = agent_val
 
         ## set flag_taken (note: assumes two teams, and one flag per team) ##
-        for team, agent_inds in self.agent_inds_of_team.items():
+        for team, agent_idxs in self.agent_inds_of_team.items():
             #check for contradiction with number of flags
-            n_agents_have_flag = np.sum(self.state["agent_has_flag"][env_idxs, agent_inds], axis=-1)
+            n_agents_have_flag = np.sum(self.state["agent_has_flag"][np.ix_(env_idxs, agent_idxs)], axis=-1)
             if np.any(n_agents_have_flag > (len(self.agents_of_team) - 1)):
                 raise Exception(
                     f"Team {team} has {n_agents_have_flag} agents with a flag in the {env_idxs.shape[0]} "
