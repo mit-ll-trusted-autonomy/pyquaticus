@@ -316,6 +316,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             agent_obs_normalizer.register("on_side", max_bool, min_bool)
             agent_obs_normalizer.register("tagging_cooldown", [self.tagging_cooldown], [0.0])
             agent_obs_normalizer.register("is_tagged", max_bool, min_bool)
+            agent_obs_normalizer.register("out_of_bounds", max_bool, min_bool)
+            agent_obs_normalizer.register("in_flag_keepout", max_bool, min_bool)
 
             for i in range(num_on_team - 1):
                 teammate_name = f"teammate_{i}"
@@ -327,6 +329,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                 agent_obs_normalizer.register((teammate_name, "on_side"), max_bool, min_bool)
                 agent_obs_normalizer.register((teammate_name, "tagging_cooldown"), [self.tagging_cooldown], [0.0])
                 agent_obs_normalizer.register((teammate_name, "is_tagged"), max_bool, min_bool)
+                agent_obs_normalizer.register((teammate_name, "out_of_bounds"), max_bool, min_bool)
+                agent_obs_normalizer.register((teammate_name, "in_flag_keepout"), max_bool, min_bool)
 
             for i in range(num_on_team):
                 opponent_name = f"opponent_{i}"
@@ -338,6 +342,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                 agent_obs_normalizer.register((opponent_name, "on_side"), max_bool, min_bool)
                 agent_obs_normalizer.register((opponent_name, "tagging_cooldown"), [self.tagging_cooldown], [0.0])
                 agent_obs_normalizer.register((opponent_name, "is_tagged"), max_bool, min_bool)
+                agent_obs_normalizer.register((opponent_name, "out_of_bounds"), max_bool, min_bool)
+                agent_obs_normalizer.register((opponent_name, "in_flag_keepout"), max_bool, min_bool)
 
             for i in range(num_obstacles):
                 agent_obs_normalizer.register(f"obstacle_{i}_distance", max_dist, min_dist)
@@ -552,15 +558,19 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             obs["scrimmage_line_distance"] = scrimmage_line_dist
 
             # Own speed
-            obs["speed"] = self.state["agent_speed"][agent.idx]
+            obs["speed"] = self.state["agent_speed"][env_idxs, agent.idx]
             # Own flag status
-            obs["has_flag"] = self.state["agent_has_flag"][agent.idx]
+            obs["has_flag"] = self.state["agent_has_flag"][env_idxs, agent.idx]
             # On side
-            obs["on_side"] = self.state["agent_on_sides"][agent.idx]
+            obs["on_side"] = self.state["agent_on_sides"][env_idxs, agent.idx]
             # Tagging cooldown
-            obs["tagging_cooldown"] = self.state["agent_tagging_cooldown"][agent.idx]
+            obs["tagging_cooldown"] = self.state["agent_tagging_cooldown"][env_idxs, agent.idx]
             # Is tagged
-            obs["is_tagged"] = self.state["agent_is_tagged"][agent.idx]
+            obs["is_tagged"] = self.state["agent_is_tagged"][env_idxs, agent.idx]
+            # Out-of-bounds
+            obs["out_of_bounds"] = self.state["agent_oob"][env_idxs, agent.idx]
+            # In flag keepout
+            obs["in_flag_keepout"] = self.state["agent_in_flag_keepout"][env_idxs, agent.idx]
 
             # Relative observations to other agents (teammates first)
             for team in [own_team, other_team]:
@@ -583,6 +593,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                     obs[(entry_name, "on_side")] = self.state["agent_on_sides"][dif_agent.idx]
                     obs[(entry_name, "tagging_cooldown")] = self.state["agent_tagging_cooldown"][dif_agent.idx]
                     obs[(entry_name, "is_tagged")] = self.state["agent_is_tagged"][dif_agent.idx]
+                    obs[(entry_name, "out_of_bounds")] = self.state["out_of_bounds"][dif_agent.idx]
+                    obs[(entry_name, "in_flag_keepout")] = self.state["in_flag_keepout"][dif_agent.idx]
 
         if normalize:
             return self.agent_obs_normalizer.normalized(obs), obs
@@ -1172,7 +1184,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Agent and flag checks and more
         self._check_oob(env_idxs)
-        self._check_untag(env_idxs)
+        self._check_untag_and_flag_keepout(env_idxs)
         self._check_agent_made_tag(env_idxs)
         self._check_flag_pickups(env_idxs)
         self._check_flag_captures(env_idxs)
@@ -1499,8 +1511,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     self.state['flag_position'][flag_oob_env_idxs, other_team_idx] = self.flags[other_team_idx].pos[flag_oob_env_idxs]
                     self.state['flag_taken'][flag_oob_env_idxs, other_team_idx] = False
 
-    def _check_untag(self, env_idxs):
-        """Untags the player if they return to their own flag."""
+    def _check_untag_and_flag_keepout(self, env_idxs):
+        """
+        Untags the player if they return to their own flag.
+        Updates "agent_in_flag_keepout in state.
+        """
         for team, agent_idxs in self.agent_inds_of_team.items():
             env_agent_ixgrid = np.ix_(env_idxs, agent_idxs)
             agent_poses = self.state['agent_position'][env_agent_ixgrid]
@@ -1508,6 +1523,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             flag_distances = np.linalg.norm(flag_home - agent_poses, axis=-1)
             self.state['agent_is_tagged'][env_agent_ixgrid] &= flag_distances >= self.catch_radius
+            self.state['agent_in_flag_keepout'][env_agent_ixgrid] = flag_distances <= self.flag_keepout_radius
 
     def _check_agent_made_tag(self, env_idxs):
         """
@@ -2336,6 +2352,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         "agent_heading":             np.zeros((self.n_envs, self.num_agents), dtype=bool),
                         "agent_on_sides":            np.zeros((self.n_envs, self.num_agents), dtype=bool),
                         "agent_oob":                 np.zeros((self.n_envs, self.num_agents), dtype=bool),
+                        "agent_in_flag_keepout":     np.zeros((self.n_envs, self.num_agents), dtype=bool),
                         "agent_has_flag":            np.zeros((self.n_envs, self.num_agents), dtype=bool),
                         "agent_is_tagged":           np.zeros((self.n_envs, self.num_agents), dtype=bool),
                         "agent_made_tag":            -np.ones((self.n_envs, self.num_agents), dtype=int),
@@ -2349,6 +2366,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     }
                 else:
                     self.state["agent_oob"][env_idxs] = False
+                    self.state["agent_in_flag_keepout"][env_idxs] = False
                     self.state["agent_has_flag"][env_idxs] = False
                     self.state["agent_is_tagged"][env_idxs] = False
                     self.state["agent_made_tag"][env_idxs] = -1
@@ -2382,7 +2400,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             # run event checks
             self._check_oob(env_idxs)
-            self._check_untag(env_idxs)
+            self._check_untag_and_flag_keepout(env_idxs)
             self._check_agent_made_tag(env_idxs)
             self._check_flag_pickups(env_idxs)
             #NOTE: _check_flag_captures is not currently necessary b/c initialization does not allow
@@ -2485,6 +2503,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 "agent_heading":             np.zeros((self.n_envs, self.num_agents), dtype=bool),
                 "agent_on_sides":            np.zeros((self.n_envs, self.num_agents), dtype=bool),
                 "agent_oob":                 np.zeros((self.n_envs, self.num_agents), dtype=bool),
+                "agent_in_flag_keepout":     np.zeros((self.n_envs, self.num_agents), dtype=bool),
                 "agent_has_flag":            np.zeros((self.n_envs, self.num_agents), dtype=bool),
                 "agent_is_tagged":           np.zeros((self.n_envs, self.num_agents), dtype=bool),
                 "agent_made_tag":            -np.ones((self.n_envs, self.num_agents), dtype=int),
@@ -2498,6 +2517,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             }
         else:
             self.state["agent_oob"][env_idxs] = False
+            self.state["agent_in_flag_keepout"][env_idxs] = False
             self.state["agent_has_flag"][env_idxs] = False
             self.state["agent_is_tagged"][env_idxs] = False
             self.state["agent_made_tag"][env_idxs] = -1

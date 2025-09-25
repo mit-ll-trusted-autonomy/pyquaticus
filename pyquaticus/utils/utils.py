@@ -227,7 +227,7 @@ def closest_point_on_line(A, B, P):
     Args:
         A: an (x, y) point on a line
         B: a different (x, y) point on a line
-        P: the point to minimize the distance from.
+        P: the point(s) to minimize the distance from.
     """
     A = np.asarray(A)
     B = np.asarray(B)
@@ -235,17 +235,17 @@ def closest_point_on_line(A, B, P):
 
     v_AB = B - A
     v_AP = P - A
-    len_AB = np.linalg.norm(v_AB)
-    unit_AB = v_AB / len_AB
     v_AB_AP = np.dot(v_AP, v_AB)
-    proj_dist = np.divide(v_AB_AP, len_AB)
 
-    if proj_dist <= 0.0:
-        return A
-    elif proj_dist >= len_AB:
-        return B
-    else:
-        return np.array([A[0] + (unit_AB[0] * proj_dist), A[1] + (unit_AB[1] * proj_dist)])
+    mag_AB = np.linalg.norm(v_AB)
+    unit_AB = v_AB / mag_AB
+    proj_mag = np.expand_dims(v_AB_AP/mag_AB, axis=-1)
+
+    closest_point = A + proj_mag * unit_AB
+    closest_point = np.where(proj_mag <= 0., A, closest_point)
+    closest_point = np.where(proj_mag >= mag_AB, B, closest_point)
+
+    return closest_point
 
 def vector_to(A, B, unit=False):
     """
@@ -258,9 +258,8 @@ def vector_to(A, B, unit=False):
     vec = B - A
 
     if unit:
-        norm = np.linalg.norm(vec)
-        if norm >= 1e-5:
-            vec = vec / norm
+        norm = np.linalg.norm(vec, axis=-1, keepdims=True)
+        vec /= np.where(norm >= 1e-5, norm, 1.)
 
     return vec
 
@@ -277,8 +276,8 @@ def heading_angle_conversion(deg):
 
 def vec_to_mag_heading(vec):
     """Converts a vector to a magnitude and heading (deg)."""
-    mag = np.linalg.norm(vec)
-    angle = math.degrees(math.atan2(vec[1], vec[0]))
+    mag = np.linalg.norm(vec, axis=-1)
+    angle = np.rad2deg(np.arctan2(vec[..., 1], vec[..., 0]))
     return mag, angle180(heading_angle_conversion(angle))
 
 def mag_heading_to_vec(mag, bearing):
@@ -303,15 +302,11 @@ def mag_bearing_to(A, B, relative_hdg=None):
     """
     mag, hdg = vec_to_mag_heading(vector_to(A, B))
     if relative_hdg is not None:
-        hdg = (hdg - relative_hdg) % 360
+        hdg = (hdg - np.asarray(relative_hdg)) % 360
     return mag, angle180(hdg)
 
 def angle180(deg):
-    while deg > 180:
-        deg -= 360
-    while deg < -180:
-        deg += 360
-    return deg
+    return (deg + 180) % 360 - 180
 
 def longitude_diff_west2east(lon1, lon2):
     """Calculate the longitude difference from westing (lon1) to easting (lon2)"""
