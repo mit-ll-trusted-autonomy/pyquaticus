@@ -578,8 +578,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                 for i, dif_agent in enumerate(dif_agents):
                     entry_name = f"teammate_{i}" if team == own_team else f"opponent_{i}"
 
-                    dif_pos = self.state["agent_position"][dif_agent.idx]
-                    dif_heading = self.state["agent_heading"][dif_agent.idx]
+                    dif_pos = self.state["agent_position"][env_idxs, dif_agent.idx]
+                    dif_heading = self.state["agent_heading"][env_idxs, dif_agent.idx]
 
                     dif_agent_dist, dif_agent_bearing = mag_bearing_to(pos, dif_pos, heading)
                     _, hdg_to_agent = mag_bearing_to(dif_pos, pos)
@@ -588,13 +588,13 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                     obs[(entry_name, "bearing")] = dif_agent_bearing #bearing relative to the bearing to you
                     obs[(entry_name, "distance")] = dif_agent_dist
                     obs[(entry_name, "relative_heading")] = angle180((dif_heading - hdg_to_agent) % 360)
-                    obs[(entry_name, "speed")] = self.state["agent_speed"][dif_agent.idx]
-                    obs[(entry_name, "has_flag")] = self.state["agent_has_flag"][dif_agent.idx]
-                    obs[(entry_name, "on_side")] = self.state["agent_on_sides"][dif_agent.idx]
-                    obs[(entry_name, "tagging_cooldown")] = self.state["agent_tagging_cooldown"][dif_agent.idx]
-                    obs[(entry_name, "is_tagged")] = self.state["agent_is_tagged"][dif_agent.idx]
-                    obs[(entry_name, "out_of_bounds")] = self.state["out_of_bounds"][dif_agent.idx]
-                    obs[(entry_name, "in_flag_keepout")] = self.state["in_flag_keepout"][dif_agent.idx]
+                    obs[(entry_name, "speed")] = self.state["agent_speed"][env_idxs, dif_agent.idx]
+                    obs[(entry_name, "has_flag")] = self.state["agent_has_flag"][env_idxs, dif_agent.idx]
+                    obs[(entry_name, "on_side")] = self.state["agent_on_sides"][env_idxs, dif_agent.idx]
+                    obs[(entry_name, "tagging_cooldown")] = self.state["agent_tagging_cooldown"][env_idxs, dif_agent.idx]
+                    obs[(entry_name, "is_tagged")] = self.state["agent_is_tagged"][env_idxs, dif_agent.idx]
+                    obs[(entry_name, "out_of_bounds")] = self.state["out_of_bounds"][env_idxs, dif_agent.idx]
+                    obs[(entry_name, "in_flag_keepout")] = self.state["in_flag_keepout"][env_idxs, dif_agent.idx]
 
         if normalize:
             return self.agent_obs_normalizer.normalized(obs), obs
