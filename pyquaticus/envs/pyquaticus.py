@@ -381,7 +381,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
         return agent_obs_normalizer, global_state_normalizer
 
-    def state_to_obs(self, agent_id, normalize=True):
+    def state_to_obs(self, agent_id, normalize=True, env_idxs=None):
         """
         Returns a local observation space. These observations are
         based entirely on the agent local coordinate frame rather
@@ -464,55 +464,56 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         team_idx = int(own_team)
         other_team_idx = int(other_team)
 
-        pos = self.state["agent_position"][agent.idx]
-        heading = self.state["agent_heading"][agent.idx]
+        pos = self.state["agent_position"][env_idxs, agent.idx]
+        heading = self.state["agent_heading"][env_idxs, agent.idx]
 
-        own_home_loc = self.state["flag_home"][team_idx]
-        opponent_home_loc = self.state["flag_home"][other_team_idx]
+        own_home_loc = self.flags[team_idx].home
+        opponent_home_loc = self.flags[other_team_idx].home
 
         if self.lidar_obs:
-            # Goal flag
-            opponent_home_dist, opponent_home_bearing = mag_bearing_to(
-                pos, opponent_home_loc, heading
-            )
-            obs["opponent_home_bearing"] = opponent_home_bearing
-            obs["opponent_home_distance"] = opponent_home_dist
+            raise NotImplementedError("Vector environment with Lidar not implemented.")
+            # # Goal flag
+            # opponent_home_dist, opponent_home_bearing = mag_bearing_to(
+            #     pos, opponent_home_loc, heading
+            # )
+            # obs["opponent_home_bearing"] = opponent_home_bearing
+            # obs["opponent_home_distance"] = opponent_home_dist
 
-            # Defend flag
-            own_home_dist, own_home_bearing = mag_bearing_to(
-                pos, own_home_loc, heading
-            )
-            obs["own_home_bearing"] = own_home_bearing
-            obs["own_home_distance"] = own_home_dist
+            # # Defend flag
+            # own_home_dist, own_home_bearing = mag_bearing_to(
+            #     pos, own_home_loc, heading
+            # )
+            # obs["own_home_bearing"] = own_home_bearing
+            # obs["own_home_distance"] = own_home_dist
 
-            # Scrimmage line
-            scrimmage_line_closest_point = closest_point_on_line(
-                self.scrimmage_coords[0], self.scrimmage_coords[1], pos
-            )
-            scrimmage_line_dist, scrimmage_line_bearing = mag_bearing_to(
-                pos, scrimmage_line_closest_point, heading
-            )
-            obs["scrimmage_line_bearing"] = scrimmage_line_bearing
-            obs["scrimmage_line_distance"] = scrimmage_line_dist
+            # # Scrimmage line
+            # scrimmage_line_closest_point = closest_point_on_line(
+            #     self.scrimmage_coords[0], self.scrimmage_coords[1], pos
+            # )
+            # scrimmage_line_dist, scrimmage_line_bearing = mag_bearing_to(
+            #     pos, scrimmage_line_closest_point, heading
+            # )
+            # obs["scrimmage_line_bearing"] = scrimmage_line_bearing
+            # obs["scrimmage_line_distance"] = scrimmage_line_dist
 
-            # Own speed
-            obs["speed"] = self.state["agent_speed"][agent.idx]
-            # Own flag status
-            obs["has_flag"] = self.state["agent_has_flag"][agent.idx]
-            # Team has flag
-            obs["team_has_flag"] = self.state["flag_taken"][other_team_idx]
-            # Opposing team has flag
-            obs["opponent_has_flag"] = self.state["flag_taken"][team_idx]
-            # On sides
-            obs["on_side"] = self.state["agent_on_sides"][agent.idx]
-            # Tagging cooldown
-            obs["tagging_cooldown"] = self.state["agent_tagging_cooldown"][agent.idx]
-            # Is tagged
-            obs["is_tagged"] = self.state["agent_is_tagged"][agent.idx]
+            # # Own speed
+            # obs["speed"] = self.state["agent_speed"][agent.idx]
+            # # Own flag status
+            # obs["has_flag"] = self.state["agent_has_flag"][agent.idx]
+            # # Team has flag
+            # obs["team_has_flag"] = self.state["flag_taken"][other_team_idx]
+            # # Opposing team has flag
+            # obs["opponent_has_flag"] = self.state["flag_taken"][team_idx]
+            # # On sides
+            # obs["on_side"] = self.state["agent_on_sides"][agent.idx]
+            # # Tagging cooldown
+            # obs["tagging_cooldown"] = self.state["agent_tagging_cooldown"][agent.idx]
+            # # Is tagged
+            # obs["is_tagged"] = self.state["agent_is_tagged"][agent.idx]
 
-            # Lidar
-            obs["ray_distances"] = self.state["lidar_distances"][agent_id]
-            obs["ray_labels"] = self.obj_ray_detection_states[own_team][self.state["lidar_labels"][agent_id]]
+            # # Lidar
+            # obs["ray_distances"] = self.state["lidar_distances"][agent_id]
+            # obs["ray_labels"] = self.obj_ray_detection_states[own_team][self.state["lidar_labels"][agent_id]]
 
         else:
             # Goal flag
@@ -1054,9 +1055,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # Pygame
         self.screen = None
         self.clock = None
-        self.render_ctr = 0
-        self.render_buffer = []
-        self.traj_render_buffer = {}
+        self.render_ctr = np.zeros(n_envs, dtype=int)
+        self.render_buffer = [[] for _ in range(n_envs)]
+        self.traj_render_buffer = {
+            agent_id: {
+                "traj": [[] for _ in range(n_envs)],
+                "agent": [[] for _ in range(n_envs)],
+                "history": [[] for _ in range(n_envs)]
+            } for agent_id in self.players
+        }
 
         if self.render_mode:
             self.create_background_image()  # create background pygame surface (for faster rendering)
@@ -1174,18 +1181,19 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self._check_agent_collisions(env_idxs)
 
         if self.lidar_obs:
-            for team in self.agents_of_team:
-                for agent_id, player in self.players.items():
-                    if player.team == team:
-                        detection_class_name = "teammate"
-                    else:
-                        detection_class_name = "opponent"
-                    if player.is_tagged:
-                        detection_class_name += "_is_tagged"
-                    elif player.has_flag:
-                        detection_class_name += "_has_flag"
+            raise NotImplementedError("Vector environment with Lidar not implemented.")
+            # for team in self.agents_of_team:
+            #     for agent_id, player in self.players.items():
+            #         if player.team == team:
+            #             detection_class_name = "teammate"
+            #         else:
+            #             detection_class_name = "opponent"
+            #         if player.is_tagged:
+            #             detection_class_name += "_is_tagged"
+            #         elif player.has_flag:
+            #             detection_class_name += "_has_flag"
 
-                    self.obj_ray_detection_states[team][self.ray_int_label_map[agent_id]] = LIDAR_DETECTION_CLASS_MAP[detection_class_name]
+            #         self.obj_ray_detection_states[team][self.ray_int_label_map[agent_id]] = LIDAR_DETECTION_CLASS_MAP[detection_class_name]
 
         # Message
         if cli_message and self.render_mode == 'human':
@@ -1368,90 +1376,91 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         return heading_error
 
     def _update_lidar(self):
-        ray_int_segments = np.copy(self.ray_int_segments)
+        raise NotImplementedError("Vector environment with Lidar not implemented.")
+        # ray_int_segments = np.copy(self.ray_int_segments)
 
-        # Valid flag intersection segments mask
-        flag_int_seg_mask = np.ones(len(self.ray_int_seg_labels), dtype=bool)
-        flag_seg_inds = self.seg_label_type_to_inds["flag"]
-        flag_int_seg_mask[flag_seg_inds] = np.repeat(np.logical_not(self.state["flag_taken"]), self.n_circle_segments)
+        # # Valid flag intersection segments mask
+        # flag_int_seg_mask = np.ones(len(self.ray_int_seg_labels), dtype=bool)
+        # flag_seg_inds = self.seg_label_type_to_inds["flag"]
+        # flag_int_seg_mask[flag_seg_inds] = np.repeat(np.logical_not(self.state["flag_taken"]), self.n_circle_segments)
 
-        # Translate non-static ray intersection geometries (flags and agents)
-        ray_int_segments[flag_seg_inds] += np.repeat(
-            np.tile(self.state["flag_home"], 2),
-            self.n_circle_segments,
-            axis=0
-        )
-        agent_seg_inds = self.seg_label_type_to_inds["agent"]
-        ray_int_segments[agent_seg_inds] += np.repeat(
-            np.tile(self.state["agent_position"], 2),
-            self.n_circle_segments,
-            axis=0
-        )
-        ray_int_segments = ray_int_segments.reshape(1, -1, 4)
+        # # Translate non-static ray intersection geometries (flags and agents)
+        # ray_int_segments[flag_seg_inds] += np.repeat(
+        #     np.tile(self.state["flag_home"], 2),
+        #     self.n_circle_segments,
+        #     axis=0
+        # )
+        # agent_seg_inds = self.seg_label_type_to_inds["agent"]
+        # ray_int_segments[agent_seg_inds] += np.repeat(
+        #     np.tile(self.state["agent_position"], 2),
+        #     self.n_circle_segments,
+        #     axis=0
+        # )
+        # ray_int_segments = ray_int_segments.reshape(1, -1, 4)
 
-        # Agent rays
-        ray_origins = np.expand_dims(self.state["agent_position"], axis=1)
-        ray_headings_global = np.deg2rad(
-            (heading_angle_conversion(self.state["agent_heading"]).reshape(-1, 1) + self.lidar_ray_headings) % 360
-        )
-        ray_vecs = np.array([np.cos(ray_headings_global), np.sin(ray_headings_global)]).transpose(1, 2, 0)
-        ray_ends = ray_origins + self.lidar_range * ray_vecs
-        ray_segments = np.concatenate(
-            (np.full(ray_ends.shape, ray_origins), ray_ends),
-            axis=-1
-        )
-        ray_segments = ray_segments.reshape(self.num_agents, -1, 1, 4)
+        # # Agent rays
+        # ray_origins = np.expand_dims(self.state["agent_position"], axis=1)
+        # ray_headings_global = np.deg2rad(
+        #     (heading_angle_conversion(self.state["agent_heading"]).reshape(-1, 1) + self.lidar_ray_headings) % 360
+        # )
+        # ray_vecs = np.array([np.cos(ray_headings_global), np.sin(ray_headings_global)]).transpose(1, 2, 0)
+        # ray_ends = ray_origins + self.lidar_range * ray_vecs
+        # ray_segments = np.concatenate(
+        #     (np.full(ray_ends.shape, ray_origins), ray_ends),
+        #     axis=-1
+        # )
+        # ray_segments = ray_segments.reshape(self.num_agents, -1, 1, 4)
 
-        # compute ray intersections
-        x1, y1, x2, y2 = (
-            ray_segments[..., 0],
-            ray_segments[..., 1],
-            ray_segments[..., 2],
-            ray_segments[..., 3],
-        )
-        x3, y3, x4, y4 = (
-            ray_int_segments[..., 0],
-            ray_int_segments[..., 1],
-            ray_int_segments[..., 2],
-            ray_int_segments[..., 3],
-        )
+        # # compute ray intersections
+        # x1, y1, x2, y2 = (
+        #     ray_segments[..., 0],
+        #     ray_segments[..., 1],
+        #     ray_segments[..., 2],
+        #     ray_segments[..., 3],
+        # )
+        # x3, y3, x4, y4 = (
+        #     ray_int_segments[..., 0],
+        #     ray_int_segments[..., 1],
+        #     ray_int_segments[..., 2],
+        #     ray_int_segments[..., 3],
+        # )
 
-        denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
-        intersect_x = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / denom
-        intersect_y = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4) ) / denom
+        # denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+        # intersect_x = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / denom
+        # intersect_y = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4) ) / denom
 
-        # mask invalid intersections (parallel lines, outside of segment bounds, picked up flags, own agent segments)
-        mask = (denom != 0) & \
-            (intersect_x >= np.minimum(x1, x2) - LINE_INTERSECT_TOL) & (intersect_x <= np.maximum(x1, x2) + LINE_INTERSECT_TOL) & \
-            (intersect_y >= np.minimum(y1, y2) - LINE_INTERSECT_TOL) & (intersect_y <= np.maximum(y1, y2) + LINE_INTERSECT_TOL) & \
-            (intersect_x >= np.minimum(x3, x4) - LINE_INTERSECT_TOL) & (intersect_x <= np.maximum(x3, x4) + LINE_INTERSECT_TOL) & \
-            (intersect_y >= np.minimum(y3, y4) - LINE_INTERSECT_TOL) & (intersect_y <= np.maximum(y3, y4) + LINE_INTERSECT_TOL) & \
-            flag_int_seg_mask & self.agent_int_seg_mask
+        # # mask invalid intersections (parallel lines, outside of segment bounds, picked up flags, own agent segments)
+        # mask = (denom != 0) & \
+        #     (intersect_x >= np.minimum(x1, x2) - LINE_INTERSECT_TOL) & (intersect_x <= np.maximum(x1, x2) + LINE_INTERSECT_TOL) & \
+        #     (intersect_y >= np.minimum(y1, y2) - LINE_INTERSECT_TOL) & (intersect_y <= np.maximum(y1, y2) + LINE_INTERSECT_TOL) & \
+        #     (intersect_x >= np.minimum(x3, x4) - LINE_INTERSECT_TOL) & (intersect_x <= np.maximum(x3, x4) + LINE_INTERSECT_TOL) & \
+        #     (intersect_y >= np.minimum(y3, y4) - LINE_INTERSECT_TOL) & (intersect_y <= np.maximum(y3, y4) + LINE_INTERSECT_TOL) & \
+        #     flag_int_seg_mask & self.agent_int_seg_mask
 
-        intersect_x = np.where(mask, intersect_x, -self.env_diag)  #a coordinate out of bounds and far away
-        intersect_y = np.where(mask, intersect_y, -self.env_diag)  #a coordinate out of bounds and far away
-        intersections = np.stack((intersect_x.flatten(), intersect_y.flatten()), axis=-1).reshape(intersect_x.shape + (2,))
+        # intersect_x = np.where(mask, intersect_x, -self.env_diag)  #a coordinate out of bounds and far away
+        # intersect_y = np.where(mask, intersect_y, -self.env_diag)  #a coordinate out of bounds and far away
+        # intersections = np.stack((intersect_x.flatten(), intersect_y.flatten()), axis=-1).reshape(intersect_x.shape + (2,))
 
-        # determine lidar ray readings
-        ray_origins = np.expand_dims(ray_origins, axis=1)
-        intersection_dists = np.linalg.norm(intersections - ray_origins, axis=-1)
-        ray_int_inds = np.argmin(intersection_dists, axis=-1)
+        # # determine lidar ray readings
+        # ray_origins = np.expand_dims(ray_origins, axis=1)
+        # intersection_dists = np.linalg.norm(intersections - ray_origins, axis=-1)
+        # ray_int_inds = np.argmin(intersection_dists, axis=-1)
 
-        ray_int_labels = self.ray_int_seg_labels[ray_int_inds]
-        ray_intersections = intersections[np.arange(self.num_agents).reshape(-1, 1), np.arange(self.num_lidar_rays), ray_int_inds]
-        ray_int_dists = intersection_dists[np.arange(self.num_agents).reshape(-1, 1), np.arange(self.num_lidar_rays), ray_int_inds]
+        # ray_int_labels = self.ray_int_seg_labels[ray_int_inds]
+        # ray_intersections = intersections[np.arange(self.num_agents).reshape(-1, 1), np.arange(self.num_lidar_rays), ray_int_inds]
+        # ray_int_dists = intersection_dists[np.arange(self.num_agents).reshape(-1, 1), np.arange(self.num_lidar_rays), ray_int_inds]
 
-        # correct lidar ray readings for which nothing was detected
-        invalid_ray_ints = np.where(np.all(np.logical_not(mask), axis=-1))
-        ray_int_labels[invalid_ray_ints] = self.ray_int_label_map["nothing"]
-        ray_intersections[invalid_ray_ints] = ray_ends[invalid_ray_ints]
-        ray_int_dists[invalid_ray_ints] = self.lidar_range
+        # # correct lidar ray readings for which nothing was detected
+        # invalid_ray_ints = np.where(np.all(np.logical_not(mask), axis=-1))
+        # ray_int_labels[invalid_ray_ints] = self.ray_int_label_map["nothing"]
+        # ray_intersections[invalid_ray_ints] = ray_ends[invalid_ray_ints]
+        # ray_int_dists[invalid_ray_ints] = self.lidar_range
 
-        # save lidar readings
-        for i, agent_id in enumerate(self.players):
-            self.state["lidar_labels"][agent_id] = ray_int_labels[i]
-            self.state["lidar_ends"][agent_id] = ray_intersections[i]
-            self.state["lidar_distances"][agent_id] = ray_int_dists[i]
+        # # save lidar readings
+        # for i, agent_id in enumerate(self.players):
+        #     self.state["lidar_labels"][agent_id] = ray_int_labels[i]
+        #     self.state["lidar_ends"][agent_id] = ray_intersections[i]
+        #     self.state["lidar_distances"][agent_id] = ray_int_dists[i]
 
     def _check_oob(self, env_idxs):
         """Checks if players are out of bounds and updates their states (and any flags in their possesion) accordingly."""
@@ -2385,50 +2394,53 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             # lidar
             if self.lidar_obs:
-                # reset lidar readings
-                self.state["lidar_labels"] = dict()
-                self.state["lidar_ends"] = dict()
-                self.state["lidar_distances"] = dict()
+                raise NotImplementedError("Vector environment with Lidar not implemented.")
+                # # reset lidar readings
+                # self.state["lidar_labels"] = dict()
+                # self.state["lidar_ends"] = dict()
+                # self.state["lidar_distances"] = dict()
 
-                for agent_id in self.players:
-                    self.state["lidar_labels"][agent_id] = np.zeros(self.num_lidar_rays, dtype=int)
-                    self.state["lidar_ends"][agent_id] = np.zeros((self.num_lidar_rays, 2))
-                    self.state["lidar_distances"][agent_id] = np.zeros(self.num_lidar_rays)
-                    self._update_lidar()
+                # for agent_id in self.players:
+                #     self.state["lidar_labels"][agent_id] = np.zeros(self.num_lidar_rays, dtype=int)
+                #     self.state["lidar_ends"][agent_id] = np.zeros((self.num_lidar_rays, 2))
+                #     self.state["lidar_distances"][agent_id] = np.zeros(self.num_lidar_rays)
+                #     self._update_lidar()
 
-                for team in self.agents_of_team:
-                    for label_name, label_idx in self.ray_int_label_map.items():
-                        if label_name.startswith("agent"):
-                            #reset agent lidar detection states (not tagged and do not have flag)
-                            if int(label_name[6:]) in self.agent_inds_of_team[team]:
-                                self.obj_ray_detection_states[team][label_idx] = LIDAR_DETECTION_CLASS_MAP["teammate"]
-                            else:
-                                self.obj_ray_detection_states[team][label_idx] = LIDAR_DETECTION_CLASS_MAP["opponent"]
+                # for team in self.agents_of_team:
+                #     for label_name, label_idx in self.ray_int_label_map.items():
+                #         if label_name.startswith("agent"):
+                #             #reset agent lidar detection states (not tagged and do not have flag)
+                #             if int(label_name[6:]) in self.agent_inds_of_team[team]:
+                #                 self.obj_ray_detection_states[team][label_idx] = LIDAR_DETECTION_CLASS_MAP["teammate"]
+                #             else:
+                #                 self.obj_ray_detection_states[team][label_idx] = LIDAR_DETECTION_CLASS_MAP["opponent"]
 
         # Rendering
         if self.render_mode:
-            if self.render_saving:
-                self.render_buffer = []
-            if self.render_traj_mode:
-                self.traj_render_buffer = {agent_id: {"traj": [], "agent": [], "history": []} for agent_id in self.players}
+            self.render_ctr[env_idxs] = 0
+            for i in env_idxs:
+                if self.render_saving:
+                    self.render_buffer[i] = []
+                if self.render_traj_mode:
+                    for agent_id in self.players:
+                        self.traj_render_buffer[agent_id]["traj"][i] = []
+                        self.traj_render_buffer[agent_id]["agent"][i] = []
+                        self.traj_render_buffer[agent_id]["history"][i] = []
 
-            self.render_ctr = 0
+        # Observations and Info
+        obs = {}
+        info = {}
+        global_state = self.state_to_global_state(self.normalize_state, env_idxs)
 
-        # Observations
-        obs = {agent_id: self._history_to_obs(agent_id, "obs_hist_buffer") for agent_id in self.players}
-
-        # Global State
-        global_state = self._history_to_state() #common to all agents
-
-        # Info
-        info = {agent_id: {} for agent_id in self.players}
         for agent_id in self.agents:
-            #global state
-            info[agent_id]["global_state"] = global_state
-
-            #unnormalized obs
+            info[agent_id] = {
+                "env_idxs": env_idxs,
+                "global_state": global_state
+            }
             if self.normalize_obs:
-                info[agent_id]["unnorm_obs"] = self._history_to_obs(agent_id, "unnorm_obs_hist_buffer")
+                obs[agent_id], info[agent_id]["unnorm_obs"] = self.state_to_obs(env_idxs, agent_id, self.normalize_obs)
+            else:
+                obs[agent_id], _ = self.state_to_obs(env_idxs, agent_id, self.normalize_obs)
 
         # Reset Count
         self.reset_count[env_idxs] += 1
@@ -4430,7 +4442,7 @@ when gps environment bounds are specified in meters"
         else:
             return b
 
-    def state_to_obs(self, agent_id, normalize=True):
+    def state_to_obs(self, env_idxs, agent_id, normalize=True):
         """
         Modified method to convert the state to agent observations. In addition to the
         logic performed in the superclass state_to_obs, this method adds the distance
@@ -4443,7 +4455,7 @@ when gps environment bounds are specified in meters"
         Returns
             The agent's observation
         """
-        obs, _ = super().state_to_obs(agent_id, normalize=False)
+        obs, _ = super().state_to_obs(env_idxs, agent_id, normalize=False)
 
         if not self.lidar_obs:
             # Obstacle Distance/Bearing
