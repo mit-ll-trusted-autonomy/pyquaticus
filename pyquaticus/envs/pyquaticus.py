@@ -661,39 +661,13 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             #     global_state[(agent_id, f"obstacle_{i}_bearing")] = obstacle[1]
 
         # flag info
-        global_state["blue_flag_home"] = self._standard_pos(self.state["flag_home"][int(Team.BLUE_TEAM)])
-        global_state["red_flag_home"] = self._standard_pos(self.state["flag_home"][int(Team.RED_TEAM)])
+        global_state["blue_flag_home"] = self._standard_pos(self.flags[int(Team.BLUE_TEAM)].home)
+        global_state["red_flag_home"] = self._standard_pos(self.flags[int(Team.RED_TEAM)].home)
 
         if normalize:
             return self.global_state_normalizer.normalized(global_state)
         else:
             return global_state
-
-    def get_state(self):
-        """ Get current normalized global state"""
-        #TODO: figure out some way to make this work with pettingzoo wrapper for pymarlzooplus (maybe save and return the latest state from info?)
-        # global_state = self.state['global_state_hist_buffer'][0]
-
-        # if not self.normalize_state:
-        #     global_state = self.global_state_normalizer.normalized(global_state)
-
-        # return global_state
-
-    def _history_to_state(self):
-        if self.state_hist_len > 1:
-            global_state = self.state["global_state_hist_buffer"][self.state_hist_buffer_inds]
-        else:
-            global_state = self.state["global_state_hist_buffer"][0]
-
-        return global_state
-
-    def _history_to_obs(self, agent_id, buffer_key):
-        if self.obs_hist_len > 1:
-            agent_obs = self.state[buffer_key][agent_id][self.obs_hist_buffer_inds]
-        else:
-            agent_obs = self.state[buffer_key][agent_id][0]
-
-        return agent_obs
 
     @functools.lru_cache(maxsize=None)
     def action_space(self, agent_id: str):
