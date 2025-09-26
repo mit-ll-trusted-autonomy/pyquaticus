@@ -359,31 +359,25 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         max_bool, min_bool = [1.0], [0.0]
         max_speed, min_speed = [max(self.max_speeds)], [0.0]
 
+        global_state_normalizer.register("blue_flag_home", pos_max, pos_min)
+        global_state_normalizer.register("red_flag_home", pos_max, pos_min)
+
         for player in self.players.values():
             player_name = player.id
 
             global_state_normalizer.register((player_name, "pos"), pos_max, pos_min)
             global_state_normalizer.register((player_name, "heading"), max_heading)
-            # global_state_normalizer.register((player_name, "scrimmage_line_bearing"), max_bearing)
-            # global_state_normalizer.register((player_name, "scrimmage_line_distance"), max_dist, min_dist)
             global_state_normalizer.register((player_name, "speed"), max_speed, min_speed)
             global_state_normalizer.register((player_name, "has_flag"), max_bool, min_bool)
             global_state_normalizer.register((player_name, "on_side"), max_bool, min_bool)
-            global_state_normalizer.register((player_name, "oob"), max_bool, min_bool)
             global_state_normalizer.register((player_name, "tagging_cooldown"), [self.tagging_cooldown], [0.0])
             global_state_normalizer.register((player_name, "is_tagged"), max_bool, min_bool)
+            global_state_normalizer.register((player_name, "out_of_bounds"), max_bool, min_bool)
+            global_state_normalizer.register((player_name, "in_flag_keepout"), max_bool, min_bool)
 
             for i in range(num_obstacles):
                 global_state_normalizer.register((player_name, f"obstacle_{i}_distance"), max_dist, min_dist)
                 global_state_normalizer.register((player_name, f"obstacle_{i}_bearing"), max_bearing)
-
-        global_state_normalizer.register("blue_flag_home", pos_max, pos_min)
-        global_state_normalizer.register("red_flag_home", pos_max, pos_min)
-        # global_state_normalizer.register("blue_flag_pos", pos_max, pos_min)
-        # global_state_normalizer.register("red_flag_pos", pos_max, pos_min)
-
-        # global_state_normalizer.register("blue_flag_pickup", max_bool, min_bool)
-        # global_state_normalizer.register("red_flag_pickup", max_bool, min_bool)
 
         return agent_obs_normalizer, global_state_normalizer
 
@@ -593,15 +587,15 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                     obs[(entry_name, "on_side")] = self.state["agent_on_sides"][env_idxs, dif_agent.idx]
                     obs[(entry_name, "tagging_cooldown")] = self.state["agent_tagging_cooldown"][env_idxs, dif_agent.idx]
                     obs[(entry_name, "is_tagged")] = self.state["agent_is_tagged"][env_idxs, dif_agent.idx]
-                    obs[(entry_name, "out_of_bounds")] = self.state["out_of_bounds"][env_idxs, dif_agent.idx]
-                    obs[(entry_name, "in_flag_keepout")] = self.state["in_flag_keepout"][env_idxs, dif_agent.idx]
+                    obs[(entry_name, "out_of_bounds")] = self.state["agent_oob"][env_idxs, dif_agent.idx]
+                    obs[(entry_name, "in_flag_keepout")] = self.state["agent_in_flag_keepout"][env_idxs, dif_agent.idx]
 
         if normalize:
             return self.agent_obs_normalizer.normalized(obs), obs
         else:
             return obs, None
     
-    def state_to_global_state(self, normalize=True):
+    def state_to_global_state(self, env_idxs, normalize=True):
         """
         Returns a global environment state:
             - Agent 0:
@@ -645,44 +639,30 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
         # agent info
         for i, (agent_id, agent) in enumerate(self.players.items()):
-            pos = self.state["agent_position"][agent.idx]
-            heading = self.state["agent_heading"][agent.idx]
-
-            # scrimmage_line_closest_point = closest_point_on_line(
-            #     self.scrimmage_coords[0], self.scrimmage_coords[1], pos
-            # )
-            # scrimmage_line_dist, scrimmage_line_bearing = mag_bearing_to(
-            #     pos, scrimmage_line_closest_point, heading
-            # )
+            pos = self.state["agent_position"][env_idxs, agent.idx]
+            heading = self.state["agent_heading"][env_idxs, agent.idx]
 
             global_state[(agent_id, "pos")] = self._standard_pos(pos)
             global_state[(agent_id, "heading")] = self._standard_heading(heading)
-            # global_state[(agent_id, "scrimmage_line_bearing")] = scrimmage_line_bearing
-            # global_state[(agent_id, "scrimmage_line_distance")] = scrimmage_line_dist
-            global_state[(agent_id, "speed")] = self.state["agent_speed"][agent.idx]
-            global_state[(agent_id, "has_flag")] = self.state["agent_has_flag"][agent.idx]
-            global_state[(agent_id, "on_side")] = self.state["agent_on_sides"][agent.idx]
-            global_state[(agent_id, "oob")] = self.state["agent_oob"][agent.idx]
-            global_state[(agent_id, "tagging_cooldown")] = self.state["agent_tagging_cooldown"][agent.idx]
-            global_state[(agent_id, "is_tagged")] = self.state["agent_is_tagged"][agent.idx]
+            global_state[(agent_id, "speed")] = self.state["agent_speed"][env_idxs, agent.idx]
+            global_state[(agent_id, "has_flag")] = self.state["agent_has_flag"][env_idxs, agent.idx]
+            global_state[(agent_id, "on_side")] = self.state["agent_on_sides"][env_idxs, agent.idx]
+            global_state[(agent_id, "tagging_cooldown")] = self.state["agent_tagging_cooldown"][env_idxs, agent.idx]
+            global_state[(agent_id, "is_tagged")] = self.state["agent_is_tagged"][env_idxs, agent.idx]
+            global_state[(agent_id, "out_of_bounds")] = self.state["agent_oob"][env_idxs, agent.idx]
+            global_state[(agent_id, "in_flag_keepout")] = self.state["agent_in_flag_keepout"][env_idxs, agent.idx]
 
-            #Obstacle Distance/Bearing
-            for i, obstacle in enumerate(
-                self.state["dist_bearing_to_obstacles"][agent_id]
-            ):
-                global_state[(agent_id, f"obstacle_{i}_distance")] = obstacle[0]
-                global_state[(agent_id, f"obstacle_{i}_bearing")] = obstacle[1]
+            #TODO: fix obstacle state
+            #obstacle distance/bearing
+            # for i, obstacle in enumerate(
+            #     self.state["dist_bearing_to_obstacles"][agent_id]
+            # ):
+            #     global_state[(agent_id, f"obstacle_{i}_distance")] = obstacle[0]
+            #     global_state[(agent_id, f"obstacle_{i}_bearing")] = obstacle[1]
 
-        # flag and score info
-        blue_team_idx = int(Team.BLUE_TEAM)
-        red_team_idx = int(Team.RED_TEAM)
-
-        global_state["blue_flag_home"] = self._standard_pos(self.state["flag_home"][blue_team_idx])
-        global_state["red_flag_home"] = self._standard_pos(self.state["flag_home"][red_team_idx])
-        global_state["blue_flag_pos"] = self._standard_pos(self.state["flag_position"][blue_team_idx])
-        global_state["red_flag_pos"] = self._standard_pos(self.state["flag_position"][red_team_idx])
-        # global_state["blue_flag_pickup"] = self.state["flag_taken"][blue_team_idx]
-        # global_state["red_flag_pickup"] = self.state["flag_taken"][red_team_idx]
+        # flag info
+        global_state["blue_flag_home"] = self._standard_pos(self.state["flag_home"][int(Team.BLUE_TEAM)])
+        global_state["red_flag_home"] = self._standard_pos(self.state["flag_home"][int(Team.RED_TEAM)])
 
         if normalize:
             return self.global_state_normalizer.normalized(global_state)
@@ -691,12 +671,13 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
     def get_state(self):
         """ Get current normalized global state"""
-        global_state = self.state['global_state_hist_buffer'][0]
+        #TODO: figure out some way to make this work with pettingzoo wrapper for pymarlzooplus (maybe save and return the latest state from info?)
+        # global_state = self.state['global_state_hist_buffer'][0]
 
-        if not self.normalize_state:
-            global_state = self.global_state_normalizer.normalized(global_state)
+        # if not self.normalize_state:
+        #     global_state = self.global_state_normalizer.normalized(global_state)
 
-        return global_state
+        # return global_state
 
     def _history_to_state(self):
         if self.state_hist_len > 1:
@@ -1226,7 +1207,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Global State
         self.state["global_state_hist_buffer"][1:] = self.state["global_state_hist_buffer"][:-1]
-        self.state["global_state_hist_buffer"][0] = self.state_to_global_state(self.normalize_state)
+        self.state["global_state_hist_buffer"][0] = self.state_to_global_state(self.normalize_state, env_idxs)
         global_state = self._history_to_state() #common to all agents
 
         # Rewards
@@ -4477,13 +4458,14 @@ when gps environment bounds are specified in meters"
         """
         obs, _ = super().state_to_obs(env_idxs, agent_id, normalize=False)
 
-        if not self.lidar_obs:
-            # Obstacle Distance/Bearing
-            for i, obstacle in enumerate(
-                self.state["dist_bearing_to_obstacles"][agent_id]
-            ):
-                obs[f"obstacle_{i}_distance"] = obstacle[0]
-                obs[f"obstacle_{i}_bearing"] = obstacle[1]
+        #TODO: fix obstacle obs
+        # if not self.lidar_obs:
+        #     # Obstacle Distance/Bearing
+        #     for i, obstacle in enumerate(
+        #         self.state["dist_bearing_to_obstacles"][agent_id]
+        #     ):
+        #         obs[f"obstacle_{i}_distance"] = obstacle[0]
+        #         obs[f"obstacle_{i}_bearing"] = obstacle[1]
 
         if normalize:
             return self.agent_obs_normalizer.normalized(obs), obs
