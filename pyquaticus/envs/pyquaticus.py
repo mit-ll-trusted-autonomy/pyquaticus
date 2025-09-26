@@ -202,30 +202,17 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             Note: we use relative heading here so that it can be used directly
                   as the heading error in the PID controller
         """
-        if act_space_match:
-            # Continuous actions
-            if act_space_str == "continuous":
-                speed = raw_action[0] * self.max_speeds[player.idx]
-                rel_heading = raw_action[1] * 180
-            # Discrete action space
-            elif act_space_str == "discrete":    
-                speed, rel_heading = self._discrete_action_to_speed_relheading(raw_action)
-                speed = self.max_speeds[player.idx] * speed #scale speed to agent's max speed
-            # Aquaticus point field
-            else:
-                speed, rel_heading = self._afp_to_speed_relheading(raw_action, player)
+        # Continuous actions
+        if act_space_str == "continuous":
+            speed = raw_action[..., 0] * self.max_speeds[player.idx]
+            rel_heading = raw_action[..., 1] * 180
+        # Discrete action space
+        elif act_space_str == "discrete":    
+            speed, rel_heading = self._discrete_action_to_speed_relheading(raw_action)
+            speed = self.max_speeds[player.idx] * speed #scale speed to agent's max speed
+        # Aquaticus point field
         else:
-            # Continuous actions
-            if isinstance(raw_action, (list, tuple, np.ndarray)):
-                speed = raw_action[0] * self.max_speeds[player.idx]
-                rel_heading = raw_action[1] * 180
-            # Aquaticus point field
-            elif isinstance(raw_action, str):
-                speed, rel_heading = self._afp_to_speed_relheading(raw_action, player)
-            # Discrete action space
-            else:
-                speed, rel_heading = self._discrete_action_to_speed_relheading(raw_action)
-                speed = self.max_speeds[player.idx] * speed #scale speed to agent's max speed
+            speed, rel_heading = self._afp_to_speed_relheading(raw_action, player)
 
         return speed, rel_heading
 
@@ -680,7 +667,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
     def get_agent_action_space(self, action_space: str, agent_idx: int):
         """Legacy Gym method"""
         if action_space == "discrete":    
-            return Discrete(len(self.discrete_action_map))
+            return Discrete(self.discrete_action_map.shape[0])
         elif action_space == "continuous":
             return Box(
                 low=np.array([0, -1], dtype=np.float32), #speed, relative heading
@@ -916,7 +903,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.config_dict = config_dict
         self.render_mode = render_mode
 
-        self.reset_count = np.zeros(n_envs, dtype=int)
+        self.reset_ctr = np.zeros(n_envs, dtype=int)
         self.step_count = np.zeros(n_envs, dtype=int)
         self.current_time = np.zeros(n_envs)
         self.state = None
@@ -977,7 +964,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.players: dict[str, Dynamics] = {player.id: player for player in itertools.chain(b_players, r_players)}  #maps player ids (or names) to player objects
         self.agents = [agent_id for agent_id in self.players] #maps agent indices to ids
         self.possible_agents = [agent_id for agent_id in self.players]
-        self.max_speeds = [player.get_max_speed() for player in self.players.values()]
+        self.max_speeds = np.array([player.get_max_speed() for player in self.players.values()])
 
         # Agents (player objects) of each team
         self.agents_of_team = {Team.BLUE_TEAM: b_players, Team.RED_TEAM: r_players}
@@ -1001,18 +988,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.set_geom_config(config_dict)
 
         # Setup action and observation spaces
-        self.discrete_action_map = [[spd, hdg] for (spd, hdg) in ACTION_MAP]
-        self.act_space_str = self.multiagent_var(action_space, type(action_space), "action_space")
+        self.discrete_action_map = np.array([[spd, hdg] for (spd, hdg) in ACTION_MAP])
 
+        self.act_space_str = self.multiagent_var(action_space, type(action_space), "action_space")
         if not isinstance(self.act_space_str, dict):
             self.act_space_str = {agent_id: self.act_space_str[i] for i, agent_id in enumerate(self.players)}
 
         self.action_spaces = {agent_id: self.get_agent_action_space(self.act_space_str[agent_id], i) for i, agent_id in enumerate(self.players)}
-        self.act_space_checked = {agent_id: False for agent_id in self.players}
-        self.act_space_match = {agent_id: True for agent_id in self.players}
-
-        self.agent_obs_normalizer, self.global_state_normalizer = self._register_state_elements(team_size, len(self.obstacles), n_envs)
         self.observation_spaces = {agent_id: self.get_agent_observation_space() for agent_id in self.players}
+        self.agent_obs_normalizer, self.global_state_normalizer = self._register_state_elements(team_size, len(self.obstacles), n_envs)
 
         # Set up rewards
         for agent_id in self.players:
@@ -1020,7 +1004,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.reward_config[agent_id] = None
 
         # Pygame
-        self.screen = None
+        self.screen = n_envs * [None]
         self.clock = None
         self.render_ctr = np.zeros(n_envs, dtype=int)
         self.render_buffer = [[] for _ in range(n_envs)]
@@ -1073,7 +1057,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 -global state
                 -unnormalized observations
         """
-        if self.state is None:
+        if np.any(self.reset_ctr[env_idxs] == 0):
             raise Exception("Call reset before using step method.")
 
         if not set(raw_action_dict.keys()) <= set(self.players):
@@ -1085,57 +1069,40 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # Previous state
         self.prev_state = copy.deepcopy(self.state)
 
+        # Process incoming actions
+        action_dict = {}
+        for player in self.players.values():
+            if player.id in raw_action_dict:
+                speed, rel_heading = self._to_speed_heading(
+                    raw_action=raw_action_dict[player.id],
+                    player=player,
+                    act_space_str=self.act_space_str[player.id]
+                )
+            else:
+                #if no action provided, no-op
+                speed, rel_heading = np.zeros(env_idxs.shape[0]), np.zeros(env_idxs.shape[0])
+
+            action_dict[player.id] = np.array([speed, rel_heading], dtype=np.float32)
+
+        # Move agents and render
+        for _ in range(self.timewarp):
+            self._move_agents(action_dict, env_idxs)
+        if self.lidar_obs:
+            raise NotImplementedError("Vector environment with Lidar not implemented.")
+            # self._update_lidar(env_idxs)
+
+        # Set the time
+        self.current_time[env_idxs] += self.timewarp * self.dt
+
         # Tagging cooldown
         for i, player in enumerate(self.players.values()):
             if player.tagging_cooldown != self.tagging_cooldown:
                 # player is still under a cooldown from tagging, advance their cooldown timer, clip at the configured tagging cooldown
                 player.tagging_cooldown = self._min(
-                    (player.tagging_cooldown + self.sim_speedup_factor * self.dt),
+                    (player.tagging_cooldown + self.timewarp * self.dt),
                     self.tagging_cooldown,
                 )
                 self.state["agent_tagging_cooldown"][i] = player.tagging_cooldown
-        
-        # Process incoming actions
-        action_dict = {}
-        for player in self.players.values():
-            if player.id in raw_action_dict:
-                if not self.act_space_checked[player.id]:
-                    if isinstance(raw_action_dict[player.id], str):
-                        self.act_space_match[player.id] = self.action_spaces[player.id].contains(
-                            np.asarray(raw_action_dict[player.id])
-                        )
-                    else:
-                        self.act_space_match[player.id] = self.action_spaces[player.id].contains(
-                            np.asarray(raw_action_dict[player.id], dtype=self.action_spaces[player.id].dtype)
-                        )
-                    self.act_space_checked[player.id] = True
-
-                    if not self.act_space_match[player.id]:
-                        action_print = repr(raw_action_dict[player.id]) if isinstance(raw_action_dict[player.id], str) else raw_action_dict[player.id]
-                        print(f"Warning! Action passed in for {player.id} ({action_print}) is not contained in agent's action space ({self.action_spaces[player.id]}).")
-                        print(f"Auto-detecting action space for {player.id}")
-                        print()
-
-                speed, rel_heading = self._to_speed_heading(
-                    raw_action=raw_action_dict[player.id],
-                    player=player,
-                    act_space_match=self.act_space_match[player.id],
-                    act_space_str=self.act_space_str[player.id]
-                )
-            else:
-                #if no action provided, no-op
-                speed, rel_heading = 0.0, 0.0
-
-            action_dict[player.id] = np.array([speed, rel_heading], dtype=np.float32)
-
-        # Move agents and render
-        for _ in range(self.sim_speedup_factor):
-            self._move_agents(action_dict)
-        if self.lidar_obs:
-            self._update_lidar()
-
-        # Set the time
-        self.current_time += self.sim_speedup_factor * self.dt
 
         # Agent and flag checks and more
         self._check_oob(env_idxs)
@@ -1669,12 +1636,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Simulation parameters
         self.dt = config_dict.get("tau", config_dict_std["tau"])
-        self.sim_speedup_factor = config_dict.get("sim_speedup_factor", config_dict_std["sim_speedup_factor"])
+        self.timewarp = config_dict.get("timewarp", config_dict_std["timewarp"])
 
         # Game parameters
         self.max_score = config_dict.get("max_score", config_dict_std["max_score"])
         self.max_time = config_dict.get("max_time", config_dict_std["max_time"])
-        self.max_cycles = ceil(self.max_time / (self.sim_speedup_factor * self.dt))
+        self.max_cycles = ceil(self.max_time / (self.timewarp * self.dt))
         self.tagging_cooldown = config_dict.get("tagging_cooldown", config_dict_std["tagging_cooldown"])
         self.tag_on_collision = config_dict.get("tag_on_collision", config_dict_std["tag_on_collision"])
         self.tag_on_oob = config_dict.get("tag_on_oob", config_dict_std["tag_on_oob"])
@@ -1800,22 +1767,21 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Scale the aquaticus point field by env size 
         if not self.gps_env:
-            self.aquaticus_field_points = get_afp()
+            self.afp_dict = get_afp()
+            afp = np.array([self.env_size * (self.env_rot_matrix @ np.asarray(v) + self.env_ll) for v in self.afp_dict.values()])
+            self.aquaticus_field_points = {team: afp for team in Team}
 
-            if not np.all(np.isclose(self.scrimmage_coords[:, 0], 0.5*self.env_size[0])):
+            if not (
+                np.all(np.isclose(self.scrimmage_coords[:, 0], 0.5*self.env_size[0])) or
+                np.all(np.isclose(self.scrimmage_coords[:, 1], 0.5*self.env_size[1]))
+            ):
                 print("Warning! Aquaticus field points are not side/team agnostic when environment is not symmetric.")
                 print(f"Environment dimensions: {self.env_size}")
                 print(f"Scrimmage line coordinates: {self.scrimmage_coords}")
                 self.afp_sym = False
             else:
-                self.afp_sym = True
-                #TODO: pre-compute blue/ red symmetric field points so not necessary to be done every time _afp_to_speed_relheading() is called 
-
-            for k, v in self.aquaticus_field_points.items():
-                pt = self.env_rot_matrix @ np.asarray(v)
-                pt += self.env_ll
-                pt *= self.env_size
-                self.aquaticus_field_points[k] = pt
+                #NOTE: assumes afp-based policies are written for blue team
+                self.aquaticus_field_points[Team.RED_TEAM] = self.env_size - self.aquaticus_field_points[Team.RED_TEAM]
 
         ### Environment Rendering ###
         if self.render_mode:
@@ -1867,13 +1833,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             assert 1 / self.render_fps <= self.dt, frame_rate_err_msg
 
             # check that time warp is an integer >= 1
-            if self.sim_speedup_factor < 1:
-                print("Warning! sim_speedup_factor must be an integer >= 1! Defaulting to 1.")
-                self.sim_speedup_factor = 1
+            if self.timewarp < 1:
+                print("Warning! timewarp must be an integer >= 1! Defaulting to 1.")
+                self.timewarp = 1
 
-            if type(self.sim_speedup_factor) != int:
-                self.sim_speedup_factor = int(np.round(self.sim_speedup_factor))
-                print(f"Warning! Converted sim_speedup_factor to integer: {self.sim_speedup_factor}")
+            if type(self.timewarp) != int:
+                self.timewarp = int(np.round(self.timewarp))
+                print(f"Warning! Converted timewarp to integer: {self.timewarp}")
 
             # check that render_saving is only True if environment is being rendered
             if self.render_saving:
@@ -2141,25 +2107,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Aquaticus field points
         if self.render_field_points and not self.gps_env:
-            for v in self.aquaticus_field_points:
+            for v in self.afp_dict.values():
                 draw.circle(
                     self.pygame_background_img,
                     (128, 0, 128),
-                    self.env_to_screen(self.aquaticus_field_points[v]),
+                    self.env_to_screen(v),
                     radius=5,
                 )
-
-    def get_distance_between_2_points(self, start: np.ndarray, end: np.ndarray) -> float:
-        """
-        Convenience method for returning distance between two points.
-
-        Args:
-            start: Starting position to measure from
-            end: Point to measure to
-        Returns:
-            The distance between `start` and `end`
-        """
-        return np.linalg.norm(np.asarray(start) - np.asarray(end))
 
     def _set_dones(self, env_idxs):
         """Check all of the end game conditions."""
@@ -2276,7 +2230,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Reset env from state_dict 
         if state_dict != None:
-            if np.any(self.reset_count[env_idxs] == 0):
+            if np.any(self.reset_ctr[env_idxs] == 0):
                 raise Exception(
                     "Resetting from state_dict should only be done for an environment that has been previously reset."
                 )
@@ -2299,7 +2253,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             else:
                 flag_homes = np.array([flag.home for flag in self.flags], dtype=float)
 
-                if np.all(self.reset_count == 0):
+                if np.all(self.reset_ctr == 0):
                     self.state = {
                         "agent_position":            np.full((self.n_envs, self.num_agents, 2), np.nan),
                         "prev_agent_position":       np.full((self.n_envs, self.num_agents, 2), np.nan),
@@ -2416,7 +2370,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 obs[agent_id], _ = self.state_to_obs(env_idxs, agent_id, self.normalize_obs)
 
         # Reset Count
-        self.reset_count[env_idxs] += 1
+        self.reset_ctr[env_idxs] += 1
 
         return obs, info
 
@@ -2450,7 +2404,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         ### Setup Order of State Dictionary ###
         flag_homes = np.array([flag.home for flag in self.flags], dtype=float)
 
-        if np.all(self.reset_count == 0):
+        if np.all(self.reset_ctr == 0):
             self.state = {
                 "agent_position":            np.full((self.n_envs, self.num_agents, 2), np.nan),
                 "prev_agent_position":       np.full((self.n_envs, self.num_agents, 2), np.nan),
@@ -2728,7 +2682,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         for flag in self.flags:
             team_idx = int(flag.team)
             flag.pos = self.state['flag_position'][:, team_idx]
-            
+
             #NOTE: we do not set flag.home because this should already be set in __init__()
 
     def _generate_agent_starts(
