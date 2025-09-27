@@ -216,28 +216,14 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
         return speed, rel_heading
 
-    def _discrete_action_to_speed_relheading(self, action):
-        return self.discrete_action_map[action]
+    def _discrete_action_to_speed_relheading(self, raw_action):
+        return self.discrete_action_map[raw_action]
 
     def _afp_to_speed_relheading(self, raw_action, agent):
-        #make aquaticus point field the same on both blue and red sides
-        if agent.team == Team.RED_TEAM:
-            if "P" in raw_action:
-                raw_action = "S" + raw_action[1:]
-            elif "S" in raw_action:
-                raw_action = "P" + raw_action[1:]
-            if "X" not in raw_action and raw_action not in ["SC", "CC", "PC"]:
-                raw_action += "X"
-            elif raw_action not in ["SC", "CC", "PC"]:
-                raw_action = raw_action[:-1]
-
-        _, rel_heading = mag_bearing_to(
-            agent.pos, self.aquaticus_field_points[raw_action], agent.heading
+        dist, rel_heading = mag_bearing_to(
+            agent.pos, self.aquaticus_field_points[agent.team][raw_action], agent.heading
         )
-        if self.get_distance_between_2_points(agent.pos, self.aquaticus_field_points[raw_action]) <= self.agent_radius[agent.idx]:
-            speed = 0.0
-        else:
-            speed = self.max_speeds[agent.idx]
+        speed = np.where(dist<=self.agent_radius[agent.idx], 0., self.max_speeds[agent_idx])
 
         return speed, rel_heading
 
@@ -1022,21 +1008,21 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # RRT policies for driving back home
         self.rrt_policies = []
         if len(self.obstacles) > 0:
-            global EnvWaypointPolicy
-            from pyquaticus.base_policies.env_waypoint_policy import EnvWaypointPolicy
-            for i in range(self.n_envs):
-                self.rrt_policies.append([])
-                for j in range(self.num_agents):
-                    self.rrt_policies[i].append(
-                        EnvWaypointPolicy(
-                            self.obstacles,
-                            self.env_size,
-                            self.max_speeds[j],
-                            capture_radius=0.45*self.catch_radius,
-                            slip_radius=self.slip_radius[j],
-                            avoid_radius=2*self.agent_radius[j]
-                        )
-                    )
+            raise NotImplementedError("Vector environment with RRT* not implemented.")
+            # global EnvWaypointPolicy
+            # from pyquaticus.base_policies.env_waypoint_policy import EnvWaypointPolicy
+            # for i in range(self.num_agents):
+            #     self.rrt_policies.append(
+            #         EnvWaypointPolicy(
+            #             n_envs,
+            #             self.obstacles,
+            #             self.env_size,
+            #             self.max_speeds[i],
+            #             capture_radius=0.45 * self.catch_radius,
+            #             slip_radius=self.slip_radius[i],
+            #             avoid_radius=2 * self.agent_radius[i]
+            #         )
+            #     )
 
     def step(self, raw_action_dict, env_idxs):
         """
@@ -1184,7 +1170,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         return obs, rewards, terminated, truncated, info
 
-    def _move_agents(self, action_dict):
+    def _move_agents(self, action_dict, env_idxs):
         """Moves agents in the space according to the specified speed/heading in `action_dict`."""
         for i, player in enumerate(self.players.values()):
             team_idx = int(player.team)
@@ -1192,6 +1178,59 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             flag_home = self.flags[team_idx].home
 
+            if len(self.obstacles) > 0:
+                raise NotImplementedError("Vector environment with RRT* not implemented.")
+                # if len(self.rrt_policies[i].wps) > 0 and not player.is_tagged:
+                #     self.rrt_policies[i].wps = []
+
+            desired_speed = np.zeros(env_idxs.shape[0])
+            heading_error = np.zeros(env_idxs.shape[0])
+
+            # If agent is tagged, drive at max speed towards home
+            agent_is_tagged = self.state["agent_is_tagged"][env_idxs, player.idx]
+            if np.any(agent_is_tagged):
+                is_tagged_idxs = np.where(np.any(agent_is_tagged, axis=-1))[0]
+                is_tagged_env_idxs = env_idxs[is_tagged_idxs]
+
+                #if we are in an environment with obstacles, use RRT*
+                if len(self.obstacles) > 0:
+                    raise NotImplementedError("Vector environment with RRT* not implemented.")
+                    # policy = self.rrt_policies[i]
+                    # assert isinstance(policy, EnvWaypointPolicy)
+                    # if len(policy.wps) == 0 and not policy.planning:
+                    #     policy.plan(player.pos, self.flags[team_idx].home)
+                    #     desired_speed = 0
+                    #     heading_error = 0
+                    # else:
+                    #     desired_speed, heading_error = policy.compute_action(player.pos, player.heading)
+                    #     if player.oob:
+                    #         desired_speed = min(desired_speed, player.get_max_speed() * self.oob_speed_frac)
+            
+                #else go directly to home
+                else:
+                    _, heading_error[is_tagged_idxs] = mag_bearing_to(
+                        self.state["agent_position"][is_tagged_env_idxs, player.idx],
+                        flag_home,
+                        self.state["agent_heading"][is_tagged_env_idxs, player.idx]
+                    )
+                    desired_speed[is_tagged_idxs] = np.where(
+                        self.state["agent_oob"][is_tagged_env_idxs, player.idx]
+                        self.oob_speed_frac * self.max_speeds[player.idx],
+                        self.max_speeds[player.idx]
+                    )
+
+            # If agent is out of bounds, drive back in bounds at fraction of max speed
+            agent_oob = self.state["agent_oob"][env_idxs, player.idx]
+            if np.any(agent_is_tagged):
+                
+
+
+            elif player.oob:
+                heading_error = self._get_oob_recover_rel_heading(player.pos, player.heading)
+                desired_speed = player.get_max_speed() * self.oob_speed_frac
+
+
+            #############################################################################################################
             # Check if agent is on their own side
             player.on_own_side = self._check_on_sides(player.pos, player.team)
             self.state["agent_on_sides"][i] = player.on_own_side
@@ -1222,29 +1261,31 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 continue
 
             if len(self.obstacles) > 0:
-                if len(self.rrt_policies[i].wps) > 0 and not player.is_tagged:
-                    self.rrt_policies[i].wps = []
+                raise NotImplementedError("Vector environment with RRT* not implemented.")
+                # if len(self.rrt_policies[i].wps) > 0 and not player.is_tagged:
+                #     self.rrt_policies[i].wps = []
 
             # If agent is tagged, drive at max speed towards home
             if player.is_tagged:
                 #if we are in an environment with obstacles, use RRT*
                 if len(self.obstacles) > 0:
-                    policy = self.rrt_policies[i]
-                    assert isinstance(policy, EnvWaypointPolicy)
-                    if len(policy.wps) == 0 and not policy.planning:
-                        policy.plan(player.pos, self.flags[team_idx].home)
-                        desired_speed = 0
-                        heading_error = 0
-                    else:
-                        desired_speed, heading_error = policy.compute_action(player.pos, player.heading)
-                        if player.oob:
-                            desired_speed = min(desired_speed, player.get_max_speed() * self.oob_speed_frac) #TODO: optimize based on MOOS behvior
+                    raise NotImplementedError("Vector environment with RRT* not implemented.")
+                    # policy = self.rrt_policies[i]
+                    # assert isinstance(policy, EnvWaypointPolicy)
+                    # if len(policy.wps) == 0 and not policy.planning:
+                    #     policy.plan(player.pos, self.flags[team_idx].home)
+                    #     desired_speed = 0
+                    #     heading_error = 0
+                    # else:
+                    #     desired_speed, heading_error = policy.compute_action(player.pos, player.heading)
+                    #     if player.oob:
+                    #         desired_speed = min(desired_speed, player.get_max_speed() * self.oob_speed_frac)
             
                 #else go directly to home
                 else:
                     _, heading_error = mag_bearing_to(player.pos, flag_home, player.heading)
                     if player.oob:
-                        desired_speed = player.get_max_speed() * self.oob_speed_frac #TODO: optimize based on MOOS behvior
+                        desired_speed = player.get_max_speed() * self.oob_speed_frac
                     else:
                         desired_speed = player.get_max_speed()
 
@@ -1780,7 +1821,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 print(f"Scrimmage line coordinates: {self.scrimmage_coords}")
                 self.afp_sym = False
             else:
-                #NOTE: assumes afp-based policies are written for blue team
+                #NOTE: assumes afp-based policies are written for BLUE_TEAM
                 self.aquaticus_field_points[Team.RED_TEAM] = self.env_size - self.aquaticus_field_points[Team.RED_TEAM]
 
         ### Environment Rendering ###

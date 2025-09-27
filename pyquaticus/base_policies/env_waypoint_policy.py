@@ -38,6 +38,7 @@ class EnvWaypointPolicy:
 
     def __init__(
         self,
+        n_envs: int,
         obstacles: list,
         env_size,
         max_speed: float,
@@ -45,6 +46,7 @@ class EnvWaypointPolicy:
         slip_radius: Optional[float] = None,
         avoid_radius: float = 2,
     ):
+        self.n_envs = n_envs
 
         self.capture_radius = capture_radius
 
