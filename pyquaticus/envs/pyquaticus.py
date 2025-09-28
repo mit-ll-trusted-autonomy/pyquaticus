@@ -1205,7 +1205,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     #     desired_speed, heading_error = policy.compute_action(player.pos, player.heading)
                     #     if player.oob:
                     #         desired_speed = min(desired_speed, player.get_max_speed() * self.oob_speed_frac)
-            
+
                 #else go directly to home
                 else:
                     _, heading_error[is_tagged_idxs] = mag_bearing_to(
@@ -1221,13 +1221,45 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             # If agent is out of bounds, drive back in bounds at fraction of max speed
             agent_oob = self.state["agent_oob"][env_idxs, player.idx]
-            if np.any(agent_is_tagged):
-                
+            if np.any(agent_oob):
+                oob_idxs = np.where(np.any(agent_oob, axis=-1))[0]
+                oob_idxs_env_idxs = env_idxs[oob_idxs]
 
+                heading_error[oob_idxs] = self._get_oob_recover_rel_heading(
+                    self.state["agent_position"][oob_idxs_env_idxs, player.idx],
+                    self.state["agent_heading"][oob_idxs_env_idxs, player.idx]
+                )
+                desired_speed[oob_idxs] = self.oob_speed_frac * self.max_speeds[player.idx]
 
-            elif player.oob:
-                heading_error = self._get_oob_recover_rel_heading(player.pos, player.heading)
-                desired_speed = player.get_max_speed() * self.oob_speed_frac
+            # If agent in flag_keepout, drive it out (away from own flag)
+            agent_in_flag_keepout = self.state["agent_in_flag_keepout"][env_idxs, player.idx]
+            if np.any(agent_in_flag_keepout):
+                in_flag_keepout_idxs = np.where(np.any(agent_in_flag_keepout, axis=-1))[0]
+                in_flag_keepout_env_idxs = env_idxs[in_flag_keepout_idxs]
+
+                _, own_flag_heading_error = mag_bearing_to(
+                    self.state["agent_position"][in_flag_keepout_env_idxs, player.idx],
+                    flag_home,
+                    self.state["agent_heading"][in_flag_keepout_env_idxs, player.idx]
+                )
+                heading_error[in_flag_keepout_idxs] = angle180(own_flag_heading_error + 180) #drive away from flag
+                desired_speed[in_flag_keepout_idxs] = self.max_speeds[player.idx]
+
+            # Else get desired speed and heading from action_dict
+            agent_controllable = ~agent_is_tagged & ~agent_oob & ~agent_in_flag_keepout
+            if np.any(agent_controllable):
+                controllable_idxs = np.where(np.any(agent_controllable, axis=-1))[0]
+                controllable_env_idxs = env_idxs[controllable_idxs]
+
+                desired_speed, heading_error = action_dict[player.id]
+
+            # Move agent
+            player._move_agent(desired_speed, heading_error, env_idxs)
+
+            # Move flag (if agent has it)
+            # update onsides
+            # check if it hit an obstacle
+            # update environment state? (maybe not necessary because of how player objects are set)
 
 
             #############################################################################################################
@@ -1260,73 +1292,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.state['agent_dynamics'][i] = player.state
                 continue
 
-            if len(self.obstacles) > 0:
-                raise NotImplementedError("Vector environment with RRT* not implemented.")
-                # if len(self.rrt_policies[i].wps) > 0 and not player.is_tagged:
-                #     self.rrt_policies[i].wps = []
-
-            # If agent is tagged, drive at max speed towards home
-            if player.is_tagged:
-                #if we are in an environment with obstacles, use RRT*
-                if len(self.obstacles) > 0:
-                    raise NotImplementedError("Vector environment with RRT* not implemented.")
-                    # policy = self.rrt_policies[i]
-                    # assert isinstance(policy, EnvWaypointPolicy)
-                    # if len(policy.wps) == 0 and not policy.planning:
-                    #     policy.plan(player.pos, self.flags[team_idx].home)
-                    #     desired_speed = 0
-                    #     heading_error = 0
-                    # else:
-                    #     desired_speed, heading_error = policy.compute_action(player.pos, player.heading)
-                    #     if player.oob:
-                    #         desired_speed = min(desired_speed, player.get_max_speed() * self.oob_speed_frac)
-            
-                #else go directly to home
-                else:
-                    _, heading_error = mag_bearing_to(player.pos, flag_home, player.heading)
-                    if player.oob:
-                        desired_speed = player.get_max_speed() * self.oob_speed_frac
-                    else:
-                        desired_speed = player.get_max_speed()
-
-            # If agent is out of bounds, drive back in bounds at fraction of max speed
-            elif player.oob:
-                heading_error = self._get_oob_recover_rel_heading(player.pos, player.heading)
-                desired_speed = player.get_max_speed() * self.oob_speed_frac
-
-            # Else get desired speed and heading from action_dict
-            else:
-                desired_speed, heading_error = action_dict[player.id]
-
-            # Move agent
-            player._move_agent(desired_speed, heading_error)
-
-            # Check if agent is in keepout region for their own flag
-            ag_dis_2_flag = self.get_distance_between_2_points(player.pos, np.asarray(flag_home))
-            if (
-                ag_dis_2_flag < self.flag_keepout_radius + self.agent_radius[i]
-                and not self.flags[team_idx].taken
-                and self.flag_keepout_radius > 0.
-            ):
-                ag_pos = rc_intersection(
-                    np.array([player.pos, player.prev_pos]),
-                    np.asarray(flag_home),
-                    self.flag_keepout_radius + self.agent_radius[i],
-                )  # point where agent center first intersected with keepout zone
-                vel = mag_heading_to_vec(player.speed, player.heading)
-
-                ag_vel = reflect_vector(ag_pos, vel, np.asarray(flag_home))
-
-                crd_ref_angle = get_rot_angle(np.asarray(flag_home), ag_pos)
-                vel_ref = rot2d(ag_vel, -crd_ref_angle)
-                vel_ref[1] = 0.0  # convention is that vector pointing from keepout intersection to flag center is y' axis in new reference frame
-
-                vel = rot2d(vel_ref, crd_ref_angle)
-                player.pos = ag_pos
-                speed, heading = vec_to_mag_heading(vel)
-                player.speed = speed
-                player.heading = heading
-
             # Move flag (if necessary)
             if player.has_flag:
                 self.flags[other_team_idx].pos = player.pos
@@ -1342,8 +1307,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     def _get_oob_recover_rel_heading(self, pos, heading):
         #compute the closest env edge and steer towards heading perpendicular to edge
         closest_env_edge_idx = closest_line(pos, self.env_edges)
-        edge_vec = np.diff(self.env_edges[closest_env_edge_idx], axis=0)[0]
-        desired_vec = np.array([-edge_vec[1], edge_vec[0]]) #this points inwards because edges are defined ccw
+        edge_vec = np.diff(self.env_edges[closest_env_edge_idx], axis=1).squeeze()
+        desired_vec = np.stack([-edge_vec[..., 1], edge_vec[..., 0]], axis=-1) #this points inwards because edges are defined ccw
         _, desired_heading = vec_to_mag_heading(desired_vec)
         
         heading_error = angle180((desired_heading - heading) % 360)
