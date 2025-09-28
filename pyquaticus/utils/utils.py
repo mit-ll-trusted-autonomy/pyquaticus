@@ -337,12 +337,12 @@ def wrap_mercator_x(wm, x_only:bool = False) -> np.ndarray:
 
     over = wm[:, 0] > EPSG_3857_EXT_X
     while np.any(over):
-        wm[np.where(over)[0], 0] -= 2*EPSG_3857_EXT_X
+        wm[over, 0] -= 2*EPSG_3857_EXT_X
         over = wm[:, 0] > EPSG_3857_EXT_X
 
     under = wm[:, 0] < -EPSG_3857_EXT_X
     while np.any(under):
-        wm[np.where(under)[0], 0] += 2*EPSG_3857_EXT_X
+        wm[under, 0] += 2*EPSG_3857_EXT_X
         under = wm[:, 0] < -EPSG_3857_EXT_X
 
     return wm.squeeze()
@@ -363,8 +363,7 @@ def wrap_mercator_x_dist(wm, x_only:bool = False) -> np.ndarray:
     else:
         wm = np.array(wm, dtype=float).reshape(-1, 2)
 
-    under = np.where(wm[:, 0] < 0)[0]
-    wm[under, 0] += 2*EPSG_3857_EXT_X
+    wm[wm[:, 0] < 0, 0] += 2*EPSG_3857_EXT_X
 
     return wm.squeeze()
 

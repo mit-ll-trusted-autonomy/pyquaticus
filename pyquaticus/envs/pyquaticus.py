@@ -1246,7 +1246,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 desired_speed[in_flag_keepout_idxs] = self.max_speeds[player.idx]
 
             # Else get desired speed and heading from action_dict
-            agent_controllable = ~agent_is_tagged & ~agent_oob & ~agent_in_flag_keepout
+            agent_controllable = ~(agent_is_tagged | agent_oob | agent_in_flag_keepout)
             if np.any(agent_controllable):
                 controllable_idxs = np.where(np.any(agent_controllable, axis=-1))[0]
                 controllable_env_idxs = env_idxs[controllable_idxs]
@@ -1434,7 +1434,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     #note: assumes two teams, and one flag per team
                     other_team_idx = int(not int(team))
 
-                    flag_oob_env_idxs = env_idxs[np.where(team_has_flag_oob)[0]]
+                    flag_oob_env_idxs = env_idxs[team_has_flag_oob]
                     self.flag[other_team_idx].reset(flag_oob_env_idxs)
                     self.state['flag_position'][flag_oob_env_idxs, other_team_idx] = self.flags[other_team_idx].pos[flag_oob_env_idxs]
                     self.state['flag_taken'][flag_oob_env_idxs, other_team_idx] = False
@@ -1497,13 +1497,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             for i, j in enumerate(agent_idxs):
                 made_tag = np.any(tag_matrix[:, i], axis=-1)
                 if np.any(made_tag):
-                    made_tag_idxs = np.where(made_tag)[0]
-                    target = np.argmin(np.where(tag_matrix[made_tag_idxs, i], a2a_dists_in_range[made_tag_idxs, i], np.inf), axis=-1)
-
-                    tag_matrix[made_tag_idxs, i+1:, target] = False
+                    target = np.argmin(np.where(tag_matrix[made_tag, i], a2a_dists_in_range[made_tag, i], np.inf), axis=-1)
+                    tag_matrix[made_tag, i+1:, target] = False
                     
                     #update tagger agent
-                    made_tag_env_idxs = env_idxs[made_tag_idxs]
+                    made_tag_env_idxs = env_idxs[made_tag]
                     target_idx = other_agent_idxs[target]
 
                     self.state['agent_made_tag'][made_tag_env_idxs, j] = target_idx
@@ -1517,7 +1515,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     #update flag and has_flag
                     target_has_flag = self.state['agent_has_flag'][made_tag_env_idxs, target_idx]
                     if np.any(target_has_flag):
-                        target_has_flag_env_idxs = made_tag_env_idxs[np.where(target_has_flag)[0]]
+                        target_has_flag_env_idxs = made_tag_env_idxs[target_has_flag]
 
                         self.flags[other_team_idx].reset(target_has_flag_env_idxs)
                         self.state['flag_position'][target_has_flag_env_idxs, other_team_idx] = self.flags[other_team_idx].pos[target_has_flag_env_idxs]
@@ -1535,11 +1533,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             other_team_flag_not_taken = ~self.state['flag_taken'][env_idxs, other_team_idx]
             if np.any(other_team_flag_not_taken):
-                flag_not_taken_env_idxs = env_idxs[np.where(other_team_flag_not_taken)[0]]
+                flag_not_taken_env_idxs = env_idxs[other_team_flag_not_taken]
                 env_agent_ixgrid = np.ix_(flag_not_taken_env_idxs, agent_idxs)
 
                 flag_distances = np.linalg.norm(
-                 j   self.flags[other_team_idx].home - self.state['agent_position'][env_agent_ixgrid],
+                    self.flags[other_team_idx].home - self.state['agent_position'][env_agent_ixgrid],
                     axis=-1
                 )
                 agent_on_sides = self.state['agent_on_sides'][env_agent_ixgrid]
@@ -1553,11 +1551,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 )
                 if np.any(agent_flag_pickups):
                     #NOTE: we choose the agent for the flag pickup based on index priority (not distance)
-                    flag_pickup_idxs = np.where(np.any(agent_flag_pickups, axis=-1))[0]
-                    flag_pickup_env_idxs = flag_not_taken_env_idxs[flag_pickup_idxs]
-                    flag_pickup_agent_idxs = agent_idxs[np.argmax(agent_flag_pickups[flag_pickup_idxs], axis=-1)]
+                    flag_pickups = np.any(agent_flag_pickups, axis=-1)
+                    flag_pickup_env_idxs = flag_not_taken_env_idxs[flag_pickups]
+                    flag_pickup_agent_idxs = agent_idxs[np.argmax(agent_flag_pickups[flag_pickups], axis=-1)]
 
-                 j   # update agent
+                    # update agent
                     self.state['agent_has_flag'][flag_pickup_env_idxs, flag_pickup_agent_idxs] = True
 
                     # update flags
@@ -1581,11 +1579,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             other_team_idx = int(not team_idx)
             env_agent_ixgrid = np.ix_(env_idxs, agent_idxs)
 
-            captures = self.state['agent_on_sides'][env_agent_ixgrid] & self.state['agent_has_flag'][env_agent_ixgrid]
-            if np.any(captures):
-                captures_idxs = np.where(np.any(captures, axis=-1))[0]
-                captures_env_idxs = env_idxs[captures_idxs]
-                captures_agent_idxs = agent_idxs[np.argmax(captures[captures_idxs], axis=-1)]
+            agent_captures = self.state['agent_on_sides'][env_agent_ixgrid] & self.state['agent_has_flag'][env_agent_ixgrid]
+            if np.any(agent_captures):
+                captures = np.any(agent_captures, axis=-1)
+                captures_env_idxs = env_idxs[captures]
+                captures_agent_idxs = agent_idxs[np.argmax(agent_captures[captures], axis=-1)]
 
                 # Update agent
                 self.state['agent_has_flag'][captures_env_idxs, captures_agent_idxs] = False
@@ -1596,7 +1594,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.state['flag_taken'][captures_env_idxs, other_team_idx] = False
 
                 # Update captures
-                new_team_captures = np.sum(captures[captures_idxs], axis=-1)
+                new_team_captures = np.sum(agent_captures[captures], axis=-1)
                 self.state['captures'][captures_env_idxs, team_idx] += new_team_captures
                 self.game_events[player.team]['captures'][captures_env_idxs] += new_team_captures
 
@@ -2136,7 +2134,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         # CLI Message
         cli_message = ""
         if self.render_mode == "human" and np.any(self.dones["__all__"][env_idxs]):
-            done_env_idxs = env_idxs[np.where(self.dones["__all__"][env_idxs])[0]]
+            done_env_idxs = env_idxs[self.dones["__all__"][env_idxs]]
             cli_message = (
                 f"Envs {done_env_idxs} are done with final scores: "
                 f"{blue_scores[done_env_idx]}\u2013{red_scores[done_env_idx]} (Blue\u2013Red). "
@@ -2799,7 +2797,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             # generate poses where not already set
             agent_pos_to_init = np.isnan(agent_pos)
             valid_pos = np.ones(env_idxs.shape[0], dtype=bool)
-            valid_pos[np.where(np.any(agent_pos_to_init, axis=-1))[0]] = False
+            valid_pos[np.any(agent_pos_to_init, axis=-1)] = False
 
             if not np.all(valid_pos):
                 if self.gps_env: #TODO: vectorize, and allow partial initialization
@@ -2840,23 +2838,23 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                                     agent_pos[j] = self.valid_init_poses[start_pos_idx]
 
                         #check if valid pos
-                        valid_pos[np.where(~valid_pos)[0]], _ = self._check_valid_pos(agent_pos, i, agent_poses, flag_homes_not_picked_up)
+                        valid_pos[~valid_pos], _ = self._check_valid_pos(agent_pos, i, agent_poses, flag_homes_not_picked_up)
                 else:
                     while not np.all(valid_pos):
                         if sync_start:
                             agent_pos[:] = np.random.choice((-1,1), size=2) * np.random.rand(2) * (self.env_size/2 - self.agent_radius[i]) + self.env_size/2
                         else:
-                            envs_to_init_x = np.where(~valid_pos & agent_pos_to_init[:, 0])[0]
-                            envs_to_init_y = np.where(~valid_pos & agent_pos_to_init[:, 1])[0]
+                            envs_to_init_x = ~valid_pos & agent_pos_to_init[:, 0]
+                            envs_to_init_y = ~valid_pos & agent_pos_to_init[:, 1]
 
                             agent_pos[envs_to_init_x, 0] = (
-                                np.random.choice([-1, 1], size=envs_to_init_x.shape[0]) *
-                                np.random.rand(envs_to_init_x.shape[0]) *
+                                np.random.choice([-1, 1], size=np.sum(envs_to_init_x)) *
+                                np.random.rand(np.sum(envs_to_init_x)) *
                                 (self.env_size[0]/2 - self.agent_radius[i]) + self.env_size[0]/2
                             )
                             agent_pos[envs_to_init_y, 1] = (
-                                np.random.choice([-1, 1], size=envs_to_init_y.shape[0]) *
-                                np.random.rand(envs_to_init_y.shape[0]) *
+                                np.random.choice([-1, 1], size=np.sum(envs_to_init_y)) *
+                                np.random.rand(np.sum(envs_to_init_y)) *
                                 (self.env_size[1]/2 - self.agent_radius[i]) + self.env_size[1]/2
                             )
 
@@ -2865,11 +2863,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         on_sides = self._check_on_sides(agent_pos, player.team)
 
                         #check agent off-sides in environments where it has flag
-                        envs_to_init_has_flag = np.where(~valid_pos & agent_has_flag[:, i])[0]
+                        envs_to_init_has_flag = ~valid_pos & agent_has_flag[:, i]
                         valid_pos[envs_to_init_has_flag] = collision_free[envs_to_init_has_flag] & ~on_sides[envs_to_init_has_flag]
 
                         #check position in other environments
-                        other_envs_to_init = np.where(~valid_pos & ~agent_has_flag[:, i])[0]
+                        other_envs_to_init = ~valid_pos & ~agent_has_flag[:, i]
                         if self.on_sides_init:
                             valid_pos[other_envs_to_init] = collision_free[other_envs_to_init] & on_sides[other_envs_to_init]
                         else:
@@ -2882,8 +2880,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             agent_on_sides[:, i] = self._check_on_sides(agent_pos, player.team)
 
             ## picked up flag (if any) ##
-            env_has_flag_idxs = np.where(agent_has_flag[:, i])[0]
-            self.state['flag_position'][env_has_flag_idxs, other_team_idx] = copy.deepcopy(agent_pos[env_has_flag_idxs])
+            self.state['flag_position'][agent_has_flag[:, i], other_team_idx] = copy.deepcopy(agent_pos[agent_has_flag[:, i]])
 
             ## speed ##
             if player.id in agent_spd_dict:
@@ -2899,12 +2896,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 if sync_start:
                     agent_headings[:, i] = agent_hdg_preset[0] if not np.isnan(agent_hdg_preset[0]) else agent_headings[0, i]
                 else:
-                    agent_hdg_preset_idxs = np.where(~np.isnan(agent_hdg_preset))[0]
+                    hdg_preset = ~np.isnan(agent_hdg_preset)
                     if np.any((agent_hdg_preset < -180) | (agent_hdg_preset > 180)):
                         raise Exception(
                             f"At least one initial heading specified for {player.id} ({agent_hdg_preset}) does not fall between -180 and 180 degrees."
                         )
-                    agent_headings[agent_hdg_preset_idxs, i] = agent_hdg_preset[agent_hdg_preset_idxs]
+                    agent_headings[hdg_preset, i] = agent_hdg_preset[hdg_preset]
 
         return agent_poses, agent_speeds, agent_headings, agent_on_sides
 
@@ -2930,19 +2927,19 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         new_pos_by_env = new_pos[:, None, :]
         agent_dists = np.linalg.norm(new_pos_by_env - agent_poses, axis=-1)
         radii = np.tile(self.agent_radius, (self.agent_radius.shape[0], 1))
-        envs_with_agent_collision = np.where(np.any(agent_dists <= self.agent_radius[agent_idx] + radii, axis=-1))[0]
+        envs_with_agent_collision = np.any(agent_dists <= self.agent_radius[agent_idx] + radii, axis=-1)
         valid_pos[envs_with_agent_collision] = False
         collision_types['agent'][envs_with_agent_collision] = True
 
         #flags
         flag_dists = np.linalg.norm(new_pos_by_env - flag_homes, axis=-1)
-        envs_with_flag_collision = np.where(np.any(flag_dists <= self.flag_keepout_radius, axis=-1))[0]
+        envs_with_flag_collision = np.any(flag_dists <= self.flag_keepout_radius, axis=-1)
         valid_pos[envs_with_flag_collision] = False
         collision_types['flag'][envs_with_flag_collision] = True
 
         #obstacles
         ## TODO: add check to make sure agent isn't spawned inside an obstacle
-        envs_with_obstacle_collision = np.where(detect_collision(new_pos, self.agent_radius[agent_idx], self.obstacle_geoms))[0]
+        envs_with_obstacle_collision = detect_collision(new_pos, self.agent_radius[agent_idx], self.obstacle_geoms)
         valid_pos[envs_with_obstacle_collision] = False
         collision_types['obstacle'][envs_with_obstacle_collision] = True
 
@@ -4039,21 +4036,19 @@ when gps environment bounds are specified in meters"
             max(self.agent_radius),
             self.obstacle_geoms
         )
-        valid_init_poses = water_coords_env[np.where(np.logical_not(poses_in_collision))[0]]
-        self.valid_init_poses = valid_init_poses[np.where(
+        valid_init_poses = water_coords_env[~poses_in_collision]
+        self.valid_init_poses = valid_init_poses[
             np.all(
                 (max(self.agent_radius) < valid_init_poses) & (valid_init_poses < (self.env_size - max(self.agent_radius))), #on-sides
                 axis=-1
             )
-        )[0]]
+        ]
 
         # Create lists of team-specific on-side init positions
         self.valid_team_init_poses = []
         for team in self.agents_of_team:
             self.valid_team_init_poses.append(
-                self.valid_init_poses[
-                    np.where(self._check_on_sides(self.valid_init_poses, team))[0]
-                ]
+                self.valid_init_poses[self._check_on_sides(self.valid_init_poses, team)]
             )
 
     def render(self):
