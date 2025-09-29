@@ -926,11 +926,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     gps_env=self.gps_env,
                     meters_per_mercator_xy=getattr(self, "meters_per_mercator_xy", None),
                     dt=self.dt,
+                    n_envs=n_envs,
                     id=f'agent_{i}',
                     idx=i,
                     team=Team.BLUE_TEAM,
                     render_radius=getattr(self, "agent_render_radius", [None] * 2*team_size)[i],
-                    render_mode=render_mode,
+                    render_mode=render_mode
                 )
             )
         for i in range(self.num_blue, self.num_blue + self.num_red):
@@ -939,11 +940,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     gps_env=self.gps_env,
                     meters_per_mercator_xy=getattr(self, "meters_per_mercator_xy", None),
                     dt=self.dt,
+                    n_envs=n_envs,
                     id=f'agent_{i}',
                     idx=i,
                     team=Team.RED_TEAM,
                     render_radius=getattr(self, "agent_render_radius", [None] * 2*team_size)[i],
-                    render_mode=render_mode,
+                    render_mode=render_mode
                 )
             )
 
@@ -1173,93 +1175,83 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     def _move_agents(self, action_dict, env_idxs):
         """Moves agents in the space according to the specified speed/heading in `action_dict`."""
         for i, player in enumerate(self.players.values()):
+            assert action_dict[player.id].shape[1] == env_idxs.shape[0]
+
             team_idx = int(player.team)
             other_team_idx = int(not team_idx)
-
             flag_home = self.flags[team_idx].home
+
+            desired_speed = np.zeros(env_idxs.shape[0])
+            heading_error = np.zeros(env_idxs.shape[0])
 
             if len(self.obstacles) > 0:
                 raise NotImplementedError("Vector environment with RRT* not implemented.")
                 # if len(self.rrt_policies[i].wps) > 0 and not player.is_tagged:
                 #     self.rrt_policies[i].wps = []
 
-            desired_speed = np.zeros(env_idxs.shape[0])
-            heading_error = np.zeros(env_idxs.shape[0])
+            ## If the player hits an obstacle: send back to previous position, rotate, and lose possession of flag ##
+            agent_obstacle_collision = detect_collision(
+                self.state["agent_position"][env_idxs, i],
+                self.agent_radius[i],
+                self.obstacle_geoms
+            )
+            agent_has_flag_collision_env_idxs = env_idxs[self.state['agent_has_flag'][env_idxs, i] & agent_obstacle_collision]
 
-            # If agent is tagged, drive at max speed towards home
-            agent_is_tagged = self.state["agent_is_tagged"][env_idxs, player.idx]
-            if np.any(agent_is_tagged):
-                is_tagged_idxs = np.where(np.any(agent_is_tagged, axis=-1))[0]
-                is_tagged_env_idxs = env_idxs[is_tagged_idxs]
+            self.state['agent_is_tagged'][env_idxs, i] = self.tag_on_collision & agent_obstacle_collision
+            self.state['agent_has_flag'][env_idxs, i] &= ~agent_obstacle_collision
+            player.rotate(env_idxs[agent_obstacle_collision])
 
-                #if we are in an environment with obstacles, use RRT*
-                if len(self.obstacles) > 0:
-                    raise NotImplementedError("Vector environment with RRT* not implemented.")
-                    # policy = self.rrt_policies[i]
-                    # assert isinstance(policy, EnvWaypointPolicy)
-                    # if len(policy.wps) == 0 and not policy.planning:
-                    #     policy.plan(player.pos, self.flags[team_idx].home)
-                    #     desired_speed = 0
-                    #     heading_error = 0
-                    # else:
-                    #     desired_speed, heading_error = policy.compute_action(player.pos, player.heading)
-                    #     if player.oob:
-                    #         desired_speed = min(desired_speed, player.get_max_speed() * self.oob_speed_frac)
+            self.flags[other_team_idx].reset(agent_has_flag_collision_env_idxs)
+            self.state['flag_taken'][agent_has_flag_collision_env_idxs, other_team_idx] = False
 
-                #else go directly to home
-                else:
-                    _, heading_error[is_tagged_idxs] = mag_bearing_to(
-                        self.state["agent_position"][is_tagged_env_idxs, player.idx],
-                        flag_home,
-                        self.state["agent_heading"][is_tagged_env_idxs, player.idx]
-                    )
-                    desired_speed[is_tagged_idxs] = np.where(
-                        self.state["agent_oob"][is_tagged_env_idxs, player.idx]
-                        self.oob_speed_frac * self.max_speeds[player.idx],
-                        self.max_speeds[player.idx]
-                    )
+            ## If agent is tagged: drive at max speed towards home ##
+            agent_is_tagged = self.state["agent_is_tagged"][env_idxs, i] & ~agent_obstacle_collision
+            is_tagged_env_idxs = env_idxs[agent_is_tagged]
 
-            # If agent is out of bounds, drive back in bounds at fraction of max speed
-            agent_oob = self.state["agent_oob"][env_idxs, player.idx]
-            if np.any(agent_oob):
-                oob_idxs = np.where(np.any(agent_oob, axis=-1))[0]
-                oob_idxs_env_idxs = env_idxs[oob_idxs]
+            _, heading_error[agent_is_tagged] = mag_bearing_to(
+                self.state["agent_position"][is_tagged_env_idxs, i],
+                flag_home,
+                self.state["agent_heading"][is_tagged_env_idxs, i]
+            )
+            desired_speed[agent_is_tagged] = np.where(
+                self.state["agent_oob"][is_tagged_env_idxs, i]
+                self.oob_speed_frac * self.max_speeds[i],
+                self.max_speeds[i]
+            )
 
-                heading_error[oob_idxs] = self._get_oob_recover_rel_heading(
-                    self.state["agent_position"][oob_idxs_env_idxs, player.idx],
-                    self.state["agent_heading"][oob_idxs_env_idxs, player.idx]
-                )
-                desired_speed[oob_idxs] = self.oob_speed_frac * self.max_speeds[player.idx]
+            ## If agent is out of bounds: drive back in-bounds at fraction of max speed ##
+            agent_oob = self.state["agent_oob"][env_idxs, i] & ~(agent_obstacle_collision | agent_is_tagged)
+            oob_env_idxs = env_idxs[agent_oob]
+
+            heading_error[agent_oob] = self._get_oob_recover_rel_heading(
+                self.state["agent_position"][oob_env_idxs, i],
+                self.state["agent_heading"][oob_env_idxs, i]
+            )
+            desired_speed[agent_oob] = self.oob_speed_frac * self.max_speeds[i]
 
             # If agent in flag_keepout, drive it out (away from own flag)
-            agent_in_flag_keepout = self.state["agent_in_flag_keepout"][env_idxs, player.idx]
-            if np.any(agent_in_flag_keepout):
-                in_flag_keepout_idxs = np.where(np.any(agent_in_flag_keepout, axis=-1))[0]
-                in_flag_keepout_env_idxs = env_idxs[in_flag_keepout_idxs]
+            agent_in_flag_keepout = self.state["agent_in_flag_keepout"][env_idxs, i] & ~(
+                agent_obstacle_collision | agent_is_tagged | agent_oob
+            )
+            in_flag_keepout_env_idxs = env_idxs[agent_in_flag_keepout]
 
-                _, own_flag_heading_error = mag_bearing_to(
-                    self.state["agent_position"][in_flag_keepout_env_idxs, player.idx],
-                    flag_home,
-                    self.state["agent_heading"][in_flag_keepout_env_idxs, player.idx]
-                )
-                heading_error[in_flag_keepout_idxs] = angle180(own_flag_heading_error + 180) #drive away from flag
-                desired_speed[in_flag_keepout_idxs] = self.max_speeds[player.idx]
+            _, own_flag_heading_error = mag_bearing_to(
+                self.state["agent_position"][in_flag_keepout_env_idxs, i],
+                flag_home,
+                self.state["agent_heading"][in_flag_keepout_env_idxs, i]
+            )
+            heading_error[agent_in_flag_keepout] = angle180(own_flag_heading_error + 180) #drive away from flag
+            desired_speed[agent_in_flag_keepout] = self.max_speeds[i]
 
-            # Else get desired speed and heading from action_dict
-            agent_controllable = ~(agent_is_tagged | agent_oob | agent_in_flag_keepout)
-            if np.any(agent_controllable):
-                controllable_idxs = np.where(np.any(agent_controllable, axis=-1))[0]
-                controllable_env_idxs = env_idxs[controllable_idxs]
+            ## Else get desired speed and heading from action_dict ##
+            agent_controllable = ~(agent_obstacle_collision | agent_is_tagged | agent_oob | agent_in_flag_keepout)
+            desired_speed[agent_controllable], heading_error[agent_controllable] = action_dict[player.id][:, agent_controllable]
 
-                desired_speed, heading_error = action_dict[player.id]
-
-            # Move agent
+            ## Move agent ##
             player._move_agent(desired_speed, heading_error, env_idxs)
 
             # Move flag (if agent has it)
             # update onsides
-            # check if it hit an obstacle
-            # update environment state? (maybe not necessary because of how player objects are set)
 
 
             #############################################################################################################
@@ -1267,42 +1259,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             player.on_own_side = self._check_on_sides(player.pos, player.team)
             self.state["agent_on_sides"][i] = player.on_own_side
 
-            # If the player hits an obstacle, send back to previous position and rotate, then skip to next agent
-            player_hit_obstacle = detect_collision(player.pos, self.agent_radius[i], self.obstacle_geoms)
-
-            if player_hit_obstacle:
-                if self.tag_on_collision:
-                    player.is_tagged = True
-                    self.state['agent_is_tagged'][i] = 1
-
-                if player.has_flag:
-                    # If they have a flag, return the flag to it's home area
-                    player.has_flag = False
-                    self.state['agent_has_flag'][i] = 0
-
-                    self.flags[other_team_idx].reset()
-                    self.state['flag_position'][other_team_idx] = self.flags[other_team_idx].pos
-                    self.state['flag_taken'][other_team_idx] = 0
-
-                player.rotate()
-                self.state['agent_position'][i] = player.pos
-                self.state['prev_agent_position'][i] = player.prev_pos
-                self.state['agent_speed'][i] = player.speed
-                self.state['agent_heading'][i] = player.heading
-                self.state['agent_dynamics'][i] = player.state
-                continue
-
             # Move flag (if necessary)
             if player.has_flag:
                 self.flags[other_team_idx].pos = player.pos
                 self.state['flag_position'][other_team_idx] = np.array(self.flags[other_team_idx].pos)
-
-            # Update environment state
-            self.state['agent_position'][i] = player.pos
-            self.state['prev_agent_position'][i] = player.prev_pos
-            self.state['agent_speed'][i] = player.speed
-            self.state['agent_heading'][i] = player.heading
-            self.state['agent_dynamics'][i] = player.state
 
     def _get_oob_recover_rel_heading(self, pos, heading):
         #compute the closest env edge and steer towards heading perpendicular to edge
@@ -1436,7 +1396,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
                     flag_oob_env_idxs = env_idxs[team_has_flag_oob]
                     self.flag[other_team_idx].reset(flag_oob_env_idxs)
-                    self.state['flag_position'][flag_oob_env_idxs, other_team_idx] = self.flags[other_team_idx].pos[flag_oob_env_idxs]
                     self.state['flag_taken'][flag_oob_env_idxs, other_team_idx] = False
 
     def _check_untag_and_flag_keepout(self, env_idxs):
@@ -1467,6 +1426,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.state["agent_on_sides"][env_idxs] &
             ~self.state["agent_is_tagged"][env_idxs] & 
             ~self.state["agent_oob"][env_idxs]
+            ~self.state["agent_in_flag_keepout"][env_idxs]
         )
         if not np.any(cantag):
             return
@@ -1518,7 +1478,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         target_has_flag_env_idxs = made_tag_env_idxs[target_has_flag]
 
                         self.flags[other_team_idx].reset(target_has_flag_env_idxs)
-                        self.state['flag_position'][target_has_flag_env_idxs, other_team_idx] = self.flags[other_team_idx].pos[target_has_flag_env_idxs]
                         self.state['flag_taken'][target_has_flag_env_idxs, other_team_idx] = False
                         self.state['agent_has_flag'][made_tag_env_idxs, target_idx] = False
 
@@ -1559,10 +1518,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     self.state['agent_has_flag'][flag_pickup_env_idxs, flag_pickup_agent_idxs] = True
 
                     # update flags
-                    self.flags[other_team_idx].pos[flag_pickup_env_idxs] = np.array(
+                    self.state['flag_position'][flag_pickup_env_idxs, other_team_idx] = np.array(
                         self.state['agent_position'][flag_pickup_env_idxs, flag_pickup_agent_idxs]
                     )
-                    self.state['flag_position'][flag_pickup_env_idxs, other_team_idx] = self.flags[other_team_idx].pos[flag_pickup_env_idxs]
                     self.state['flag_taken'][flag_pickup_env_idxs, other_team_idx] = True
 
                     # update grabs
@@ -1590,7 +1548,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
                 # Update flag
                 self.flags[other_team_idx].reset(captures_env_idxs)
-                self.state['flag_position'][captures_env_idxs, other_team_idx] = self.flags[other_team_idx].pos[captures_env_idxs]
                 self.state['flag_taken'][captures_env_idxs, other_team_idx] = False
 
                 # Update captures
@@ -2249,6 +2206,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self._set_player_attributes_from_state()
             self._set_flag_attributes_from_state()
             self._set_game_events_from_state()
+            for player in self.players.values():
+                player.state = self.state['agent_dynamics'][player.idx]
 
         # Reset env from init_dict or standard init
         else:
@@ -2306,10 +2265,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self._set_player_attributes_from_state()
             self._set_flag_attributes_from_state()
             self._set_game_events_from_state()
-            for player in self.players.values():
-                player.reset(env_idxs) #reset agent-specific dynamics
 
-            self.state['agent_dynamics'][env_idxs] = np.array([[player.state[i] for player in self.players.values()]] for i in env_idxs)
+            # reset agent-specific dynamics
+            for player in self.players.values():
+                player.reset(env_idxs)
+            self.state['agent_dynamics'] = np.array([player.state for player in self.players.values()])
 
             # run event checks
             self._check_oob(env_idxs)
@@ -2680,7 +2640,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             player.prev_pos = self.state['prev_agent_position'][:, i]
             player.speed = self.state['agent_speed'][:, i]
             player.heading = self.state['agent_heading'][:, i]
-            player.state = self.state['agent_dynamics'][:, i]
 
     def _set_flag_attributes_from_state(self):
         for flag in self.flags:

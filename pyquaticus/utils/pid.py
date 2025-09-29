@@ -20,7 +20,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import numpy as np
-from collections import deque
 
 
 class PID:
@@ -33,20 +32,20 @@ class PID:
 
         (2) https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/lib_marine_pid/PIDEngine.cpp
     """
-    def __init__(self, dt, kp, kd, ki, deriv_history_size=1, integral_limit=float("inf"), output_limit=float("inf")):
+    def __init__(self, dt, kp, kd, ki, deriv_history_size=1, integral_limit=float("inf"), output_limit=float("inf"), n_envs=1):
         self._dt = dt
         self._kp = kp
         self._kd = kd
         self._ki = ki
 
-        self._deriv_history = deque(maxlen=deriv_history_size)
+        self._deriv_history = np.full((n_envs, deriv_history_size), np.nan)
         self._integral_limit = integral_limit
         self._output_limit = output_limit
 
-        self._prev_error = None
-        self._integral = 0.0
+        self._prev_error = np.full(n_envs, np.nan)
+        self._integral = np.zeros(n_envs)
 
-    def __call__(self, error):
+    def __call__(self, error, env_idxs):
         #Calculate the derivative term
         if self._prev_error is not None:
             self._deriv_history.append((error - self._prev_error) / self._dt)

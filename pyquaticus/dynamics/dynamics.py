@@ -14,12 +14,14 @@ class Dynamics(RenderingPlayer):
         gps_env: bool,
         meters_per_mercator_xy: float,
         dt: float,
+        n_envs: int,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.gps_env = gps_env
         self.meters_per_mercator_xy = meters_per_mercator_xy
         self.dt = dt
+        self.n_envs = n_envs
 
         self.state = {} #model-specific time-varying state/control values
 
@@ -281,13 +283,13 @@ class BaseUSV(Dynamics):
         self.max_dec = max_dec
         self.rotate_speed = rotate_speed
 
-        self.state["thrust"] = 0
-        self.state["rudder"] = 0
+        self.state["thrust"] = np.zeros(self.n_envs)
+        self.state["rudder"] = np.zeros(self.n_envs)
 
         # PID 
         self._pid_controllers = {
-            "speed": PID(dt=kwargs["dt"], kp=0.8, kd=0.1, ki=0.11, integral_limit=0.07, output_limit=max_thrust),
-            "heading": PID(dt=kwargs["dt"], kp=0.5, kd=0.1, ki=0.012, integral_limit=0.2, output_limit=max_rudder)
+            "speed": PID(dt=kwargs["dt"], kp=0.8, kd=0.1, ki=0.11, integral_limit=0.07, output_limit=max_thrust, n_envs=self.n_envs),
+            "heading": PID(dt=kwargs["dt"], kp=0.5, kd=0.1, ki=0.012, integral_limit=0.2, output_limit=max_rudder, n_envs=self.n_envs)
         }
 
     def reset(self, env_idxs):
@@ -299,7 +301,7 @@ class BaseUSV(Dynamics):
         self.state['thrust'][env_idxs] = 0
         self.state['rudder'][env_idxs] = 0
 
-    def rotate(self, theta=180):
+    def rotate(self, env_idxs, theta=180):
         """
         Set all model-specific time-varying state/control values to their initialization values as in reset().
         Set speed to 0.
@@ -307,19 +309,19 @@ class BaseUSV(Dynamics):
         Place agent at previous position.
         Do not change is_tagged, has_flag, or on_own_side.
         """
-        prev_pos = self.prev_pos
-        self.prev_pos = self.pos
-        self.pos = prev_pos
-        self.speed = 0
-        self.heading = angle180(self.heading + theta)
+        prev_pos = self.prev_pos[env_idxs]
+        self.prev_pos[env_idxs] = self.pos[env_idxs]
+        self.pos[env_idxs] = prev_pos
+        self.speed[env_idxs] = 0
+        self.heading[env_idxs] = angle180(self.heading[env_idxs] + theta)
 
-        self.state['thrust'] = 0
-        self.state['rudder'] = 0
+        self.state['thrust'][env_idxs] = 0
+        self.state['rudder'][env_idxs] = 0
 
     def get_max_speed(self) -> float:
         return self.max_speed
 
-    def _move_agent(self, desired_speed: float, heading_error: float):
+    def _move_agent(self, desired_speed: float, heading_error: float, env_idxs: list):
         """
         Use MOOS-IVP simulation dynamics to move the agent given a desired speed and heading error.
         Adapted for use in pyquaticus from:
@@ -332,7 +334,7 @@ class BaseUSV(Dynamics):
         """
         # Calculate Desired Thrust and Desired Rudder
         # Based on setDesiredValues() in https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/lib_marine_pid/PIDEngine.cpp
-        self._set_desired_thrust(desired_speed)
+        self._set_desired_thrust(desired_speed, env_idxs)
         if self.state['thrust'] > 0:
             self._set_desired_rudder(heading_error)
             self.state['rudder'] = clip(self.state['rudder'], -100, 100) #clip in case abs(self.max_rudder) > 100
@@ -355,7 +357,7 @@ class BaseUSV(Dynamics):
         self.prev_pos = self.pos
         self.pos = np.asarray(new_pos)
 
-    def _set_desired_thrust(self, desired_speed):
+    def _set_desired_thrust(self, desired_speed, env_idxs):
         """
         This is based on setDesiredThrust() function from Moos-Ivp PIDEngine
         Adapted for use in pyquaticus from https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/lib_marine_pid/PIDEngine.cpp
@@ -363,15 +365,13 @@ class BaseUSV(Dynamics):
         if self.speed_factor != 0:
             desired_thrust = desired_speed * self.speed_factor
         else:
-            speed_error = desired_speed - self.speed
-            delta_thrust = self._pid_controllers['speed'](speed_error)
-            
-            desired_thrust = self.state['thrust'] + delta_thrust
+            speed_error = desired_speed - self.speed[env_idxs]
+            delta_thrust = self._pid_controllers['speed'](speed_error, env_idxs)
+            desired_thrust = self.state['thrust'][env_idxs] + delta_thrust
 
-        if desired_thrust < 0.01:
-            desired_thrust = 0
+        desired_thrust = np.where(desired_thrust < 0.01, 0, desired_thrust)
 
-        self.state['thrust'] = clip(desired_thrust, -self.max_thrust, self.max_thrust) #enforce limit on desired thrust
+        self.state['thrust'][env_idxs] = np.clip(desired_thrust, -self.max_thrust, self.max_thrust) #enforce limit on desired thrust
 
     def _set_desired_rudder(self, heading_error):
         """
