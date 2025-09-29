@@ -326,7 +326,8 @@ class BaseUSV(Dynamics):
         Use MOOS-IVP simulation dynamics to move the agent given a desired speed and heading error.
         Adapted for use in pyquaticus from:
             (1) https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarine
-            (2) https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/dep_uSimMarine/SimEngine.cpp
+            (2) https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/lib_marine_pid/PIDEngine.cpp
+            (3) https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/dep_uSimMarine/SimEngine.cpp
 
         Args:
             desired speed: desired speed, in m/s
@@ -335,6 +336,8 @@ class BaseUSV(Dynamics):
         # Calculate Desired Thrust and Desired Rudder
         # Based on setDesiredValues() in https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/lib_marine_pid/PIDEngine.cpp
         self._set_desired_thrust(desired_speed, env_idxs)
+        nonzero_thrust = self.state['thrust'][env_idxs] > 0
+
         if self.state['thrust'] > 0:
             self._set_desired_rudder(heading_error)
             self.state['rudder'] = clip(self.state['rudder'], -100, 100) #clip in case abs(self.max_rudder) > 100
@@ -370,8 +373,7 @@ class BaseUSV(Dynamics):
             desired_thrust = self.state['thrust'][env_idxs] + delta_thrust
 
         desired_thrust = np.where(desired_thrust < 0.01, 0, desired_thrust)
-
-        self.state['thrust'][env_idxs] = np.clip(desired_thrust, -self.max_thrust, self.max_thrust) #enforce limit on desired thrust
+        np.clip(desired_thrust, -self.max_thrust, self.max_thrust, out=self.state['thrust'][env_idxs]) #enforce limit on desired thrust
 
     def _set_desired_rudder(self, heading_error):
         """
@@ -392,7 +394,7 @@ class BaseUSV(Dynamics):
         next_speed = np.interp(thrust, self.thrust_map[0, :], self.thrust_map[1, :])
 
         # Apply a slowing penalty proportional to the rudder/turn
-        next_speed *= 1 - ((abs(rudder) / 100) * self.turn_loss)
+        next_speed *= 1 - ((np.abs(rudder) / 100) * self.turn_loss)
 
         # Clip new speed based on max acceleration and deceleration
         if (

@@ -47,20 +47,24 @@ class PID:
 
     def __call__(self, error, env_idxs):
         #Calculate the derivative term
-        if self._prev_error is not None:
-            self._deriv_history.append((error - self._prev_error) / self._dt)
-            deriv = np.mean(self._deriv_history)
-        else:
-            deriv = 0
+        self._deriv_history[env_idxs] = np.roll(self._deriv_history[env_idxs], 1, axis=-1)
+        self._deriv_history[env_idxs, 0] = np.where(
+            np.isnan(self._prev_error[env_idxs]),
+            self._deriv_history[env_idxs, 0],
+            (error - self._prev_error[env_idxs]) / self._dt
+        )
+        deriv = np.zeros(env_idxs.shape[0])
+        has_prev_error = ~np.isnan(self._prev_error[env_idxs])
+        deriv[has_prev_error] = np.nanmean(self._deriv_history[env_idxs][has_prev_error], axis=-1)
 
         #Calculate the integral term
-        self._integral += self._ki * error * self._dt
-        self._integral = np.clip(self._integral, -self._integral_limit, self._integral_limit) #prevent integral wind up
+        self._integral[env_idxs] += self._ki * error * self._dt
+        np.clip(self._integral[env_idxs], -self._integral_limit, self._integral_limit, out=self._integral[env_idxs]) #prevent integral wind up
         
         #Calculate PID output
         pid_out = (self._kp * error) + (self._kd * deriv) + self._integral #note Ki is already in self._integral
-        pid_out = np.clip(pid_out, -self._output_limit, self._output_limit) #prevent saturation
-        
-        self._prev_error = error
+        np.clip(pid_out, -self._output_limit, self._output_limit, out=pid_out) #prevent saturation
+
+        self._prev_error[env_idxs] = error
 
         return pid_out
