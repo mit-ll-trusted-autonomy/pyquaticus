@@ -338,27 +338,29 @@ class BaseUSV(Dynamics):
         self._set_desired_thrust(desired_speed, env_idxs)
         nonzero_thrust = self.state['thrust'][env_idxs] > 0
 
-        if self.state['thrust'] > 0:
-            self._set_desired_rudder(heading_error)
-            self.state['rudder'] = clip(self.state['rudder'], -100, 100) #clip in case abs(self.max_rudder) > 100
+        self._set_desired_rudder(heading_error[nonzero_thrust], env_idxs[nonzero_thrust])
+        self.state['rudder'][env_idxs] = np.where(nonzero_thrust, self.state['rudder'][env_idxs], 0.)
+        np.clip(self.state['rudder'][env_idxs], -100, 100, out=self.state['rudder'][env_idxs]) #clip in case abs(self.max_rudder) > 100
 
         # Propagate Speed, Heading, and Position
         new_speed = self._propagate_speed(
-            thrust=self.state['thrust'],
-            rudder=self.state['rudder']
+            thrust=self.state['thrust'][env_idxs],
+            rudder=self.state['rudder'][env_idxs],
+            env_idxs=env_idxs
         )
         new_heading = self._propagate_heading(
             speed=new_speed,
-            thrust=self.state['thrust'],
-            rudder=self.state['rudder']
+            thrust=self.state['thrust'][env_idxs],
+            rudder=self.state['rudder'][env_idxs],
+            env_idxs=env_idxs
         )
-        new_pos, new_speed = self._propagate_pos(new_speed, new_heading) #propagate vehicle pos based on new_speed and new_heading
+        new_pos, new_speed = self._propagate_pos(new_speed, new_heading, env_idxs) #propagate vehicle pos based on new_speed and new_heading
 
         # Set New Speed, Heading, and Position Values
-        self.speed = clip(new_speed, 0.0, self.max_speed)
-        self.heading = angle180(new_heading)
-        self.prev_pos = self.pos
-        self.pos = np.asarray(new_pos)
+        np.clip(new_speed, 0.0, self.max_speed, out=self.speed[env_idxs])
+        self.heading[env_idxs] = angle180(new_heading)
+        self.prev_pos[env_idxs] = self.pos[env_idxs]
+        self.pos[env_idxs] = new_pos
 
     def _set_desired_thrust(self, desired_speed, env_idxs):
         """
@@ -375,15 +377,15 @@ class BaseUSV(Dynamics):
         desired_thrust = np.where(desired_thrust < 0.01, 0, desired_thrust)
         np.clip(desired_thrust, -self.max_thrust, self.max_thrust, out=self.state['thrust'][env_idxs]) #enforce limit on desired thrust
 
-    def _set_desired_rudder(self, heading_error):
+    def _set_desired_rudder(self, heading_error, env_idxs):
         """
         This is based on setDesiredRudder() function from Moos-Ivp PIDEngine
         Adapted for use in pyquaticus from https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/lib_marine_pid/PIDEngine.cpp
         """
-        desired_rudder = self._pid_controllers["heading"](heading_error)
-        self.state['rudder'] = clip(desired_rudder, -self.max_rudder, self.max_rudder) #enforce limit on desired rudder
+        desired_rudder = self._pid_controllers["heading"](heading_error, env_idxs)
+        np.clip(desired_rudder, -self.max_rudder, self.max_rudder, out=self.state['rudder'][env_idxs]) #enforce limit on desired rudder
 
-    def _propagate_speed(self, thrust, rudder):
+    def _propagate_speed(self, thrust, rudder, env_idxs):
         """
         This is based on propagateSpeed() function from Moos-Ivp SimEngine
         Adapted for use in pyquaticus from:
@@ -397,44 +399,34 @@ class BaseUSV(Dynamics):
         next_speed *= 1 - ((np.abs(rudder) / 100) * self.turn_loss)
 
         # Clip new speed based on max acceleration and deceleration
-        if (
-            self.max_acc > 0 and
-            (next_speed - self.speed) / self.dt > self.max_acc
-        ):
-            next_speed = self.speed + self.max_acc * self.dt
-        elif (
-            self.max_dec > 0 and
-            (self.speed - next_speed) / self.dt > self.max_dec
-        ):
-            next_speed = self.speed - self.max_dec * self.dt
+        accel = np.clip((next_speed - self.speed[env_idxs]) / self.dt, -self.max_dec, self.max_acc)
+        next_speed = self.speed[env_idxs] + accel * self.dt
 
         return next_speed
 
-    def _propagate_heading(self, speed, thrust, rudder):
+    def _propagate_heading(self, speed, thrust, rudder, env_idxs):
         """
         This is based on propagateHeading() function from Moos-Ivp SimEngine
         Adapted for use in pyquaticus from:
             (1) https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarine
             (2) https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/dep_uSimMarine/SimEngine.cpp
         """
-        if speed == 0:
-            rudder = 0
+        rudder = np.where(speed==0, 0, rudder)
 
         # Calculate raw delta change in heading
         delta_deg = rudder * (self.turn_rate/100) * self.dt
 
         # Calculate change in heading factoring in thrust
-        delta_deg *= 1 + (abs(thrust)-50) / 50
-        if thrust < 0:
-            delta_deg = -delta_deg
+        delta_deg *= 1 + (np.abs(thrust)-50) / 50
+        delta_deg = np.where(thrust < 0, -delta_deg, delta_deg)
 
         # Calculate change in heading factoring external drift
         delta_deg += self.rotate_speed * self.dt
 
         # Calculate final new heading
-        return angle180(self.heading + delta_deg)
+        return angle180(self.heading[env_idxs] + delta_deg)
 
-    def _propagate_pos(self, new_speed, new_heading):
+    def _propagate_pos(self, new_speed, new_heading, env_idxs):
         """
         This is based on propagate() function from Moos-Ivp SimEngine
         Adapted for use in pyquaticus from:
@@ -442,10 +434,10 @@ class BaseUSV(Dynamics):
             (2) https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/dep_uSimMarine/SimEngine.cpp
         """
         # Calculate average speed
-        avg_speed = (new_speed + self.speed) / 2.0
+        avg_speed = (new_speed + self.speed[env_idxs]) / 2.0
 
         # Calculate average heading
-        hdg_rad = np.deg2rad(self.heading)
+        hdg_rad = np.deg2rad(self.heading[env_idxs])
         new_hdg_rad = np.deg2rad(new_heading)
 
         s = np.sin(new_hdg_rad) + np.sin(hdg_rad)
@@ -453,15 +445,17 @@ class BaseUSV(Dynamics):
         avg_hdg = np.arctan2(s, c)
 
         # Calculate new position and speed
-        vel = avg_speed * np.asarray(
-            [np.sin(avg_hdg), np.cos(avg_hdg)] #sine/cos swapped because of the heading / angle difference
+        vel = avg_speed * np.stack(
+            [np.sin(avg_hdg), np.cos(avg_hdg)], #sine/cos swapped because of the heading / angle difference
+            axis=-1
         )
-        new_speed = np.linalg.norm(vel)
+        new_speed = np.linalg.norm(vel, axis=-1)
+        new_speed = np.where(avg_speed < 0, -new_speed, new_speed)
 
         if self.gps_env:
-            new_pos = self.pos + (vel / self.meters_per_mercator_xy) * self.dt
+            new_pos = self.pos[env_idxs] + (vel / self.meters_per_mercator_xy) * self.dt
         else:
-            new_pos = self.pos + vel * self.dt
+            new_pos = self.pos[env_idxs] + vel * self.dt
 
         return new_pos, new_speed
 
