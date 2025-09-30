@@ -230,10 +230,10 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
     def _relheading_to_global_heading(self, player_heading, relheading):
         return angle180((player_heading + relheading) % 360)
 
-    def _register_state_elements(self, num_on_team, num_obstacles, n_envs):
+    def _register_state_elements(self, num_on_team, num_obstacles):
         """Initializes the normalizers."""
-        agent_obs_normalizer = ObsNormalizer(False, n_envs)
-        global_state_normalizer = ObsNormalizer(False, n_envs)
+        agent_obs_normalizer = ObsNormalizer(False)
+        global_state_normalizer = ObsNormalizer(False)
 
         ### Agent Observation Normalizer ###
         if self.lidar_obs:
@@ -890,7 +890,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.render_mode = render_mode
 
         self.reset_ctr = np.zeros(n_envs, dtype=int)
-        self.step_count = np.zeros(n_envs, dtype=int)
+        self.step_ctr = np.zeros(n_envs, dtype=int)
         self.current_time = np.zeros(n_envs)
         self.state = None
         self.prev_state = None
@@ -984,7 +984,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         self.action_spaces = {agent_id: self.get_agent_action_space(self.act_space_str[agent_id], i) for i, agent_id in enumerate(self.players)}
         self.observation_spaces = {agent_id: self.get_agent_observation_space() for agent_id in self.players}
-        self.agent_obs_normalizer, self.global_state_normalizer = self._register_state_elements(team_size, len(self.obstacles), n_envs)
+        self.agent_obs_normalizer, self.global_state_normalizer = self._register_state_elements(team_size, len(self.obstacles))
 
         # Set up rewards
         for agent_id in self.players:
@@ -1026,7 +1026,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             #         )
             #     )
 
-    def step(self, raw_action_dict, env_idxs):
+    def step(self, raw_action_dict, env_idxs=None):
         """
         Steps the environment forward in time by self.dt seconds, applying actions.
 
@@ -1045,6 +1045,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 -global state
                 -unnormalized observations
         """
+        if env_idxs is None:
+            env_idxs = np.arange(self.n_envs)
+        else:
+            env_idxs = np.unique(env_idxs)
+
         if np.any(self.reset_ctr[env_idxs] == 0):
             raise Exception("Call reset before using step method.")
 
@@ -1080,27 +1085,28 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             # self._update_lidar(env_idxs)
 
         # Set the time
+        self.step_ctr[env_idxs] += 1
         self.current_time[env_idxs] += self.timewarp * self.dt
 
         # Tagging cooldown
-        for i, player in enumerate(self.players.values()):
-            if player.tagging_cooldown != self.tagging_cooldown:
-                # player is still under a cooldown from tagging, advance their cooldown timer, clip at the configured tagging cooldown
-                player.tagging_cooldown = self._min(
-                    (player.tagging_cooldown + self.timewarp * self.dt),
-                    self.tagging_cooldown,
-                )
-                self.state["agent_tagging_cooldown"][i] = player.tagging_cooldown
+        np.clip(
+            self.state["agent_tagging_cooldown"][env_idxs] + self.timewarp * self.dt,
+            0, self.tagging_cooldown,
+            out=self.state["agent_tagging_cooldown"][env_idxs]
+        )
 
         # Agent and flag checks and more
-        self._check_oob(env_idxs)
-        self._check_untag_and_flag_keepout(env_idxs)
-        self._check_agent_made_tag(env_idxs)
-        self._check_flag_pickups(env_idxs)
-        self._check_flag_captures(env_idxs)
-        cli_message = self._set_dones(env_idxs)
-        self._update_dist_bearing_to_obstacles(env_idxs)
-        self._check_agent_collisions(env_idxs)
+        self.cli_message = ""
+        if self.step_ctr % self.action_repeat == 0:
+            self._check_oob(env_idxs)
+            self._update_on_sides(env_idxs)
+            self._check_untag_and_flag_keepout(env_idxs)
+            self._check_agent_made_tag(env_idxs)
+            self._check_flag_pickups(env_idxs)
+            self._check_flag_captures(env_idxs)
+            self._set_dones(env_idxs)
+            self._update_dist_bearing_to_obstacles(env_idxs)
+            self._check_agent_collisions(env_idxs)
 
         if self.lidar_obs:
             raise NotImplementedError("Vector environment with Lidar not implemented.")
@@ -1118,59 +1124,36 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             #         self.obj_ray_detection_states[team][self.ray_int_label_map[agent_id]] = LIDAR_DETECTION_CLASS_MAP[detection_class_name]
 
         # Message
-        if cli_message and self.render_mode == 'human':
-            print(cli_message)
+        if self.cli_message and self.render_mode == 'human':
+            print(self.cli_message)
 
-        # Observations
-        for agent_id in raw_action_dict:
-            next_obs, next_unnorm_obs = self.state_to_obs(agent_id, self.normalize_obs)
+        # Observations and Infos
+        obs = {}
+        infos = {}
+        global_state = self.state_to_global_state(self.normalize_state, env_idxs)
 
-            self.state["obs_hist_buffer"][agent_id][1:] = self.state["obs_hist_buffer"][agent_id][:-1]
-            self.state["obs_hist_buffer"][agent_id][0] = next_obs
-
+        for agent_id in self.agents:
+            infos[agent_id] = {
+                "env_idxs": env_idxs,
+                "global_state": global_state,
+                "low_level_action": action_dict[agent_id]
+            }
             if self.normalize_obs:
-                self.state["unnorm_obs_hist_buffer"][agent_id][1:] = self.state["unnorm_obs_hist_buffer"][agent_id][:-1]
-                self.state["unnorm_obs_hist_buffer"][agent_id][0] = next_unnorm_obs
-
-        obs = {agent_id: self._history_to_obs(agent_id, "obs_hist_buffer") for agent_id in self.players}
-
-        # Global State
-        self.state["global_state_hist_buffer"][1:] = self.state["global_state_hist_buffer"][:-1]
-        self.state["global_state_hist_buffer"][0] = self.state_to_global_state(self.normalize_state, env_idxs)
-        global_state = self._history_to_state() #common to all agents
+                obs[agent_id], infos[agent_id]["unnorm_obs"] = self.state_to_obs(env_idxs, agent_id, self.normalize_obs)
+            else:
+                obs[agent_id], _ = self.state_to_obs(env_idxs, agent_id, self.normalize_obs)
 
         # Rewards
-        rewards = {agent_id: self.compute_rewards(agent_id, player.team) for agent_id, player in self.players.items()}
+        rewards = {agent_id: self.compute_rewards(agent_id, player.team, env_idxs) for agent_id, player in self.players.items()}
 
         # Dones
-        terminated = False
-        truncated = False
+        terminated = self.dones["blue"][env_idxs] | self.dones["red"][env_idxs]
+        truncated = self.dones["__all__"][env_idxs] & ~terminated
 
-        if self.dones["__all__"]:
-            if self.dones["blue"] or self.dones["red"]:
-                terminated = True
-            else:
-                truncated = True
+        terminations = {agent_id: terminated for agent_id in self.players}
+        truncations = {agent_id: truncated for agent_id in self.players}
 
-        terminated = {agent_id: terminated for agent_id in self.players}
-        truncated = {agent_id: truncated for agent_id in self.players}
-        terminated["__all__"] = self.dones["__all__"]
-        truncated["__all__"] = self.dones["__all__"]
-
-        # Info
-        info = {agent_id: {} for agent_id in self.players}
-        for agent_id in self.agents:
-            #global state
-            info[agent_id]["global_state"] = global_state
-
-            #unnormalized obs
-            if self.normalize_obs:
-                info[agent_id]["unnorm_obs"] = self._history_to_obs(agent_id, "unnorm_obs_hist_buffer")
-
-            #low-level action
-            info[agent_id]["low_level_action"] = action_dict[agent_id]
-
-        return obs, rewards, terminated, truncated, info
+        return obs, rewards, terminations, truncations, infos
 
     def _move_agents(self, action_dict, env_idxs):
         """Moves agents in the space according to the specified speed/heading in `action_dict`."""
@@ -1250,19 +1233,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             ## Move agent ##
             player._move_agent(desired_speed, heading_error, env_idxs)
 
-            # Move flag (if agent has it)
-            # update onsides
-
-
-            #############################################################################################################
-            # Check if agent is on their own side
-            player.on_own_side = self._check_on_sides(player.pos, player.team)
-            self.state["agent_on_sides"][i] = player.on_own_side
-
-            # Move flag (if necessary)
-            if player.has_flag:
-                self.flags[other_team_idx].pos = player.pos
-                self.state['flag_position'][other_team_idx] = np.array(self.flags[other_team_idx].pos)
+            ## Move flag (if agent has it) ##
+            has_flag_env_idxs = env_idxs[self.state["agent_has_flag"][env_idxs, i]]
+            self.state['flag_position'][has_flag_env_idxs, other_team_idx] = self.state["agent_position"][has_flag_env_idxs, i]
 
     def _get_oob_recover_rel_heading(self, pos, heading):
         #compute the closest env edge and steer towards heading perpendicular to edge
@@ -1398,6 +1371,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     self.flag[other_team_idx].reset(flag_oob_env_idxs)
                     self.state['flag_taken'][flag_oob_env_idxs, other_team_idx] = False
 
+    def _update_on_sides(self, env_idxs)
+        for team, agent_idxs in self.agent_inds_of_team.items():
+            env_agent_ixgrid = np.ix_(env_idxs, agent_idxs)
+            self.state["agent_on_sides"][env_agent_ixgrid] = self._check_on_sides(self.state["agent_position"][env_agent_ixgrid], team)
+
     def _check_untag_and_flag_keepout(self, env_idxs):
         """
         Untags the player if they return to their own flag.
@@ -1466,7 +1444,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
                     self.state['agent_made_tag'][made_tag_env_idxs, j] = target_idx
                     self.state['agent_tagging_cooldown'][made_tag_env_idxs, j] = 0.0
-                    self.state['tags'][made_tag_env_idxs, team_idx] += 1
                     self.game_events[team]['tags'][made_tag_env_idxs] += 1
 
                     #update target agent
@@ -1524,7 +1501,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     self.state['flag_taken'][flag_pickup_env_idxs, other_team_idx] = True
 
                     # update grabs
-                    self.state['grabs'][flag_pickup_env_idxs, team_idx] += 1
                     self.game_events[team]['grabs'][flag_pickup_env_idxs] += 1
 
     def _check_flag_captures(self, env_idxs):
@@ -1551,9 +1527,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.state['flag_taken'][captures_env_idxs, other_team_idx] = False
 
                 # Update captures
-                new_team_captures = np.sum(agent_captures[captures], axis=-1)
-                self.state['captures'][captures_env_idxs, team_idx] += new_team_captures
-                self.game_events[player.team]['captures'][captures_env_idxs] += new_team_captures
+                self.game_events[player.team]['captures'][captures_env_idxs] += np.sum(agent_captures[captures], axis=-1)
 
     def set_config_values(self, config_dict):
         """
@@ -2089,22 +2063,20 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         )
 
         # CLI Message
-        cli_message = ""
         if self.render_mode == "human" and np.any(self.dones["__all__"][env_idxs]):
             done_env_idxs = env_idxs[self.dones["__all__"][env_idxs]]
-            cli_message = (
+            self.cli_message = (
                 f"Envs {done_env_idxs} are done with final scores: "
                 f"{blue_scores[done_env_idx]}\u2013{red_scores[done_env_idx]} (Blue\u2013Red). "
             )
-        
-        return cli_message
 
-    def compute_rewards(self, agent_id, team):
+    def compute_rewards(self, agent_id, team, env_idxs):
         if self.reward_config[agent_id] is None:
             return 0.0
 
         # Get reward based on the passed in reward function
         return self.reward_config[agent_id](
+            env_idxs=env_idxs,
             agent_id=agent_id,
             team=team,
             agents=self.agents,
@@ -2171,6 +2143,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         else:
             env_idxs = np.unique(env_idxs)
 
+        self.step_ctr[env_idxs] = 0
         self.current_time[env_idxs] = 0.
         self._reset_dones(env_idxs)
         self.active_collisions[env_idxs] = False
@@ -2318,25 +2291,25 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                         self.traj_render_buffer[agent_id]["agent"][i] = []
                         self.traj_render_buffer[agent_id]["history"][i] = []
 
-        # Observations and Info
+        # Observations and Infos
         obs = {}
-        info = {}
+        infos = {}
         global_state = self.state_to_global_state(self.normalize_state, env_idxs)
 
         for agent_id in self.agents:
-            info[agent_id] = {
+            infos[agent_id] = {
                 "env_idxs": env_idxs,
                 "global_state": global_state
             }
             if self.normalize_obs:
-                obs[agent_id], info[agent_id]["unnorm_obs"] = self.state_to_obs(env_idxs, agent_id, self.normalize_obs)
+                obs[agent_id], infos[agent_id]["unnorm_obs"] = self.state_to_obs(env_idxs, agent_id, self.normalize_obs)
             else:
                 obs[agent_id], _ = self.state_to_obs(env_idxs, agent_id, self.normalize_obs)
 
         # Reset Count
         self.reset_ctr[env_idxs] += 1
 
-        return obs, info
+        return obs, infos
 
     def _set_state_from_init_dict(self, init_dict: dict, env_idxs: list, sync_start: bool):
         """
@@ -4010,7 +3983,7 @@ when gps environment bounds are specified in meters"
                 self.valid_init_poses[self._check_on_sides(self.valid_init_poses, team)]
             )
 
-    def render(self):
+    def render(self, env_idxs):
         """
         Overridden method inherited from `Gym`.
 
