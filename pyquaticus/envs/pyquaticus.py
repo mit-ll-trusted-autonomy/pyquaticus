@@ -1197,7 +1197,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.state["agent_heading"][is_tagged_env_idxs, i]
             )
             desired_speed[agent_is_tagged] = np.where(
-                self.state["agent_oob"][is_tagged_env_idxs, i]
+                self.state["agent_oob"][is_tagged_env_idxs, i],
                 self.oob_speed_frac * self.max_speeds[i],
                 self.max_speeds[i]
             )
@@ -2876,6 +2876,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         collision_types['obstacle'][envs_with_obstacle_collision] = True
 
         return valid_pos, collision_types
+
+    def sync_envs(self):
+        pass
 
     def _update_dist_bearing_to_obstacles(self, env_idxs):
         """Computes the distance and heading from each player to each obstacle"""
