@@ -259,6 +259,47 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                 f"obstacle_{i}_bearing", max_bearing
             )
 
+        ### Global State Normalizer ###
+        max_heading = [180]
+        max_bearing = [180]
+        pos_max = self.env_size + 5*max(self.agent_radius) #add a normalization buffer
+        pos_min = len(self.env_size) * [-5*max(self.agent_radius)] #add a normalization buffer
+        max_dist = [self.env_diag]
+        min_dist = [0.0]
+        max_bool, min_bool = [1.0], [0.0]
+        # max_speed, min_speed = [max(self.max_speeds)], [0.0]
+        max_score, min_score = [self.max_score], [0.0]
+
+        for player in self.players.values():
+            player_name = player.id
+
+            global_state_normalizer.register((player_name, "pos"), pos_max, pos_min)
+            global_state_normalizer.register((player_name, "heading"), max_heading)
+            # global_state_normalizer.register((player_name, "scrimmage_line_bearing"), max_bearing)
+            # global_state_normalizer.register((player_name, "scrimmage_line_distance"), max_dist, min_dist)
+            # global_state_normalizer.register((player_name, "speed"), max_speed, min_speed)
+            global_state_normalizer.register((player_name, "has_flag"), max_bool, min_bool)
+            global_state_normalizer.register((player_name, "on_side"), max_bool, min_bool)
+            # global_state_normalizer.register((player_name, "oob"), max_bool, min_bool)
+            global_state_normalizer.register((player_name, "tagging_cooldown"), [self.tagging_cooldown], [0.0])
+            global_state_normalizer.register((player_name, "is_tagged"), max_bool, min_bool)
+
+            for i in range(num_obstacles):
+                global_state_normalizer.register((player_name, f"obstacle_{i}_distance"), max_dist, min_dist)
+                global_state_normalizer.register((player_name, f"obstacle_{i}_bearing"), max_bearing)
+
+        global_state_normalizer.register("blue_flag_home", pos_max, pos_min)
+        global_state_normalizer.register("red_flag_home", pos_max, pos_min)
+        # global_state_normalizer.register("blue_flag_pos", pos_max, pos_min)
+        # global_state_normalizer.register("red_flag_pos", pos_max, pos_min)
+
+        # global_state_normalizer.register("blue_flag_pickup", max_bool, min_bool)
+        # global_state_normalizer.register("red_flag_pickup", max_bool, min_bool)
+        global_state_normalizer.register("blue_team_score", max_score, min_score)
+        global_state_normalizer.register("red_team_score", max_score, min_score)
+
+        return agent_obs_normalizer, global_state_normalizer
+
         self._state_elements_initialized = True
         return agent_obs_normalizer
 
@@ -410,6 +451,96 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                 obs_dict[agent.id]
             )
         return obs_dict[agent.id]
+
+    def state_to_global_state(self, normalize=True):
+        """
+        Returns a global environment state:
+            - Agent 0:
+              - Position (xy meters)
+              - Heading (clockwise degrees where North is 0)
+              - Scrimmage line bearing (clockwise degrees)
+              - Scrimmage line distance (meters)
+              - Own speed (meters per second)
+              - Has flag status (boolean)
+              - On side status (boolean)
+              - Out of bounds (boolean)
+              - Tagging cooldown (seconds) time elapsed since last tag (at max when you can tag again)
+              - Is tagged status (boolean)
+              - Relative distance and bearing to each obstacle (meters and clockwise degrees respectively)
+            - Agent 1: same as Agent 0
+            - Agent 2: same as Agent 0
+            .
+            .
+            .
+            - Agent n: same as Agent 0
+            - Blue flag home (xy meters)
+            - Red flag home (xy meters)
+            - Blue flag position (xy meters)
+            - Red flag position (xy meters)
+            - Blue flag pickup (boolean)
+            - Red flag pickup (boolean)
+            - Blue team score (cummulative flag captures by blue team)
+            - Red team score (cummulative flag captures by red team)
+
+        Note 1: the angles are 0 when the agent is pointed directly at the object
+                and increase in the clockwise direction
+        Note 2: when normalized, the boolean args are -1 False and +1 True
+        Note 3: the values are normalized by default
+        Note 4: units with 'meters' are either in actual meters or mercator xy meters depending if
+                self.gps_env is True or not (except for speed which is always meters per second)
+
+        Developer Note 1: changes here should be reflected in _register_state_elements.
+        Developer Note 2: check that variables used here are available to PyQuaticusMoosBridge in pyquaticus_moos_bridge.py
+        """
+        global_state = dict()
+
+        # agent info
+        for i, (agent_id, agent) in enumerate(self.players.items()):
+            pos = agent.pos
+            heading = agent.heading
+
+            # scrimmage_line_closest_point = closest_point_on_line(
+            #     self.scrimmage_coords[0], self.scrimmage_coords[1], pos
+            # )
+            # scrimmage_line_dist, scrimmage_line_bearing = mag_bearing_to(
+            #     pos, scrimmage_line_closest_point, heading
+            # )
+
+            global_state[(agent_id, "pos")] = pos
+            global_state[(agent_id, "heading")] = heading
+            # global_state[(agent_id, "scrimmage_line_bearing")] = scrimmage_line_bearing
+            # global_state[(agent_id, "scrimmage_line_distance")] = scrimmage_line_dist
+            # global_state[(agent_id, "speed")] = self.state["agent_speed"][agent.idx]
+            global_state[(agent_id, "has_flag")] = agent.has_flag
+            global_state[(agent_id, "on_side")] = agent.on_own_side
+            # global_state[(agent_id, "oob")] = self.state["agent_oob"][agent.idx]
+            global_state[(agent_id, "tagging_cooldown")] = agent.tagging_cooldown
+            global_state[(agent_id, "is_tagged")] = agent.is_tagged
+
+            #Obstacle Distance/Bearing
+            for i, obstacle in enumerate(
+                self.state["dist_bearing_to_obstacles"][agent_id]
+            ):
+                global_state[(agent_id, f"obstacle_{i}_distance")] = obstacle[0]
+                global_state[(agent_id, f"obstacle_{i}_bearing")] = obstacle[1]
+
+        # flag and score info
+        blue_team_idx = int(Team.BLUE_TEAM)
+        red_team_idx = int(Team.RED_TEAM)
+
+        global_state["blue_flag_home"] = self.flags[blue_team_idx].home
+        global_state["red_flag_home"] = self.flags[red_team_idx].home
+        # global_state["blue_flag_pos"] = self._standard_pos(self.state["flag_position"][blue_team_idx])
+        # global_state["red_flag_pos"] = self._standard_pos(self.state["flag_position"][red_team_idx])
+        # global_state["blue_flag_pickup"] = self.state["flag_taken"][blue_team_idx]
+        # global_state["red_flag_pickup"] = self.state["flag_taken"][red_team_idx]
+        global_state["blue_team_score"] = self.game_score["blue_captures"]
+        global_state["red_team_score"] = self.game_score["red_captures"]
+
+        if normalize:
+            return self.global_state_normalizer.normalized(global_state)
+        else:
+            return global_state
 
     def get_agent_observation_space(self):
         """Overridden method inherited from `Gym`."""
@@ -611,7 +742,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.agents_of_team[Team.RED_TEAM]
         )
         num_on_team = len(self.agents_of_team[Team.BLUE_TEAM])
-        self.agent_obs_normalizer = self._register_state_elements(num_on_team, len(self.obstacles))
+        self.agent_obs_normalizer, self.global_state_normalizer = self._register_state_elements(num_on_team, len(self.obstacles))
 
         self.action_spaces = {
             agent_id: self.get_agent_action_space() for agent_id in self.players
@@ -705,7 +836,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             print(self.message)
         rewards = {agent_id: self.compute_rewards(agent_id) for agent_id in self.players}
         obs = {agent_id: self.state_to_obs(agent_id, self.normalize) for agent_id in raw_action_dict}
-        info = {}
+        info = {"global_state": self.state_to_global_state()}
 
         terminated = False
         truncated = False
