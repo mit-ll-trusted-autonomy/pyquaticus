@@ -170,6 +170,9 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
     def _register_state_elements(self, num_on_team, num_obstacles):
         """Initializes the normalizer."""
         agent_obs_normalizer = ObsNormalizer(False)
+        global_state_normalizer = ObsNormalizer(False)
+
+        ### Agent Observation Normalizer ###
         max_bearing = [180]
         max_dist = [np.linalg.norm(self.world_size) + 10]  # add a ten meter buffer
         max_dist_scrimmage = [self.scrimmage]
@@ -262,9 +265,9 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         ### Global State Normalizer ###
         max_heading = [180]
         max_bearing = [180]
-        pos_max = self.env_size + 5*max(self.agent_radius) #add a normalization buffer
-        pos_min = len(self.env_size) * [-5*max(self.agent_radius)] #add a normalization buffer
-        max_dist = [self.env_diag]
+        pos_max = self.world_size + 5*self.agent_radius #add a normalization buffer
+        pos_min = len(self.world_size) * [-5*self.agent_radius] #add a normalization buffer
+        max_dist = [np.linalg.norm(self.world_size)]
         min_dist = [0.0]
         max_bool, min_bool = [1.0], [0.0]
         # max_speed, min_speed = [max(self.max_speeds)], [0.0]
@@ -298,10 +301,8 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         global_state_normalizer.register("blue_team_score", max_score, min_score)
         global_state_normalizer.register("red_team_score", max_score, min_score)
 
-        return agent_obs_normalizer, global_state_normalizer
-
         self._state_elements_initialized = True
-        return agent_obs_normalizer
+        return agent_obs_normalizer, global_state_normalizer
 
     def state_to_obs(self, agent_id, normalize=True):
         """
@@ -516,13 +517,6 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             # global_state[(agent_id, "oob")] = self.state["agent_oob"][agent.idx]
             global_state[(agent_id, "tagging_cooldown")] = agent.tagging_cooldown
             global_state[(agent_id, "is_tagged")] = agent.is_tagged
-
-            #Obstacle Distance/Bearing
-            for i, obstacle in enumerate(
-                self.state["dist_bearing_to_obstacles"][agent_id]
-            ):
-                global_state[(agent_id, f"obstacle_{i}_distance")] = obstacle[0]
-                global_state[(agent_id, f"obstacle_{i}_bearing")] = obstacle[1]
 
         # flag and score info
         blue_team_idx = int(Team.BLUE_TEAM)
@@ -836,7 +830,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             print(self.message)
         rewards = {agent_id: self.compute_rewards(agent_id) for agent_id in self.players}
         obs = {agent_id: self.state_to_obs(agent_id, self.normalize) for agent_id in raw_action_dict}
-        info = {"global_state": self.state_to_global_state()}
+        info = {"global_state": self.state_to_global_state(True)}
 
         terminated = False
         truncated = False
@@ -1140,7 +1134,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         """
         # set variables from config
 
-        self.world_size = config_dict.get("world_size", config_dict_std["world_size"])
+        self.world_size = np.array(config_dict.get("world_size", config_dict_std["world_size"]))
         self.pixel_size = config_dict.get("pixel_size", config_dict_std["pixel_size"])
         self.agent_radius = config_dict.get(
             "agent_radius", config_dict_std["agent_radius"]
