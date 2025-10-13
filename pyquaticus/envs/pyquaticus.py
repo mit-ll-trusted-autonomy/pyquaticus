@@ -298,8 +298,9 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
 
         # global_state_normalizer.register("blue_flag_pickup", max_bool, min_bool)
         # global_state_normalizer.register("red_flag_pickup", max_bool, min_bool)
-        global_state_normalizer.register("blue_team_score", max_score, min_score)
-        global_state_normalizer.register("red_team_score", max_score, min_score)
+        if self.score_state:
+            global_state_normalizer.register("blue_team_score", max_score, min_score)
+            global_state_normalizer.register("red_team_score", max_score, min_score)
 
         self._state_elements_initialized = True
         return agent_obs_normalizer, global_state_normalizer
@@ -528,8 +529,9 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         # global_state["red_flag_pos"] = self._standard_pos(self.state["flag_position"][red_team_idx])
         # global_state["blue_flag_pickup"] = self.state["flag_taken"][blue_team_idx]
         # global_state["red_flag_pickup"] = self.state["flag_taken"][red_team_idx]
-        global_state["blue_team_score"] = self.game_score["blue_captures"]
-        global_state["red_team_score"] = self.game_score["red_captures"]
+        if self.score_state:
+            global_state["blue_team_score"] = self.game_score["blue_captures"]
+            global_state["red_team_score"] = self.game_score["red_captures"]
 
         if normalize:
             return self.global_state_normalizer.normalized(global_state)
@@ -645,6 +647,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     def __init__(
         self,
         team_size: int = 1,
+        score_state: bool = True,
         reward_config: dict = None,
         config_dict=config_dict_std,
         render_mode: Optional[str] = None,
@@ -736,6 +739,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.agents_of_team[Team.RED_TEAM]
         )
         num_on_team = len(self.agents_of_team[Team.BLUE_TEAM])
+        self.score_state = score_state
         self.agent_obs_normalizer, self.global_state_normalizer = self._register_state_elements(num_on_team, len(self.obstacles))
 
         self.action_spaces = {
