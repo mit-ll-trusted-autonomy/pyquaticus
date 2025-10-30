@@ -725,10 +725,16 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.params = {agent_id: {} for agent_id in self.players}
         self.prev_params = {agent_id: {} for agent_id in self.players}
         # Create the list of flags that are indexed by self.flags[int(player.team)]
-
         self.flags = []
         for team in Team:
             self.flags.append(Flag(team))
+
+        flag_locations = [
+            [self.world_size[0] - self.world_size[0]/8, self.world_size[1]/2],  # Blue Team
+            [self.world_size[0]/8, self.world_size[1]/2]  # Red Team
+        ]
+        for flag in self.flags:
+            flag.home = np.array(flag_locations[int(flag.team)])
 
         # Set tagging cooldown
         for player in self.players.values():
@@ -1491,16 +1497,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if return_info:
             raise DeprecationWarning("return_info has been deprecated by PettingZoo -- https://github.com/Farama-Foundation/PettingZoo/pull/890")
 
-        flag_locations = [
-            [
-                self.world_size[0] - self.world_size[0] / 8,
-                self.world_size[1] / 2,
-            ],  # Blue Team
-            [self.world_size[0] / 8, self.world_size[1] / 2],  # Red Team
-        ]
-
         for flag in self.flags:
-            flag.home = flag_locations[int(flag.team)]
             flag.reset()
 
         self.dones = self._reset_dones()
