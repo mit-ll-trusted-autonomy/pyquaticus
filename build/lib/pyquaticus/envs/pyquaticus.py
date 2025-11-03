@@ -1499,7 +1499,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.state['agent_oob'] = agent_oob
         for i, oob in enumerate(agent_oob):
             self.players[self.agents[i]].oob = oob
-
+        
         if not np.any(agent_oob):
             return
 
