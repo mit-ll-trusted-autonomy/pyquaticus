@@ -1502,6 +1502,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         self.dones = self._reset_dones()
 
+        flag_locations = [flag.home for flag in self.flags]
         agent_positions, agent_spd_hdg, agent_on_sides = self._generate_agent_starts(
             np.array(flag_locations)
         )
