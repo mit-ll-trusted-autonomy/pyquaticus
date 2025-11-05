@@ -30,7 +30,7 @@ config_dict_std = {
     # [2.0, 4.0, 2.5, 3.5]
 
     "flag_radius":           1.5,  # meters
-    "flag_keepout":          3.0,  # minimum distance (meters) between agent and flag centers
+    "flag_keepout":          0.0,  # minimum distance (meters) between agent and flag centers
     "catch_radius":         10.0,  # distance (meters) for tagging and flag pickup
     "untag_radius":         20.0, # distance (meters) for untagging when at home base
     "slip_radius":          10.0,  # meters (tolerance for reaching RRT* waypoint for auto-driving home on tag)
@@ -50,6 +50,7 @@ config_dict_std = {
 
     # Dynamics parameters
     "oob_speed_frac": 0.5,  # proportion
+    "tag_speed_frac": 0.5,
     "dynamics":   "surveyor",  # dynamics to use for agents (from dynamics_registry.py)
 
     # note: if different dynamics are desired for different agents, provide a list / tuple / array like:
@@ -57,7 +58,7 @@ config_dict_std = {
 
     # Simulation parameters
     "tau":              0.1,  # dt (seconds) for updating the simulation
-    "sim_speedup_factor": 1,  # simulation speed multiplier similar to time warp in MOOS (integer >= 1)
+    "sim_speedup_factor": 10,  # simulation speed multiplier similar to time warp in MOOS (integer >= 1)
 
     # Game parameters
     "default_init":      True,  # Spawn agents programmatically, rather than randomly

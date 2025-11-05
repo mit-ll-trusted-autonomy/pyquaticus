@@ -31,6 +31,7 @@ from pyquaticus.envs.pyquaticus import Team
 import pyquaticus.config
 import copy
 from pyquaticus import pyquaticus_v0
+from pyquaticus.mctf26_config import config_dict_std as mctf_config
 
 from pyquaticus.envs.competition_pyquaticus import CompPyquaticusEnv
 class KeyTest:
@@ -111,11 +112,13 @@ class KeyTest:
         return action_dict
 
 def main():
-    config = {}
-    config["sim_speedup_factor"] = 8
-    config["tag_probability"] = 0.75
-    config["power_play_percentage"] = 0.2
-    config["untag_radius"] = 20
+    # config = {}
+    # config["sim_speedup_factor"] = 10
+    # config["tag_probability"] = 0.75
+    # config["power_play_percentage"] = 0.2
+    # config["untag_radius"] = 20
+    config = mctf_config
+
 
 
     # config["max_time"] = 1000

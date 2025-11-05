@@ -90,6 +90,7 @@ class RenderingPlayer(Player):
 
     render_radius: float
     render_mode: str
+    is_disabled: bool = field(init=False, default=False)
 
     def __post_init__(self):
         """Called automatically after __init__ to set up pygame object interface."""
@@ -191,6 +192,16 @@ class RenderingPlayer(Player):
                 end_angle,
                 round(self.render_radius / 4),
             )
+    def render_disabled(self):
+        if self.is_disabled:
+            draw.circle(
+                self.pygame_agent,
+                (255, 255, 0),
+                (self.render_radius, self.render_radius),
+                self.render_radius,
+                width=round(self.render_radius/4),
+            )
+
 
 @dataclass
 class Flag:
