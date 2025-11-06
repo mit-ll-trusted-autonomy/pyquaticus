@@ -328,6 +328,7 @@ class BaseUSV(Dynamics):
             (1) https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarine
             (2) https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/lib_marine_pid/PIDEngine.cpp
             (3) https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/dep_uSimMarine/SimEngine.cpp
+            (4) https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/dep_uSimMarine/USM_Model.cpp
 
         Args:
             desired speed: desired speed, in m/s
@@ -343,6 +344,7 @@ class BaseUSV(Dynamics):
         np.clip(self.state['rudder'][env_idxs], -100, 100, out=self.state['rudder'][env_idxs]) #clip in case abs(self.max_rudder) > 100
 
         # Propagate Speed, Heading, and Position
+        # Based on propagateNodeRecord() in https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/dep_uSimMarine/USM_Model.cpp
         new_speed = self._propagate_speed(
             thrust=self.state['thrust'][env_idxs],
             rudder=self.state['rudder'][env_idxs],
