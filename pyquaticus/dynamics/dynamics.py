@@ -324,7 +324,9 @@ class BaseUSV(Dynamics):
         Use MOOS-IVP simulation dynamics to move the agent given a desired speed and heading error.
         Adapted for use in pyquaticus from:
             (1) https://oceanai.mit.edu/ivpman/pmwiki/pmwiki.php?n=IvPTools.USimMarine
-            (2) https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/dep_uSimMarine/SimEngine.cpp
+            (2) https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/lib_marine_pid/PIDEngine.cpp
+            (3) https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/dep_uSimMarine/SimEngine.cpp
+            (4) https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/dep_uSimMarine/USM_Model.cpp
 
         Args:
             desired speed: desired speed, in m/s
@@ -336,8 +338,11 @@ class BaseUSV(Dynamics):
         if self.state['thrust'] > 0:
             self._set_desired_rudder(heading_error)
             self.state['rudder'] = clip(self.state['rudder'], -100, 100) #clip in case abs(self.max_rudder) > 100
+        else:
+            self.state['rudder'] = 0
 
         # Propagate Speed, Heading, and Position
+        # Based on propagateNodeRecord() in https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/dep_uSimMarine/USM_Model.cpp
         new_speed = self._propagate_speed(
             thrust=self.state['thrust'],
             rudder=self.state['rudder']
@@ -351,7 +356,7 @@ class BaseUSV(Dynamics):
 
         # Set New Speed, Heading, and Position Values
         self.speed = clip(new_speed, 0.0, self.max_speed)
-        self.heading = angle180(new_heading)
+        self.heading = new_heading
         self.prev_pos = self.pos
         self.pos = np.asarray(new_pos)
 
@@ -365,7 +370,6 @@ class BaseUSV(Dynamics):
         else:
             speed_error = desired_speed - self.speed
             delta_thrust = self._pid_controllers['speed'](speed_error)
-            
             desired_thrust = self.state['thrust'] + delta_thrust
 
         if desired_thrust < 0.01:
@@ -455,6 +459,8 @@ class BaseUSV(Dynamics):
             [np.sin(avg_hdg), np.cos(avg_hdg)] #sine/cos swapped because of the heading / angle difference
         )
         new_speed = np.linalg.norm(vel)
+        if avg_speed < 0:
+            new_speed = -new_speed
 
         if self.gps_env:
             new_pos = self.pos + (vel / self.meters_per_mercator_xy) * self.dt
@@ -520,7 +526,7 @@ class Heron(BaseUSV):
                 dt=kwargs["dt"],
                 kp=0.9,
                 kd=0.6,
-                ki=0.3,
+                ki=0.0,
                 integral_limit=0.3,
                 output_limit=max_rudder
             )

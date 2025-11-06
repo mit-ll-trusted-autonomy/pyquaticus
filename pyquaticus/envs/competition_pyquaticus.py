@@ -671,6 +671,7 @@ class CompPyquaticusEnv(PyQuaticusEnv):
                         heading_error = 0
                     else:
                         desired_speed, heading_error = policy.compute_action(player.pos, player.heading)
+                        desired_speed = min(desired_speed, player.get_max_speed() * self.tag_speed_frac)
                         if player.oob:
                             desired_speed = min(desired_speed, player.get_max_speed() * self.oob_speed_frac) #TODO: optimize based on MOOS behvior
             
@@ -691,10 +692,9 @@ class CompPyquaticusEnv(PyQuaticusEnv):
                             heading_error = temp_heading_error
 
                     # _, heading_error = mag_bearing_to(player.pos, self.env_ur, player.heading)
+                    desired_speed = player.get_max_speed() * self.tag_speed_frac
                     if player.oob:
-                        desired_speed = player.get_max_speed() * self.oob_speed_frac #TODO: optimize based on MOOS behvior
-                    else:
-                        desired_speed = player.get_max_speed()
+                        desired_speed = min(desired_speed, player.get_max_speed() * self.oob_speed_frac) #TODO: optimize based on MOOS behvior
 
             # If agent is out of bounds, drive back in bounds at fraction of max speed
             elif player.oob:
