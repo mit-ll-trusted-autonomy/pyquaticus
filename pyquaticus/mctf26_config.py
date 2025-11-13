@@ -68,7 +68,7 @@ config_dict_std = {
     "tagging_cooldown":  60.0,  # cooldown on an agent (seconds) after they tag another agent, to prevent consecutive tags
     "tag_on_collision": False,  # option for setting the agent to a tagged state upon collsion with an obstacle
     "tag_on_oob":        True,  # option for setting the agent to a tagged state upon driving out-of-bounds
-    "tag_probability":   0.75,
+    "tag_probability":   1.0,
     "power_play_percentage": 0.20,
 
     # Observation parameters

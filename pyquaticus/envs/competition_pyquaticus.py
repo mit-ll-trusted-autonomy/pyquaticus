@@ -134,19 +134,20 @@ class CompPyquaticusEnv(PyQuaticusEnv):
         power_slot_two = 0
 
         self.power_play_length = self.max_cycles * self.power_play_percentage
+
         #Attempt to find two random times x length apart
         for i in range(10):
             power_slot_one = random.randint(0,self.max_cycles-self.power_play_length)
             #Restrict Ranges and select second if not possible retry selecting power slot one
             next_range = []
             if not power_slot_one < self.power_play_length:
-                next_range += list(range(0, power_slot_one))
+                next_range += list(range(0, int(power_slot_one-self.power_play_length)))
             if not (power_slot_one + self.power_play_length >= self.max_cycles):
                 next_range += list(range(int(power_slot_one + self.power_play_length), int(self.max_cycles-self.power_play_length)))
             if len(next_range) <= 0:
                 # Couldn't get two valid slots retry
                 continue
-            power_slot_two = next_range[random.randint(0,len(next_range))]
+            power_slot_two = next_range[random.randint(0,len(next_range)-1)]
             break
         #
         if random.random() < 0.5:
@@ -239,25 +240,25 @@ class CompPyquaticusEnv(PyQuaticusEnv):
                             player.pos, other_player.pos
                         )
                         if agent_distance < self.catch_radius:
-                            team_idx = int(player.team)
-                            other_team_idx = int(other_player.team)
+                            if random.random() <= self.tag_probability:
+                                team_idx = int(player.team)
+                                other_team_idx = int(other_player.team)
 
-                            other_player.is_tagged = True
-                            self.state['agent_is_tagged'][j] = 1
-                            self.state['agent_made_tag'][i] = j
-                            self.state['tags'][team_idx] += 1
-                            self.game_events[player.team]['tags'] += 1
+                                other_player.is_tagged = True
+                                self.state['agent_is_tagged'][j] = 1
+                                self.state['agent_made_tag'][i] = j
+                                self.state['tags'][team_idx] += 1
+                                self.game_events[player.team]['tags'] += 1
 
-                            if other_player.has_flag:
-                                #update tagged agent
-                                other_player.has_flag = False
-                                self.state['agent_has_flag'][j] = 0
+                                if other_player.has_flag:
+                                    #update tagged agent
+                                    other_player.has_flag = False
+                                    self.state['agent_has_flag'][j] = 0
 
-                                #update flag
-                                self.flags[team_idx].reset()
-                                self.state['flag_position'][team_idx] = self.flags[team_idx].pos
-                                self.state['flag_taken'][team_idx] = 0
-
+                                    #update flag
+                                    self.flags[team_idx].reset()
+                                    self.state['flag_position'][team_idx] = self.flags[team_idx].pos
+                                    self.state['flag_taken'][team_idx] = 0
                             #set players tagging cooldown
                             player.tagging_cooldown = 0.0
                             self.state['agent_tagging_cooldown'][i] = 0.0
@@ -403,20 +404,16 @@ class CompPyquaticusEnv(PyQuaticusEnv):
         blue_team_idx = self.agent_inds_of_team[Team.BLUE_TEAM]
 
         #Check if we need to start a power play
-        # print("Current Step: ", self.current_cycle)
         if self.current_cycle == self.red_power_start and self.current_cycle < self.red_power_start + self.power_play_length:
             agent_idx = red_team_idx[random.randint(0, len(red_team_idx)-1)]
             self.state["disabled_agents"][agent_idx] = True
             self.players[f"agent_{agent_idx}"].is_disabled = True
-            print(f"Disabling RED Agent: {agent_idx}")
-            # self.state["agent_is_disabled"] = 
+
         if self.current_cycle == self.blue_power_start and self.current_cycle < self.blue_power_start + self.power_play_length:
             agent_idx = blue_team_idx[random.randint(0, len(blue_team_idx)-1)]
             self.state["disabled_agents"][agent_idx] = True
             self.players[f"agent_{agent_idx}"].is_disabled = True
-            print(f"Disabling BLUE Agent: {agent_idx}")
 
-            # self.state["agent_is_disabled"]
         #Check to see if we should end a power play
         if self.current_cycle == self.red_power_start + self.power_play_length:
             self.state["disabled_agents"][red_team_idx] = False
@@ -467,6 +464,8 @@ class CompPyquaticusEnv(PyQuaticusEnv):
         """
         self._seed(seed=seed)
         self._set_power_play_times()
+            
+
 
         self.message = ""
         self.current_time = 0

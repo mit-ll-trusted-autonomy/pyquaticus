@@ -106,7 +106,6 @@ class RenderingPlayer(Player):
                 self.render_radius + self.render_radius * np.sqrt(2) / 2 - 1,
             )
             center_vertex = (self.render_radius, 1.25*self.render_radius)
-
             # Create the actual object
             self.pygame_agent = Surface((2*self.render_radius, 2*self.render_radius), SRCALPHA)
 
@@ -158,7 +157,6 @@ class RenderingPlayer(Player):
 
     def render_tagging_oob(self, cooldown_time):
         self.pygame_agent = self.pygame_agent_base.copy()
-
         # render_is_tagged
         if self.oob:
             draw.circle(
@@ -194,14 +192,22 @@ class RenderingPlayer(Player):
             )
     def render_disabled(self):
         if self.is_disabled:
-            draw.circle(
-                self.pygame_agent,
-                (255, 255, 0),
-                (self.render_radius, self.render_radius),
-                self.render_radius,
-                width=round(self.render_radius/4),
-            )
-
+            bot_left_vertex = (0, 0)
+            bot_right_vertex = (0,self.render_radius*2)
+            
+            top_right_vertex = (self.render_radius*2, self.render_radius*2)
+            top_left_vertex = (self.render_radius*2, 0)
+            draw.line(self.pygame_agent,
+                (128, 128, 128),
+                top_left_vertex,
+                bot_right_vertex,
+                width=int(self.render_radius/2))
+            draw.line(self.pygame_agent,
+                (128, 128, 128),
+                top_right_vertex,
+                bot_left_vertex,
+                width=int(self.render_radius/2))
+            
 
 @dataclass
 class Flag:
