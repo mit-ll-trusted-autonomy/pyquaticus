@@ -92,6 +92,7 @@ class KeyTest:
                 if event.type == QUIT or (
                     event.type == KEYDOWN and event.key == K_ESCAPE
                 ):
+                    self.env.save_screenshot()
                     self.env.close()
                     sys.exit()
 
@@ -127,6 +128,11 @@ def main():
     config["catch_radius"] = 250
     config["default_init"] = False
     config["dynamics"] = "large_usv"
+    config["render_saving"] = True
+    config["catch_radius"] = 275
+    config["screen_frac"] = 1.5
+    config["agent_radius"] = 100
+    config["flag_radius"] = 50
     
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
     env = pyquaticus_v0.PyQuaticusEnv(team_size=3, render_mode='human', config_dict=config)
