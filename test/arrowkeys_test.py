@@ -123,7 +123,7 @@ def main():
     config["lidar_range"] = 20
     config["render_lidar_mode"] = "detection"
     config["render_agent_ids"] = True
-    config["render_traj_mode"] = "traj_history"
+    config["render_traj_mode"] = "traj"
     config["render_traj_freq"] = 50
     config["short_obs_hist_length"] = 4
     config["short_obs_hist_interval"] = 5
@@ -131,7 +131,7 @@ def main():
     config["long_obs_hist_interval"] = 20
     config["render_traj_cutoff"] = 100
     config["tag_on_oob"] = True
-    config["arena_buffer_frac"] = 0.4
+    # config["arena_buffer_frac"] = 0.4
 
 
     
