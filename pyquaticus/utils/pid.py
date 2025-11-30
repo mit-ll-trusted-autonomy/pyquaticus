@@ -57,7 +57,7 @@ class PID:
         #Calculate the integral term
         self._integral += self._ki * error * self._dt
         self._integral = np.clip(self._integral, -self._integral_limit, self._integral_limit) #prevent integral wind up
-        
+
         #Calculate PID output
         pid_out = (self._kp * error) + (self._kd * deriv) + self._integral #note Ki is already in self._integral
         pid_out = np.clip(pid_out, -self._output_limit, self._output_limit) #prevent saturation
