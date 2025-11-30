@@ -477,11 +477,15 @@ class Heron(BaseUSV):
             -turn_rate
             -speed PID gains
             -heading (yaw) PID gains
+                *changed ki from 0.3 to 0.0 for straight driving in simulation
 
         (2) https://oceanai.mit.edu/svn/moos-ivp-aquaticus-oai/trunk/missions/charles-2023/meta_vehicle.moos
-                -max_speed
-                    *max_speed = max(thrust_map[1])
-                    *pHelmIvP config speed domain (0.5 buffer added for normlization)
+            -max_speed
+                *max_speed = max(thrust_map[1])
+                *pHelmIvP config speed domain (0.5 buffer added for normlization)
+            -speed PID gains
+            -alternative heading (yaw) PID gains used for 2023 & 2024 Charles River Heron MCTF experiments
+                *kp=0.35, kd=0.07, ki=0.0, integral_limit=0.07
     """
     def __init__(
         self,
