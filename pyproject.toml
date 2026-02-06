@@ -57,8 +57,7 @@ dependencies = [
 	"pygame==2.4.0",
 	"scipy",
 	"shapely",
-	"sympy",
-	"pymoos==2022.1; sys_platform == 'linux' or sys_platform == 'darwin'"
+	"sympy"
 ]
 
 [project.optional-dependencies]
