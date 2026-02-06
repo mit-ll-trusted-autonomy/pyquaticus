@@ -23,8 +23,9 @@ The default vehicle dynamics are based on the [MOOS-IvP](https://oceanai.mit.edu
 * Example integration with [RLLib](https://docs.ray.io/en/latest/rllib/index.html) for reinforcement learning
 * Easy deployment on MOOS-compatible robots  
 
-
 ## Installation
+### Make sure you are in mctf2026 branch
+
 ### Conda
 It is highly recommended to use a `conda` environment. Assuming you have [Anaconda](https://www.anaconda.com/) or [Miniconda](https://docs.conda.io/en/latest/miniconda.html) installed, run the following from the top-level of this repository:
 
@@ -52,6 +53,11 @@ or
 ```
 pip install -e .[torch,ray]
 ```
+try
+```
+pip install -e ".[torch,ray]"
+```
+if pip install -e .[torch,ray] doesn't work
 
 ## Basic Tests
 
