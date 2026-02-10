@@ -24,8 +24,8 @@ The default vehicle dynamics are based on the [MOOS-IvP](https://oceanai.mit.edu
 * Easy deployment on MOOS-compatible robots  
 
 ## Installation
-### Make sure you are in mctf2026 branch
-#### also Remove line 56 (pymoos==2022.1) from pyproject.toml
+##### Make sure you are in mctf2026 branch
+##### Also remove/comment out line 56 (pymoos==2022.1) from pyproject.toml, and any instances of pymoos in test files you want to run
 ### Conda
 It is highly recommended to use a `conda` environment. Assuming you have [Anaconda](https://www.anaconda.com/) or [Miniconda](https://docs.conda.io/en/latest/miniconda.html) installed, run the following from the top-level of this repository:
 
