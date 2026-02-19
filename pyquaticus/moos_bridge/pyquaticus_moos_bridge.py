@@ -1,7 +1,7 @@
 import copy
 import itertools
 import numpy as np
-import pymoos
+# import pymoos
 import time
 
 from pyquaticus.envs.pyquaticus import PyQuaticusEnvBase

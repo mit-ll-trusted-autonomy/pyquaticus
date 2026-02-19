@@ -24,7 +24,7 @@ from typing import Any, Union
 import numpy as np
 
 from pyquaticus.envs.pyquaticus import PyQuaticusEnv, Team
-from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
+# from pyquaticus.moos_bridge.pyquaticus_moos_bridge import PyQuaticusMoosBridge
 
 
 class BaseAgentPolicy:
@@ -35,7 +35,7 @@ class BaseAgentPolicy:
     def __init__(
         self,
         agent_id: str,
-        env: Union[PyQuaticusEnv, PyQuaticusMoosBridge],
+        env: PyQuaticusEnv,
         suppress_numpy_warnings=True,
     ):
         self.id = agent_id
