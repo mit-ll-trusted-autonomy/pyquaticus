@@ -23,8 +23,7 @@ This document describes the dynamic environment extensions and how to run/train 
 ### 3. Training script (`rl_test/train_dynamic.py`)
 
 - Trains Blue team (agents 0–2) vs random Red (agents 3–5)
-- Uses graph observations by default
-- Supports vector observations with `--no-graph`
+- Uses graph observations and GNN policy only
 
 ---
 
@@ -91,6 +90,14 @@ Training uses **only the custom GNN policy**: graph observations and the GNN mod
 python rl_test/train_dynamic.py
 ```
 
+**Overnight runs:** Progress is logged to `ray_dynamic/train.log` by default. Recommended command (speedup 8, 24 runners, save every 50 iters):
+
+```bash
+python rl_test/train_dynamic.py --speedup 8 --runners 24 --save-every 50
+```
+
+If it stops, resume with: `python rl_test/train_dynamic.py --resume ./ray_dynamic/iter_N` (use the latest `iter_*`). Run a short test first: `python rl_test/train_dynamic.py --iters 100`.
+
 ### With rendering
 
 ```bash
@@ -104,14 +111,21 @@ python rl_test/train_dynamic.py --render
 | `--render` | False | Render during training |
 | `--iters` | 2000 | Training iterations |
 | `--save-every` | 250 | Save checkpoint every N iters |
-| `--out-dir` | `./ray_dynamic/` | Checkpoint directory |
+| `--out-dir` | `./ray_dynamic/` | Checkpoint directory (also where `train.log` is written) |
 | `--runners` | 20 | Number of parallel env runners (more = faster if you have CPUs) |
 | `--speedup` | 4 | Sim speedup factor (e.g. 8 = env steps 2× faster; minimal impact on learning) |
+| `--resume` | — | Resume from checkpoint (e.g. `./ray_dynamic/iter_1250`); continues from next iteration |
+| `--no-log-file` | False | Disable writing progress to `out_dir/train.log` |
+
+Progress is written to `{out_dir}/train.log` by default so you can inspect it after an overnight run. If training stops, resume with `--resume ./ray_dynamic/iter_N` (use the latest `iter_*` folder).
+
+**Save right now:** While training is running, create an empty file `SAVE_NOW` in the output directory; the next completed iteration will save a checkpoint (e.g. `iter_150`) and then delete `SAVE_NOW`. Windows: `echo. > ray_dynamic\SAVE_NOW`. Linux/Mac: `touch ray_dynamic/SAVE_NOW`.
 
 ### Speed (without sacrificing results)
 
-- **Time per 50 iters**: The script prints `time=Xs/iter (est. ~Ys per 50 iters)`. Use that for planning.
-- **Faster runs**: Use `--runners 32` (or 40) if you have spare CPUs, and `--speedup 8` to run the sim 2× faster. Same dynamics and learning; only wall-clock time changes.
+- **Time per 50 iters**: The script prints `time=Xs/iter (est. ~Ys per 50 iters)`. Use that for planning. Each iteration runs one PPO update (default batch is 2000 env steps; use `--speedup 8` to make env steps 2× faster).
+- **If each iter is very slow (~5+ min)**: Use `--speedup 8` so the sim runs 2× faster. Use `--runners 16` (or 8 if you only see a few workers running); more runners than your CPU count won't help.
+- **`return_mean=n/a`**: Normal on the first few iters when no episodes have finished yet; it will show numbers once episodes complete.
 
 ### Checkpoints
 

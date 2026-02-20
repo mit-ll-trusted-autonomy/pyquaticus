@@ -3,19 +3,34 @@
 Train MARL policies on Dynamic PyQuaticus with our GNN policy only.
 
 Uses graph observations and the custom GNN model (message passing, self-node embedding).
+
 Usage:
   python rl_test/train_dynamic.py
   python rl_test/train_dynamic.py --render
+  # Overnight: progress is logged to out_dir/train.log (disable with --no-log-file)
+  python rl_test/train_dynamic.py --speedup 8 --runners 16
+  # Save more often so you can resume if you have to stop early (e.g. --save-every 100):
+  python rl_test/train_dynamic.py --speedup 8 --runners 16 --save-every 100
+  # Resume after a crash (continues from next iteration, saves to same out_dir):
+  python rl_test/train_dynamic.py --resume ./ray_dynamic/iter_1250
+  # Quick smoke test before a long run:
+  python rl_test/train_dynamic.py --iters 100
+
+  # Save checkpoint right now (while training is running): create file SAVE_NOW in out_dir.
+  # E.g. from another terminal:  echo. > ray_dynamic/SAVE_NOW   (Windows)
+  #                             touch ray_dynamic/SAVE_NOW      (Linux/Mac)
+  # Next completed iteration will save to iter_N and delete SAVE_NOW.
 """
 
 import argparse
 import logging
 import os
+import re
 import time
 
 import numpy as np
 import ray
-from ray.rllib.algorithms.ppo import PPOConfig
+from ray.rllib.algorithms.ppo import PPO, PPOConfig
 from ray.rllib.policy.policy import Policy
 from ray.tune.registry import register_env
 
@@ -100,10 +115,35 @@ if __name__ == "__main__":
     parser.add_argument("--render", action="store_true", help="Enable rendering")
     parser.add_argument("--iters", type=int, default=2000, help="Training iterations")
     parser.add_argument("--save-every", type=int, default=250, help="Save checkpoint every N iters")
-    parser.add_argument("--out-dir", type=str, default="./ray_dynamic/", help="Output directory")
+    parser.add_argument("--out-dir", type=str, default="./ray_dynamic/", help="Output directory for checkpoints and train.log")
     parser.add_argument("--runners", type=int, default=20, help="Number of parallel env runners (more = faster if you have CPUs)")
     parser.add_argument("--speedup", type=int, default=4, help="Sim speedup factor (4=default; 8=env steps 2x faster, minimal impact on learning)")
+    parser.add_argument("--resume", type=str, default=None, metavar="PATH", help="Resume from checkpoint (e.g. ./ray_dynamic/iter_1250)")
+    parser.add_argument("--no-log-file", action="store_true", help="Disable writing progress to out_dir/train.log")
     args = parser.parse_args()
+
+    # Out-dir: use parent of resume path if resuming and out-dir not explicitly set
+    if args.resume and args.out_dir == "./ray_dynamic/":
+        args.out_dir = os.path.dirname(os.path.normpath(os.path.abspath(args.resume))) or "."
+    os.makedirs(args.out_dir, exist_ok=True)
+
+    # Log file: same messages to stdout and to out_dir/train.log (unless --no-log-file)
+    log_file = None
+    if not args.no_log_file:
+        log_path = os.path.join(args.out_dir, "train.log")
+        try:
+            log_file = open(log_path, "a", encoding="utf-8")
+        except OSError:
+            log_file = None
+
+    def log(msg):
+        print(msg)
+        if log_file is not None:
+            try:
+                log_file.write(msg + "\n")
+                log_file.flush()
+            except OSError:
+                pass
 
     logging.basicConfig(level=logging.ERROR)
     ray.init(ignore_reinit_error=True)
@@ -154,45 +194,90 @@ if __name__ == "__main__":
         "red_policy": (RandPolicy, obs_space, act_space, {}),
     }
 
-    ppo_config = (
-        PPOConfig()
-        .api_stack(enable_rl_module_and_learner=False, enable_env_runner_and_connector_v2=False)
-        .environment(env="dynamic_pyquaticus")
-        .env_runners(num_env_runners=args.runners, num_cpus_per_env_runner=0.25)
-        .multi_agent(
-            policies=policies,
-            policy_mapping_fn=policy_mapping_fn,
-            policies_to_train=["blue_policy"],
-        )
-    ).training(
-        model={
-            "custom_model": "gnn_model",
-            "custom_model_config": {"gnn_hidden": 64, "gnn_layers": 2},
-        }
-    )
-    algo = ppo_config.build_algo()
-
-    os.makedirs(args.out_dir, exist_ok=True)
-    for i in range(args.iters + 1):
-        start = time.time()
+    # Build or load algorithm
+    i_start = 0
+    if args.resume:
+        resume_path = os.path.abspath(args.resume)
+        if not os.path.isdir(resume_path):
+            log(f"ERROR: Resume path is not a directory: {resume_path}")
+            ray.shutdown()
+            raise SystemExit(1)
+        # Parse iteration from path (e.g. .../iter_1250 -> 1250)
+        basename = os.path.basename(resume_path)
+        m = re.match(r"iter_(\d+)$", basename)
+        if not m:
+            log(f"ERROR: Resume path should end with iter_N (e.g. iter_1250), got: {basename}")
+            ray.shutdown()
+            raise SystemExit(1)
+        i_start = int(m.group(1)) + 1
+        log(f"Resuming from {resume_path} (next iteration {i_start})")
         try:
-            result = algo.train()
-            elapsed = time.time() - start
-            ep_rew = result.get("env_runners", {}).get("episode_return_mean", 0)
-            if i % 50 == 0:
-                print(f"Iter {i}: return_mean={ep_rew:.2f}, time={elapsed:.1f}s/iter (est. ~{50*elapsed:.0f}s per 50 iters)")
-            if i > 0 and i % args.save_every == 0:
-                path = os.path.join(args.out_dir, f"iter_{i}")
-                algo.save(path)
-                print(f"Saved checkpoint to {path}")
-        except Exception as e:
-            print(f"ERROR at iteration {i}: {e}")
-            import traceback
-            traceback.print_exc()
-            print("\nCheck Ray worker logs for more details:")
-            print("  - Look for 'RolloutWorker pid=...' error messages above")
-            print("  - Or check: ray logs")
-            break
+            algo = PPO.from_checkpoint(resume_path)
+        except AttributeError:
+            from ray.rllib.algorithms.algorithm import Algorithm
+            algo = Algorithm.from_checkpoint(resume_path)
+    else:
+        ppo_config = (
+            PPOConfig()
+            .api_stack(enable_rl_module_and_learner=False, enable_env_runner_and_connector_v2=False)
+            .environment(env="dynamic_pyquaticus")
+            .env_runners(num_env_runners=args.runners, num_cpus_per_env_runner=0.25)
+            .multi_agent(
+                policies=policies,
+                policy_mapping_fn=policy_mapping_fn,
+                policies_to_train=["blue_policy"],
+            )
+        ).training(
+            model={
+                "custom_model": "gnn_model",
+                "custom_model_config": {"gnn_hidden": 64, "gnn_layers": 2},
+            },
+            # Fewer steps per iteration = faster iters (default 4000 can be ~7+ min/iter)
+            train_batch_size=2000,
+        )
+        algo = ppo_config.build_algo()
+        log("Training started (new run).")
 
-    ray.shutdown()
-    print("Training complete.")
+    try:
+        for i in range(i_start, args.iters + 1):
+            start = time.time()
+            try:
+                result = algo.train()
+                elapsed = time.time() - start
+                ep_rew = result.get("env_runners", {}).get("episode_return_mean", 0)
+                if ep_rew is None or (isinstance(ep_rew, float) and not np.isfinite(ep_rew)):
+                    ep_rew_str = "n/a (no completed episodes yet)"
+                else:
+                    ep_rew_str = f"{float(ep_rew):.2f}"
+                # Print every 50 iters, or every 10 for short runs, or always for first 10 iters
+                print_every = 10 if args.iters <= 200 else 50
+                if i % print_every == 0 or i < 10:
+                    log(f"Iter {i}: return_mean={ep_rew_str}, time={elapsed:.1f}s/iter (est. ~{50*elapsed:.0f}s per 50 iters)")
+                if i > 0 and i % args.save_every == 0:
+                    path = os.path.join(args.out_dir, f"iter_{i}")
+                    algo.save(path)
+                    log(f"Saved checkpoint to {path}")
+                # "Save now" trigger: create out_dir/SAVE_NOW to save at end of current iter
+                save_now_file = os.path.join(args.out_dir, "SAVE_NOW")
+                if os.path.isfile(save_now_file):
+                    path = os.path.join(args.out_dir, f"iter_{i}")
+                    algo.save(path)
+                    log(f"Saved checkpoint (on request) to {path}")
+                    try:
+                        os.remove(save_now_file)
+                    except OSError:
+                        pass
+            except Exception as e:
+                log(f"ERROR at iteration {i}: {e}")
+                import traceback
+                traceback.print_exc()
+                log("Check Ray worker logs for more details (RolloutWorker pid=... or: ray logs)")
+                break
+    finally:
+        ray.shutdown()
+        if log_file is not None:
+            try:
+                log_file.close()
+            except OSError:
+                pass
+    log("Training complete.")

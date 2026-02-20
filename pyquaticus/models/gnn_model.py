@@ -41,29 +41,10 @@ _FLAT_NODE = MAX_AGENTS * NODE_FEAT_DIM
 _FLAT_EDGE = 2 * _NUM_EDGES
 _FLAT_MASK = MAX_AGENTS
 _FLAT_SELF = 1
-_FLAT_TOTAL = _FLAT_NODE + _FLAT_EDGE + _FLAT_MASK + _FLAT_SELF
-
-
-def _scatter_mean(src, index, dim_size):
-    """Aggregate messages to nodes (mean). src (E, F), index (E,) -> (dim_size, F)."""
-    out = torch.zeros(dim_size, src.size(1), device=src.device, dtype=src.dtype)
-    count = torch.zeros(dim_size, 1, device=src.device, dtype=src.dtype)
-    index = index.unsqueeze(1).expand_as(src)
-    out.scatter_add_(0, index, src)
-    count.scatter_add_(0, index[:, :1], torch.ones_like(src[:, :1]))
-    count = count.clamp(min=1)
-    return out / count
 
 
 class GNNModel(TorchModelV2, nn.Module):
-    """
-    Graph Neural Network that:
-    1. Embeds node features
-    2. Runs message passing (mean aggregation over edges)
-    3. Selects the self node's embedding
-    4. Policy head: self_embedding -> action logits
-    5. Value head: self_embedding -> value
-    """
+    """GNN: node embed -> message passing -> self-node embedding -> policy/value heads. See module docstring for flow."""
 
     def __init__(self, obs_space, action_space, num_outputs, model_config, name, **kwargs):
         TorchModelV2.__init__(self, obs_space, action_space, num_outputs, model_config, name, **kwargs)

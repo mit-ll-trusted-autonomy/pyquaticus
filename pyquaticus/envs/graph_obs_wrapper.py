@@ -4,14 +4,12 @@ Graph Observation Wrapper for PyQuaticus
 
 Converts vector observations to graph format:
 - node_features: (max_agents, feat_dim) per-agent features
-- edge_index: (2, num_edges) for all-to-all or distance-based edges
+- edge_index: (2, num_edges) for all-to-all edges
 - mask: (max_agents,) 1.0 if agent active, 0.0 if disabled
-- num_nodes: int (for variable-size handling)
+- self_node_idx: (1,) index of the acting agent in the node list
 
 Output is a Dict that can be flattened for standard policies or used with GNNs.
 """
-
-from typing import Optional
 
 import numpy as np
 from gymnasium.spaces import Box, Dict
@@ -108,14 +106,8 @@ def _state_to_node_features(env, agent_id: str, global_state: dict, disabled: np
             # Already normalized, just clip to be safe
             features[i, 9] = np.clip(cooldown, -1.0, 1.0)
     
-    # Final safety check: ensure all features are in [-1, 1]
-    # Convert to float32 and clip aggressively
     features = np.asarray(features, dtype=np.float32)
-    features = np.clip(features, -1.0, 1.0)
-    # Double-check: if any value is still outside [-1, 1], force clip
-    if np.any(np.abs(features) > 1.0):
-        features = np.clip(features, -1.0, 1.0)
-    return features
+    return np.clip(features, -1.0, 1.0)
 
 
 def _build_edge_index(max_agents: int = MAX_AGENTS, fully_connected: bool = True) -> np.ndarray:
@@ -212,13 +204,10 @@ class GraphObsWrapper(ParallelEnv):
         def observation_space(agent_id: str):
             if agent_id in self.observation_spaces:
                 return self.observation_spaces[agent_id]
-            # Fallback: return first space or create default
             if self.observation_spaces:
                 return list(self.observation_spaces.values())[0]
-            # Create default if empty
-            flat_dim = MAX_AGENTS * NODE_FEAT_DIM + MAX_AGENTS if self.flatten_for_fc else self._graph_obs_space
             if self.flatten_for_fc:
-                return Box(low=-1, high=1, shape=(flat_dim,), dtype=np.float32)
+                return Box(low=-1, high=1, shape=(MAX_AGENTS * NODE_FEAT_DIM + MAX_AGENTS,), dtype=np.float32)
             return self._graph_obs_space
         self.observation_space = observation_space
         
@@ -241,7 +230,7 @@ class GraphObsWrapper(ParallelEnv):
         env_size = getattr(env, "env_size", np.array([160, 80]))
         max_speed = max(getattr(env, "max_speeds", [2.0]))
         node_features = _state_to_node_features(env, agent_id, global_state, disabled, env_size, max_speed)
-        edge_index = _build_edge_index(MAX_AGENTS)
+        edge_index = _build_edge_index()
         mask = 1.0 - np.array([float(disabled[i]) if i < len(disabled) else 1.0 for i in range(MAX_AGENTS)], dtype=np.float32)
         # Index of the acting agent in the node list (agent_0 -> 0, agent_1 -> 1, ...)
         try:
@@ -273,15 +262,6 @@ class GraphObsWrapper(ParallelEnv):
         else:
             self.observation_spaces = {aid: self._graph_obs_space for aid in self.possible_agents}
         
-        # Update methods for PettingZoo compatibility (must be callable)
-        def observation_space(agent_id: str):
-            return self.observation_spaces.get(agent_id, list(self.observation_spaces.values())[0])
-        self.observation_space = observation_space
-        
-        def action_space(agent_id: str):
-            return self.action_spaces.get(agent_id, list(self.action_spaces.values())[0])
-        self.action_space = action_space
-        
         # Always update action_spaces from wrapped env
         wrapped_action_spaces = getattr(self.env, "action_spaces", None)
         if wrapped_action_spaces is None:
@@ -305,15 +285,13 @@ class GraphObsWrapper(ParallelEnv):
             # Single space for all agents
             self.action_spaces = {aid: wrapped_action_spaces for aid in self.possible_agents}
         
-        # Update methods for PettingZoo compatibility
         def observation_space(agent_id: str):
             return self.observation_spaces.get(agent_id, list(self.observation_spaces.values())[0])
         self.observation_space = observation_space
-        
         def action_space(agent_id: str):
             return self.action_spaces.get(agent_id, list(self.action_spaces.values())[0])
         self.action_space = action_space
-            
+
         out_obs = {}
         for aid in obs:
             g = self._obs_to_graph(aid, obs[aid], info.get(aid, {}))
