@@ -1,0 +1,15 @@
+Red team using built-in heuristic (combined CTF, medium mode).
+Training started (new run).
+Iter 0: return_mean=n/a (no completed episodes yet), time=214.3s/iter (est. ~10714s per 50 iters)
+Training complete.
+Red team using built-in heuristic (combined CTF, medium mode).
+Training started (new run).
+Iter 0: return_mean=n/a (no completed episodes yet), time=222.0s/iter (est. ~11102s per 50 iters)
+Training complete.
+Red team using built-in heuristic (combined CTF, easy mode).
+Red team using built-in heuristic (combined CTF, easy mode).
+Rendering enabled: using 0 remote env runners (pygame cannot be pickled for Ray workers).
+Training started (new run).
+Training started (new run).
+Iter 0: return_mean=-2.50, time=451.6s/iter (est. ~22580s per 50 iters)
+Training complete.

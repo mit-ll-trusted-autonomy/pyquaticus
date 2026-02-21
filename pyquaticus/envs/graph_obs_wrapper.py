@@ -128,7 +128,7 @@ class GraphObsWrapper(ParallelEnv):
     If wrapping a ParallelPettingZooEnv, preserves MultiAgentEnv compatibility.
     """
 
-    def __init__(self, env: ParallelEnv, flatten_for_fc: bool = True):
+    def __init__(self, env: ParallelEnv, flatten_for_fc: bool = True, blue_agent_ids=None, red_gets_raw_obs: bool = False):
         # Check if we should inherit from RLLib's wrapper for compatibility
         if HAS_RAY and isinstance(env, ParallelPettingZooEnv):
             # Don't double-wrap - this shouldn't happen, but handle it
@@ -137,6 +137,8 @@ class GraphObsWrapper(ParallelEnv):
             super().__init__()
         self.env = env
         self.flatten_for_fc = flatten_for_fc
+        self.blue_agent_ids = list(blue_agent_ids) if blue_agent_ids is not None else ["agent_0", "agent_1", "agent_2"]
+        self.red_gets_raw_obs = red_gets_raw_obs
         self.par_env = getattr(env, "par_env", env)
         # Get agents from wrapped env - try multiple ways
         self.possible_agents = getattr(env, "possible_agents", None)
@@ -165,7 +167,15 @@ class GraphObsWrapper(ParallelEnv):
             flat_dim = MAX_AGENTS * NODE_FEAT_DIM + MAX_AGENTS
             self.observation_spaces = {aid: Box(low=-1, high=1, shape=(flat_dim,), dtype=np.float32) for aid in default_agents}
         else:
-            self.observation_spaces = {aid: self._graph_obs_space for aid in default_agents}
+            self.observation_spaces = {}
+            for aid in default_agents:
+                if red_gets_raw_obs and aid not in self.blue_agent_ids:
+                    try:
+                        self.observation_spaces[aid] = self.env.observation_space(aid) if callable(getattr(self.env, "observation_space", None)) else getattr(self.env, "observation_spaces", {}).get(aid, self._graph_obs_space)
+                    except Exception:
+                        self.observation_spaces[aid] = self._graph_obs_space
+                else:
+                    self.observation_spaces[aid] = self._graph_obs_space
         
         # Get action spaces from wrapped env
         wrapped_action_spaces = getattr(env, "action_spaces", None)
@@ -260,7 +270,15 @@ class GraphObsWrapper(ParallelEnv):
             flat_dim = MAX_AGENTS * NODE_FEAT_DIM + MAX_AGENTS
             self.observation_spaces = {aid: Box(low=-1, high=1, shape=(flat_dim,), dtype=np.float32) for aid in self.possible_agents}
         else:
-            self.observation_spaces = {aid: self._graph_obs_space for aid in self.possible_agents}
+            self.observation_spaces = {}
+            for aid in self.possible_agents:
+                if self.red_gets_raw_obs and aid not in self.blue_agent_ids:
+                    try:
+                        self.observation_spaces[aid] = self.env.observation_space(aid) if callable(getattr(self.env, "observation_space", None)) else getattr(self.env, "observation_spaces", {}).get(aid, self._graph_obs_space)
+                    except Exception:
+                        self.observation_spaces[aid] = self._graph_obs_space
+                else:
+                    self.observation_spaces[aid] = self._graph_obs_space
         
         # Always update action_spaces from wrapped env
         wrapped_action_spaces = getattr(self.env, "action_spaces", None)
@@ -294,16 +312,22 @@ class GraphObsWrapper(ParallelEnv):
 
         out_obs = {}
         for aid in obs:
-            g = self._obs_to_graph(aid, obs[aid], info.get(aid, {}))
-            out_obs[aid] = self._graph_to_flat(g) if self.flatten_for_fc else g
+            if self.red_gets_raw_obs and aid not in self.blue_agent_ids:
+                out_obs[aid] = obs[aid]
+            else:
+                g = self._obs_to_graph(aid, obs[aid], info.get(aid, {}))
+                out_obs[aid] = self._graph_to_flat(g) if self.flatten_for_fc else g
         return out_obs, info
 
     def step(self, actions):
         obs, rewards, term, trunc, info = self.env.step(actions)
         out_obs = {}
         for aid in obs:
-            g = self._obs_to_graph(aid, obs[aid], info.get(aid, {}))
-            out_obs[aid] = self._graph_to_flat(g) if self.flatten_for_fc else g
+            if self.red_gets_raw_obs and aid not in self.blue_agent_ids:
+                out_obs[aid] = obs[aid]
+            else:
+                g = self._obs_to_graph(aid, obs[aid], info.get(aid, {}))
+                out_obs[aid] = self._graph_to_flat(g) if self.flatten_for_fc else g
         return out_obs, rewards, term, trunc, info
 
     def close(self):

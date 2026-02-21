@@ -45,7 +45,7 @@ pip install -e .[torch,ray]
 ### Quick test (no training)
 
 ```bash
-cd c:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus
+# From pyquaticus project root
 python test/test_dynamic_env.py
 ```
 
@@ -86,17 +86,36 @@ env.close()
 
 Training uses **only the custom GNN policy**: graph observations and the GNN model (message passing, self-node embedding for policy/value).
 
+### Overnight training (recommended)
+
+Use this procedure so you don’t waste time if training stops. Progress is logged to `ray_dynamic/train.log`. **Save every 12 iterations** (default) so you lose at most the time for 12 iters if training stops; each checkpoint is written to `ray_dynamic/iter_12`, `iter_24`, etc.
+
+**Step 1 — Start with easy Red** (defaults: 8 runners, speedup 8, save-every 12):
+
+```bash
+python rl_test/train_dynamic.py --red-heuristic
+```
+
+(Red difficulty defaults to `easy`; no need to pass `--red-heuristic-mode` for the first run.)
+
+**Step 2 — When ready, switch to medium (or hard):** Resume from your latest checkpoint and change Red difficulty. Only Blue is restored; Red is rebuilt from the new mode:
+
+```bash
+python rl_test/train_dynamic.py --resume ./ray_dynamic/iter_N --red-heuristic --red-heuristic-mode medium
+```
+
+Use the latest `iter_*` for `iter_N`. Later you can switch to `--red-heuristic-mode hard` the same way.
+
+- **Resume if training stops:** Same as above; use your latest `iter_*` and keep the same `--red-heuristic-mode` (or change it to continue the curriculum).
+- **Quick test first:** `python rl_test/train_dynamic.py --iters 100 --red-heuristic`.
+
+If your PC can handle more, you can try more runners (e.g. `--runners 16` or `--runners 24`); reduce if you see high RAM or swapping.
+
+### Default / quick run
+
 ```bash
 python rl_test/train_dynamic.py
 ```
-
-**Overnight runs:** Progress is logged to `ray_dynamic/train.log` by default. Recommended command (speedup 8, 24 runners, save every 50 iters):
-
-```bash
-python rl_test/train_dynamic.py --speedup 8 --runners 24 --save-every 50
-```
-
-If it stops, resume with: `python rl_test/train_dynamic.py --resume ./ray_dynamic/iter_N` (use the latest `iter_*`). Run a short test first: `python rl_test/train_dynamic.py --iters 100`.
 
 ### With rendering
 
@@ -110,22 +129,28 @@ python rl_test/train_dynamic.py --render
 |------|---------|-------------|
 | `--render` | False | Render during training |
 | `--iters` | 2000 | Training iterations |
-| `--save-every` | 250 | Save checkpoint every N iters |
+| `--save-every` | 12 | Save checkpoint every N iters (default 12 so you lose at most ~12 iters of work if training stops) |
 | `--out-dir` | `./ray_dynamic/` | Checkpoint directory (also where `train.log` is written) |
-| `--runners` | 20 | Number of parallel env runners (more = faster if you have CPUs) |
-| `--speedup` | 4 | Sim speedup factor (e.g. 8 = env steps 2× faster; minimal impact on learning) |
+| `--runners` | 8 | Number of parallel env runners (stable default; increase if PC has headroom) |
+| `--speedup` | 8 | Sim speedup factor (env steps 2× faster; minimal impact on learning) |
 | `--resume` | — | Resume from checkpoint (e.g. `./ray_dynamic/iter_1250`); continues from next iteration |
 | `--no-log-file` | False | Disable writing progress to `out_dir/train.log` |
+| `--red-heuristic` | False | Use built-in heuristic (combined CTF) for Red instead of random |
+| `--red-heuristic-mode` | easy | Heuristic difficulty when `--red-heuristic`: `easy`, `medium`, or `hard` |
 
-Progress is written to `{out_dir}/train.log` by default so you can inspect it after an overnight run. If training stops, resume with `--resume ./ray_dynamic/iter_N` (use the latest `iter_*` folder).
+Progress is written to `{out_dir}/train.log` by default so you can inspect it after an overnight run. Default **save-every 12** keeps lost work to at most ~12 iters if training stops; resume with `--resume ./ray_dynamic/iter_N` (use the latest `iter_*` folder).
 
 **Save right now:** While training is running, create an empty file `SAVE_NOW` in the output directory; the next completed iteration will save a checkpoint (e.g. `iter_150`) and then delete `SAVE_NOW`. Windows: `echo. > ray_dynamic\SAVE_NOW`. Linux/Mac: `touch ray_dynamic/SAVE_NOW`.
 
 ### Speed (without sacrificing results)
 
-- **Time per 50 iters**: The script prints `time=Xs/iter (est. ~Ys per 50 iters)`. Use that for planning. Each iteration runs one PPO update (default batch is 2000 env steps; use `--speedup 8` to make env steps 2× faster).
-- **If each iter is very slow (~5+ min)**: Use `--speedup 8` so the sim runs 2× faster. Use `--runners 16` (or 8 if you only see a few workers running); more runners than your CPU count won't help.
+- **Time per iter**: Each iteration collects 4000 env steps then does one PPO update, so iters take longer than with a smaller batch but learning is more stable. The script prints `time=Xs/iter (est. ~Ys per 50 iters)`. `--speedup 8` makes env steps 2× faster.
+- **Runners**: Use `--runners 8` as a stable default; increase (e.g. 16) only if your PC has headroom. More runners than your CPU count won't help.
 - **`return_mean=n/a`**: Normal on the first few iters when no episodes have finished yet; it will show numbers once episodes complete.
+
+### Memory (high RAM, low CPU)
+
+If memory is near full (e.g. 90%+) and CPU is low, Ray and the sim are fighting for RAM and the system may be swapping. **Reduce parallel workers**: use `--runners 8` (or 4); keep `--speedup 8` and `--save-every 12`. If RAM stays comfortable (e.g. under 80%), you can try `--runners 12` or 16.
 
 ### Checkpoints
 
