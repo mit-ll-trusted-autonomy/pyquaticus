@@ -13,3 +13,26 @@ Training started (new run).
 Training started (new run).
 Iter 0: return_mean=-2.50, time=451.6s/iter (est. ~22580s per 50 iters)
 Training complete.
+Red team using built-in heuristic (combined CTF, easy mode).
+Training started (new run).
+Iter 0: return_mean=-1.09, time=373.7s/iter (est. ~18683s per 50 iters)
+Saved checkpoint to ./ray_dynamic/iter_12
+Saved checkpoint to ./ray_dynamic/iter_24
+Iter 25: return_mean=-0.01, time=372.0s/iter (est. ~18602s per 50 iters)
+Saved checkpoint to ./ray_dynamic/iter_36
+Saved checkpoint to ./ray_dynamic/iter_48
+Iter 50: return_mean=-0.04, time=371.7s/iter (est. ~18584s per 50 iters)
+Saved checkpoint to ./ray_dynamic/iter_60
+Saved checkpoint to ./ray_dynamic/iter_72
+Iter 75: return_mean=-0.04, time=372.3s/iter (est. ~18616s per 50 iters)
+Saved checkpoint to ./ray_dynamic/iter_84
+Saved checkpoint to ./ray_dynamic/iter_96
+Iter 100: return_mean=-0.04, time=372.5s/iter (est. ~18625s per 50 iters)
+Red team using built-in heuristic (combined CTF, easy mode).
+Resuming from C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_96 (next iteration 97)
+Red opponent: easy (current args). Blue weights restored from checkpoint.
+Iter 100: return_mean=-0.02, time=374.4s/iter (est. ~18720s per 50 iters)
+Saved checkpoint to C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_108
+Saved checkpoint to C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_120
+Iter 125: return_mean=-0.10, time=374.1s/iter (est. ~18706s per 50 iters)
+Saved checkpoint to C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_132
