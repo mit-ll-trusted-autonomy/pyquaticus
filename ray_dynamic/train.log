@@ -36,3 +36,17 @@ Saved checkpoint to C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\i
 Saved checkpoint to C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_120
 Iter 125: return_mean=-0.10, time=374.1s/iter (est. ~18706s per 50 iters)
 Saved checkpoint to C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_132
+Red team using built-in heuristic (combined CTF, easy mode).
+Resuming from C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_132 (next iteration 133)
+Red opponent: easy (current args). Blue weights restored from checkpoint.
+Saved checkpoint to C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_144
+Iter 150: return_mean=-0.09, time=444.8s/iter (est. ~22238s per 50 iters)
+Saved checkpoint to C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_156
+Saved checkpoint to C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_168
+Iter 175: return_mean=-0.06, time=445.7s/iter (est. ~22283s per 50 iters)
+Saved checkpoint to C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_180
+Saved checkpoint to C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_192
+Iter 200: return_mean=-0.02, time=430.5s/iter (est. ~21524s per 50 iters)
+Saved checkpoint to C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_204
+Saved checkpoint to C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_216
+Iter 225: return_mean=-0.10, time=440.6s/iter (est. ~22030s per 50 iters)
