@@ -264,10 +264,19 @@ class Heuristic_CTF_Agent(BaseAgentPolicy):
 
         Args:
             obs: observation from gym
-            info: info from gym
+            info: info from gym (either full multi-agent info[agent_id]["global_state"] or per-agent info["global_state"])
         """
-
-        global_state = info[self.id]["global_state"]
+        # Accept full info[agent_id]["global_state"], per-agent info["global_state"], or RLLib-style info[0]["global_state"]
+        if self.id in info and isinstance(info.get(self.id), dict) and "global_state" in info[self.id]:
+            global_state = info[self.id]["global_state"]
+        elif "global_state" in info:
+            global_state = info["global_state"]
+        elif 0 in info and isinstance(info.get(0), dict) and "global_state" in info[0]:
+            global_state = info[0]["global_state"]
+        else:
+            raise KeyError(
+                f"Heuristic expected info[{self.id!r}]['global_state'], info['global_state'], or info[0]['global_state']; got keys: {list(info.keys()) if isinstance(info, dict) else type(info)}"
+            )
         if not isinstance(global_state, dict):
             global_state = self.state_normalizer.unnormalized(global_state)
 

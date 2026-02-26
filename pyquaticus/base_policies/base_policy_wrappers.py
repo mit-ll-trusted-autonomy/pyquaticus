@@ -20,6 +20,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 from ray.rllib.policy.policy import Policy
+from ray.rllib.policy.sample_batch import SampleBatch
 from typing import Union
 
 from pyquaticus.base_policies.base_attack import BaseAttacker
@@ -211,6 +212,9 @@ def CombinedGen(agent_id: str, env: Union[PyQuaticusEnv, PyQuaticusMoosBridge], 
             Policy.__init__(self, observation_space, action_space, config)
             self.policy = Heuristic_CTF_Agent(agent_id, env, mode=mode)
             self.action_dict = {}
+            # So RLLib includes infos in the inference batch (required for heuristic)
+            if SampleBatch.INFOS in self.view_requirements:
+                self.view_requirements[SampleBatch.INFOS].used_for_compute_actions = True
 
         def compute_actions(
             self,
@@ -223,19 +227,44 @@ def CombinedGen(agent_id: str, env: Union[PyQuaticusEnv, PyQuaticusMoosBridge], 
             explore=None,
             timestep=None,
             **kwargs,
-        ):  # Iterate over all observations in obs_batch
+        ):
             if info_batch is None:
-                raise Warning("Warning: Base policy requires info as well as obs")
-
-            # Iterate over all observations in obs_batch
-            for i in range(len(obs_batch)):
-
-                # Compute action and add it to the action dictionary
-                self.action_dict[agent_id] = self.policy.compute_action(
-                    obs_batch[i], {k: v[i] for k, v in info_batch.items()}
+                raise RuntimeError(
+                    "Heuristic Red policy requires env infos. Ensure INFOS is included "
+                    "in the policy input (view_requirements[INFOS].used_for_compute_actions=True)."
                 )
-
-            return [self.action_dict[agent_id]], [], {}
+            n = len(obs_batch)
+            # info_batch from RLLib: list of dicts, numpy array of dicts, or dict of arrays
+            if hasattr(info_batch, "items"):
+                # dict of lists/arrays
+                get_info_i = lambda i: {k: v[i] for k, v in info_batch.items()}
+            else:
+                # list or ndarray (one dict per batch row)
+                get_info_i = lambda i: info_batch[i] if i < len(info_batch) else {}
+            # Heuristic expects info[agent_id]["global_state"]; RLLib often passes per-agent info (no agent_id key)
+            agent_id = self.policy.id
+            def norm_info(raw):
+                if raw is None:
+                    return {}
+                # Unwrap numpy 0-d array holding a dict
+                if hasattr(raw, "item") and callable(raw.item):
+                    raw = raw.item()
+                if not isinstance(raw, dict):
+                    return raw
+                # RLLib sometimes passes infos as {0: per_agent_info} (integer-keyed)
+                if list(raw.keys()) == [0] and isinstance(raw.get(0), dict):
+                    raw = raw[0]
+                if agent_id in raw:
+                    return raw
+                if "global_state" in raw:
+                    return {agent_id: raw}
+                return raw
+            actions = []
+            for i in range(n):
+                raw = get_info_i(i)
+                action = self.policy.compute_action(obs_batch[i], norm_info(raw))
+                actions.append(action)
+            return actions, [], {}
 
         def get_weights(self):
             return {}
