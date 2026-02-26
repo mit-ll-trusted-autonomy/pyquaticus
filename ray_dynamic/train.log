@@ -50,3 +50,28 @@ Iter 200: return_mean=-0.02, time=430.5s/iter (est. ~21524s per 50 iters)
 Saved checkpoint to C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_204
 Saved checkpoint to C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_216
 Iter 225: return_mean=-0.10, time=440.6s/iter (est. ~22030s per 50 iters)
+Red team using built-in heuristic (combined CTF, medium mode).
+Resuming from C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_216 (next iteration 217)
+Red opponent: medium (current args). Blue weights restored from checkpoint.
+Iter 225: return_mean=-0.04, time=361.6s/iter (est. ~18080s per 50 iters)
+Saved checkpoint to C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_228
+Saved checkpoint to C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_240
+Iter 250: return_mean=-0.04, time=359.8s/iter (est. ~17992s per 50 iters)
+Saved checkpoint to C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_252
+Saved checkpoint to C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_264
+Iter 275: return_mean=-0.02, time=360.0s/iter (est. ~18001s per 50 iters)
+Saved checkpoint to C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_276
+Saved checkpoint to C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_288
+Iter 300: return_mean=-0.04, time=360.8s/iter (est. ~18042s per 50 iters)
+Saved checkpoint to C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_300
+Saved checkpoint to C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_312
+Saved checkpoint to C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_324
+Iter 325: return_mean=-0.04, time=362.3s/iter (est. ~18113s per 50 iters)
+Saved checkpoint to C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_336
+Saved checkpoint to C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_348
+Iter 350: return_mean=-0.04, time=361.1s/iter (est. ~18057s per 50 iters)
+Saved checkpoint to C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_360
+Red team using built-in heuristic (combined CTF, medium mode).
+Resuming from C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_360 (next iteration 361)
+Red team using built-in heuristic (combined CTF, medium mode).
+Resuming from C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus\ray_dynamic\iter_360 (next iteration 361)
