@@ -1097,16 +1097,19 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Agent and flag checks and more
         self.cli_message = ""
-        if self.step_ctr % self.action_repeat == 0:
-            self._check_oob(env_idxs)
-            self._update_on_sides(env_idxs)
-            self._check_untag_and_flag_keepout(env_idxs)
-            self._check_agent_made_tag(env_idxs)
-            self._check_flag_pickups(env_idxs)
-            self._check_flag_captures(env_idxs)
-            self._set_dones(env_idxs)
-            self._update_dist_bearing_to_obstacles(env_idxs)
-            self._check_agent_collisions(env_idxs)
+
+        env_state_update = self.step_ctr[env_idxs] % self.action_repeat == 0
+        if np.any(env_state_update):
+            env_state_update_idxs = env_idxs[env_state_update]
+            self._check_oob(env_state_update_idxs)
+            self._update_on_sides(env_state_update_idxs)
+            self._check_untag_and_flag_keepout(env_state_update_idxs)
+            self._check_agent_made_tag(env_state_update_idxs)
+            self._check_flag_pickups(env_state_update_idxs)
+            self._check_flag_captures(env_state_update_idxs)
+            self._set_dones(env_state_update_idxs)
+            self._update_dist_bearing_to_obstacles(env_state_update_idxs)
+            self._check_agent_collisions(env_state_update_idxs)
 
         if self.lidar_obs:
             raise NotImplementedError("Vector environment with Lidar not implemented.")
@@ -1240,7 +1243,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     def _get_oob_recover_rel_heading(self, pos, heading):
         #compute the closest env edge and steer towards heading perpendicular to edge
         closest_env_edge_idx = closest_line(pos, self.env_edges)
-        edge_vec = np.diff(self.env_edges[closest_env_edge_idx], axis=1).squeeze()
+        edge_vec = np.diff(self.env_edges[closest_env_edge_idx], axis=-2).squeeze()
         desired_vec = np.stack([-edge_vec[..., 1], edge_vec[..., 0]], axis=-1) #this points inwards because edges are defined ccw
         _, desired_heading = vec_to_mag_heading(desired_vec)
         
@@ -1403,7 +1406,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             (self.state["agent_tagging_cooldown"][env_idxs] == self.tagging_cooldown) &
             self.state["agent_on_sides"][env_idxs] &
             ~self.state["agent_is_tagged"][env_idxs] & 
-            ~self.state["agent_oob"][env_idxs]
+            ~self.state["agent_oob"][env_idxs] &
             ~self.state["agent_in_flag_keepout"][env_idxs]
         )
         if not np.any(cantag):
@@ -2193,8 +2196,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     self.state = {
                         "agent_position":            np.full((self.n_envs, self.num_agents, 2), np.nan),
                         "prev_agent_position":       np.full((self.n_envs, self.num_agents, 2), np.nan),
-                        "agent_speed":               np.zeros((self.n_envs, self.num_agents), dtype=bool),
-                        "agent_heading":             np.zeros((self.n_envs, self.num_agents), dtype=bool),
+                        "agent_speed":               np.zeros((self.n_envs, self.num_agents)),
+                        "agent_heading":             np.zeros((self.n_envs, self.num_agents)),
                         "agent_on_sides":            np.zeros((self.n_envs, self.num_agents), dtype=bool),
                         "agent_oob":                 np.zeros((self.n_envs, self.num_agents), dtype=bool),
                         "agent_in_flag_keepout":     np.zeros((self.n_envs, self.num_agents), dtype=bool),
@@ -2345,8 +2348,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             self.state = {
                 "agent_position":            np.full((self.n_envs, self.num_agents, 2), np.nan),
                 "prev_agent_position":       np.full((self.n_envs, self.num_agents, 2), np.nan),
-                "agent_speed":               np.zeros((self.n_envs, self.num_agents), dtype=bool),
-                "agent_heading":             np.zeros((self.n_envs, self.num_agents), dtype=bool),
+                "agent_speed":               np.zeros((self.n_envs, self.num_agents)),
+                "agent_heading":             np.zeros((self.n_envs, self.num_agents)),
                 "agent_on_sides":            np.zeros((self.n_envs, self.num_agents), dtype=bool),
                 "agent_oob":                 np.zeros((self.n_envs, self.num_agents), dtype=bool),
                 "agent_in_flag_keepout":     np.zeros((self.n_envs, self.num_agents), dtype=bool),
@@ -2572,13 +2575,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             agent_hdg_dict=agent_hdg_dict,
             agent_has_flag=self.state['agent_has_flag'][env_idxs]
         )
-        self.state['agent_position'] = agent_poses
-        self.state['prev_agent_position'] = copy.deepcopy(agent_poses)
+        self.state['agent_position'][env_idxs] = agent_poses
+        self.state['prev_agent_position'][env_idxs] = copy.deepcopy(agent_poses)
 
         ## set agent_speed, agent_heading, and agent_on_sides ##
-        self.state['agent_speed'] = agent_speeds
-        self.state['agent_heading'] = agent_headings
-        self.state['agent_on_sides'] = agent_on_sides
+        self.state['agent_speed'][env_idxs] = agent_speeds
+        self.state['agent_heading'][env_idxs] = agent_headings
+        self.state['agent_on_sides'][env_idxs] = agent_on_sides
 
         ### Set Score and Game Events ###
         ## captures, tags, grabs ##

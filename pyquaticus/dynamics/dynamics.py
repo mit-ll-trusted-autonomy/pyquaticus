@@ -356,7 +356,8 @@ class BaseUSV(Dynamics):
             rudder=self.state['rudder'][env_idxs],
             env_idxs=env_idxs
         )
-        new_pos, new_speed = self._propagate_pos(new_speed, new_heading, env_idxs) #propagate vehicle pos based on new_speed and new_heading
+        # new_pos, new_speed = self._propagate_pos(new_speed, new_heading, env_idxs) #propagate vehicle pos based on new_speed and new_heading #NOTE: this matches the MOOS-IvP docs
+        new_pos = self._propagate_pos(new_speed, new_heading, env_idxs) #propagate vehicle pos based on new_speed and new_heading
 
         # Set New Speed, Heading, and Position Values
         np.clip(new_speed, 0.0, self.max_speed, out=self.speed[env_idxs])
@@ -451,15 +452,16 @@ class BaseUSV(Dynamics):
             [np.sin(avg_hdg), np.cos(avg_hdg)], #sine/cos swapped because of the heading / angle difference
             axis=-1
         )
-        new_speed = np.linalg.norm(vel, axis=-1)
-        new_speed = np.where(avg_speed < 0, -new_speed, new_speed)
+        # new_speed = np.linalg.norm(vel, axis=-1) #NOTE: this matches the MOOS-IvP docs
+        # new_speed = np.where(avg_speed < 0, -new_speed, new_speed) #NOTE: this matches the MOOS-IvP docs
 
         if self.gps_env:
             new_pos = self.pos[env_idxs] + (vel / self.meters_per_mercator_xy) * self.dt
         else:
             new_pos = self.pos[env_idxs] + vel * self.dt
 
-        return new_pos, new_speed
+        # return new_pos, new_speed #NOTE: this matches the MOOS-IvP docs
+        return new_pos
 
 
 class Heron(BaseUSV):
