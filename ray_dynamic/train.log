@@ -83,3 +83,11 @@ Red team using do-nothing policy (always no-op actions).
 Resuming from C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus-dynamic2026\ray_dynamic\iter_360 (next iteration 361)
 Rendering with resume: using 0 remote env runners so one game window stays responsive.
 Red opponent: dummy (current args). Blue weights restored from checkpoint.
+Red team using Blue policy from checkpoint: ./ray_dynamic/iter_300
+Red opponent weights loaded from checkpoint.
+Training started (new run).
+Red team using Blue policy from checkpoint: ./ray_dynamic/iter_300
+Rendering enabled: using 0 remote env runners (pygame cannot be pickled for Ray workers).
+Rendering: using smaller train batch (500) so freezes are shorter; window will still freeze briefly each iteration during PPO update.
+Red opponent weights loaded from checkpoint.
+Training started (new run).

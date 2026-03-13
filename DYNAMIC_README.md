@@ -40,10 +40,10 @@ Checkpoints save to `./ray_dynamic/iter_N/`. Progress is logged to `./ray_dynami
 Run the trained Blue policy and watch it (no training):
 
 ```bash
-python rl_test/deploy_dynamic.py --checkpoint ./ray_dynamic/iter_360 --red-dummy --render
+python rl_test/deploy_dynamic.py ./ray_dynamic/iter_360 --red-dummy
 ```
 
-Adjust `--checkpoint` to your latest or chosen checkpoint.
+Use your latest or chosen checkpoint path (e.g. `./ray_dynamic/iter_360`). Add `--no-render` to run without a window.
 
 ---
 
@@ -61,7 +61,7 @@ Unless you pass flags, training uses:
 | **Save every** | 12 iters | Checkpoint written every 12 iterations. |
 | **Out directory** | `./ray_dynamic/` | Checkpoints and `train.log` go here. |
 | **Train batch size** | 4000 steps | Env steps per PPO update (500 when `--render`). |
-| **Red opponent** | random | Use `--red-dummy` or `--red-heuristic` to change. |
+| **Red opponent** | random | Use `--red-dummy`, `--red-heuristic`, or `--red-from-checkpoint` (one only). |
 
 ---
 
@@ -71,7 +71,8 @@ Unless you pass flags, training uses:
 |------|---------|-------------|
 | `--resume` | — | Resume from checkpoint (e.g. `./ray_dynamic/iter_360`). |
 | `--red-dummy` | False | No Red opponents; Blue plays alone (capture the flag). |
-| `--red-heuristic` | False | Red uses built-in heuristic (cannot combine with `--red-dummy`). |
+| `--red-heuristic` | False | Red uses built-in heuristic. Use only one of: `--red-dummy`, `--red-heuristic`, `--red-from-checkpoint`. |
+| `--red-from-checkpoint` | — | Red uses Blue policy from this checkpoint (self-play vs previous iteration). Path: e.g. `./ray_dynamic/iter_300`. |
 | `--red-heuristic-mode` | easy | If `--red-heuristic`: `easy`, `medium`, or `hard`. |
 | `--render` | False | Show one game window while training (short freezes each iteration). |
 | `--iters` | 2000 | Max training iterations. |
@@ -87,36 +88,56 @@ Unless you pass flags, training uses:
 
 ---
 
-## 4. Expected training: continue vs dummy from checkpoint 360
+## 4. Training progression (3 phases)
 
-To keep training your Blue policy against dummy (no Red) from checkpoint 360 or your latest checkpoint:
+Recommended order: train Blue to capture (dummy), then vs a simple opponent (heuristic), then vs random Red for diversity. Use `--resume ./ray_dynamic/iter_N` to continue from a checkpoint.
 
-1. **Use your latest checkpoint**  
-   For example: `./ray_dynamic/iter_360` (or `iter_372`, etc.).
+### Phase 1: Dummy — learn to capture
 
-2. **Run training with resume + dummy:**
-
-   ```bash
-   python rl_test/train_dynamic.py --resume ./ray_dynamic/iter_360 --red-dummy
-   ```
-
-   This restores Blue from the checkpoint and runs with no Red agents. Training continues from the next iteration (e.g. 361).
-
-3. **Optional:** add `--render` to watch one game (window will briefly freeze each iteration), or `--max-time 900` for longer episodes.
-
-4. **Optional:** save more often, e.g. `--save-every 6`.
-
-Example with all of the above:
+No Red opponents; Blue learns to reach and capture the flag. Use longer episodes so they have time to reach the flag.
 
 ```bash
-python rl_test/train_dynamic.py --resume ./ray_dynamic/iter_360 --red-dummy --max-time 900 --save-every 6
+python rl_test/train_dynamic.py --red-dummy --max-time 600 --max-score 3 --save-every 12
 ```
 
-When you want to train against moving Red again, resume the same way but switch to heuristic instead of dummy:
+Run until Blue is reliably capturing (e.g. 100–300 iters). Checkpoints go to `./ray_dynamic/iter_N`. Pick one (e.g. `iter_200` or `iter_300`) for the next phase.
+
+### Phase 2: Heuristic Red — learn vs a simple opponent
+
+Switch to heuristic Red and resume from your best dummy checkpoint. Start easy, then increase difficulty.
 
 ```bash
-python rl_test/train_dynamic.py --resume ./ray_dynamic/iter_400 --red-heuristic --red-heuristic-mode easy
+python rl_test/train_dynamic.py --resume ./ray_dynamic/iter_300 --red-heuristic --red-heuristic-mode easy --save-every 12
 ```
+
+When performance looks good, make Red harder and continue:
+
+```bash
+python rl_test/train_dynamic.py --resume ./ray_dynamic/iter_500 --red-heuristic --red-heuristic-mode medium --save-every 12
+```
+
+Use `--red-heuristic-mode hard` when ready.
+
+### Phase 3: Self-play (vs previous iteration)
+
+Train Blue against an older copy of itself. Red uses the Blue policy from a past checkpoint (e.g. a few save intervals behind). Resume from your latest checkpoint and pass the older one as `--red-from-checkpoint`.
+
+```bash
+python rl_test/train_dynamic.py --resume ./ray_dynamic/iter_700 --red-from-checkpoint ./ray_dynamic/iter_688
+```
+
+You can also train from scratch with Red fixed to a checkpoint: `--red-from-checkpoint ./ray_dynamic/iter_500` (no `--resume`).
+
+**Alternative — Random Red:** Omit Red flags to use random Red for diversity: `python rl_test/train_dynamic.py --resume ./ray_dynamic/iter_700`
+
+### Quick reference
+
+| Phase      | Goal              | Command |
+|-----------|-------------------|--------|
+| **Dummy** | Learn to capture  | `--red-dummy --max-time 600 --max-score 3` |
+| **Heuristic** | Learn vs opponent | `--resume ./ray_dynamic/iter_N --red-heuristic --red-heuristic-mode easy` (then `medium` / `hard`) |
+| **Self-play** | Vs previous iteration | `--resume ./ray_dynamic/iter_N --red-from-checkpoint ./ray_dynamic/iter_M` (M < N) |
+| **Random** | Generalize        | `--resume ./ray_dynamic/iter_N` (no Red flags) |
 
 ---
 

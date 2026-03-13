@@ -17,6 +17,8 @@ Usage:
   # Train vs built-in heuristic (default: easy first, then resume with --red-heuristic-mode medium; save every 12):
   python rl_test/train_dynamic.py --red-heuristic
   python rl_test/train_dynamic.py --resume ./ray_dynamic/iter_N --red-heuristic --red-heuristic-mode medium
+  # Self-play: Red uses Blue from a previous checkpoint (e.g. 12 iters behind):
+  python rl_test/train_dynamic.py --resume ./ray_dynamic/iter_700 --red-from-checkpoint ./ray_dynamic/iter_688
   # Quick smoke test before a long run:
   python rl_test/train_dynamic.py --iters 100
 
@@ -168,12 +170,14 @@ if __name__ == "__main__":
     parser.add_argument("--red-heuristic", action="store_true", help="Use built-in heuristic (combined CTF) for Red instead of random")
     parser.add_argument("--red-heuristic-mode", type=str, default="easy", choices=["easy", "medium", "hard"], help="Heuristic difficulty when --red-heuristic (default: easy)")
     parser.add_argument("--red-dummy", action="store_true", help="Use do-nothing policy for Red (always no-op)")
+    parser.add_argument("--red-from-checkpoint", type=str, default=None, metavar="PATH", help="Use Blue policy from this checkpoint for Red (self-play vs previous iteration)")
     parser.add_argument("--max-time", type=float, default=600, help="Max episode time in seconds (default 600 = 10 min)")
     parser.add_argument("--max-score", type=int, default=3, help="Max score per team to end episode (default 3)")
     args = parser.parse_args()
 
-    if args.red_heuristic and args.red_dummy:
-        raise SystemExit("Cannot enable both --red-heuristic and --red-dummy at the same time.")
+    red_mode_count = sum([bool(args.red_heuristic), bool(args.red_dummy), bool(args.red_from_checkpoint)])
+    if red_mode_count > 1:
+        raise SystemExit("Use only one of: --red-heuristic, --red-dummy, --red-from-checkpoint.")
 
     # Out-dir: use parent of resume path if resuming and out-dir not explicitly set
     if args.resume and args.out_dir == "./ray_dynamic/":
@@ -250,6 +254,8 @@ if __name__ == "__main__":
             return "red_policy_3" if agent_id == "agent_3" else "red_policy_4" if agent_id == "agent_4" else "red_policy_5"
         if args.red_dummy:
             return "red_dummy_policy"
+        if args.red_from_checkpoint:
+            return "red_prev_policy"
         return "red_policy"
 
     if args.red_heuristic:
@@ -278,11 +284,33 @@ if __name__ == "__main__":
             "red_dummy_policy": (DoNothingPolicy, obs_space_blue, act_space, {}),
         }
         log("Red team using do-nothing policy (always no-op actions).")
+    elif args.red_from_checkpoint:
+        policies = {
+            "blue_policy": (None, obs_space_blue, act_space, {}),
+            "red_prev_policy": (None, obs_space_blue, act_space, {}),
+        }
+        log(f"Red team using Blue policy from checkpoint: {args.red_from_checkpoint}")
     else:
         policies = {
             "blue_policy": (None, obs_space_blue, act_space, {}),
             "red_policy": (RandPolicy, obs_space_blue, act_space, {}),
         }
+
+    def _resolve_blue_policy_path(checkpoint_dir):
+        p = os.path.abspath(checkpoint_dir)
+        if os.path.isdir(p) and not p.endswith("blue_policy"):
+            return os.path.join(p, "policies", "blue_policy")
+        return p
+
+    def _load_red_prev_weights(algo, red_ckpt_path):
+        path = _resolve_blue_policy_path(red_ckpt_path)
+        if not os.path.isdir(path):
+            log(f"ERROR: Red-from-checkpoint path not found: {path}")
+            ray.shutdown()
+            raise SystemExit(1)
+        prev_policy = Policy.from_checkpoint(path)
+        algo.get_policy("red_prev_policy").set_weights(prev_policy.get_weights())
+        log("Red opponent weights loaded from checkpoint.")
 
     # Build or load algorithm
     i_start = 0
@@ -323,10 +351,22 @@ if __name__ == "__main__":
                 train_batch_size=500,
             )
             algo = ppo_config.build_algo()
-            if hasattr(algo, "restore_from_path"):
-                algo.restore_from_path(resume_path)
+            if args.red_from_checkpoint:
+                # Don't restore full checkpoint (it has different Red policy). Load Blue from resume, Red from red_from_checkpoint.
+                blue_path = _resolve_blue_policy_path(resume_path)
+                if not os.path.isdir(blue_path):
+                    log(f"ERROR: Resume checkpoint has no blue_policy at {blue_path}")
+                    ray.shutdown()
+                    raise SystemExit(1)
+                blue_src = Policy.from_checkpoint(blue_path)
+                algo.get_policy("blue_policy").set_weights(blue_src.get_weights())
+                log("Blue weights restored from resume checkpoint.")
+                _load_red_prev_weights(algo, args.red_from_checkpoint)
             else:
-                algo.restore(resume_path)
+                if hasattr(algo, "restore_from_path"):
+                    algo.restore_from_path(resume_path)
+                else:
+                    algo.restore(resume_path)
         else:
             # Load only Blue so Red can use current args (e.g. --red-heuristic-mode).
             try:
@@ -353,10 +393,14 @@ if __name__ == "__main__":
                     algo.add_policy(pid, policy_cls=policy_obj, observation_space=obs_sp, action_space=act_sp, config=cfg)
                 else:
                     algo.add_policy(pid, policy=policy_obj, observation_space=obs_sp, action_space=act_sp, config=cfg)
+            if args.red_from_checkpoint:
+                _load_red_prev_weights(algo, args.red_from_checkpoint)
         if args.red_heuristic:
             mode_str = getattr(args, "red_heuristic_mode", "easy")
         elif args.red_dummy:
             mode_str = "dummy"
+        elif args.red_from_checkpoint:
+            mode_str = "prev_checkpoint"
         else:
             mode_str = "random"
         log(f"Red opponent: {mode_str} (current args). Blue weights restored from checkpoint.")
@@ -390,6 +434,8 @@ if __name__ == "__main__":
             train_batch_size=train_batch_size,
         )
         algo = ppo_config.build_algo()
+        if args.red_from_checkpoint:
+            _load_red_prev_weights(algo, args.red_from_checkpoint)
         log("Training started (new run).")
 
     try:

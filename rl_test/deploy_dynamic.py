@@ -7,6 +7,7 @@ Usage:
   python rl_test/deploy_dynamic.py ./ray_dynamic/iter_500
   python rl_test/deploy_dynamic.py ./ray_dynamic/iter_500 --no-render
   python rl_test/deploy_dynamic.py ./ray_dynamic/iter_132 --red-heuristic --red-heuristic-mode easy
+  python rl_test/deploy_dynamic.py ./ray_dynamic/iter_360 --red-dummy
 """
 
 import argparse
@@ -51,13 +52,15 @@ def _get_action_space(env, agent_id):
     return _DEFAULT_ACTION_SPACE
 
 
-def make_env(render_mode="human", red_gets_raw_obs=False):
+def make_env(render_mode="human", red_gets_raw_obs=False, red_dummy=False):
     cfg = config_dict_std.copy()
     cfg["sim_speedup_factor"] = 4
     cfg["max_score"] = 3
     cfg["max_time"] = 240
     cfg["tagging_cooldown"] = 60
     cfg["tag_on_oob"] = True
+    if red_dummy:
+        cfg["red_dummy_mode"] = True
     reward_config = {
         "agent_0": rew.caps_and_grabs, "agent_1": rew.caps_and_grabs, "agent_2": rew.caps_and_grabs,
         "agent_3": rew.caps_and_grabs, "agent_4": rew.caps_and_grabs, "agent_5": rew.caps_and_grabs,
@@ -87,7 +90,12 @@ def main():
     parser.add_argument("--max-episodes", type=int, default=0, help="Stop after N episodes (0 = run until Ctrl+C)")
     parser.add_argument("--red-heuristic", action="store_true", help="Use easy/medium/hard heuristic for Red instead of random")
     parser.add_argument("--red-heuristic-mode", type=str, default="easy", choices=["easy", "medium", "hard"], help="Heuristic difficulty (default: easy)")
+    parser.add_argument("--red-dummy", action="store_true", help="No Red opponents (Blue plays alone; same as training with --red-dummy)")
     args = parser.parse_args()
+
+    if args.red_heuristic and args.red_dummy:
+        print("Error: Cannot use both --red-heuristic and --red-dummy.")
+        return
 
     # Resolve policy path
     path = os.path.abspath(args.checkpoint)
@@ -104,11 +112,13 @@ def main():
     blue_policy = Policy.from_checkpoint(policy_path)
 
     render_mode = None if args.no_render else "human"
-    env = make_env(render_mode=render_mode, red_gets_raw_obs=args.red_heuristic)
+    env = make_env(render_mode=render_mode, red_gets_raw_obs=args.red_heuristic, red_dummy=args.red_dummy)
 
     # Red heuristic: need base env (DynamicPyQuaticusEnv) and raw obs for Red
     red_heuristics = None
-    if args.red_heuristic:
+    if args.red_dummy:
+        print("Red team: dummy (no opponents; Blue plays alone).")
+    elif args.red_heuristic:
         base_env = getattr(getattr(env, "par_env", env), "par_env", getattr(env, "par_env", env))
         red_heuristics = {
             "agent_3": Heuristic_CTF_Agent("agent_3", base_env, mode=args.red_heuristic_mode),

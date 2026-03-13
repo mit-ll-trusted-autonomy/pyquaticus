@@ -258,7 +258,7 @@ class DynamicPyQuaticusEnv(PyQuaticusEnv):
                 continue  # Never re-enable Red in dummy mode
             inds = self.agent_inds_of_team[team]
             disabled_team = [i for i in inds if disabled[i]]
-            if disabled_team and random.random() < 0.5:
+            if disabled_team and random.random() < self.reinforcement_prob:
                 idx = random.choice(disabled_team)
                 self.state["disabled_agents"][idx] = False
                 self.players[self.agents[idx]].is_disabled = False
