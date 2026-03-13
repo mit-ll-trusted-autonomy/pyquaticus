@@ -53,7 +53,7 @@ except Exception as e:
     raise RuntimeError("GNN model registration failed (need ray/rllib and pyquaticus.models.gnn_model).") from e
 
 import pyquaticus.utils.rewards as rew
-from pyquaticus.config import config_dict_std
+from pyquaticus.config import config_dict_std, ACTION_MAP
 from pyquaticus.envs.dynamic_pyquaticus import DynamicPyQuaticusEnv
 from pyquaticus.envs.graph_obs_wrapper import GraphObsWrapper
 from pyquaticus.envs.rllib_pettingzoo_wrapper import ParallelPettingZooWrapper
@@ -71,6 +71,45 @@ class RandPolicy(Policy):
         if hasattr(self.action_space, "n"):
             return [np.random.randint(0, self.action_space.n) for _ in range(n)], [], {}
         return [self.action_space.sample() for _ in range(n)], [], {}
+
+    def get_weights(self):
+        return {}
+
+    def learn_on_batch(self, samples):
+        return {}
+
+    def set_weights(self, weights):
+        pass
+
+
+class DoNothingPolicy(Policy):
+    """Deterministic policy that always selects the no-op action for opponents."""
+
+    def __init__(self, observation_space, action_space, config):
+        Policy.__init__(self, observation_space, action_space, config)
+        # In discrete mode, the last ACTION_MAP entry is defined as the "none" action.
+        if hasattr(action_space, "n"):
+            self._noop_action = len(ACTION_MAP) - 1
+        else:
+            # For continuous spaces, the environment treats [0, 0] as no movement.
+            self._noop_action = np.array([0.0, 0.0], dtype=np.float32)
+
+    def compute_actions(
+        self,
+        obs_batch,
+        state_batches=None,
+        prev_action_batch=None,
+        prev_reward_batch=None,
+        info_batch=None,
+        episodes=None,
+        **kwargs,
+    ):
+        n = len(obs_batch)
+        if isinstance(self._noop_action, np.ndarray):
+            actions = [self._noop_action.copy() for _ in range(n)]
+        else:
+            actions = [self._noop_action for _ in range(n)]
+        return actions, [], {}
 
     def get_weights(self):
         return {}
@@ -126,7 +165,11 @@ if __name__ == "__main__":
     parser.add_argument("--no-log-file", action="store_true", help="Disable writing progress to out_dir/train.log")
     parser.add_argument("--red-heuristic", action="store_true", help="Use built-in heuristic (combined CTF) for Red instead of random")
     parser.add_argument("--red-heuristic-mode", type=str, default="easy", choices=["easy", "medium", "hard"], help="Heuristic difficulty when --red-heuristic (default: easy)")
+    parser.add_argument("--red-dummy", action="store_true", help="Use do-nothing policy for Red (always no-op)")
     args = parser.parse_args()
+
+    if args.red_heuristic and args.red_dummy:
+        raise SystemExit("Cannot enable both --red-heuristic and --red-dummy at the same time.")
 
     # Out-dir: use parent of resume path if resuming and out-dir not explicitly set
     if args.resume and args.out_dir == "./ray_dynamic/":
@@ -201,6 +244,8 @@ if __name__ == "__main__":
             return "blue_policy"
         if args.red_heuristic:
             return "red_policy_3" if agent_id == "agent_3" else "red_policy_4" if agent_id == "agent_4" else "red_policy_5"
+        if args.red_dummy:
+            return "red_dummy_policy"
         return "red_policy"
 
     if args.red_heuristic:
@@ -223,6 +268,12 @@ if __name__ == "__main__":
             "red_policy_5": (RedPolicy5, obs_space_red, act_space, {}),
         }
         log(f"Red team using built-in heuristic (combined CTF, {mode} mode).")
+    elif args.red_dummy:
+        policies = {
+            "blue_policy": (None, obs_space_blue, act_space, {}),
+            "red_dummy_policy": (DoNothingPolicy, obs_space_blue, act_space, {}),
+        }
+        log("Red team using do-nothing policy (always no-op actions).")
     else:
         policies = {
             "blue_policy": (None, obs_space_blue, act_space, {}),

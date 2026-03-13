@@ -123,6 +123,31 @@ python rl_test/train_dynamic.py
 python rl_test/train_dynamic.py --render
 ```
 
+### Training against do-nothing (dummy) Red
+
+Sometimes you want an extremely easy opponent so Blue can learn basic behaviors (e.g., grabbing and returning the flag) without pressure. The training script supports a **do-nothing Red team** via `--red-dummy`:
+
+- **Behavior**: All Red agents (3–5) always take the **no-op action**:
+  - In discrete mode this corresponds to the last entry in `ACTION_MAP`, defined as the “none” action with zero speed.
+  - Practically, Red agents spawn and then **sit still** for the entire episode.
+- **Usage from scratch**:
+
+```bash
+python rl_test/train_dynamic.py --red-dummy
+```
+
+- **Usage resuming from a checkpoint** (for example, your 360-iteration run):
+
+```bash
+python rl_test/train_dynamic.py --resume ./ray_dynamic/iter_360 --red-dummy
+```
+
+  - Blue policy weights are restored from `iter_360`.
+  - Red is rebuilt as a dummy opponent (no-op actions), making games very easy for Blue.
+- **Mutual exclusivity**:
+  - `--red-dummy` **cannot** be combined with `--red-heuristic`; the script will exit if both are set.
+  - If neither `--red-dummy` nor `--red-heuristic` is given, Red uses the original **random** policy.
+
 ### Options
 
 | Flag | Default | Description |
@@ -137,6 +162,7 @@ python rl_test/train_dynamic.py --render
 | `--no-log-file` | False | Disable writing progress to `out_dir/train.log` |
 | `--red-heuristic` | False | Use built-in heuristic (combined CTF) for Red instead of random |
 | `--red-heuristic-mode` | easy | Heuristic difficulty when `--red-heuristic`: `easy`, `medium`, or `hard` |
+| `--red-dummy` | False | Use a do-nothing policy for Red (all Red agents always take no-op actions) |
 
 Progress is written to `{out_dir}/train.log` by default so you can inspect it after an overnight run. Default **save-every 12** keeps lost work to at most ~12 iters if training stops; resume with `--resume ./ray_dynamic/iter_N` (use the latest `iter_*` folder).
 
