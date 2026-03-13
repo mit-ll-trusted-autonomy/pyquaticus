@@ -109,6 +109,9 @@ config_dict_std = {
 
     # Miscellaneous parameters
     "suppress_numpy_warnings": True,  # option to stop numpy from printing warnings to the console
+
+    # Dynamic / training options (used by DynamicPyQuaticusEnv, not all envs)
+    "red_dummy_mode": False,  # if True: 1 Red agent only, spawned at side; used with train_dynamic.py --red-dummy
 }
 
 

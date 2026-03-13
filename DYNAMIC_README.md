@@ -1,227 +1,131 @@
-# Dynamic PyQuaticus & Graph Observations
+# Dynamic PyQuaticus — Setup, Training & Deployment
 
-This document describes the dynamic environment extensions and how to run/train them.
+## 1. Setup and run
 
-## What Was Added
+### Setup
 
-### 1. `DynamicPyQuaticusEnv` (`pyquaticus/envs/dynamic_pyquaticus.py`)
-
-- **Variable team sizes (1–3 per team)** at each reset
-- **`disabled_agents`** state for inactive agents
-- **Mid-game removal**: `tag_removes_agent=True` disables agents when tagged
-- **Mid-game spawning**: `reinforcement_interval` and `reinforcement_prob` for reinforcements
-- **`is_disabled`** in observations so policies can ignore inactive agents
-
-### 2. `GraphObsWrapper` (`pyquaticus/envs/graph_obs_wrapper.py`)
-
-- Converts vector observations to a graph format:
-  - **node_features**: (6, 10) per-agent features (pos, heading, speed, has_flag, is_tagged, etc.)
-  - **edge_index**: all-to-all edges between agents
-  - **mask**: (6,) indicating active agents
-- **Flatten mode**: concatenates to a fixed-size vector for standard RLLib policies
-
-### 3. Training script (`rl_test/train_dynamic.py`)
-
-- Trains Blue team (agents 0–2) vs random Red (agents 3–5)
-- Uses graph observations and GNN policy only
-
----
-
-## Setup
-
-Use the same environment as the base PyQuaticus project:
+From the project root:
 
 ```bash
-# From pyquaticus root
-conda activate env-full   # or your conda env with ray, torch, etc.
-# OR
-pip install -e .[torch,ray]
+conda activate env-full
+# or: pip install -e .[torch,ray]
 ```
 
----
+### Training
 
-## Run the Dynamic Environment
-
-### Quick test (no training)
-
-```bash
-# From pyquaticus project root
-python test/test_dynamic_env.py
-```
-
-### Manual run with rendering
-
-```python
-from pyquaticus.envs.dynamic_pyquaticus import DynamicPyQuaticusEnv
-import pyquaticus.utils.rewards as rew
-from pyquaticus.config import config_dict_std
-
-cfg = config_dict_std.copy()
-cfg["max_score"] = 3
-cfg["max_time"] = 120
-reward_config = {f"agent_{i}": rew.caps_and_grabs for i in range(6)}
-
-env = DynamicPyQuaticusEnv(
-    team_size_range=(1, 3),
-    tag_removes_agent=False,
-    reinforcement_interval=100,
-    reinforcement_prob=0.3,
-    config_dict=cfg,
-    reward_config=reward_config,
-    render_mode="human",
-)
-obs, info = env.reset(seed=42)
-print("Active blue:", info["agent_0"]["num_blue_active"])
-print("Active red:", info["agent_0"]["num_red_active"])
-# Step with no-ops
-for _ in range(100):
-    actions = {aid: 16 for aid in env.agents}
-    obs, rewards, term, trunc, info = env.step(actions)
-env.close()
-```
-
----
-
-## Train with RLLib
-
-Training uses **only the custom GNN policy**: graph observations and the GNN model (message passing, self-node embedding for policy/value).
-
-### Overnight training (recommended)
-
-Use this procedure so you don’t waste time if training stops. Progress is logged to `ray_dynamic/train.log`. **Save every 12 iterations** (default) so you lose at most the time for 12 iters if training stops; each checkpoint is written to `ray_dynamic/iter_12`, `iter_24`, etc.
-
-**Step 1 — Start with easy Red** (defaults: 8 runners, speedup 8, save-every 12):
-
-```bash
-python rl_test/train_dynamic.py --red-heuristic
-```
-
-(Red difficulty defaults to `easy`; no need to pass `--red-heuristic-mode` for the first run.)
-
-**Step 2 — When ready, switch to medium (or hard):** Resume from your latest checkpoint and change Red difficulty. Only Blue is restored; Red is rebuilt from the new mode:
-
-```bash
-python rl_test/train_dynamic.py --resume ./ray_dynamic/iter_N --red-heuristic --red-heuristic-mode medium
-```
-
-Use the latest `iter_*` for `iter_N`. Later you can switch to `--red-heuristic-mode hard` the same way.
-
-- **Resume if training stops:** Same as above; use your latest `iter_*` and keep the same `--red-heuristic-mode` (or change it to continue the curriculum).
-- **Quick test first:** `python rl_test/train_dynamic.py --iters 100 --red-heuristic`.
-
-If your PC can handle more, you can try more runners (e.g. `--runners 16` or `--runners 24`); reduce if you see high RAM or swapping.
-
-### Default / quick run
+**Start from scratch (Blue vs random Red):**
 
 ```bash
 python rl_test/train_dynamic.py
 ```
 
-### With rendering
-
-```bash
-python rl_test/train_dynamic.py --render
-```
-
-### Training against do-nothing (dummy) Red
-
-Sometimes you want an extremely easy opponent so Blue can learn basic behaviors (e.g., grabbing and returning the flag) without pressure. The training script supports a **do-nothing Red team** via `--red-dummy`:
-
-- **Behavior**: All Red agents (3–5) always take the **no-op action**:
-  - In discrete mode this corresponds to the last entry in `ACTION_MAP`, defined as the “none” action with zero speed.
-  - Practically, Red agents spawn and then **sit still** for the entire episode.
-- **Usage from scratch**:
-
-```bash
-python rl_test/train_dynamic.py --red-dummy
-```
-
-- **Usage resuming from a checkpoint** (for example, your 360-iteration run):
+**Continue from a checkpoint (e.g. iter_360) with dummy Red (no opponents):**
 
 ```bash
 python rl_test/train_dynamic.py --resume ./ray_dynamic/iter_360 --red-dummy
 ```
 
-  - Blue policy weights are restored from `iter_360`.
-  - Red is rebuilt as a dummy opponent (no-op actions), making games very easy for Blue.
-- **Mutual exclusivity**:
-  - `--red-dummy` **cannot** be combined with `--red-heuristic`; the script will exit if both are set.
-  - If neither `--red-dummy` nor `--red-heuristic` is given, Red uses the original **random** policy.
+Use your latest checkpoint folder instead of `iter_360` if you have a newer one (e.g. `iter_372`).
 
-### Options
+**Training with the game window (one window; will briefly freeze each iteration):**
+
+```bash
+python rl_test/train_dynamic.py --resume ./ray_dynamic/iter_360 --red-dummy --render
+```
+
+Checkpoints save to `./ray_dynamic/iter_N/`. Progress is logged to `./ray_dynamic/train.log`.
+
+### Deployment / watch a policy
+
+Run the trained Blue policy and watch it (no training):
+
+```bash
+python rl_test/deploy_dynamic.py --checkpoint ./ray_dynamic/iter_360 --red-dummy --render
+```
+
+Adjust `--checkpoint` to your latest or chosen checkpoint.
+
+---
+
+## 2. Defaults
+
+Unless you pass flags, training uses:
+
+| Setting | Default | Meaning |
+|--------|---------|--------|
+| **Training length** | 2000 iters | Run stops after this many iterations. |
+| **Runners** | 8 | Parallel envs (0 when `--render`). |
+| **Speedup** | 8 | Sim runs 8× real time. |
+| **Episode time** | 600 s (10 min) | Max seconds per game. |
+| **Episode score** | 3 | First team to 3 captures wins. |
+| **Save every** | 12 iters | Checkpoint written every 12 iterations. |
+| **Out directory** | `./ray_dynamic/` | Checkpoints and `train.log` go here. |
+| **Train batch size** | 4000 steps | Env steps per PPO update (500 when `--render`). |
+| **Red opponent** | random | Use `--red-dummy` or `--red-heuristic` to change. |
+
+---
+
+## 3. Options and toggles
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--render` | False | Render during training |
-| `--iters` | 2000 | Training iterations |
-| `--save-every` | 12 | Save checkpoint every N iters (default 12 so you lose at most ~12 iters of work if training stops) |
-| `--out-dir` | `./ray_dynamic/` | Checkpoint directory (also where `train.log` is written) |
-| `--runners` | 8 | Number of parallel env runners (stable default; increase if PC has headroom) |
-| `--speedup` | 8 | Sim speedup factor (env steps 2× faster; minimal impact on learning) |
-| `--resume` | — | Resume from checkpoint (e.g. `./ray_dynamic/iter_1250`); continues from next iteration |
-| `--no-log-file` | False | Disable writing progress to `out_dir/train.log` |
-| `--red-heuristic` | False | Use built-in heuristic (combined CTF) for Red instead of random |
-| `--red-heuristic-mode` | easy | Heuristic difficulty when `--red-heuristic`: `easy`, `medium`, or `hard` |
-| `--red-dummy` | False | Use a do-nothing policy for Red (all Red agents always take no-op actions) |
+| `--resume` | — | Resume from checkpoint (e.g. `./ray_dynamic/iter_360`). |
+| `--red-dummy` | False | No Red opponents; Blue plays alone (capture the flag). |
+| `--red-heuristic` | False | Red uses built-in heuristic (cannot combine with `--red-dummy`). |
+| `--red-heuristic-mode` | easy | If `--red-heuristic`: `easy`, `medium`, or `hard`. |
+| `--render` | False | Show one game window while training (short freezes each iteration). |
+| `--iters` | 2000 | Max training iterations. |
+| `--save-every` | 12 | Save checkpoint every N iterations. |
+| `--out-dir` | `./ray_dynamic/` | Where checkpoints and `train.log` are written. |
+| `--runners` | 8 | Parallel env runners (no effect when `--render`). |
+| `--speedup` | 8 | Sim speedup factor. |
+| `--max-time` | 600 | Max episode time in seconds. |
+| `--max-score` | 3 | Score limit per team to end episode. |
+| `--no-log-file` | False | Do not write to `out_dir/train.log`. |
 
-Progress is written to `{out_dir}/train.log` by default so you can inspect it after an overnight run. Default **save-every 12** keeps lost work to at most ~12 iters if training stops; resume with `--resume ./ray_dynamic/iter_N` (use the latest `iter_*` folder).
+**Save a checkpoint on demand:** create an empty file `SAVE_NOW` in `out_dir`; the next finished iteration will save and then delete it.
 
-**Save right now:** While training is running, create an empty file `SAVE_NOW` in the output directory; the next completed iteration will save a checkpoint (e.g. `iter_150`) and then delete `SAVE_NOW`. Windows: `echo. > ray_dynamic\SAVE_NOW`. Linux/Mac: `touch ray_dynamic/SAVE_NOW`.
+---
 
-### Speed (without sacrificing results)
+## 4. Expected training: continue vs dummy from checkpoint 360
 
-- **Time per iter**: Each iteration collects 4000 env steps then does one PPO update, so iters take longer than with a smaller batch but learning is more stable. The script prints `time=Xs/iter (est. ~Ys per 50 iters)`. `--speedup 8` makes env steps 2× faster.
-- **Runners**: Use `--runners 8` as a stable default; increase (e.g. 16) only if your PC has headroom. More runners than your CPU count won't help.
-- **`return_mean=n/a`**: Normal on the first few iters when no episodes have finished yet; it will show numbers once episodes complete.
+To keep training your Blue policy against dummy (no Red) from checkpoint 360 or your latest checkpoint:
 
-### Memory (high RAM, low CPU)
+1. **Use your latest checkpoint**  
+   For example: `./ray_dynamic/iter_360` (or `iter_372`, etc.).
 
-If memory is near full (e.g. 90%+) and CPU is low, Ray and the sim are fighting for RAM and the system may be swapping. **Reduce parallel workers**: use `--runners 8` (or 4); keep `--speedup 8` and `--save-every 12`. If RAM stays comfortable (e.g. under 80%), you can try `--runners 12` or 16.
+2. **Run training with resume + dummy:**
 
-### Checkpoints
+   ```bash
+   python rl_test/train_dynamic.py --resume ./ray_dynamic/iter_360 --red-dummy
+   ```
 
-Checkpoints are saved to `./ray_dynamic/iter_500/`, `iter_1000/`, etc. Load with:
+   This restores Blue from the checkpoint and runs with no Red agents. Training continues from the next iteration (e.g. 361).
 
-```python
-from ray.rllib.policy.policy import Policy
-policy = Policy.from_checkpoint("./ray_dynamic/iter_1000/policies/blue_policy/")
+3. **Optional:** add `--render` to watch one game (window will briefly freeze each iteration), or `--max-time 900` for longer episodes.
+
+4. **Optional:** save more often, e.g. `--save-every 6`.
+
+Example with all of the above:
+
+```bash
+python rl_test/train_dynamic.py --resume ./ray_dynamic/iter_360 --red-dummy --max-time 900 --save-every 6
+```
+
+When you want to train against moving Red again, resume the same way but switch to heuristic instead of dummy:
+
+```bash
+python rl_test/train_dynamic.py --resume ./ray_dynamic/iter_400 --red-heuristic --red-heuristic-mode easy
 ```
 
 ---
 
-## File Reference
+## 5. File reference
 
 | File | Purpose |
 |------|---------|
-| `pyquaticus/envs/dynamic_pyquaticus.py` | Dynamic env with variable teams and mid-game changes |
-| `pyquaticus/envs/graph_obs_wrapper.py` | Graph observation wrapper |
-| `pyquaticus/models/gnn_model.py` | GNN TorchModelV2 (message passing, self-node embedding) |
-| `rl_test/train_dynamic.py` | RLLib training script |
-| `rl_test/deploy_dynamic.py` | Run trained blue policy from checkpoint |
-| `test/test_dynamic_env.py` | Basic tests |
-
----
-
-## How agent embeddings work (GNN)
-
-The GNN turns the graph into one embedding vector per agent, then uses only the **acting agent’s** embedding for its action and value:
-
-1. **Node features** (from `GraphObsWrapper`): Each of the 6 nodes has 10 features (pos, heading, speed, has_flag, is_tagged, on_side, team, is_disabled, cooldown). Node order matches `env.players` (agent_0…agent_5).
-
-2. **Node embedding**: A small MLP maps each node’s 10-D vector to a hidden vector (e.g. 64-D). So each agent is first represented by a single vector from its raw features.
-
-3. **Message passing**: Edges are all-to-all (every agent sees every other). For each edge (source, target), the model computes a message from the concatenation of source and target embeddings, then each node **aggregates** incoming messages (mean) and adds the result to its own embedding (residual). This is repeated for `gnn_layers` (e.g. 2). So each node’s vector now encodes both itself and its neighbors.
-
-4. **Mask**: Embeddings of disabled agents are zeroed so they don’t affect aggregation or the policy.
-
-5. **Self-node selection**: The wrapper tells the model which node is “me” via `self_node_idx` (e.g. agent_0 → 0, agent_1 → 1). The model takes **only that node’s** embedding after message passing.
-
-6. **Policy and value**: That single vector (the “agent embedding” for the acting agent) is passed through the policy head → action logits and the value head → value estimate. So each agent’s action is based on its own contextualized embedding, not on a global pool.
-
----
-
-## Extending Further
-
-- **GNN policy**: Training uses the GNN by default. See `pyquaticus/models/gnn_model.py`.
-- **Larger teams**: Change `team_size_range` and `MAX_AGENTS` in the graph wrapper.
-- **Custom rewards**: Edit `reward_config` in `train_dynamic.py` or pass your own reward functions.
+| `rl_test/train_dynamic.py` | Training script (GNN policy, graph obs). |
+| `rl_test/deploy_dynamic.py` | Run a saved policy (watch only). |
+| `pyquaticus/envs/dynamic_pyquaticus.py` | Dynamic env (variable teams, dummy mode). |
+| `pyquaticus/envs/graph_obs_wrapper.py` | Graph observation wrapper. |
+| `pyquaticus/models/gnn_model.py` | GNN model. |

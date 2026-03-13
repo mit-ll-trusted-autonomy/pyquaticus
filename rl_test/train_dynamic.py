@@ -126,13 +126,15 @@ if POLICIES is not None:
     POLICIES["RandPolicy"] = RandPolicy
 
 
-def make_env(config=None, render_mode=None, sim_speedup=4, red_gets_raw_obs=False):
+def make_env(config=None, render_mode=None, sim_speedup=4, red_gets_raw_obs=False, red_dummy=False, max_time=600, max_score=3):
     cfg = config_dict_std.copy()
     cfg["sim_speedup_factor"] = sim_speedup
-    cfg["max_score"] = 3
-    cfg["max_time"] = 240
+    cfg["max_score"] = max_score
+    cfg["max_time"] = max_time
     cfg["tagging_cooldown"] = 60
     cfg["tag_on_oob"] = True
+    if red_dummy:
+        cfg["red_dummy_mode"] = True
 
     reward_config = {
         "agent_0": rew.caps_and_grabs, "agent_1": rew.caps_and_grabs, "agent_2": rew.caps_and_grabs,
@@ -166,6 +168,8 @@ if __name__ == "__main__":
     parser.add_argument("--red-heuristic", action="store_true", help="Use built-in heuristic (combined CTF) for Red instead of random")
     parser.add_argument("--red-heuristic-mode", type=str, default="easy", choices=["easy", "medium", "hard"], help="Heuristic difficulty when --red-heuristic (default: easy)")
     parser.add_argument("--red-dummy", action="store_true", help="Use do-nothing policy for Red (always no-op)")
+    parser.add_argument("--max-time", type=float, default=600, help="Max episode time in seconds (default 600 = 10 min)")
+    parser.add_argument("--max-score", type=int, default=3, help="Max score per team to end episode (default 3)")
     args = parser.parse_args()
 
     if args.red_heuristic and args.red_dummy:
@@ -201,10 +205,10 @@ if __name__ == "__main__":
     SPEEDUP = max(1, int(args.speedup))
 
     def env_creator(cfg=None):
-        return make_env(cfg, render_mode=RENDER, sim_speedup=SPEEDUP, red_gets_raw_obs=args.red_heuristic)
+        return make_env(cfg, render_mode=RENDER, sim_speedup=SPEEDUP, red_gets_raw_obs=args.red_heuristic, red_dummy=args.red_dummy, max_time=args.max_time, max_score=args.max_score)
 
     register_env("dynamic_pyquaticus", env_creator)
-    env = make_env(render_mode=RENDER, sim_speedup=SPEEDUP, red_gets_raw_obs=args.red_heuristic)
+    env = make_env(render_mode=RENDER, sim_speedup=SPEEDUP, red_gets_raw_obs=args.red_heuristic, red_dummy=args.red_dummy, max_time=args.max_time, max_score=args.max_score)
     # Reset to ensure agents are initialized
     obs, info = env.reset()
     # Get spaces - Blue uses graph obs, Red uses raw obs when --red-heuristic
@@ -297,55 +301,82 @@ if __name__ == "__main__":
             raise SystemExit(1)
         i_start = int(m.group(1)) + 1
         log(f"Resuming from {resume_path} (next iteration {i_start})")
-        # Load only Blue so Red can use current args (e.g. --red-heuristic-mode). Curriculum easy→medium→hard keeps Blue progress.
-        try:
-            algo = PPO.from_checkpoint(
-                resume_path,
-                policy_ids=["blue_policy"],
-                policy_mapping_fn=policy_mapping_fn,
-                policies_to_train=["blue_policy"],
-            )
-        except AttributeError:
-            from ray.rllib.algorithms.algorithm import Algorithm
-            algo = Algorithm.from_checkpoint(
-                resume_path,
-                policy_ids=["blue_policy"],
-                policy_mapping_fn=policy_mapping_fn,
-                policies_to_train=["blue_policy"],
-            )
-        # Re-add Red policies from current args (heuristic mode or random).
-        for pid, spec in policies.items():
-            if pid == "blue_policy":
-                continue
-            policy_obj, obs_sp, act_sp, cfg = spec
-            if isinstance(policy_obj, type):
-                algo.add_policy(
-                    pid,
-                    policy_cls=policy_obj,
-                    observation_space=obs_sp,
-                    action_space=act_sp,
-                    config=cfg,
+
+        # When resuming with --render, build a fresh algo with 0 workers so we get one responsive window,
+        # then restore the checkpoint into it. Otherwise we'd keep the checkpoint's worker count (e.g. 8).
+        if args.render:
+            num_runners = 0
+            env_runner_kw = {"num_env_runners": num_runners, "num_cpus_per_env_runner": 0.25, "num_envs_per_env_runner": 1}
+            log("Rendering with resume: using 0 remote env runners so one game window stays responsive.")
+            ppo_config = (
+                PPOConfig()
+                .api_stack(enable_rl_module_and_learner=False, enable_env_runner_and_connector_v2=False)
+                .environment(env="dynamic_pyquaticus")
+                .env_runners(**env_runner_kw)
+                .multi_agent(
+                    policies=policies,
+                    policy_mapping_fn=policy_mapping_fn,
+                    policies_to_train=["blue_policy"],
                 )
+            ).training(
+                model={"custom_model": "gnn_model", "custom_model_config": {"gnn_hidden": 64, "gnn_layers": 2}},
+                train_batch_size=500,
+            )
+            algo = ppo_config.build_algo()
+            if hasattr(algo, "restore_from_path"):
+                algo.restore_from_path(resume_path)
             else:
-                algo.add_policy(
-                    pid,
-                    policy=policy_obj,
-                    observation_space=obs_sp,
-                    action_space=act_sp,
-                    config=cfg,
+                algo.restore(resume_path)
+        else:
+            # Load only Blue so Red can use current args (e.g. --red-heuristic-mode).
+            try:
+                algo = PPO.from_checkpoint(
+                    resume_path,
+                    policy_ids=["blue_policy"],
+                    policy_mapping_fn=policy_mapping_fn,
+                    policies_to_train=["blue_policy"],
                 )
-        mode_str = getattr(args, "red_heuristic_mode", None) if args.red_heuristic else "random"
+            except AttributeError:
+                from ray.rllib.algorithms.algorithm import Algorithm
+                algo = Algorithm.from_checkpoint(
+                    resume_path,
+                    policy_ids=["blue_policy"],
+                    policy_mapping_fn=policy_mapping_fn,
+                    policies_to_train=["blue_policy"],
+                )
+            # Re-add Red policies from current args (heuristic mode or random).
+            for pid, spec in policies.items():
+                if pid == "blue_policy":
+                    continue
+                policy_obj, obs_sp, act_sp, cfg = spec
+                if isinstance(policy_obj, type):
+                    algo.add_policy(pid, policy_cls=policy_obj, observation_space=obs_sp, action_space=act_sp, config=cfg)
+                else:
+                    algo.add_policy(pid, policy=policy_obj, observation_space=obs_sp, action_space=act_sp, config=cfg)
+        if args.red_heuristic:
+            mode_str = getattr(args, "red_heuristic_mode", "easy")
+        elif args.red_dummy:
+            mode_str = "dummy"
+        else:
+            mode_str = "random"
         log(f"Red opponent: {mode_str} (current args). Blue weights restored from checkpoint.")
     else:
         # With --render, env has pygame Surface which can't be pickled; use 0 remote workers so rollout runs in driver.
         num_runners = 0 if args.render else args.runners
-        if args.render and args.runners != 0:
-            log("Rendering enabled: using 0 remote env runners (pygame cannot be pickled for Ray workers).")
+        env_runner_kw = {"num_env_runners": num_runners, "num_cpus_per_env_runner": 0.25}
+        if args.render:
+            if args.runners != 0:
+                log("Rendering enabled: using 0 remote env runners (pygame cannot be pickled for Ray workers).")
+            env_runner_kw["num_envs_per_env_runner"] = 1  # only one game window when rendering
+        # When rendering, use smaller batch so the SGD phase is shorter and the window freezes less
+        train_batch_size = 500 if args.render else 4000
+        if args.render:
+            log("Rendering: using smaller train batch (500) so freezes are shorter; window will still freeze briefly each iteration during PPO update.")
         ppo_config = (
             PPOConfig()
             .api_stack(enable_rl_module_and_learner=False, enable_env_runner_and_connector_v2=False)
             .environment(env="dynamic_pyquaticus")
-            .env_runners(num_env_runners=num_runners, num_cpus_per_env_runner=0.25)
+            .env_runners(**env_runner_kw)
             .multi_agent(
                 policies=policies,
                 policy_mapping_fn=policy_mapping_fn,
@@ -356,8 +387,7 @@ if __name__ == "__main__":
                 "custom_model": "gnn_model",
                 "custom_model_config": {"gnn_hidden": 64, "gnn_layers": 2},
             },
-            # 4000 steps per iteration for more stable learning (longer per iter)
-            train_batch_size=4000,
+            train_batch_size=train_batch_size,
         )
         algo = ppo_config.build_algo()
         log("Training started (new run).")

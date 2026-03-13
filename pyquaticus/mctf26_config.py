@@ -113,6 +113,9 @@ config_dict_std = {
 
     # Miscellaneous parameters
     "suppress_numpy_warnings": True,  # option to stop numpy from printing warnings to the console
+
+    # Dynamic / training options (used by DynamicPyQuaticusEnv when using train_dynamic.py --red-dummy)
+    "red_dummy_mode": False,
 }
 
 

@@ -1788,9 +1788,10 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             with the standard configuration value.
         """
         ### Set Variables from the Configuration Dictionary ###
-        # Check for unrecognized variables
+        # Check for unrecognized variables (allow optional keys used by subclasses, e.g. DynamicPyQuaticusEnv)
+        _config_extra_keys = {"red_dummy_mode"}
         for k in config_dict:
-            if k not in config_dict_std:
+            if k not in config_dict_std and k not in _config_extra_keys:
                 print(f"Warning! Config variable '{k}' not recognized (it will have no effect).")
                 print("Please consult config.py for variable names.")
                 print()
