@@ -79,3 +79,7 @@ Red team using do-nothing policy (always no-op actions).
 Resuming from C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus-dynamic2026\ray_dynamic\iter_360 (next iteration 361)
 Rendering with resume: using 0 remote env runners so one game window stays responsive.
 Red opponent: dummy (current args). Blue weights restored from checkpoint.
+Red team using do-nothing policy (always no-op actions).
+Resuming from C:\Users\Joeyt\Documents\GMU\CS_491\pyquaticus-dynamic2026\ray_dynamic\iter_360 (next iteration 361)
+Rendering with resume: using 0 remote env runners so one game window stays responsive.
+Red opponent: dummy (current args). Blue weights restored from checkpoint.
