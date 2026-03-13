@@ -128,7 +128,19 @@ if POLICIES is not None:
     POLICIES["RandPolicy"] = RandPolicy
 
 
-def make_env(config=None, render_mode=None, sim_speedup=4, red_gets_raw_obs=False, red_dummy=False, max_time=600, max_score=3):
+def make_env(
+    config=None,
+    render_mode=None,
+    sim_speedup=4,
+    red_gets_raw_obs=False,
+    red_dummy=False,
+    max_time=600,
+    max_score=3,
+    team_size_range=(1, 3),
+    tag_removes_agent=False,
+    reinforcement_interval=0,
+    reinforcement_prob=0.5,
+):
     cfg = config_dict_std.copy()
     cfg["sim_speedup_factor"] = sim_speedup
     cfg["max_score"] = max_score
@@ -144,9 +156,10 @@ def make_env(config=None, render_mode=None, sim_speedup=4, red_gets_raw_obs=Fals
     }
 
     env = DynamicPyQuaticusEnv(
-        team_size_range=(1, 3),
-        tag_removes_agent=False,
-        reinforcement_interval=0,
+        team_size_range=team_size_range,
+        tag_removes_agent=tag_removes_agent,
+        reinforcement_interval=reinforcement_interval,
+        reinforcement_prob=reinforcement_prob,
         config_dict=cfg,
         reward_config=reward_config,
         render_mode=render_mode,
@@ -173,7 +186,16 @@ if __name__ == "__main__":
     parser.add_argument("--red-from-checkpoint", type=str, default=None, metavar="PATH", help="Use Blue policy from this checkpoint for Red (self-play vs previous iteration)")
     parser.add_argument("--max-time", type=float, default=600, help="Max episode time in seconds (default 600 = 10 min)")
     parser.add_argument("--max-score", type=int, default=3, help="Max score per team to end episode (default 3)")
+    parser.add_argument("--team-size-min", type=int, default=1, help="Min agents per team at episode start (default 1)")
+    parser.add_argument("--team-size-max", type=int, default=3, help="Max agents per team at episode start (default 3)")
+    parser.add_argument("--tag-removes-agent", action="store_true", help="When tagged, agent is disabled (removed) until reinforcement")
+    parser.add_argument("--reinforcement-interval", type=int, default=0, help="Steps between reinforcement spawn checks (0=off, e.g. 500)")
+    parser.add_argument("--reinforcement-prob", type=float, default=0.5, help="Probability of spawning one reinforcement when interval hits (default 0.5)")
     args = parser.parse_args()
+
+    team_min, team_max = args.team_size_min, args.team_size_max
+    if team_min < 1 or team_max > 3 or team_min > team_max:
+        raise SystemExit("Require 1 <= --team-size-min <= --team-size-max <= 3.")
 
     red_mode_count = sum([bool(args.red_heuristic), bool(args.red_dummy), bool(args.red_from_checkpoint)])
     if red_mode_count > 1:
@@ -208,11 +230,38 @@ if __name__ == "__main__":
     RENDER = "human" if args.render else None
     SPEEDUP = max(1, int(args.speedup))
 
+    team_size_range = (team_min, team_max)
+    reinf_interval = max(0, int(args.reinforcement_interval))
+    reinf_prob = max(0.0, min(1.0, args.reinforcement_prob))
+
     def env_creator(cfg=None):
-        return make_env(cfg, render_mode=RENDER, sim_speedup=SPEEDUP, red_gets_raw_obs=args.red_heuristic, red_dummy=args.red_dummy, max_time=args.max_time, max_score=args.max_score)
+        return make_env(
+            cfg,
+            render_mode=RENDER,
+            sim_speedup=SPEEDUP,
+            red_gets_raw_obs=args.red_heuristic,
+            red_dummy=args.red_dummy,
+            max_time=args.max_time,
+            max_score=args.max_score,
+            team_size_range=team_size_range,
+            tag_removes_agent=args.tag_removes_agent,
+            reinforcement_interval=reinf_interval,
+            reinforcement_prob=reinf_prob,
+        )
 
     register_env("dynamic_pyquaticus", env_creator)
-    env = make_env(render_mode=RENDER, sim_speedup=SPEEDUP, red_gets_raw_obs=args.red_heuristic, red_dummy=args.red_dummy, max_time=args.max_time, max_score=args.max_score)
+    env = make_env(
+        render_mode=RENDER,
+        sim_speedup=SPEEDUP,
+        red_gets_raw_obs=args.red_heuristic,
+        red_dummy=args.red_dummy,
+        max_time=args.max_time,
+        max_score=args.max_score,
+        team_size_range=team_size_range,
+        tag_removes_agent=args.tag_removes_agent,
+        reinforcement_interval=reinf_interval,
+        reinforcement_prob=reinf_prob,
+    )
     # Reset to ensure agents are initialized
     obs, info = env.reset()
     # Get spaces - Blue uses graph obs, Red uses raw obs when --red-heuristic
@@ -246,6 +295,8 @@ if __name__ == "__main__":
     # Base env (for heuristic Red) = innermost PyQuaticus env, before env.close()
     base_env = getattr(getattr(env, "par_env", env), "par_env", getattr(env, "par_env", env)) if args.red_heuristic else None
     env.close()
+
+    log(f"Dynamic env: team_size={team_min}-{team_max} per team, tag_removes_agent={args.tag_removes_agent}, reinforcement_interval={reinf_interval}, reinforcement_prob={reinf_prob}")
 
     def policy_mapping_fn(agent_id, episode, worker, **kwargs):
         if agent_id in ["agent_0", "agent_1", "agent_2"]:

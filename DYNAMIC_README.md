@@ -82,9 +82,16 @@ Unless you pass flags, training uses:
 | `--speedup` | 8 | Sim speedup factor. |
 | `--max-time` | 600 | Max episode time in seconds. |
 | `--max-score` | 3 | Score limit per team to end episode. |
+| `--team-size-min` | 1 | Min agents per team at episode start (1–3). |
+| `--team-size-max` | 3 | Max agents per team at episode start (1–3). |
+| `--tag-removes-agent` | False | When tagged, agent is disabled until a reinforcement spawns. |
+| `--reinforcement-interval` | 0 | Env steps between reinforcement checks (0=off; e.g. 500 to enable). |
+| `--reinforcement-prob` | 0.5 | Probability of spawning one reinforcement when interval hits. |
 | `--no-log-file` | False | Do not write to `out_dir/train.log`. |
 
 **Save a checkpoint on demand:** create an empty file `SAVE_NOW` in `out_dir`; the next finished iteration will save and then delete it.
+
+**Dynamic team sizes and mid-game changes:** By default each episode starts with a random number of agents per team between `--team-size-min` and `--team-size-max` (default 1–3). Use `--tag-removes-agent` so tagged agents are disabled, and `--reinforcement-interval 500` (and optionally `--reinforcement-prob 0.5`) so disabled agents can be re-spawned periodically.
 
 ---
 
