@@ -6,6 +6,7 @@ output/
 rl_test/ray_test/
 env-light/
 env-full/
+.venv/
 ctf_gym.egg-info/
 pyquaticus.egg-info/
 _version.py
