@@ -139,7 +139,7 @@ class ObsNormalizer:
         high = np.concatenate([bound.high.flatten() for bound in self._bounds.values()])
         avg = (high + low) / 2.0
         r = (high - low) / 2.0
-        assert state_array.shape[-1] == avg.shape
+        assert state_array.shape[-1] == avg.shape[0]
         norm_obs = (state_array - avg) / r
         return norm_obs.squeeze()
 

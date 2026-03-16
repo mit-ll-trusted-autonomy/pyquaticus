@@ -279,8 +279,8 @@ class BaseUSV(Dynamics):
         self.max_rudder = max_rudder
         self.turn_loss = turn_loss
         self.turn_rate = clip(turn_rate, 0, 100)
-        self.max_acc = max_acc
-        self.max_dec = max_dec
+        self.max_acc = max_acc if max_acc > 0 else None
+        self.min_acc = -max_dec if max_dec > 0 else None
         self.rotate_speed = rotate_speed
 
         self.state["thrust"] = np.zeros(self.n_envs)
@@ -339,9 +339,10 @@ class BaseUSV(Dynamics):
         self._set_desired_thrust(desired_speed, env_idxs)
         nonzero_thrust = self.state['thrust'][env_idxs] > 0
 
-        self._set_desired_rudder(heading_error[nonzero_thrust], env_idxs[nonzero_thrust])
+        if np.any(nonzero_thrust):
+            self._set_desired_rudder(heading_error[nonzero_thrust], env_idxs[nonzero_thrust])
         self.state['rudder'][env_idxs] = np.where(nonzero_thrust, self.state['rudder'][env_idxs], 0.)
-        np.clip(self.state['rudder'][env_idxs], -100, 100, out=self.state['rudder'][env_idxs]) #clip in case abs(self.max_rudder) > 100
+        self.state['rudder'][env_idxs] = np.clip(self.state['rudder'][env_idxs], -100, 100) #clip in case abs(self.max_rudder) > 100
 
         # Propagate Speed, Heading, and Position
         # Based on propagateNodeRecord() in https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/dep_uSimMarine/USM_Model.cpp
@@ -360,7 +361,7 @@ class BaseUSV(Dynamics):
         new_pos = self._propagate_pos(new_speed, new_heading, env_idxs) #propagate vehicle pos based on new_speed and new_heading
 
         # Set New Speed, Heading, and Position Values
-        np.clip(new_speed, 0.0, self.max_speed, out=self.speed[env_idxs])
+        self.speed[env_idxs] = np.clip(new_speed, 0.0, self.max_speed)
         self.heading[env_idxs] = angle180(new_heading)
         self.prev_pos[env_idxs] = self.pos[env_idxs]
         self.pos[env_idxs] = new_pos
@@ -378,7 +379,7 @@ class BaseUSV(Dynamics):
             desired_thrust = self.state['thrust'][env_idxs] + delta_thrust
 
         desired_thrust = np.where(desired_thrust < 0.01, 0, desired_thrust)
-        np.clip(desired_thrust, -self.max_thrust, self.max_thrust, out=self.state['thrust'][env_idxs]) #enforce limit on desired thrust
+        self.state['thrust'][env_idxs] = np.clip(desired_thrust, -self.max_thrust, self.max_thrust) #enforce limit on desired thrust
 
     def _set_desired_rudder(self, heading_error, env_idxs):
         """
@@ -386,7 +387,7 @@ class BaseUSV(Dynamics):
         Adapted for use in pyquaticus from https://oceanai.mit.edu/svn/moos-ivp-aro/trunk/ivp/src/lib_marine_pid/PIDEngine.cpp
         """
         desired_rudder = self._pid_controllers["heading"](heading_error, env_idxs)
-        np.clip(desired_rudder, -self.max_rudder, self.max_rudder, out=self.state['rudder'][env_idxs]) #enforce limit on desired rudder
+        self.state['rudder'][env_idxs] = np.clip(desired_rudder, -self.max_rudder, self.max_rudder) #enforce limit on desired rudder
 
     def _propagate_speed(self, thrust, rudder, env_idxs):
         """
@@ -402,7 +403,7 @@ class BaseUSV(Dynamics):
         next_speed *= 1 - ((np.abs(rudder) / 100) * self.turn_loss)
 
         # Clip new speed based on max acceleration and deceleration
-        accel = np.clip((next_speed - self.speed[env_idxs]) / self.dt, -self.max_dec, self.max_acc)
+        accel = np.clip((next_speed - self.speed[env_idxs]) / self.dt, self.min_acc, self.max_acc)
         next_speed = self.speed[env_idxs] + accel * self.dt
 
         return next_speed
@@ -518,7 +519,8 @@ class Heron(BaseUSV):
                 kd=0.0,
                 ki=0.0,
                 integral_limit=0.07,
-                output_limit=max_thrust
+                output_limit=max_thrust,
+                n_envs=self.n_envs
             ),
             "heading": PID(
                 dt=kwargs["dt"],
@@ -526,7 +528,8 @@ class Heron(BaseUSV):
                 kd=0.6,
                 ki=0.0,
                 integral_limit=0.3,
-                output_limit=max_rudder
+                output_limit=max_rudder,
+                n_envs=self.n_envs
             )
         }
 
@@ -595,7 +598,8 @@ class Surveyor(BaseUSV):
                 kd=0.0,
                 ki=0.0,
                 integral_limit=0.00,
-                output_limit=max_thrust
+                output_limit=max_thrust,
+                n_envs=self.n_envs
             ),
             "heading": PID(
                 dt=kwargs["dt"],
@@ -603,7 +607,8 @@ class Surveyor(BaseUSV):
                 kd=3.0,
                 ki=0.0,
                 integral_limit=0.00,
-                output_limit=max_rudder
+                output_limit=max_rudder,
+                n_envs=self.n_envs
             )
         }
 

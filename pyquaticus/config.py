@@ -56,7 +56,7 @@ config_dict_std = {
 
     # Simulation parameters
     "tau":              0.1,  # dt (seconds) for updating the simulation
-    "sim_speedup_factor": 1,  # simulation speed multiplier similar to time warp in MOOS (integer >= 1)
+    "timewarp": 1,  # simulation speed multiplier similar to time warp in MOOS (integer >= 1)
 
     # Game parameters
     "default_init":      True,  # Spawn agents programmatically, rather than randomly

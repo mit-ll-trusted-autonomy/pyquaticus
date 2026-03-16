@@ -24,7 +24,7 @@ from collections import OrderedDict
 import gymnasium as gym
 import numpy as np
 import pygame
-from pygame import KEYDOWN, QUIT, K_ESCAPE, K_SPACE, K_LEFT, K_UP, K_RIGHT, K_a, K_w, K_d
+from pygame import KEYDOWN, QUIT, K_ESCAPE, K_SPACE, K_LEFT, K_UP, K_RIGHT, K_a, K_w, K_d, K_TAB
 import sys
 import time
 from pyquaticus.envs.pyquaticus import Team
@@ -41,9 +41,15 @@ class KeyTest:
             env: the pyquaticus environment
         '''
         self.obs, _ = env.reset()
+        # render initial frame for env 0 so pygame display initializes
+        env.render(0)
         self.env = env
 
         self.quittable = quittable
+
+        # support multiple parallel envs and keep track of selected env
+        self.n_envs = getattr(env, 'n_envs', 1)
+        self.selected_env = 0
 
         no_op = 16
         straight = 4
@@ -77,13 +83,34 @@ class KeyTest:
 
     def begin(self):
         while True:
+            # render the currently-selected environment
+            self.env.render(self.selected_env)
+
             action_dict = self.process_event(self.quittable)
+
+            # step all environments concurrently
             self.obs, rewards, terminated, truncated, info = self.env.step(action_dict)
+
+            # determine which envs are done (terminated or truncated) and reset only those
+            done_mask = np.zeros(self.n_envs, dtype=bool)
             for k in terminated:
-                if terminated[k] == True or truncated[k]==True:
-                    time.sleep(1.)
-                    self.env.reset()
-                    break
+                try:
+                    done_mask |= np.asarray(terminated[k], dtype=bool)
+                except Exception:
+                    pass
+            for k in truncated:
+                try:
+                    done_mask |= np.asarray(truncated[k], dtype=bool)
+                except Exception:
+                    pass
+
+            done_envs = np.where(done_mask)[0]
+            if done_envs.size > 0:
+                time.sleep(1.)
+                self.env.reset(env_idxs=done_envs.tolist())
+
+            # render updated state for the selected environment
+            self.env.render(self.selected_env)
 
     def process_event(self, quittable):
 
@@ -95,48 +122,40 @@ class KeyTest:
                     self.env.close()
                     sys.exit()
 
-        action_dict = OrderedDict([(player_id, self.no_op_action) for player_id in self.env.players])
+                # switch which parallel env we're controlling
+                if event.type == KEYDOWN and event.key == K_TAB:
+                    self.selected_env = (self.selected_env + 1) % max(1, self.n_envs)
+
+        # initialize per-agent actions for all envs as no-op
+        action_dict = OrderedDict()
+        for player_id in self.env.players:
+            action_dict[player_id] = np.full(self.n_envs, self.no_op_action, dtype=int)
+
         is_key_pressed = pygame.key.get_pressed()
 
-        # blue keys
+        # blue keys (compute desired action for the selected env)
         blue_keys = K_RIGHT*is_key_pressed[K_RIGHT] + K_LEFT*is_key_pressed[K_LEFT]*(is_key_pressed[K_LEFT] - is_key_pressed[K_RIGHT]) + K_UP*is_key_pressed[K_UP]
         blue_action = self.blue_keys_to_action[blue_keys]
-        action_dict[self.blue_agent_id] = blue_action
+        action_dict[self.blue_agent_id][self.selected_env] = blue_action
 
         # red keys
         red_keys = K_d*is_key_pressed[K_d] + K_a*is_key_pressed[K_a]*(is_key_pressed[K_a] - is_key_pressed[K_d]) + K_w*is_key_pressed[K_w]
         red_action = self.red_keys_to_action[red_keys]
-        action_dict[self.red_agent_id] = red_action
+        action_dict[self.red_agent_id][self.selected_env] = red_action
 
         return action_dict
 
 def main():
     config = {}
-    config["obstacles"] = {
-        "circle": [(4, (6, 5))],
-        "polygon": [((70, 10), (85, 21), (83, 51), (72, 35))]
-    }
-    config["sim_speedup_factor"] = 8
+    config["timewarp"] = 8
     config["max_time"] = 1000
-    config["lidar_obs"] = True
-    config["num_lidar_rays"] = 100
-    config["lidar_range"] = 20
-    config["render_lidar_mode"] = "detection"
     config["render_agent_ids"] = True
-    config["render_traj_mode"] = "traj_history"
-    config["render_traj_freq"] = 50
-    config["short_obs_hist_length"] = 4
-    config["short_obs_hist_interval"] = 5
-    config["long_obs_hist_length"] = 5
-    config["long_obs_hist_interval"] = 20
-    config["render_traj_cutoff"] = 100
     config["tag_on_oob"] = True
-    config["arena_buffer_frac"] = 0.4
 
 
     
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
-    env = pyquaticus_v0.PyQuaticusEnv(render_mode='human', team_size=1, config_dict=config)
+    env = pyquaticus_v0.PyQuaticusEnv(render_mode='human', n_envs=2, team_size=1, config_dict=config)
     kt = KeyTest(env)
     kt.begin()
 

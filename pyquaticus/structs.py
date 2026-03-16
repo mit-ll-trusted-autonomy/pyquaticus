@@ -5,7 +5,7 @@ import numpy as np
 from numpy.typing import NDArray
 import pygame
 from pygame import SRCALPHA, Surface, draw
-from typing import Hashable
+from typing import Hashable, Optional
 from pyquaticus.utils.utils import angle180, closest_point_on_line, mag_bearing_to
 
 
@@ -149,11 +149,11 @@ class RenderingPlayer(Player):
             # pygame Rect object the same size as pygame_agent Surface
             self.pygame_agent_rect = pygame.Rect((0, 0), (2*self.render_radius, 2*self.render_radius))
 
-    def render_tagging_oob(self, cooldown_time):
+    def render_tagging_oob(self, cooldown_time, cooldown, out_of_bounds, is_tagged):
         self.pygame_agent = self.pygame_agent_base.copy()
 
         # render_is_tagged
-        if self.oob:
+        if out_of_bounds:
             draw.circle(
                 self.pygame_agent,
                 (255, 255, 0),
@@ -161,7 +161,7 @@ class RenderingPlayer(Player):
                 self.render_radius,
                 width=round(self.render_radius/4),
             )
-        elif self.is_tagged:
+        elif is_tagged:
             draw.circle(
                 self.pygame_agent,
                 (0, 255, 0),
@@ -171,8 +171,8 @@ class RenderingPlayer(Player):
             )
 
         # render_tagging_cooldown
-        if self.tagging_cooldown != cooldown_time:
-            percent_cooldown = self.tagging_cooldown / cooldown_time
+        if cooldown != cooldown_time:
+            percent_cooldown = cooldown / cooldown_time
 
             start_angle = np.pi / 2 + percent_cooldown * 2 * np.pi
             end_angle = 5 * np.pi / 2

@@ -62,7 +62,7 @@ class PID:
         np.clip(self._integral[env_idxs], -self._integral_limit, self._integral_limit, out=self._integral[env_idxs]) #prevent integral wind up
         
         #Calculate PID output
-        pid_out = (self._kp * error) + (self._kd * deriv) + self._integral #note Ki is already in self._integral
+        pid_out = (self._kp * error) + (self._kd * deriv) + self._integral[env_idxs] #note Ki is already in self._integral
         np.clip(pid_out, -self._output_limit, self._output_limit, out=pid_out) #prevent saturation
 
         self._prev_error[env_idxs] = error
