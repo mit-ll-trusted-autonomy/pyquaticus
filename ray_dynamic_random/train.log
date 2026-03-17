@@ -1,0 +1,32 @@
+Dynamic env: team_size=1-3 per team, tag_removes_agent=False, reinforcement_interval=0, reinforcement_prob=0.5
+Red team using do-nothing policy (always no-op actions).
+Training started (new run).
+Iter 0: return_mean=n/a (no completed episodes yet), time=519.2s/iter (est. ~25958s per 50 iters)
+Saved checkpoint to ./ray_dynamic_random/iter_12
+Saved checkpoint to ./ray_dynamic_random/iter_24
+Iter 25: return_mean=-0.76, time=465.4s/iter (est. ~23270s per 50 iters)
+Saved checkpoint to ./ray_dynamic_random/iter_36
+Saved checkpoint to ./ray_dynamic_random/iter_48
+Iter 50: return_mean=-0.48, time=429.8s/iter (est. ~21489s per 50 iters)
+Saved checkpoint to ./ray_dynamic_random/iter_60
+Saved checkpoint to ./ray_dynamic_random/iter_72
+Iter 75: return_mean=-0.58, time=429.0s/iter (est. ~21451s per 50 iters)
+Saved checkpoint to ./ray_dynamic_random/iter_84
+Saved checkpoint to ./ray_dynamic_random/iter_96
+Iter 100: return_mean=-0.80, time=429.0s/iter (est. ~21450s per 50 iters)
+Saved checkpoint to ./ray_dynamic_random/iter_108
+Dynamic env: team_size=1-3 per team, tag_removes_agent=False, reinforcement_interval=0, reinforcement_prob=0.5
+Red team using do-nothing policy (always no-op actions).
+Resuming from C:\Users\robin\Documents\CS491\pyquaticus-dynamic2026\ray_dynamic_random\iter_12 (next iteration 13)
+Rendering with resume: using 0 remote env runners so one game window stays responsive.
+Red opponent: dummy (current args). Blue weights restored from checkpoint.
+Dynamic env: team_size=1-3 per team, tag_removes_agent=False, reinforcement_interval=0, reinforcement_prob=0.5
+Red team using do-nothing policy (always no-op actions).
+Resuming from C:\Users\robin\Documents\CS491\pyquaticus-dynamic2026\ray_dynamic_random\iter_108 (next iteration 109)
+Rendering with resume: using 0 remote env runners so one game window stays responsive.
+Red opponent: dummy (current args). Blue weights restored from checkpoint.
+Dynamic env: team_size=1-3 per team, tag_removes_agent=False, reinforcement_interval=0, reinforcement_prob=0.5
+Red team using do-nothing policy (always no-op actions).
+Resuming from C:\Users\robin\Documents\CS491\pyquaticus-dynamic2026\ray_dynamic_random\iter_108 (next iteration 109)
+Rendering with resume: using 0 remote env runners so one game window stays responsive.
+Red opponent: dummy (current args). Blue weights restored from checkpoint.

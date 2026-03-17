@@ -9,6 +9,7 @@ From the project root:
 ```bash
 conda activate env-full
 # or: pip install -e .[torch,ray]
+# conda activate ./env-full for Robin
 ```
 
 ### Training
@@ -165,7 +166,7 @@ You can also train from scratch with Red fixed to a checkpoint: `--red-from-chec
 
 ## 6. Fresh agent (no prior checkpoints)
 
-Use this when you want to train a **new** Blue policy from scratch with no weights or state loaded from previous runs. No `--resume` is used; to avoid mixing with old checkpoints and logs, use a **dedicated output directory** (e.g. `./ray_dynamic_fresh/`).
+Use this when you want to train a **new** Blue policy from scratch with no weights or state loaded from previous runs. No `--resume` is used; to avoid mixing with old checkpoints and logs, use a **dedicated output directory** (e.g. `./ray_dynamic_random/`).
 
 ### One-time setup
 
@@ -173,7 +174,7 @@ From the project root, activate the env and (optionally) choose a name for the n
 
 ```bash
 conda activate env-full
-# Pick a name for this run, e.g. ray_dynamic_fresh (used below as --out-dir)
+# Pick a name for this run, e.g. ray_dynamic_random (used below as --out-dir)
 ```
 
 ### Phase 1: Dummy — learn to capture (fresh)
@@ -181,23 +182,23 @@ conda activate env-full
 No Red opponents; Blue learns from scratch to reach and capture the flag.
 
 ```bash
-python rl_test/train_dynamic.py --out-dir ./ray_dynamic_fresh/ --red-dummy --max-time 600 --max-score 3 --save-every 12
+python rl_test/train_dynamic.py --out-dir ./ray_dynamic_random/ --red-dummy --max-time 600 --max-score 3 --save-every 12
 ```
 
-Checkpoints and log: `./ray_dynamic_fresh/iter_N/` and `./ray_dynamic_fresh/train.log`. Run until Blue captures reliably (e.g. 100–300 iters), then pick a checkpoint (e.g. `iter_200` or `iter_300`) for the next phase.
+Checkpoints and log: `./ray_dynamic_random/iter_N/` and `./ray_dynamic_random/train.log`. Run until Blue captures reliably (e.g. 100–300 iters), then pick a checkpoint (e.g. `iter_200` or `iter_300`) for the next phase.
 
 ### Phase 2: Heuristic Red (continue fresh agent)
 
 Resume from your chosen dummy checkpoint, still using the same output dir so all checkpoints stay in one place.
 
 ```bash
-python rl_test/train_dynamic.py --resume ./ray_dynamic_fresh/iter_300 --red-heuristic --red-heuristic-mode easy --save-every 12
+python rl_test/train_dynamic.py --resume ./ray_dynamic_random/iter_300 --red-heuristic --red-heuristic-mode easy --save-every 12
 ```
 
 When ready for harder Red (same out-dir is inferred from `--resume`):
 
 ```bash
-python rl_test/train_dynamic.py --resume ./ray_dynamic_fresh/iter_500 --red-heuristic --red-heuristic-mode medium --save-every 12
+python rl_test/train_dynamic.py --resume ./ray_dynamic_random/iter_500 --red-heuristic --red-heuristic-mode medium --save-every 12
 ```
 
 ### Phase 3: Self-play (continue fresh agent)
@@ -205,7 +206,7 @@ python rl_test/train_dynamic.py --resume ./ray_dynamic_fresh/iter_500 --red-heur
 Red uses an older Blue checkpoint from this same run; resume from your latest.
 
 ```bash
-python rl_test/train_dynamic.py --resume ./ray_dynamic_fresh/iter_700 --red-from-checkpoint ./ray_dynamic_fresh/iter_688
+python rl_test/train_dynamic.py --resume ./ray_dynamic_random/iter_700 --red-from-checkpoint ./ray_dynamic_random/iter_688
 ```
 
 ### Deploy / watch the fresh agent
@@ -213,7 +214,7 @@ python rl_test/train_dynamic.py --resume ./ray_dynamic_fresh/iter_700 --red-from
 Run the trained Blue policy (no training). Use your chosen checkpoint under the fresh dir:
 
 ```bash
-python rl_test/deploy_dynamic.py ./ray_dynamic_fresh/iter_360 --red-dummy
+python rl_test/deploy_dynamic.py ./ray_dynamic_random/iter_360 --red-dummy
 ```
 
 Add `--no-render` to run without a window.
@@ -222,11 +223,19 @@ Add `--no-render` to run without a window.
 
 | Step | Command |
 |------|--------|
-| **Start Phase 1 (dummy)** | `python rl_test/train_dynamic.py --out-dir ./ray_dynamic_fresh/ --red-dummy --max-time 600 --max-score 3 --save-every 12` |
-| **Phase 2 (heuristic)** | `python rl_test/train_dynamic.py --resume ./ray_dynamic_fresh/iter_N --red-heuristic --red-heuristic-mode easy` (then `medium` / `hard`) |
-| **Phase 3 (self-play)** | `python rl_test/train_dynamic.py --resume ./ray_dynamic_fresh/iter_N --red-from-checkpoint ./ray_dynamic_fresh/iter_M` (M < N) |
-| **Deploy** | `python rl_test/deploy_dynamic.py ./ray_dynamic_fresh/iter_N --red-dummy` |
+| **Start Phase 1 (dummy)** | `python rl_test/train_dynamic.py --out-dir ./ray_dynamic_random/ --red-dummy --max-time 600 --max-score 3 --save-every 12` |
+| **Phase 2 (heuristic)** | `python rl_test/train_dynamic.py --resume ./ray_dynamic_random/iter_N --red-heuristic --red-heuristic-mode easy` (then `medium` / `hard`) |
+| **Phase 3 (self-play)** | `python rl_test/train_dynamic.py --resume ./ray_dynamic_random/iter_N --red-from-checkpoint ./ray_dynamic_random/iter_M` (M < N) |
+| **Deploy** | `python rl_test/deploy_dynamic.py ./ray_dynamic_random/iter_N --red-dummy` |
 
-Replace `ray_dynamic_fresh` with your chosen output dir name and `iter_N` / `iter_M` with actual checkpoint folder names.
+Replace `ray_dynamic_random` with your chosen output dir name and `iter_N` / `iter_M` with actual checkpoint folder names.
 
+
+---
+
+## 7. Dynamic settings used in this project
+
+- **Dynamic team sizes (training)**: All training commands in this README use the dynamic environment with **1–3 agents per team**. On each episode reset, the number of active Blue and Red agents is randomly chosen in that range; extra agents are present but disabled (they never move).
+- **Randomized spawns on correct sides (training)**: Training is configured with `default_init=False` and `on_sides_init=True`, so every active agent is spawned at a **random location on its own side of the scrimmage line** each episode, instead of fixed spawn-line positions.
+- **3v3-only deployment**: `rl_test/deploy_dynamic.py` is configured with `team_size_range=(3, 3)` in `DynamicPyQuaticusEnv`, so when you deploy a checkpoint to watch it, episodes always run as **3 Blue vs 3 Red** with all six agents active.
 
