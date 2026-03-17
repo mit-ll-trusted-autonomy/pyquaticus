@@ -147,6 +147,10 @@ def make_env(
     cfg["max_time"] = max_time
     cfg["tagging_cooldown"] = 60
     cfg["tag_on_oob"] = True
+    # Randomize initial agent positions on their own side each reset.
+    # This disables the default deterministic "spawn line" placement.
+    cfg["default_init"] = False
+    cfg["on_sides_init"] = True
     if red_dummy:
         cfg["red_dummy_mode"] = True
 

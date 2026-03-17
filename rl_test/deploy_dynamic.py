@@ -66,7 +66,7 @@ def make_env(render_mode="human", red_gets_raw_obs=False, red_dummy=False):
         "agent_3": rew.caps_and_grabs, "agent_4": rew.caps_and_grabs, "agent_5": rew.caps_and_grabs,
     }
     env = DynamicPyQuaticusEnv(
-        team_size_range=(1, 3),
+        team_size_range=(3, 3),
         tag_removes_agent=False,
         reinforcement_interval=0,
         config_dict=cfg,
