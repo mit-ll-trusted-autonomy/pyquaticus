@@ -56,7 +56,7 @@ def make_env(render_mode="human", red_gets_raw_obs=False, red_dummy=False):
     cfg = config_dict_std.copy()
     cfg["sim_speedup_factor"] = 4
     cfg["max_score"] = 3
-    cfg["max_time"] = 240
+    cfg["max_time"] = 1000
     cfg["tagging_cooldown"] = 60
     cfg["tag_on_oob"] = True
     if red_dummy:
