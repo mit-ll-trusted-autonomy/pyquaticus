@@ -155,7 +155,7 @@ def main():
 
     
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
-    env = pyquaticus_v0.PyQuaticusEnv(render_mode='human', n_envs=10, team_size=1, config_dict=config)
+    env = pyquaticus_v0.PyQuaticusEnv(render_mode='human', n_envs=3, team_size=1, config_dict=config)
     kt = KeyTest(env)
     kt.begin()
 

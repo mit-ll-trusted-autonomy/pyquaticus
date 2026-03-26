@@ -449,7 +449,7 @@ class BaseUSV(Dynamics):
         avg_hdg = np.arctan2(s, c)
 
         # Calculate new position and speed
-        vel = avg_speed * np.stack(
+        vel = avg_speed[:, None] * np.stack(
             [np.sin(avg_hdg), np.cos(avg_hdg)], #sine/cos swapped because of the heading / angle difference
             axis=-1
         )

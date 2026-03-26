@@ -2852,8 +2852,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         #agents
         new_pos_by_env = new_pos[:, None, :]
         agent_dists = np.linalg.norm(new_pos_by_env - agent_poses, axis=-1)
-        print(new_pos, agent_poses.shape)
-        radii = np.tile(self.agent_radius, (self.agent_radius.shape[0], 1))
+        radii = np.tile(self.agent_radius, (agent_dists.shape[0], 1))
         envs_with_agent_collision = np.any(agent_dists <= self.agent_radius[agent_idx] + radii, axis=-1)
         valid_pos[envs_with_agent_collision] = False
         collision_types['agent'][envs_with_agent_collision] = True
