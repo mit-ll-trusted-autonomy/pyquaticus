@@ -195,6 +195,9 @@ def caps_and_grabs(
     tagging_cooldown: float
 ):
     reward = 0.0
+    
+    #----------
+    
     agent_index = agents.index(agent_id)
 
     if int(team) == 0:  # Blue
@@ -228,11 +231,21 @@ def caps_and_grabs(
     if num_oob > prev_num_oob:
         reward += -1.0
 
+    #----------
+
+    #added a reward when you tag an opponent 
+    tagged_agent_index = state["agent_made_tag"][agent_index] #can return none if an agent isnt tagged, thats why we check if x != None
+    if tagged_agent_index != None: 
+        if state["agent_has_flag"][tagged_agent_index]:
+            reward += 0.5
+            
+    #----------
+
     #Check if agents lost flag
     prev_has_flag = prev_state['agent_has_flag'][agents.index(agent_id)]
     has_flag = state['agent_has_flag'][agents.index(agent_id)]
     #Agent lost flag
-    if (prev_has_flag > has_flag): 
+    if (prev_has_flag > has_flag):
         reward += -0.25
     
     #Grabs and captures are of shape [team_0 (BLUE), team_1 (RED)] the value at the index 0 corresponds to the number of grabs
