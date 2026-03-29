@@ -195,8 +195,36 @@ def caps_and_grabs(
     tagging_cooldown: float
 ):
     reward = 0.0
-    prev_num_oob = prev_state['agent_oob'][agents.index(agent_id)]
-    num_oob = state['agent_oob'][agents.index(agent_id)]
+    agent_index = agents.index(agent_id)
+
+    if int(team) == 0:  # Blue
+        opp_team = 1  # Red
+    else:  # Red
+        opp_team = 0  # Blue 
+
+    agent_is_tagged = state["agent_is_tagged"][agent_index] #[agent_0,agent_1,..]
+    if not agent_is_tagged:
+        agent_has_flag = state["agent_has_flag"][agent_index]
+        if agent_has_flag:
+            target = np.array(state["flag_home"][int(team)])
+        """
+        if the agent isnt tagged and doesnt have the flag we can reward it,
+        otherwise it wouldnt make any sense since the agent has no control 
+        during those circumstances
+        """
+        else:
+            target = np.array(state["flag_position"][opp_team])
+            prev_pos = np.array(prev_state["agent_position"][agent_index])
+            curr_pos = np.array(state["agent_position"][agent_index])
+        
+            field_diag = np.linalg.norm(env_size)
+            curr_dist = np.linalg.norm(curr_pos - target)
+            prev_dist = np.linalg.norm(prev_pos - target)
+            
+            reward += (0.01 * (prev_dist - curr_dist) / field_diag)
+
+    prev_num_oob = prev_state["agent_oob"][agent_index]
+    num_oob = state["agent_oob"][agent_index]
     if num_oob > prev_num_oob:
         reward += -1.0
 
