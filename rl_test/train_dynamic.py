@@ -404,6 +404,7 @@ if __name__ == "__main__":
             ).training(
                 model={"custom_model": "gnn_model", "custom_model_config": {"gnn_hidden": 64, "gnn_layers": 2}},
                 train_batch_size=500,
+                entropy_coeff=0.01, # allows it to explore early during the traiing process - tismailw
             )
             algo = ppo_config.build_algo()
             if args.red_from_checkpoint:
@@ -487,6 +488,7 @@ if __name__ == "__main__":
                 "custom_model_config": {"gnn_hidden": 64, "gnn_layers": 2},
             },
             train_batch_size=train_batch_size,
+            entropy_coeff=0.01, # allows it to explore early during the traiing process - tismailw
         )
         algo = ppo_config.build_algo()
         if args.red_from_checkpoint:
