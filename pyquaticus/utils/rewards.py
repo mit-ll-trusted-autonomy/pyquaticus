@@ -197,6 +197,7 @@ def caps_and_grabs(
     reward = 0.0
     
     #----------
+    #incremental reward for when the agent gets closer to the target 
     
     agent_index = agents.index(agent_id)
 
@@ -232,14 +233,23 @@ def caps_and_grabs(
         reward += -1.0
 
     #----------
-
     #added a reward when you tag an opponent 
+
     tagged_agent_index = state["agent_made_tag"][agent_index] #can return none if an agent isnt tagged, thats why we check if x != None
     if tagged_agent_index != None: 
         if state["agent_has_flag"][tagged_agent_index]:
             reward += 0.5
             
     #----------
+    #(possibility, check with group if needed)additional penelty if the agent is tagged when it looses the flag
+
+    #----------
+    #added a reward when being on opponents side
+    agent_on_own_side = state["agent_on_sides"][agent_index]
+    agent_has_flag = state["agent_has_flag"][agent_index]
+    if (not agent_on_own_side) and (not agent_has_flag):
+        reward += 0.01
+
 
     #Check if agents lost flag
     prev_has_flag = prev_state['agent_has_flag'][agents.index(agent_id)]
