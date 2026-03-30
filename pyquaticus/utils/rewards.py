@@ -249,7 +249,19 @@ def caps_and_grabs(
     agent_has_flag = state["agent_has_flag"][agent_index]
     if (not agent_on_own_side) and (not agent_has_flag):
         reward += 0.01
+    
+    #----------
+    #added a reward when defending against agents on our side; opp_index = opponents index
+    opponent_on_our_side = False
+    for opp_index in agent_inds_of_team[opp_team]:
+        if not state["agent_on_sides"][opp_index]:
+            opponent_on_our_side = True
+            break
 
+    if agent_on_own_side and opponent_on_our_side:
+        reward += 0.01
+
+    #----------#
 
     #Check if agents lost flag
     prev_has_flag = prev_state['agent_has_flag'][agents.index(agent_id)]
