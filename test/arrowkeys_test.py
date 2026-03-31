@@ -147,15 +147,18 @@ class KeyTest:
 
 def main():
     config = {}
-    config["timewarp"] = 8
+    config["timewarp"] = 10
     config["max_time"] = 1000
     config["render_agent_ids"] = True
     config["tag_on_oob"] = True
+    config["tau"] = 0.05
+    config["dynamics"] = "surveyor"
+    config["env_bounds"] = [160, 80]
 
 
     
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
-    env = pyquaticus_v0.PyQuaticusEnv(render_mode='human', n_envs=3, team_size=1, config_dict=config)
+    env = pyquaticus_v0.PyQuaticusEnv(render_mode='human', n_envs=1, team_size=2, config_dict=config)
     kt = KeyTest(env)
     kt.begin()
 

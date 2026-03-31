@@ -462,9 +462,6 @@ def detect_collision(
             #calculate distances to obstacles
             distances = np.linalg.norm(poses - closest_points, axis=-1)
             collisions |= np.any(distances <= agent_radius + padding, axis=-1)
-    
-    if collisions.shape[0] == 1:
-        collisions = collisions.item()
 
     return collisions
 

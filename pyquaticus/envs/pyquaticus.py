@@ -1180,7 +1180,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             )
             agent_has_flag_collision_env_idxs = env_idxs[self.state['agent_has_flag'][env_idxs, i] & agent_obstacle_collision]
 
-            self.state['agent_is_tagged'][env_idxs, i] = self.tag_on_collision & agent_obstacle_collision
+            self.state['agent_is_tagged'][env_idxs, i] |= self.tag_on_collision & agent_obstacle_collision
             self.state['agent_has_flag'][env_idxs, i] &= ~agent_obstacle_collision
             player.rotate(env_idxs[agent_obstacle_collision])
 
@@ -1526,7 +1526,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.state['flag_taken'][captures_env_idxs, other_team_idx] = False
 
                 # Update captures
-                self.game_events[player.team]['captures'][captures_env_idxs] += np.sum(agent_captures[captures], axis=-1)
+                self.game_events[team]['captures'][captures_env_idxs] += np.sum(agent_captures[captures], axis=-1)
 
     def set_config_values(self, config_dict):
         """
