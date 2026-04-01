@@ -140,6 +140,7 @@ def make_env(
     tag_removes_agent=False,
     reinforcement_interval=0,
     reinforcement_prob=0.5,
+    fixed_spawn=False,
 ):
     cfg = config_dict_std.copy()
     cfg["sim_speedup_factor"] = sim_speedup
@@ -147,9 +148,9 @@ def make_env(
     cfg["max_time"] = max_time
     cfg["tagging_cooldown"] = 60
     cfg["tag_on_oob"] = True
-    # Randomize initial agent positions on their own side each reset.
-    # This disables the default deterministic "spawn line" placement.
-    cfg["default_init"] = False
+    # default_init True  = deterministic spawn-line placement (no random positions).
+    # default_init False + on_sides_init True = random position on own side each reset.
+    cfg["default_init"] = bool(fixed_spawn)
     cfg["on_sides_init"] = True
     if red_dummy:
         cfg["red_dummy_mode"] = True
@@ -195,6 +196,11 @@ if __name__ == "__main__":
     parser.add_argument("--tag-removes-agent", action="store_true", help="When tagged, agent is disabled (removed) until reinforcement")
     parser.add_argument("--reinforcement-interval", type=int, default=0, help="Steps between reinforcement spawn checks (0=off, e.g. 500)")
     parser.add_argument("--reinforcement-prob", type=float, default=0.5, help="Probability of spawning one reinforcement when interval hits (default 0.5)")
+    parser.add_argument(
+        "--fixed-spawn",
+        action="store_true",
+        help="Deterministic spawn-line placement (default_init=True). Omit for random positions on own side each episode (training default).",
+    )
     args = parser.parse_args()
 
     team_min, team_max = args.team_size_min, args.team_size_max
@@ -251,6 +257,7 @@ if __name__ == "__main__":
             tag_removes_agent=args.tag_removes_agent,
             reinforcement_interval=reinf_interval,
             reinforcement_prob=reinf_prob,
+            fixed_spawn=args.fixed_spawn,
         )
 
     register_env("dynamic_pyquaticus", env_creator)
@@ -265,6 +272,7 @@ if __name__ == "__main__":
         tag_removes_agent=args.tag_removes_agent,
         reinforcement_interval=reinf_interval,
         reinforcement_prob=reinf_prob,
+        fixed_spawn=args.fixed_spawn,
     )
     # Reset to ensure agents are initialized
     obs, info = env.reset()
@@ -300,7 +308,11 @@ if __name__ == "__main__":
     base_env = getattr(getattr(env, "par_env", env), "par_env", getattr(env, "par_env", env)) if args.red_heuristic else None
     env.close()
 
-    log(f"Dynamic env: team_size={team_min}-{team_max} per team, tag_removes_agent={args.tag_removes_agent}, reinforcement_interval={reinf_interval}, reinforcement_prob={reinf_prob}")
+    spawn_mode = "spawn_line (fixed)" if args.fixed_spawn else "random_on_own_side"
+    log(
+        f"Dynamic env: team_size={team_min}-{team_max} per team, init={spawn_mode}, "
+        f"tag_removes_agent={args.tag_removes_agent}, reinforcement_interval={reinf_interval}, reinforcement_prob={reinf_prob}"
+    )
 
     def policy_mapping_fn(agent_id, episode, worker, **kwargs):
         if agent_id in ["agent_0", "agent_1", "agent_2"]:
