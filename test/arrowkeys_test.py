@@ -153,12 +153,12 @@ def main():
     config["tag_on_oob"] = True
     config["tau"] = 0.05
     config["dynamics"] = "surveyor"
-    config["env_bounds"] = [160, 80]
+    config["env_bounds"] = [100, 100]
 
 
     
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
-    env = pyquaticus_v0.PyQuaticusEnv(render_mode='human', n_envs=1, team_size=2, config_dict=config)
+    env = pyquaticus_v0.PyQuaticusEnv(render_mode='human', n_envs=1000, team_size=2, config_dict=config)
     kt = KeyTest(env)
     kt.begin()
 

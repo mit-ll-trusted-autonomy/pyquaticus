@@ -1348,17 +1348,15 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if not np.any(new_oob):
             return
 
-        agent_oob_idxs = env_idxs[np.where(new_oob)[0]]
-
         # Set tag (if applicable)
         if self.tag_on_oob:
-            self.state['agent_is_tagged'][agent_oob_idxs] = True
+            self.state['agent_is_tagged'][env_idxs] |= new_oob
 
         # Reset picked-up flag (if applicable)
         agent_has_flag_oob = self.state['agent_has_flag'][env_idxs] & new_oob
         if np.any(agent_has_flag_oob):
             # update agent
-            self.state['agent_has_flag'][agent_oob_idxs] = False
+            self.state['agent_has_flag'][env_idxs] &= ~new_oob
             # update flag
             for team, agent_idxs in self.agent_inds_of_team.items():
                 team_has_flag_oob = np.any(agent_has_flag_oob[:, agent_idxs], axis=-1)
