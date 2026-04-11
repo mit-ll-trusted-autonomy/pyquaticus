@@ -161,9 +161,6 @@ You can also train from scratch with Red fixed to a checkpoint: `--red-from-chec
 
 ---
 
-<<<<<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>>>>
-
-
 ## 6. Fresh agent (no prior checkpoints)
 
 Use this when you want to train a **new** Blue policy from scratch with no weights or state loaded from previous runs. No `--resume` is used; to avoid mixing with old checkpoints and logs, use a **dedicated output directory** (e.g. `./ray_dynamic_random/`).
@@ -238,4 +235,28 @@ Replace `ray_dynamic_random` with your chosen output dir name and `iter_N` / `it
 - **Dynamic team sizes (training)**: All training commands in this README use the dynamic environment with **1–3 agents per team**. On each episode reset, the number of active Blue and Red agents is randomly chosen in that range; extra agents are present but disabled (they never move).
 - **Randomized spawns on correct sides (training)**: Training is configured with `default_init=False` and `on_sides_init=True`, so every active agent is spawned at a **random location on its own side of the scrimmage line** each episode, instead of fixed spawn-line positions.
 - **3v3-only deployment**: `rl_test/deploy_dynamic.py` is configured with `team_size_range=(3, 3)` in `DynamicPyQuaticusEnv`, so when you deploy a checkpoint to watch it, episodes always run as **3 Blue vs 3 Red** with all six agents active.
+
+---
+
+## 8. `ray_dynamic_v2` — fresh training vs hard heuristic (updated rewards)
+
+Use **`./ray_dynamic_v2/`** when you want a **new run from iteration 0** (no `--resume`) with the **current** `caps_and_grabs` reward in `pyquaticus/utils/rewards.py`, training **directly against hard heuristic Red** instead of dummy → easy → hard. Checkpoints and `train.log` stay separate from `ray_dynamic_v1/` and other dirs.
+
+**Start from scratch (hard Red, dynamic 1–3 per team):**
+
+```bash
+python rl_test/train_dynamic.py --out-dir ./ray_dynamic_v2/ --red-heuristic --red-heuristic-mode hard --max-time 600 --max-score 3 --save-every 12 --runners 16
+```
+
+- Omit `--resume` so weights initialize randomly.
+- Add `--fixed-spawn` if you want deterministic spawn-line placement (same as `train_dynamic.py` flag).
+- Continue later: `python rl_test/train_dynamic.py --resume ./ray_dynamic_v2/iter_N --red-heuristic --red-heuristic-mode hard --save-every 12 --runners 16` (out-dir is inferred from the resume path if you still use the default `./ray_dynamic/` override only when needed).
+
+**Deploy a v2 checkpoint (example):**
+
+```bash
+python rl_test/deploy_dynamic.py ./ray_dynamic_v2/iter_12 --red-heuristic --red-heuristic-mode hard
+```
+
+`ray_dynamic_v2/` is listed in `.gitignore` so checkpoint folders are not committed by mistake.
 

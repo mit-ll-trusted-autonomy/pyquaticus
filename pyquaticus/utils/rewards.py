@@ -201,23 +201,17 @@ def caps_and_grabs(
     
     agent_index = agents.index(agent_id)
 
-    if int(team) == 0:  # Blue
-        opp_team = 1  # Red
-    else:  # Red
-        opp_team = 0  # Blue 
+    # agent_inds_of_team is keyed by Team enum, not int (0/1).
+    opp_team = Team.RED_TEAM if int(team) == 0 else Team.BLUE_TEAM
 
     agent_is_tagged = state["agent_is_tagged"][agent_index] #[agent_0,agent_1,..]
     if not agent_is_tagged:
         agent_has_flag = state["agent_has_flag"][agent_index]
         if agent_has_flag:
             target = np.array(state["flag_home"][int(team)])
-        """
-        if the agent isnt tagged and doesnt have the flag we can reward it,
-        otherwise it wouldnt make any sense since the agent has no control 
-        during those circumstances
-        """
         else:
-            target = np.array(state["flag_position"][opp_team])
+            # If not tagged and no flag: reward moving toward opponent flag (no control if tagged / carrying).
+            target = np.array(state["flag_position"][int(opp_team)])
             prev_pos = np.array(prev_state["agent_position"][agent_index])
             curr_pos = np.array(state["agent_position"][agent_index])
         
