@@ -15,3 +15,8 @@ _version.py
 *.avi
 __mapcache__/
 ray_dynamic_v2/
+
+# External opponent policies (e.g. simpleMARL torch.save). Paths: opponents/simple_marl/agent_{0,1,2}/step_<N>
+opponents/**/*.pt
+opponents/**/*.pth
+opponents/simple_marl/agent_*/step_*
