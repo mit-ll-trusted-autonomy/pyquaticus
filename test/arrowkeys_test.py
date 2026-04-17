@@ -53,8 +53,8 @@ class KeyTest:
 
         no_op = 16
         straight = 4
-        left = 6
-        right = 2
+        left = 7
+        right = 1
         straightleft = 5
         straightright = 3
 
@@ -151,14 +151,14 @@ def main():
     config["max_time"] = 1000
     config["render_agent_ids"] = True
     config["tag_on_oob"] = True
-    config["tau"] = 0.05
+    config["tau"] = 0.1
     config["dynamics"] = "surveyor"
     config["env_bounds"] = [100, 100]
 
 
     
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
-    env = pyquaticus_v0.PyQuaticusEnv(render_mode='human', n_envs=1000, team_size=2, config_dict=config)
+    env = pyquaticus_v0.PyQuaticusEnv(render_mode='human', n_envs=1, team_size=2, config_dict=config)
     kt = KeyTest(env)
     kt.begin()
 
