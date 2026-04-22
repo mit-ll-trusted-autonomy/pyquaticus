@@ -69,6 +69,7 @@ def main():
                 while True:
                     moostime = pymoos.time()
                     obs, reward, terminated, truncated, info = self.env.step(self.action, self.tag)
+                    print(f"DEPLOY: {self.env.deployed}")
                     # print(info["global_state"][("blue_one", "pos")])
                     # print(info["global_state"][("blue_two", "pos")])
                     # print(info["global_state"][("blue_three", "pos")])
@@ -87,6 +88,9 @@ def main():
                             self.tag = True
                             if key.char not in self.pressed_keys:
                                 self.pressed_keys.append(key.char)
+                        elif key.char == 'p':
+                            print("Pausing environment (setting DEPLOY to false)")
+                            self.env.pause()
                         else:
                             self.check_if_idle()
                 except:

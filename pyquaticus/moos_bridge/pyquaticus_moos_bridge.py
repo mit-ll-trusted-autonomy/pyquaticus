@@ -78,6 +78,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         self.aquaticus_field_points = None
         self.afp_sym = True
         self.active_collisions = None #see pyquaticus/pyquaticus/envs/pyquaticus.py for documentation
+        self.deployed = False #track DEPLOY state from MOOS
         self.game_events = {
             team: {
                 "scores": 0,
@@ -532,7 +533,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
         def _on_connect():
             for vname in self._moos_vars:
                 self._moos_comm.register(vname, 0)
-            self._moos_comm.register('DEPLOY_ALL', 0)
+            self._moos_comm.register('DEPLOY', 0)
             return True
 
         self._moos_comm.set_on_connect_callback(_on_connect)
@@ -566,7 +567,7 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             return False
 
     def pause(self):
-        self._moos_comm.notify("DEPLOY_ALL", "FALSE", pymoos.time())
+        self._moos_comm.notify("DEPLOY", "false", pymoos.time())
 
     def _dispatch_message(self, msg):
         """
@@ -584,6 +585,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             self._cantag_handler(msg)
         elif "_SCORES" in msg.key():
             self._score_handler(msg)
+        elif "DEPLOY" == msg.key():
+            self._deploy_handler(msg)
         else:
             raise ValueError(f"Unexpected message: {msg.key()}")
 
@@ -670,6 +673,13 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             self.game_events[Team.RED_TEAM]['scores'] = msg.double()
         else:
             raise ValueError(f"Unexpected message: {msg.key()}")
+
+    def _deploy_handler(self, msg):
+        """
+        Handles messages about MOOS vehicle deployment status.
+        """
+        deploy_str = msg.string().lower()
+        self.deployed = deploy_str == "true"
 
     def _flag_grab_publisher(self):
         player = self.players[self._agent_name]
