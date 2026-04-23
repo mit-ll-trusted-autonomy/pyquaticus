@@ -3,7 +3,7 @@ import itertools
 import numpy as np
 import pymoos
 import time
-
+from pyquaticus.envs.competition_pyquaticus import CompPyquaticusEnv
 from pyquaticus.envs.pyquaticus import PyQuaticusEnvBase
 from pyquaticus.moos_bridge.config import FieldReaderConfig, pyquaticus_config_std
 from pyquaticus.structs import Player, Team, Flag
@@ -12,7 +12,7 @@ from pyquaticus.utils.utils import mag_bearing_to
 from typing import Optional
 
 
-class PyQuaticusMoosBridge(PyQuaticusEnvBase):
+class PyQuaticusMoosBridge(CompPyquaticusEnv):
     """
     This class is used to control an agent in MOOS Aquaticus.
     It does *not* start anything on the MOOS side. Instead, you start everything you want
@@ -221,7 +221,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             "captures":                  np.zeros(len(self.agents_of_team), dtype=int), #set with _update_state() to confirm
             "tags":                      np.zeros(len(self.agents_of_team), dtype=int),
             "grabs":                     np.zeros(len(self.agents_of_team), dtype=int),
-            "agent_collisions":          np.zeros(self.num_agents, dtype=int)
+            "agent_collisions":          np.zeros(self.num_agents, dtype=int),
+            "disabled_agents":           np.zeros(self.num_agents, dtype=bool)
         } #NOTE: see pyquaticus/pyquaticus/envs/pyquaticus.py reset method for documentation on self.state
 
         # Update state dictionary (self.state)
@@ -520,7 +521,8 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             "FLAG_SUMMARY",
             "TAGGED_VEHICLES",
             "CANTAG_SUMMARY",
-            "BLUE_SCORES", "RED_SCORES"
+            "BLUE_SCORES", "RED_SCORES",
+            "POWERPLAY_AGENTS"
         ]
         self._moos_vars.extend([
             f"NODE_REPORT_{n.upper()}"
@@ -582,8 +584,22 @@ class PyQuaticusMoosBridge(PyQuaticusEnvBase):
             self._cantag_handler(msg)
         elif "_SCORES" in msg.key():
             self._score_handler(msg)
+        elif "POWERPLAY_AGENTS" == msg.key():
+            self._powerplay_handler(msg)
         else:
             raise ValueError(f"Unexpected message: {msg.key()}")
+    def _powerplay_handler(self, msg):
+        """
+        Updates Disabled State of vehicle currently disabled
+        due to powerplay mode 
+        """
+
+        pp_vnames = msg.string().lower().split(',')
+        for aid in self.agents:
+            if aid in pp_vnames:
+                self.state['disabled_agents'][self.agents.index(aid)] = True
+            else:
+                self.state['disabled_agents'][self.agents.index(aid)] = False
 
     def _nav_handler(self, msg):
         """
