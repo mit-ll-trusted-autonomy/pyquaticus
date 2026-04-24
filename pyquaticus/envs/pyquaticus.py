@@ -1801,6 +1801,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
         # Dynamics parameters
         self.dynamics = config_dict.get("dynamics", config_dict_std["dynamics"])
+        self.oob_speed_frac = config_dict.get("oob_speed_frac", config_dict_std["oob_speed_frac"])
 
         if isinstance(self.dynamics, (list, tuple, np.ndarray)):
             if len(self.dynamics) != 2*self.team_size:
@@ -1815,9 +1816,6 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 raise Exception(
                     f"{dynamics} is not a valid dynamics class. Please check dynamics_registry.py"
                 )
-
-        # Dynamics parameters
-        self.oob_speed_frac = config_dict.get("oob_speed_frac", config_dict_std["oob_speed_frac"])
 
         # Simulation parameters
         self.dt = config_dict.get("tau", config_dict_std["tau"])
@@ -1936,7 +1934,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         if flag_keepout_radius >= (catch_radius - max(agent_radius)):
             print(f"Warning! Flag keepout radius is >= than the catch radius")
 
-        slip_radius = config_dict.get("slip_radius", config_dict_std["catch_radius"])
+        slip_radius = config_dict.get("slip_radius", config_dict_std["slip_radius"])
         slip_radius = self.multiagent_var(slip_radius, float, "slip_radius")
 
         lidar_range = config_dict.get("lidar_range", config_dict_std["lidar_range"])
