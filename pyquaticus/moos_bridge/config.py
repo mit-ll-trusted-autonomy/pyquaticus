@@ -194,3 +194,14 @@ class WestPoint2025(FieldReaderConfig):
 
         ####### Dynamics Parameters #######
         self.max_speeds = 6 * [3.0]
+class WestPoint2026(FieldReaderConfig):
+    def __init__(self, mission_dir):
+        #def __init__(self, mission_dir:str, script:str=f'{os.path.dirname(__file__)}/get_field.sh'):
+        pyquaticus_root = Path(__file__).resolve().parents[2]
+        super().__init__(mission_dir=mission_dir)#str(pyquaticus_root / "moos" / "missions" / "wp-2025"))
+
+        ####### Geometry Parameters #######
+        self.agent_radius = 6 * [2.0]
+
+        ####### Dynamics Parameters #######
+        self.max_speeds = 6 * [3.0]

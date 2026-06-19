@@ -3,7 +3,7 @@ import itertools
 import numpy as np
 import pymoos
 import time
-from pyquaticus.envs.competition_pyquaticus import CompPyquaticusEnv
+from pyquaticus.envs.competition_pyquaticus import CompetitionPyQuaticusEnvBase
 from pyquaticus.envs.pyquaticus import PyQuaticusEnvBase
 from pyquaticus.moos_bridge.config import FieldReaderConfig, pyquaticus_config_std
 from pyquaticus.structs import Player, Team, Flag
@@ -12,7 +12,7 @@ from pyquaticus.utils.utils import mag_bearing_to
 from typing import Optional
 
 
-class PyQuaticusMoosBridge(CompPyquaticusEnv):
+class PyQuaticusMoosBridge(CompetitionPyQuaticusEnvBase):
     """
     This class is used to control an agent in MOOS Aquaticus.
     It does *not* start anything on the MOOS side. Instead, you start everything you want
@@ -419,17 +419,17 @@ class PyQuaticusMoosBridge(CompPyquaticusEnv):
             self._auto_returning_flag = False
 
         # Automatically return agent to home region
-        elif agent.has_flag and self._check_on_sides(agent.pos, agent.team):
-            desired_spd = self.max_speeds[agent.idx]
-            _, desired_hdg = mag_bearing_to(agent.pos, self.flags[int(self.team)].home)
+        # elif agent.has_flag and self._check_on_sides(agent.pos, agent.team):
+        #     desired_spd = self.max_speeds[agent.idx]
+        #     _, desired_hdg = mag_bearing_to(agent.pos, self.flags[int(self.team)].home)
 
-            if not self._auto_returning_flag:
-                print("Taking over control to return flag")
+        #     if not self._auto_returning_flag:
+        #         print("Taking over control to return flag")
 
-            self._auto_returning_flag = True
-            self._moos_comm.notify("ACTION", "CONTROL", moostime)
-            self._moos_comm.notify("RLA_SPEED", desired_spd, moostime)
-            self._moos_comm.notify("RLA_HEADING", desired_hdg%360, moostime)
+        #     # self._auto_returning_flag = True
+        #     self._moos_comm.notify("ACTION", "CONTROL", moostime)
+        #     self._moos_comm.notify("RLA_SPEED", desired_spd, moostime)
+        #     self._moos_comm.notify("RLA_HEADING", desired_hdg%360, moostime)
 
         # Translate incoming actions and publish them
         else:
@@ -532,7 +532,7 @@ class PyQuaticusMoosBridge(CompPyquaticusEnv):
         def _on_connect():
             for vname in self._moos_vars:
                 self._moos_comm.register(vname, 0)
-            self._moos_comm.register('DEPLOY_ALL', 0)
+            self._moos_comm.register('DEPLOY', 0)
             return True
 
         self._moos_comm.set_on_connect_callback(_on_connect)
@@ -585,7 +585,10 @@ class PyQuaticusMoosBridge(CompPyquaticusEnv):
         elif "_SCORES" in msg.key():
             self._score_handler(msg)
         elif "POWERPLAY_AGENTS" == msg.key():
-            self._powerplay_handler(msg)
+            if msg.is_string():
+                self._powerplay_handler(msg)
+        elif "DEPLOY" == msg.key():
+            print("Deploy Called")
         else:
             raise ValueError(f"Unexpected message: {msg.key()}")
     def _powerplay_handler(self, msg):
